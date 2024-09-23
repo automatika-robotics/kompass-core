@@ -1,0 +1,5 @@
+
+ompl_tester:
+  ompl:
+    log_level: 'DEBUG'
+    planning_timeout: 5.0

@@ -1,0 +1,75 @@
+{
+    "Box_Cone_pairwise_collision": {
+        "collision": true,
+        "num_contacts": 1
+    },
+    "Box_Cylinder_pairwise_collision": {
+        "collision": true,
+        "num_contacts": 1
+    },
+    "Box_Mesh_pairwise_collision": {
+        "collision": true,
+        "num_contacts": 2
+    },
+    "Box_Cone_distance": {
+        "distance": -3.264940438288847,
+        "closest_point_1": {
+            "x": -0.5,
+            "y": -4.440892098500626e-16,
+            "z": -1.5
+        },
+        "closest_point_2": {
+            "x": 2.0081967213114753,
+            "y": -8.889060204945377e-17,
+            "z": 0.5901639344262293
+        }
+    },
+    "Box_Cylinder_distance": {
+        "distance": -3.264940438288847,
+        "closest_point_1": {
+            "x": -0.5,
+            "y": -4.440892098500626e-16,
+            "z": -1.5
+        },
+        "closest_point_2": {
+            "x": 2.0081967213114753,
+            "y": -8.889060204945377e-17,
+            "z": 0.5901639344262293
+        }
+    },
+    "Box_Box_distance": {
+        "distance": -3.264940438288847,
+        "closest_point_1": {
+            "x": -0.5,
+            "y": -4.440892098500626e-16,
+            "z": -1.5
+        },
+        "closest_point_2": {
+            "x": 2.0081967213114753,
+            "y": -8.889060204945377e-17,
+            "z": 0.5901639344262293
+        }
+    },
+    "Box_Cylinder_continous_collision": {
+        "collision": true,
+        "collision_time": 0.2500000000042258
+    },
+    "pointCloud_Box_distance": {
+        "distance": 0.5803447251418764,
+        "closest_point_1": {
+            "x": 0.9199999999999999,
+            "y": 0.52,
+            "z": 0.24257425742574257
+        },
+        "closest_point_2": {
+            "x": 1.5,
+            "y": 0.5,
+            "z": 0.24257425742574268
+        }
+    },
+    "pointcloud_with_manager": {
+        "collision_in_manager_1": false,
+        "closest_dist_in_manager_1": 1.7976931348623157e+308,
+        "collision_manager_1_data": false
+    }
+}
