@@ -58,6 +58,11 @@ PYBIND11_MODULE(kompass_cpp, m) {
   // Types submodule
   auto m_types = m.def_submodule("types", "KOMPASS CPP data types module");
 
+  py::enum_<Path::InterpolationType>(m_types, "PathInterpolationType")
+      .value("LINEAR", Path::InterpolationType::LINEAR)
+      .value("CUBIC_SPLINE", Path::InterpolationType::CUBIC_SPLINE)
+      .value("HERMITE_SPLINE", Path::InterpolationType::HERMITE_SPLINE);
+
   py::class_<Path::State>(m_types, "State")
       .def(py::init<double, double, double, double>(), py::arg("x") = 0.0,
            py::arg("y") = 0.0, py::arg("yaw") = 0.0, py::arg("speed") = 0.0)
@@ -241,6 +246,7 @@ PYBIND11_MODULE(kompass_cpp, m) {
   py::class_<Control::Follower, Control::Controller>(m_control, "Follower")
       .def(py::init<>())
       .def(py::init<Control::Follower::FollowerParameters>())
+      .def("set_interpolation_type", &Control::Follower::setInterpolationType)
       .def("set_current_path", &Control::Follower::setCurrentPath)
       .def("is_goal_reached", &Control::Follower::isGoalReached)
       .def("get_vx_cmd", &Control::Follower::getLinearVelocityCmdX)
@@ -256,6 +262,7 @@ PYBIND11_MODULE(kompass_cpp, m) {
 
   py::enum_<Control::Controller::Result::Status>(m_control, "FollowingStatus")
       .value("GOAL_REACHED", Control::Controller::Result::Status::GOAL_REACHED)
+      .value("LOOSING_GOAL", Control::Controller::Result::Status::LOOSING_GOAL)
       .value("COMMAND_FOUND",
              Control::Controller::Result::Status::COMMAND_FOUND)
       .value("NO_COMMAND_POSSIBLE",

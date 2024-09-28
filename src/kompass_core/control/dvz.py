@@ -22,7 +22,7 @@ class DVZConfig(DeformableVirtualZoneParams):
     )
 
     cross_track_gain: float = field(
-        default=0.1, validator=in_range(min_value=0.0, max_value=1e2)
+        default=0.5, validator=in_range(min_value=0.0, max_value=1e2)
     )
 
 

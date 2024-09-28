@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
+from kompass_cpp.types import PathInterpolationType
 
 from kompass_core.datatypes.laserscan import LaserScanData
 from kompass_core.control import (
@@ -48,7 +49,6 @@ def plot_path(
     # Extract x and y coordinates from the Path message
     x_coords = [pose.pose.position.x for pose in path.poses]
     y_coords = [pose.pose.position.y for pose in path.poses]
-
     # Plot the path
     plt.figure()
     plt.plot(x_coords, y_coords, marker="o", linestyle="-", color="b")
@@ -315,7 +315,7 @@ def main():
     control_time_step = 0.1
 
     ## TESTING STANLEY ##
-    config = StanleyConfig(cross_track_gain=0.1, heading_gain=1.0)
+    config = StanleyConfig(cross_track_gain=0.5, heading_gain=1.0)
 
     stanley = Stanley(
         robot=my_robot,
@@ -323,6 +323,7 @@ def main():
         config=config,
         control_time_step=control_time_step,
     )
+    # stanley._planner.set_interpolation_type(PathInterpolationType.LINEAR)
     run_control(
         stanley,
         global_path,
@@ -339,7 +340,6 @@ def main():
         ctrl_limits=robot_ctr_limits,
         control_time_step=control_time_step,
     )
-    dvz.set_path(global_path)
 
     run_control(
         dvz,
@@ -353,7 +353,7 @@ def main():
 
     ## TESTING DWA ##
     cost_weights = TrajectoryCostsWeights(
-        reference_path_distance_weight=1.0,
+        reference_path_distance_weight=3.0,
         goal_distance_weight=1.0,
         smoothness_weight=0.0,
         jerk_weight=0.0,
@@ -365,11 +365,14 @@ def main():
         octree_resolution=0.1,
         costs_weights=cost_weights,
         prediction_horizon=1.0,
-        control_horizon=0.1,
+        control_horizon=0.2,
         control_time_step=control_time_step,
     )
 
     dwa = DWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
+
+    # Change interpolation type
+    dwa._planner.set_interpolation_type(PathInterpolationType.HERMITE_SPLINE)
 
     run_control(
         dwa,

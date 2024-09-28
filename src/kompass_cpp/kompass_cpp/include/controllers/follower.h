@@ -17,6 +17,8 @@
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
+#include <cmath>
+#include <pcl/common/io.h>
 
 namespace Kompass {
 namespace Control {
@@ -26,29 +28,30 @@ public:
   // Nested class for follower parameters
   class FollowerParameters : public Controller::ControllerParameters {
   public:
+
     FollowerParameters() : Controller::ControllerParameters() {
       addParameter("max_point_interpolation_distance",
                    Parameter(0.01, 0.0001,
-                             10.0)); // [m] distance used for path interpolation
+                             1000.0)); // [m] distance used for path interpolation
       addParameter(
           "lookahead_distance",
           Parameter(1.0, 0.0,
-                    10.0)); // [m] Lookahead distance used to find the next
+                    1000.0)); // [m] Lookahead distance used to find the next
                             // point to reach (normally be same as wheelbase)
       addParameter(
           "goal_dist_tolerance",
-          Parameter(0.1, 0.001, 10.0)); // [m] Tolerance to consider the robot
+          Parameter(0.1, 0.001, 1000.0)); // [m] Tolerance to consider the robot
                                         // reached the goal point
       addParameter(
           "path_segment_length",
-          Parameter(0.1, 0.001,
-                    10.0)); // [m] Length of one segment of the path to follow
+          Parameter(1.0, 0.001,
+                    1000.0)); // [m] Length of one segment of the path to follow
       addParameter(
           "goal_orientation_tolerance",
-          Parameter(0.1, 0.001, 1.5)); // [rad] Tolerance to consider the robot
+          Parameter(0.1, 0.001, 2 * M_PI)); // [rad] Tolerance to consider the robot
                                        // reached the goal point
       addParameter("loosing_goal_distance",
-                   Parameter(0.1, 0.001, 10.0)); // [m] If driving past the goal
+                   Parameter(0.1, 0.001, 1000.0)); // [m] If driving past the goal
                                                  // we stop after this distance
     }
   };
@@ -92,6 +95,13 @@ public:
    * @return false is goal is still not reached
    */
   bool isGoalReached();
+
+  /**
+   * @brief Set the Interpolation type used for interpolating the follower's path
+   *
+   * @param type
+   */
+  void setInterpolationType(Path::InterpolationType type);
 
   bool isForwardSegment(const Path::Path &segment1,
                         const Path::Path &segment2) const;
@@ -193,12 +203,13 @@ protected:
   bool enable_reverse_driving{false};
   double path_segment_length{0.0};
   double maxDist{0.0};
+  Path::InterpolationType interpolationType = Path::InterpolationType::LINEAR;
 
   FollowerParameters config;
 
   /**
    * @brief Finds closestPosition on the currentPath to the currentState
-   * Performs a recursie search to first find the closest segment, then the
+   * Performs a recursive search to first find the closest segment, then the
    * closest point of the segment
    *
    * @return Path::PathPosition
@@ -229,16 +240,10 @@ protected:
   bool reached_yaw_{false};
 
 private:
-  /**
-   * @brief Interpolates the reference global path using splines and sets the
-   * interpolation in this->currentPath
-   *
-   */
-  void interpolatePath();
 
   /**
    * @brief Finds the index of the closest segment on the path to the
-   * currentState between two given segment indeces
+   * currentState between two given segment indices
    *
    * @param left Index of the left segment
    * @param right Index of the right segment

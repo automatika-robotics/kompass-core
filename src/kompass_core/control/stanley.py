@@ -104,7 +104,7 @@ class Stanley(FollowerTemplate):
 
         self.__max_angular = ctrl_limits.omega_limits.max_vel
 
-        # Init the following resut
+        # Init the following result
         self._result = kompass_cpp.control.FollowingResult()
 
     @property

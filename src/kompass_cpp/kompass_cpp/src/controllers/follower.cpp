@@ -7,10 +7,8 @@
 #include "controllers/follower.h"
 #include "utils/angles.h"
 #include "utils/logger.h"
-#include "utils/spline.h"
 
 using namespace std;
-using namespace tk;
 
 namespace Kompass {
 namespace Control {
@@ -73,8 +71,10 @@ void Follower::setCurrentPath(const Path::Path &path) {
 
   refPath->points = path.points;
 
-  // Interpolate
-  interpolatePath();
+
+  currentPath->points = refPath->points;
+
+  currentPath->interpolate(maxDist, interpolationType);
 
   // Segment path
   currentPath->segment(path_segment_length);
@@ -96,33 +96,6 @@ void Follower::setCurrentPath(const Path::Path &path) {
 }
 
 size_t Follower::getCurrentSegmentIndex() { return current_segment_index_; }
-
-void Follower::interpolatePath() {
-
-  if (refPath->points.size() < 2) {
-    throw invalid_argument(
-        "At least two points are required to perform interpolation.");
-  }
-
-  vector<double> x(refPath->points.size()), y(refPath->points.size());
-  for (size_t i = 0; i < refPath->points.size(); ++i) {
-    x[i] = refPath->points[i].x;
-    y[i] = refPath->points[i].y;
-  }
-
-  // Create the spline object and set the x and y values
-  tk::spline s(x, y, tk::spline::cspline);
-
-  std::vector<double> x_points = s.get_x();
-  std::vector<double> y_points = s.get_y();
-
-  // add first point to interpolation
-  currentPath->points.push_back(refPath->points[0]);
-
-  for (size_t i = 1; i < x_points.size(); ++i) {
-    currentPath->points.push_back(Path::Point(x_points[i], y_points[i]));
-  }
-}
 
 bool Follower::isGoalReached() {
   if (!path_processing_) {
@@ -157,6 +130,10 @@ bool Follower::isGoalReached() {
   }
 
   return reached_goal_;
+}
+
+void Follower::setInterpolationType(Path::InterpolationType type) {
+  interpolationType = type;
 }
 
 const double Follower::calculateDistance(const Path::State &state,
@@ -294,7 +271,7 @@ void Follower::determineTarget() {
   // closestPosition = new Path::PathPosition();
 
   // closest position is never updated
-  if (closestPosition->segment_length < 0.0) {
+  if (closestPosition->segment_length <= 0.0) {
     *closestPosition = findClosestPathPoint();
   }
   // If we reached end of segment or end of path -> Find new point
