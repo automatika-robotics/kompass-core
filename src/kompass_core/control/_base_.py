@@ -135,6 +135,7 @@ class FollowerTemplate:
     @abstractmethod
     def __init__(
         self,
+        config: Optional[FollowerConfig] = None,
         config_file: Optional[str] = None,
         config_yaml_root_name: Optional[str] = None,
         **kwargs,
@@ -142,6 +143,7 @@ class FollowerTemplate:
         """
         Sets up the controller and any required objects
         """
+        self._config = config or FollowerConfig()
         raise NotImplementedError
 
     @property

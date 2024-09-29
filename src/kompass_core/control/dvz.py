@@ -5,14 +5,14 @@ from ..datatypes.laserscan import LaserScanData
 from nav_msgs.msg import Path
 
 import kompass_cpp
-from ..algorithms import DeformableVirtualZoneParams
+from ..algorithms import DeformableVirtualZoneParams, DeformableVirtualZone
 from ..models import Robot, RobotCtrlLimits, RobotState, RobotType
 
 from ._base_ import FollowerTemplate
-from .sensor_based_control import ScanBasedDVZControl
 from .stanley import Stanley, StanleyConfig
 from attrs import define, field
 from ..utils.common import in_range
+from ..utils.geometry import convert_to_0_2pi
 
 
 @define
@@ -22,7 +22,7 @@ class DVZConfig(DeformableVirtualZoneParams):
     )
 
     cross_track_gain: float = field(
-        default=0.1, validator=in_range(min_value=0.0, max_value=1e2)
+        default=0.5, validator=in_range(min_value=0.0, max_value=1e2)
     )
 
 
@@ -61,9 +61,17 @@ class DVZ(FollowerTemplate):
         if not config:
             config = DVZConfig()
 
-        self._path_controller = ScanBasedDVZControl(
-            robot=robot, config=config, ctrl_limits=ctrl_limits, config_file=config_file
+        self._config = config
+
+        self._path_controller = DeformableVirtualZone(
+            robot=robot, ctrl_limits=ctrl_limits, config=config
         )
+
+        if config_file:
+            self._path_controller.set_from_yaml(config_file)
+
+        self._dvz_linear: float = 0.0
+        self._dvz_angular: float = 0.0
 
         generator_config = StanleyConfig(
             heading_gain=config.heading_gain, cross_track_gain=config.cross_track_gain
@@ -122,6 +130,7 @@ class DVZ(FollowerTemplate):
         laser_scan: LaserScanData,
         current_state: RobotState,
         initial_control_seq: Optional[np.ndarray] = None,
+        debug: bool = False,
         **_,
     ) -> bool:
         """
@@ -152,13 +161,39 @@ class DVZ(FollowerTemplate):
                 _ref_angular_cmd = self.__refrence_cmd_generator.angular_control[0]
 
         # Get new dvz control
-        self._path_controller.get_new_dvz_ctr(
-            laser_scan_data=laser_scan,
-            time_step=self._control_time_step,
-            ref_linear=_ref_linear_x_cmd,
-            ref_angular=_ref_angular_cmd,
+        self._get_dvz_deformation(laser_scan, debug)
+        self._dvz_linear = self._path_controller.compute_linear_control(
+            _ref_linear_x_cmd, self._dvz_linear, self._control_time_step
+        )
+        self._dvz_angular = self._path_controller.compute_angular_control(
+            _ref_angular_cmd
         )
         return True
+
+    def _get_dvz_deformation(self, laser_scan_data: LaserScanData, debug: bool = False):
+        """
+        Update DVZ deformation with new scan
+
+        :param laser_scan_data: 2D LiDAR scan
+        :type laser_scan_data: LaserScanData
+        """
+        # Set new scan data
+
+        if laser_scan_data.angles.any():
+            angles = laser_scan_data.angles
+        else:
+            angles = np.arange(
+                laser_scan_data.angle_min,
+                laser_scan_data.angle_max,
+                laser_scan_data.angle_increment,
+            )
+            angles: np.ndarray = convert_to_0_2pi(angles)
+
+        self._path_controller.update_zone_size(self._dvz_linear)
+        self._path_controller.set_scan_values(
+            scan_values=laser_scan_data.ranges, scan_angles=angles
+        )
+        self._path_controller.get_total_deformation(compute_deformation_plot=debug)
 
     @property
     def planner(self) -> kompass_cpp.control.Follower:
@@ -181,21 +216,21 @@ class DVZ(FollowerTemplate):
         """
         if (
             self._robot.robot_type != RobotType.ACKERMANN
-            and abs(self._path_controller.dvz_angular)
-            > self.__refrence_cmd_generator.config.min_angular_vel
+            and abs(self._dvz_angular)
+            > self.__refrence_cmd_generator._config.min_angular_vel
         ):
             if (
                 abs(self.orientation_error)
-                > self.__refrence_cmd_generator.config.max_angle_error
+                > self.__refrence_cmd_generator._config.max_angle_error
                 and abs(self.distance_error)
-                < self.__refrence_cmd_generator.config.max_distance_error
+                < self.__refrence_cmd_generator._config.max_distance_error
             ):
                 # Rotate in place
                 return [0.0]
             # Apply angular first (Set linear to zero): Rotate then move
-            return [0.0, self._path_controller.dvz_linear]
+            return [0.0, self._dvz_linear]
 
-        return [self._path_controller.dvz_linear]
+        return [self._dvz_linear]
 
     @property
     def linear_y_control(self) -> List[float]:
@@ -207,14 +242,14 @@ class DVZ(FollowerTemplate):
         """
         if (
             self._robot.robot_type != RobotType.ACKERMANN
-            and abs(self._path_controller.dvz_angular)
-            > self.__refrence_cmd_generator.config.min_angular_vel
+            and abs(self._dvz_angular)
+            > self.__refrence_cmd_generator._config.min_angular_vel
         ):
             if (
                 abs(self.orientation_error)
-                > self.__refrence_cmd_generator.config.max_angle_error
+                > self.__refrence_cmd_generator._config.max_angle_error
                 and abs(self.distance_error)
-                < self.__refrence_cmd_generator.config.max_distance_error
+                < self.__refrence_cmd_generator._config.max_distance_error
             ):
                 return [0.0]
             # Apply angular first (Set linear to zero): Rotate then move
@@ -232,18 +267,18 @@ class DVZ(FollowerTemplate):
         """
         if (
             self._robot.robot_type != RobotType.ACKERMANN
-            and abs(self._path_controller.dvz_angular)
-            > self.__refrence_cmd_generator.config.min_angular_vel
+            and abs(self._dvz_angular)
+            > self.__refrence_cmd_generator._config.min_angular_vel
         ):
             if (
                 abs(self.orientation_error)
-                > self.__refrence_cmd_generator.config.max_angle_error
+                > self.__refrence_cmd_generator._config.max_angle_error
                 and abs(self.distance_error)
-                < self.__refrence_cmd_generator.config.max_distance_error
+                < self.__refrence_cmd_generator._config.max_distance_error
             ):
                 self.rotating_in_place = True
                 return [self.__refrence_cmd_generator.in_place_rotation()]
             self.rotating_in_place = False
             # Apply angular first (Set linear to zero): Rotate then move
-            return [self._path_controller.dvz_angular, 0.0]
-        return [self._path_controller.dvz_angular]
+            return [self._dvz_angular, 0.0]
+        return [self._dvz_angular]

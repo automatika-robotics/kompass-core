@@ -10,7 +10,6 @@ from ._trajectory_ import TrajectoryCostsWeights
 from .dvz import DVZ, DVZConfig
 from .dwa import DWA, DWAConfig
 from .stanley import StanleyConfig, Stanley
-from .sensor_based_control import LaserScanBasedStop
 
 ControllerType = FollowerTemplate
 
@@ -92,5 +91,4 @@ __all__ = [
     "DWA",
     "DWAConfig",
     "TrajectoryCostsWeights",
-    "LaserScanBasedStop",
 ]

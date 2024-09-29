@@ -90,7 +90,7 @@ class Stanley(FollowerTemplate):
                 file_path=config_file, nested_root_name=config_yaml_root_name
             )
 
-        self.config = config
+        self._config = config
         self._control_time_step = config.control_time_step
 
         self._planner = kompass_cpp.control.Stanley(config.to_kompass_cpp())
@@ -104,7 +104,7 @@ class Stanley(FollowerTemplate):
 
         self.__max_angular = ctrl_limits.omega_limits.max_vel
 
-        # Init the following resut
+        # Init the following result
         self._result = kompass_cpp.control.FollowingResult()
 
     @property
@@ -151,11 +151,11 @@ class Stanley(FollowerTemplate):
 
         elif (
             self._robot.robot_type != RobotType.ACKERMANN.value
-            and abs(self._planner.get_omega_cmd()) > self.config.min_angular_vel
+            and abs(self._planner.get_omega_cmd()) > self._config.min_angular_vel
         ):
             if (
-                abs(self.orientation_error) > self.config.max_angle_error
-                and abs(self.distance_error) < self.config.max_distance_error
+                abs(self.orientation_error) > self._config.max_angle_error
+                and abs(self.distance_error) < self._config.max_distance_error
             ):
                 return [0.0]
             # Apply angular first (Set linear to zero): Rotate then move
@@ -176,11 +176,11 @@ class Stanley(FollowerTemplate):
 
         elif (
             self._robot.robot_type != RobotType.ACKERMANN.value
-            and abs(self._planner.get_omega_cmd()) > self.config.min_angular_vel
+            and abs(self._planner.get_omega_cmd()) > self._config.min_angular_vel
         ):
             if (
-                abs(self.orientation_error) > self.config.max_angle_error
-                and abs(self.distance_error) < self.config.max_distance_error
+                abs(self.orientation_error) > self._config.max_angle_error
+                and abs(self.distance_error) < self._config.max_distance_error
             ):
                 return [0.0]
             # Apply angular first (Set linear to zero): Rotate then move
@@ -201,11 +201,11 @@ class Stanley(FollowerTemplate):
 
         if (
             self._robot.robot_type != RobotType.ACKERMANN.value
-            and abs(self._planner.get_omega_cmd()) > self.config.min_angular_vel
+            and abs(self._planner.get_omega_cmd()) > self._config.min_angular_vel
         ):
             if (
-                abs(self.orientation_error) > self.config.max_angle_error
-                and abs(self.distance_error) < self.config.max_distance_error
+                abs(self.orientation_error) > self._config.max_angle_error
+                and abs(self.distance_error) < self._config.max_distance_error
             ):
                 return [self.in_place_rotation()]
 

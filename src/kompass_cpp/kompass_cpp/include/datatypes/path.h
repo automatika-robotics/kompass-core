@@ -1,11 +1,19 @@
 #pragma once
 
+#include "utils/logger.h"
 #include <cmath>
+#include <cstddef>
 #include <math.h>
 #include <stdexcept>
 #include <vector>
+#include "utils/spline.h"
+
+using namespace std;
+using namespace tk;
 
 namespace Path {
+
+enum class InterpolationType { LINEAR, CUBIC_SPLINE, HERMITE_SPLINE };
 
 // Structure for Position
 struct State {
@@ -31,8 +39,10 @@ struct Point {
 struct Path {
   std::vector<Point> points;  // List of points defining the path
   std::vector<Path> segments; // List of path segments
+  tk::spline* _spline;
 
-  Path(const std::vector<Point> &points = {}) : points(points) {}
+  Path(const std::vector<Point> &points = {})
+      : points(points) {}
 
   size_t getMaxNumSegments() { return segments.size() - 1; }
 
@@ -150,6 +160,53 @@ struct Path {
     return points.size();
   }
 
+  void interpolate(double max_interpolation_point_dist, InterpolationType type) {
+    if (points.size() < 2) {
+      throw invalid_argument(
+          "At least two points are required to perform interpolation.");
+    }
+
+    vector<double> x(points.size()), y(points.size());
+    for (size_t i = 0; i < points.size(); ++i) {
+      x[i] = points[i].x;
+      y[i] = points[i].y;
+    }
+
+    // Create the spline object and set the x and y values
+    if (type == InterpolationType::LINEAR){
+      _spline = new tk::spline(x, y, tk::spline::linear);
+    } else if (type == InterpolationType::CUBIC_SPLINE){
+      _spline = new tk::spline(x, y, tk::spline::cspline);
+    }
+    else{
+      _spline = new tk::spline(x, y, tk::spline::cspline_hermite);
+    }
+
+      std::vector<double> x_points = _spline->get_x();
+    std::vector<double> y_points = _spline->get_y();
+
+    // add first point to interpolation
+    // points.push_back(points[0]);
+    points.clear();
+    for (size_t i = 0; i < x_points.size() - 1; ++i) {
+      double point_e = x_points[i];
+      double y = _spline->operator()(x_points[i]);
+
+      points.push_back({x_points[i], y});
+      double dist = distance(x_points[i], x_points[i + 1]);
+      int j = 1;
+      while ( dist > max_interpolation_point_dist and j < 500) {
+        point_e = x_points[i] + j * max_interpolation_point_dist;
+        y = _spline->operator()(point_e);
+        points.push_back({point_e, y});
+        dist = distance(point_e, x_points[i + 1]);
+        j++;
+      }
+    }
+    points.push_back({x_points.back(), y_points.back()});
+    LOG_DEBUG("Interpolated the reference path into ", points.size(), " points");
+  }
+
   // Segment the path by a given segment path length [m]
   void segment(double pathSegmentLength) {
     segments.clear();
@@ -157,8 +214,8 @@ struct Path {
     if (pathSegmentLength >= totalLength) {
       segments.push_back(Path(points));
     } else {
-      int numberOfPoints = getNumberPointsInLength(pathSegmentLength);
-      segmentBySegmentNumber(numberOfPoints);
+      int segmentsNumber = totalLength / pathSegmentLength;
+      segmentBySegmentNumber(segmentsNumber);
     }
   }
 
@@ -200,7 +257,6 @@ struct Path {
       for (size_t j = i; j < i + segmentLength && j < points.size(); ++j) {
         segment_points.push_back(points[j]);
       }
-
       segments.push_back(Path(segment_points));
     }
   }

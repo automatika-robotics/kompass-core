@@ -16,7 +16,7 @@ public:
    *
    */
   struct Result {
-    enum class Status { GOAL_REACHED, COMMAND_FOUND, NO_COMMAND_POSSIBLE };
+    enum class Status { GOAL_REACHED, LOOSING_GOAL, COMMAND_FOUND, NO_COMMAND_POSSIBLE };
 
     Status status;
     Control::Velocity velocity_command;

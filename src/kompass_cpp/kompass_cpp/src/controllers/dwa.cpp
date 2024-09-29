@@ -121,7 +121,7 @@ Path::Path DWA::findTrackedPathSegment() {
   if (closestPosition->index > currentSegment.points.size() - 1 and
       current_segment_index_ < max_segment_index_) {
     trackedPathSegment = currentPath->segments[current_segment_index_ + 1];
-    segment_index = current_segment_index_ + 2;
+    segment_index = current_segment_index_ + 1;
   }
   // Else take the segment points from the current point onwards
   else {
@@ -167,6 +167,7 @@ TrajSearchResult DWA::findBestSegment(const std::vector<Trajectory> &samples) {
   for (auto sample = samples.begin(); sample != samples.end(); ++sample) {
     double traj_cost = trajCostEvaluator->getTrajectoryCost(
         *sample, *currentPath, trackedRefPathSegment, current_segment_index_);
+
     if (traj_cost < minCost) {
       minCost = traj_cost;
       minCostTraj = *sample;
