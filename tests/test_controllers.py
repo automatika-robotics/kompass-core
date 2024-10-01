@@ -51,14 +51,23 @@ def plot_path(
     y_coords = [pose.pose.position.y for pose in path.poses]
     # Plot the path
     plt.figure()
-    plt.plot(x_coords, y_coords, marker="o", linestyle="-", color="b")
-    plt.plot(interpolation_x, interpolation_y, linestyle="-", color="g")
-    plt.plot(x_robot, y_robot, color="r")
-    plt.scatter(tracked_point_x, tracked_point_y)
+    plt.plot(
+        x_coords, y_coords, marker="o", linestyle="-", color="b", label="Reference Path"
+    )
+    plt.plot(
+        interpolation_x,
+        interpolation_y,
+        label="Interpolated Path",
+        linestyle="-",
+        color="g",
+    )
+    plt.plot(x_robot, y_robot, color="r", label="Robot Path")
+    plt.scatter(tracked_point_x, tracked_point_y, label="Tracked Point")
     plt.xlabel("X")
     plt.ylabel("Y")
     plt.title(figure_tag)
     plt.grid(True)
+    plt.legend()
     plt.savefig(f"{control_resources}/{figure_name}.png")
 
 
@@ -315,7 +324,7 @@ def main():
     control_time_step = 0.1
 
     ## TESTING STANLEY ##
-    config = StanleyConfig(cross_track_gain=0.5, heading_gain=1.0)
+    config = StanleyConfig(cross_track_gain=1.0, heading_gain=2.0)
 
     stanley = Stanley(
         robot=my_robot,
