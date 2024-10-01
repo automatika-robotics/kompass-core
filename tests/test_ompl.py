@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import timeit
-
+from typing import Dict
 import numpy as np
 import pandas as pd
 from nav_msgs.msg import MapMetaData
@@ -66,6 +66,10 @@ def ompl_solve_once(
     goal_y = 0.73
     goal_yaw = 0.0
 
+    print(
+        f"Setting planning problem with from [{start_x},{start_y}] to [{goal_x}, {goal_y}] and map data {map_data}"
+    )
+
     ompl_planner.setup_problem(
         map_data,
         start_x,
@@ -79,7 +83,7 @@ def ompl_solve_once(
     return ompl_planner.solve()
 
 
-def load_map_meta(map_file: str) -> MapMetaData:
+def load_map_meta(map_file: str) -> Dict:
     """
     Load map meta data from json file
 
@@ -94,18 +98,16 @@ def load_map_meta(map_file: str) -> MapMetaData:
         with open(map_file, "r") as f:
             map_meta_dict = json.load(f)
 
-        map_meta = MapMetaData()
-        map_meta.map_load_time.sec = map_meta_dict["map_load_time"]
-        map_meta.resolution = map_meta_dict["resolution"]
-        map_meta.width = map_meta_dict["width"]
-        map_meta.height = map_meta_dict["height"]
-        map_meta.origin.position.x = map_meta_dict["origin"]["position"]["x"]
-        map_meta.origin.position.y = map_meta_dict["origin"]["position"]["y"]
-        map_meta.origin.position.z = map_meta_dict["origin"]["position"]["z"]
-        map_meta.origin.orientation.x = map_meta_dict["origin"]["orientation"]["x"]
-        map_meta.origin.orientation.y = map_meta_dict["origin"]["orientation"]["y"]
-        map_meta.origin.orientation.z = map_meta_dict["origin"]["orientation"]["z"]
-        map_meta.origin.orientation.w = map_meta_dict["origin"]["orientation"]["w"]
+        map_meta = {}
+        map_meta["resolution"] = map_meta_dict["resolution"]
+        map_meta["width"] = map_meta_dict["width"]
+        map_meta["height"] = map_meta_dict["height"]
+        map_meta["origin_x"] = map_meta_dict["origin"]["position"]["x"]
+        map_meta["origin_y"] = map_meta_dict["origin"]["position"]["y"]
+        map_meta["origin_yaw"] = 2 * np.arctan2(
+            map_meta_dict["origin"]["orientation"]["z"],
+            map_meta_dict["origin"]["orientation"]["w"],
+        )
 
         logging.info(f"Loaded map metadata: {map_meta}")
 
