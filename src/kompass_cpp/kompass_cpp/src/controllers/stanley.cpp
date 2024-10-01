@@ -52,10 +52,12 @@ Controller::Result Stanley::computeVelocityCommand(double timeStep) {
                                        : ctrlimitsParams.velXParams.maxVel;
 
   // Stanley control law
-  double control_steering_angle = Angle::normalizeToMinusPiPlusPi(
-      std::atan2(cross_track_gain * target.crosstrack_error,
-                 std::max(std::abs(target_speed), min_velocity)) -
-      heading_gain * Angle::normalizeToMinusPiPlusPi(target.heading_error));
+  double control_steering_angle =
+     - cross_track_gain *
+          std::atan2(target.crosstrack_error,
+                     std::max(std::abs(target_speed), min_velocity)) +
+          heading_gain * Angle::normalizeToMinusPiPlusPi(target.heading_error);
+
 
   current_segment_index_ = target.segment_index;
   current_position_in_segment_ = target.position_in_segment;

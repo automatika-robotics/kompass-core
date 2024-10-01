@@ -215,7 +215,7 @@ class Stanley(FollowerTemplate):
 
     def in_place_rotation(self) -> float:
         rotation_val = (
-            -self.__max_angular
+            self.__max_angular
             * self.orientation_error
             / (self._control_time_step * 2 * np.pi)
         )

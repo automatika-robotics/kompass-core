@@ -172,39 +172,54 @@ struct Path {
       y[i] = points[i].y;
     }
 
-    // Create the spline object and set the x and y values
-    if (type == InterpolationType::LINEAR){
-      _spline = new tk::spline(x, y, tk::spline::linear);
-    } else if (type == InterpolationType::CUBIC_SPLINE){
-      _spline = new tk::spline(x, y, tk::spline::cspline);
-    }
-    else{
-      _spline = new tk::spline(x, y, tk::spline::cspline_hermite);
+    // Sort points before using spline interpolation
+    vector<int> index(x.size());
+
+    for (int i = 0; i != index.size(); i++) {
+      index[i] = i;
     }
 
-      std::vector<double> x_points = _spline->get_x();
-    std::vector<double> y_points = _spline->get_y();
+    sort(index.begin(), index.end(),
+         [&](const int &a, const int &b) { return (x[a] < x[b]); });
+
+    vector<double> sorted_x(points.size()), sorted_y(points.size());
+    for (int ii = 0; ii != index.size(); ++ii) {
+      sorted_x[ii] = x[index[ii]];
+      sorted_y[ii] = y[index[ii]];
+    }
+
+    // Create the spline object and set the x and y values
+    if (type == InterpolationType::LINEAR){
+      _spline = new tk::spline(sorted_x, sorted_y, tk::spline::linear);
+    } else if (type == InterpolationType::CUBIC_SPLINE){
+      _spline = new tk::spline(sorted_x, sorted_y, tk::spline::cspline);
+    }
+    else{
+      _spline = new tk::spline(sorted_x, sorted_y, tk::spline::cspline_hermite);
+    }
 
     // add first point to interpolation
     // points.push_back(points[0]);
     points.clear();
-    for (size_t i = 0; i < x_points.size() - 1; ++i) {
-      double point_e = x_points[i];
-      double y = _spline->operator()(x_points[i]);
+    for (size_t i = 0; i < x.size() - 1; ++i) {
+      double point_e = x[i];
+      double y = _spline->operator()(x[i]);
 
-      points.push_back({x_points[i], y});
-      double dist = distance(x_points[i], x_points[i + 1]);
+      points.push_back({x[i], y});
+      double dist = distance(x[i], x[i + 1]);
       int j = 1;
+      // double direction = std::copysign(1.0, x_points[i+1] - x_points[i]);
       while ( dist > max_interpolation_point_dist and j < 500) {
-        point_e = x_points[i] + j * max_interpolation_point_dist;
+        point_e = x[i] + j * (x[i + 1] - x[i]) *
+                                    max_interpolation_point_dist;
+
         y = _spline->operator()(point_e);
         points.push_back({point_e, y});
-        dist = distance(point_e, x_points[i + 1]);
+        dist = distance(point_e, x[i + 1]);
         j++;
       }
     }
-    points.push_back({x_points.back(), y_points.back()});
-    LOG_DEBUG("Interpolated the reference path into ", points.size(), " points");
+    points.push_back({x.back(), y.back()});
   }
 
   // Segment the path by a given segment path length [m]

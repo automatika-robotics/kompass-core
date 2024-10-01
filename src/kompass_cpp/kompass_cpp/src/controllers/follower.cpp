@@ -250,8 +250,8 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
   double vec_y = currentState.y - closest_point.y;
 
   // Calculate the direction vector based on the heading
-  double cos_direction = std::cos(closest_point.yaw - M_PI_2);
-  double sin_direction = std::sin(closest_point.yaw - M_PI_2);
+  double cos_direction = std::cos(closest_point.yaw);
+  double sin_direction = std::sin(closest_point.yaw);
 
   // crossProduct determines if the currentState is left or right to the closest
   // point
@@ -290,7 +290,7 @@ void Follower::determineTarget() {
   currentTrackedTarget_->movement = closestPosition->state;
   currentTrackedTarget_->lookahead = lookahead_distance;
   currentTrackedTarget_->heading_error = Angle::normalizeTo0Pi(
-      currentTrackedTarget_->movement.yaw - currentState.yaw);
+      currentTrackedTarget_->movement.yaw) - Angle::normalizeTo0Pi(currentState.yaw);
 
   currentTrackedTarget_->crosstrack_error = closestPosition->parallel_distance;
   currentTrackedTarget_->reverse =
