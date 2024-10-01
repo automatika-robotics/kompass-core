@@ -9,7 +9,7 @@ from pybind11.setup_helpers import (
 )
 from setuptools import find_packages, setup
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 ext_modules = [
     Pybind11Extension(
