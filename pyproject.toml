@@ -5,12 +5,16 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kompass_core"
 version = "0.0.1"
-description = "Kompass Navigation Algorithms"
+description = "Navigation Algorithms for Kompass"
 authors = [{ name = "Automatika Robotics", email = "contact@automatikarobotics.com" }]
+readme = "README.md"
 classifiers = [
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
 ]
+
+keywords = ["robotics", "robots", "navigation", "control", "planning", "mapping"]
 dependencies = [
     "numpy==1.26.4",
     "numpy-quaternion==2023.0.3",
@@ -24,6 +28,8 @@ dependencies = [
     "matplotlib",
     "pandas",
 ]
+
+requires-python = ">=3.8"
 
 [project.optional-dependencies]
 dev = ["pip-tools", "pytest==8.0.0", "pre-commit"]
@@ -72,3 +78,24 @@ ignore = ["E203", "E266", "E501", "F403", "F401"]
 select = ["B","C","E","F","W","B9"]
 [tool.ruff.lint.mccabe]
 max-complexity = 10
+
+[tool.bumpver]
+current_version = "0.0.1"
+version_pattern = "MAJOR.MINOR.PATCH"
+commit_message = "(chore) Bump version {old_version} -> {new_version}"
+tag_message = "{new_version}"
+tag_scope = "default"
+pre_commit_hook = ""
+post_commit_hook = ""
+commit = true
+tag = true
+push = true
+
+[tool.bumpver.file_patterns]
+"pyproject.toml" = [
+    'version = "{version}"',
+]
+"setup.py" = [
+    "{__version__}",
+]
+
