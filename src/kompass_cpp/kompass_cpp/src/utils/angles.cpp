@@ -8,7 +8,7 @@ double Angle::normalizeTo0Pi(double angle) {
     angle += 2 * M_PI;
   }
   // If angle is greater than pi, subtract from 2*pi to get the range [0, pi]
-  if (angle > M_PI) {
+  if (angle > 2 * M_PI) {
     angle = 2 * M_PI - angle;
   }
   return angle;

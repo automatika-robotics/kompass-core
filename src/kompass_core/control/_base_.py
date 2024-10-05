@@ -7,6 +7,7 @@ import kompass_cpp
 from ..models import RobotState
 from attrs import define, field
 from ..utils.common import BaseAttrs, in_range
+from ..utils.geometry import convert_to_plus_minus_pi
 from ..datatypes.laserscan import LaserScanData
 
 
@@ -307,4 +308,4 @@ class FollowerTemplate:
         :rtype: float
         """
         target: kompass_cpp.control.FollowingTarget = self.planner.get_tracked_target()
-        return target.heading_error
+        return convert_to_plus_minus_pi(target.heading_error)

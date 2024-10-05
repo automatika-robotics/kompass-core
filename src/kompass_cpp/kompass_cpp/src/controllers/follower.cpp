@@ -210,30 +210,24 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
       currentPath->segments[segment_index].points;
   double min_distance = std::numeric_limits<double>::max();
   Path::State closest_point;
-  double segment_position = 0.0;
+  double segment_position = 0.0;  // in [0, 1]
   size_t point_index = 0;
   // Get current segment start, end to calculate length and orientation
   Path::Point start = currentPath->segments[segment_index].getStart();
   Path::Point end = currentPath->segments[segment_index].getEnd();
 
-  double segment_length = calculateDistance(start, end);
+  double segment_heading = std::atan2(end.y - start.y, end.x - start.x);
 
-  for (size_t i = 0; i < segment_points.size() - 1; ++i) {
-    double temp_segment_length;
+  for (size_t i = 0; i < segment_points.size(); ++i) {
 
-    // Project point to current segment and calculate distance
-    Path::State projected_point = projectPointOnSegment(
-        segment_points[i], segment_points[i + 1], temp_segment_length);
+    Path::Point projected_point = segment_points[i];
     double distance = calculateDistance(currentState, projected_point);
 
     if (distance < min_distance) {
       min_distance = distance;
-      closest_point = projected_point;
-      // Get orientation from the total segment to avoid tracking interpolated
-      // spline orientation
-      // closest_point.yaw = std::atan2(end.y - start.y, end.x - start.x);
+      closest_point = {projected_point.x, projected_point.y, segment_heading};
       segment_position =
-          static_cast<double>(i) + temp_segment_length / segment_length;
+          static_cast<double>(i) / (segment_points.size() - 1 );
       point_index = i;
     }
   }
@@ -293,9 +287,7 @@ void Follower::determineTarget() {
       currentTrackedTarget_->movement.yaw) - Angle::normalizeTo0Pi(currentState.yaw);
 
   currentTrackedTarget_->crosstrack_error = closestPosition->parallel_distance;
-  currentTrackedTarget_->reverse =
-      false; // enable_reverse_driving &&
-             // (!isForwardMovement(currentTrackedTarget_->movement));
+  currentTrackedTarget_->reverse =  false;
   return;
 }
 

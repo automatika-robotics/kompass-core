@@ -1,6 +1,5 @@
 #pragma once
 
-#include "utils/logger.h"
 #include <cmath>
 #include <cstddef>
 #include <math.h>
@@ -124,9 +123,13 @@ struct Path {
 
   // Function to compute the total path length
   double totalPathLength() const {
-    double totalLength = 0.0;
 
-    for (size_t i = 1; i < points.size(); ++i) {
+    if(points.empty()){
+      return 0.0;
+    }
+
+    double totalLength = 0.0;
+    for (size_t i = 1; i < points.size(); ++i){
       totalLength += distance(points[i - 1], points[i]);
     }
 
@@ -202,19 +205,21 @@ struct Path {
     // points.push_back(points[0]);
     points.clear();
     for (size_t i = 0; i < x.size() - 1; ++i) {
-      double point_e = x[i];
-      double y = _spline->operator()(x[i]);
+      // Add the first point
+      points.push_back({x[i], y[i]});
 
-      points.push_back({x[i], y});
+      double point_e = x[i];
+      double y_e;
       double dist = distance(x[i], x[i + 1]);
       int j = 1;
-      // double direction = std::copysign(1.0, x_points[i+1] - x_points[i]);
+
+      // Interpolate new points between i, i+1
       while ( dist > max_interpolation_point_dist and j < 500) {
         point_e = x[i] + j * (x[i + 1] - x[i]) *
                                     max_interpolation_point_dist;
 
-        y = _spline->operator()(point_e);
-        points.push_back({point_e, y});
+        y_e = _spline->operator()(point_e);
+        points.push_back({point_e, y_e});
         dist = distance(point_e, x[i + 1]);
         j++;
       }
@@ -229,7 +234,11 @@ struct Path {
     if (pathSegmentLength >= totalLength) {
       segments.push_back(Path(points));
     } else {
-      int segmentsNumber = totalLength / pathSegmentLength;
+      int segmentsNumber = std::max(totalLength / pathSegmentLength, 1.0);
+      if (segmentsNumber == 1){
+        segments.push_back(Path(points));
+        return;
+      }
       segmentBySegmentNumber(segmentsNumber);
     }
   }
