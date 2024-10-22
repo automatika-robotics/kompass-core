@@ -374,7 +374,7 @@ def get_transform_polar_coordinates(
     radius_new = np.sqrt(radius_transformed_sq)
 
     angle_new = convert_to_0_2pi(
-        convert_to_0_2pi(angle) + transf_vec[1] + convert_to_0_2pi(rotation_angle)
+        convert_to_0_2pi(angle) + convert_to_0_2pi(rotation_angle)
     )
 
     return (radius_new, angle_new)
