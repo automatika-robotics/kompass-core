@@ -61,20 +61,30 @@ def test_laserscan_polar_tf(laser_scan_data: LaserScanData, plot: bool = False):
 
     if plot:
         fig, ax = plt.subplots(subplot_kw={"projection": "polar"})
-        ax.plot(laser_scan_data.angles, laser_scan_data.ranges, label='Original LaserScan')
-        ax.plot(transformed_scan.angles, transformed_scan.ranges, label="Transformed LaserScan")
+        ax.plot(
+            laser_scan_data.angles, laser_scan_data.ranges, label="Original LaserScan"
+        )
+        ax.plot(
+            transformed_scan.angles,
+            transformed_scan.ranges,
+            label="Transformed LaserScan",
+        )
         fig.legend()
         dir_name = os.path.dirname(os.path.abspath(__file__))
-        plt.savefig(os.path.join(dir_name, 'resources/laserscan_tf_test.png'))
+        plt.savefig(os.path.join(dir_name, "resources/laserscan_tf_test.png"))
 
-    old_range = laser_scan_data.ranges[laser_scan_data.angles == laser_scan_data.angle_min]
+    old_range = laser_scan_data.ranges[
+        laser_scan_data.angles == laser_scan_data.angle_min
+    ]
     new_range = transformed_scan.ranges[
-            transformed_scan.angles == laser_scan_data.angle_min + np.pi / 2
-        ]
+        transformed_scan.angles == laser_scan_data.angle_min + np.pi / 2
+    ]
     try:
         assert old_range == new_range
     except AssertionError:
-        logging.error(f"Original range at 0 {old_range} is not equal to transformed range at 90 {new_range} after 90 degree transformation")
+        logging.error(
+            f"Original range at 0 {old_range} is not equal to transformed range at 90 {new_range} after 90 degree transformation"
+        )
         raise
 
 

@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 dir_name = os.path.dirname(os.path.abspath(__file__))
 control_resources = os.path.join(dir_name, "resources/control")
+EPSILON = 1e-3
 
 
 def plot_path(
@@ -197,11 +198,108 @@ def run_control(
     return end_reached
 
 
-def test_stanley():
+def test_path_interpolation(plot: bool = False):
+    """Test path interpolation in followers
+
+    :param plot: Generate a figure plot of the interpolation results, defaults to True
+    :type plot: bool, optional
+    :raises ValueError: If the reference path file is not found
+    """
+    global my_robot, robot_ctr_limits
+
+    ref_path = json_to_ros_path(f"{control_resources}/global_path.json")
+
+    if not global_path:
+        raise ValueError("Global path file not found")
+
+    # Create a follower to access the interpolation
+    follower = Stanley(robot=my_robot, ctrl_limits=robot_ctr_limits)
+
+    follower.set_interpolation_type(PathInterpolationType.LINEAR)
+    follower.set_path(ref_path)
+    linear_interpolation = follower.interpolated_path(msg_header=ref_path.header)
+
+    follower.set_interpolation_type(PathInterpolationType.HERMITE_SPLINE)
+    follower.set_path(ref_path)
+    hermite_spline_interpolation = follower.interpolated_path(
+        msg_header=ref_path.header
+    )
+
+    follower.set_interpolation_type(PathInterpolationType.CUBIC_SPLINE)
+    follower.set_path(ref_path)
+    cubic_spline_interpolation = follower.interpolated_path(msg_header=ref_path.header)
+
+    if plot:
+        # Extract x and y coordinates from the Path message
+        x_ref = [pose.pose.position.x for pose in ref_path.poses]
+        y_ref = [pose.pose.position.y for pose in ref_path.poses]
+
+        x_inter_lin = [pose.pose.position.x for pose in linear_interpolation.poses]
+        y_inter_lin = [pose.pose.position.y for pose in linear_interpolation.poses]
+
+        x_inter_her = [
+            pose.pose.position.x for pose in hermite_spline_interpolation.poses
+        ]
+        y_inter_her = [
+            pose.pose.position.y for pose in hermite_spline_interpolation.poses
+        ]
+
+        x_inter_cub = [
+            pose.pose.position.x for pose in cubic_spline_interpolation.poses
+        ]
+        y_inter_cub = [
+            pose.pose.position.y for pose in cubic_spline_interpolation.poses
+        ]
+        # Plot the path
+        plt.figure()
+        plt.plot(
+            x_ref, y_ref, marker="o", linestyle="-", color="b", label="Reference Path"
+        )
+        plt.plot(x_inter_lin, y_inter_lin, color="g", label="Interpolated Path: Linear")
+        plt.plot(
+            x_inter_her,
+            y_inter_her,
+            color="r",
+            label="Interpolated Path: Hermite Spline",
+        )
+        plt.plot(
+            x_inter_cub,
+            y_inter_cub,
+            color="m",
+            label="Interpolated Path: Cubic Spline",
+        )
+
+        plt.xlabel("X")
+        plt.ylabel("Y")
+        plt.grid(True)
+        plt.legend()
+        plt.savefig(f"{control_resources}/interpolation_test.png")
+
+    def path_length(path: Path) -> float:
+        """Computes the length of a path
+
+        :param path: Path
+        :type path: Path
+        :return: Path length
+        :rtype: float
+        """
+        length = 0.0
+        for idx in range(len(path.poses) - 1):
+            d_x = path.poses[idx + 1].pose.position.x - path.poses[idx].pose.position.x
+            d_y = path.poses[idx + 1].pose.position.y - path.poses[idx].pose.position.y
+            length += np.sqrt(d_x**2 + d_y**2)
+        return length
+
+    length_diff = path_length(ref_path) - path_length(linear_interpolation)
+
+    assert abs(length_diff) <= EPSILON
+
+
+def test_stanley(plot: bool = False, figure_name: str = "", figure_tag: str = ""):
     """Run Stanley pytest and assert reaching end"""
     global global_path, my_robot, robot_ctr_limits, control_time_step
 
-    config = StanleyConfig(cross_track_gain=0.1, heading_gain=2.0)
+    config = StanleyConfig(cross_track_gain=1.5, heading_gain=2.0)
 
     stanley = Stanley(
         robot=my_robot,
@@ -214,13 +312,15 @@ def test_stanley():
         global_path,
         my_robot,
         control_time_step,
-        plot_results=False,
+        plot_results=plot,
+        figure_name=figure_name,
+        figure_tag=figure_tag,
     )
 
     assert reached_end is True
 
 
-def test_dvz():
+def test_dvz(plot: bool = False, figure_name: str = "", figure_tag: str = ""):
     """Run DVZ pytest and assert reaching end"""
     global global_path, my_robot, robot_ctr_limits, control_time_step
 
@@ -236,131 +336,18 @@ def test_dvz():
         global_path,
         my_robot,
         control_time_step,
-        plot_results=False,
+        plot_results=plot,
+        figure_name=figure_name,
+        figure_tag=figure_tag,
     )
 
     assert reached_end is True
 
 
-def test_dwa():
+def test_dwa(plot: bool = False, figure_name: str = "", figure_tag: str = ""):
     """Run DWA pytest and assert reaching end"""
     global global_path, my_robot, robot_ctr_limits, control_time_step
 
-    cost_weights = TrajectoryCostsWeights(
-        reference_path_distance_weight=1.5,
-        goal_distance_weight=4.0,
-        smoothness_weight=0.0,
-        jerk_weight=0.0,
-        obstacles_distance_weight=1.0,
-    )
-    config = DWAConfig(
-        max_linear_samples=20,
-        max_angular_samples=20,
-        octree_resolution=0.1,
-        costs_weights=cost_weights,
-        prediction_horizon=5.0,
-        control_horizon=0.1,
-        control_time_step=control_time_step,
-    )
-
-    dwa = DWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
-
-    reached_end = run_control(
-        dwa, global_path, my_robot, control_time_step, plot_results=False
-    )
-
-    assert reached_end is True
-
-
-@pytest.fixture(autouse=True)
-def run_before_and_after_tests():
-    """Fixture to execute asserts before and after a test is run"""
-
-    global global_path, my_robot, robot_ctr_limits, control_time_step
-
-    global_path = json_to_ros_path("./resources/control/global_path.json")
-
-    if not global_path:
-        raise ValueError("Global path file not found")
-
-    my_robot = Robot(
-        robot_type=RobotType.ACKERMANN,
-        geometry_type=RobotGeometry.Type.CYLINDER,
-        geometry_params=np.array([0.1, 0.4]),
-    )
-
-    robot_ctr_limits = RobotCtrlLimits(
-        vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
-        omega_limits=AngularCtrlLimits(
-            max_vel=10.0, max_acc=30.0, max_decel=20.0, max_steer=np.pi
-        ),
-    )
-
-    control_time_step = 0.1
-
-    yield
-
-
-def main():
-    global_path = json_to_ros_path("./resources/control/global_path.json")
-
-    if not global_path:
-        raise ValueError("Global path file not found")
-
-    my_robot = Robot(
-        robot_type=RobotType.DIFFERENTIAL_DRIVE,
-        geometry_type=RobotGeometry.Type.CYLINDER,
-        geometry_params=np.array([0.1, 0.4]),
-    )
-
-    robot_ctr_limits = RobotCtrlLimits(
-        vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
-        omega_limits=AngularCtrlLimits(
-            max_vel=2.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
-        ),
-    )
-
-    plot_results = True
-    control_time_step = 0.1
-
-    ## TESTING STANLEY ##
-    config = StanleyConfig(cross_track_gain=1.0, heading_gain=2.0)
-
-    stanley = Stanley(
-        robot=my_robot,
-        ctrl_limits=robot_ctr_limits,
-        config=config,
-        control_time_step=control_time_step,
-    )
-    # stanley._planner.set_interpolation_type(PathInterpolationType.LINEAR)
-    run_control(
-        stanley,
-        global_path,
-        my_robot,
-        control_time_step,
-        plot_results,
-        figure_name="stanley",
-        figure_tag="Stanley Follower Test Results",
-    )
-
-    # TESTING DVZ ##
-    dvz = DVZ(
-        robot=my_robot,
-        ctrl_limits=robot_ctr_limits,
-        control_time_step=control_time_step,
-    )
-
-    run_control(
-        dvz,
-        global_path,
-        my_robot,
-        control_time_step,
-        plot_results,
-        figure_name="dvz",
-        figure_tag="DVZ Controller Test Results",
-    )
-
-    ## TESTING DWA ##
     cost_weights = TrajectoryCostsWeights(
         reference_path_distance_weight=3.0,
         goal_distance_weight=1.0,
@@ -380,18 +367,87 @@ def main():
 
     dwa = DWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
 
-    # Change interpolation type
-    dwa._planner.set_interpolation_type(PathInterpolationType.HERMITE_SPLINE)
-
-    run_control(
+    reached_end = run_control(
         dwa,
         global_path,
         my_robot,
         control_time_step,
-        plot_results,
-        figure_name="dwa",
-        figure_tag="DWA Controller Test Results",
+        plot_results=plot,
+        figure_name=figure_name,
+        figure_tag=figure_tag,
     )
+
+    assert reached_end is True
+
+
+@pytest.fixture(autouse=True)
+def run_before_and_after_tests():
+    """Fixture to execute asserts before and after a test is run"""
+
+    global global_path, my_robot, robot_ctr_limits, control_time_step
+
+    global_path = json_to_ros_path(f"{control_resources}/global_path.json")
+
+    if not global_path:
+        raise ValueError("Global path file not found")
+
+    my_robot = Robot(
+        robot_type=RobotType.DIFFERENTIAL_DRIVE,
+        geometry_type=RobotGeometry.Type.CYLINDER,
+        geometry_params=np.array([0.1, 0.4]),
+    )
+
+    robot_ctr_limits = RobotCtrlLimits(
+        vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
+        omega_limits=AngularCtrlLimits(
+            max_vel=10.0, max_acc=30.0, max_decel=20.0, max_steer=np.pi
+        ),
+    )
+
+    control_time_step = 0.1
+
+    yield
+
+
+def main():
+    global global_path, my_robot, robot_ctr_limits, control_time_step
+
+    global_path = json_to_ros_path(f"{control_resources}/global_path.json")
+
+    if not global_path:
+        raise ValueError("Global path file not found")
+
+    my_robot = Robot(
+        robot_type=RobotType.ACKERMANN,
+        geometry_type=RobotGeometry.Type.CYLINDER,
+        geometry_params=np.array([0.1, 0.4]),
+    )
+
+    robot_ctr_limits = RobotCtrlLimits(
+        vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
+        omega_limits=AngularCtrlLimits(
+            max_vel=2.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
+        ),
+    )
+
+    control_time_step = 0.1
+
+    print("RUNNING PATH INTERPOLATION TEST")
+    test_path_interpolation(plot=True)
+
+    ## TESTING STANLEY ##
+    print("RUNNING STANLEY CONTROLLER TEST")
+    test_stanley(
+        plot=True, figure_name="stanley", figure_tag="Stanley Controller Test Results"
+    )
+
+    # TESTING DVZ ##
+    print("RUNNING DVZ CONTROLLER TEST")
+    test_dvz(plot=True, figure_name="dvz", figure_tag="DVZ Controller Test Results")
+
+    ## TESTING DWA ##
+    print("RUNNING DWA CONTROLLER TEST")
+    test_dwa(plot=True, figure_name="dwa", figure_tag="DWA Controller Test Results")
 
 
 if __name__ == "__main__":

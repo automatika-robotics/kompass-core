@@ -9,8 +9,7 @@ from kompass_core.datatypes.pose import PoseData
 from kompass_core.datatypes.laserscan import LaserScanData
 from kompass_core.datatypes.obstacles import OCCUPANCY_TYPE
 
-from kompass_core.mapping.local_mapper import LocalMapper, LocalMapperConfig
-from kompass_core.mapping.laserscan_model import LaserScanModelConfig
+from kompass_core.mapping import LocalMapper, MapConfig, LaserScanModelConfig
 from kompass_core.utils.visualization import visualize_grid
 
 
@@ -83,9 +82,7 @@ def local_mapper() -> LocalMapper:
     :rtype: LocalMapper
     """
 
-    mapper_config = LocalMapperConfig(
-        width=3.0, height=3.0, padding=0.0, resolution=0.05
-    )
+    mapper_config = MapConfig(width=3.0, height=3.0, padding=0.0, resolution=0.05)
 
     scan_model_config = LaserScanModelConfig(
         p_prior=0.5, p_occupied=0.9, range_sure=0.1, range_max=20.0, wall_size=0.075
