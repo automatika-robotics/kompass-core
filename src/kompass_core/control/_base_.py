@@ -9,6 +9,7 @@ from attrs import define, field
 from ..utils.common import BaseAttrs, in_range
 from ..utils.geometry import convert_to_plus_minus_pi
 from ..datatypes.laserscan import LaserScanData
+from kompass_cpp.types import PathInterpolationType
 
 
 @define
@@ -239,6 +240,14 @@ class FollowerTemplate:
 
         ros_path.poses = parsed_points
         return ros_path
+
+    def set_interpolation_type(self, interpolation_type: PathInterpolationType):
+        """Set the follower path interpolation type
+
+        :param interpolation_type: Used interpolation (linear, hermit, etc.)
+        :type interpolation_type: PathInterpolationType
+        """
+        self._planner.set_interpolation_type(interpolation_type)
 
     @property
     def tracked_state(self) -> Optional[RobotState]:
