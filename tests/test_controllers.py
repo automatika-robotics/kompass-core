@@ -295,7 +295,7 @@ def test_path_interpolation(plot: bool = False):
     assert abs(length_diff) <= EPSILON
 
 
-def test_stanley(plot: bool = False, figure_name: str = "", figure_tag: str = ""):
+def test_stanley(plot: bool = False, figure_name: str = "stanley", figure_tag: str = "stanley"):
     """Run Stanley pytest and assert reaching end"""
     global global_path, my_robot, robot_ctr_limits, control_time_step
 
@@ -320,7 +320,7 @@ def test_stanley(plot: bool = False, figure_name: str = "", figure_tag: str = ""
     assert reached_end is True
 
 
-def test_dvz(plot: bool = False, figure_name: str = "", figure_tag: str = ""):
+def test_dvz(plot: bool = False, figure_name: str = "dvz", figure_tag: str = "dvz"):
     """Run DVZ pytest and assert reaching end"""
     global global_path, my_robot, robot_ctr_limits, control_time_step
 
@@ -344,7 +344,7 @@ def test_dvz(plot: bool = False, figure_name: str = "", figure_tag: str = ""):
     assert reached_end is True
 
 
-def test_dwa(plot: bool = False, figure_name: str = "", figure_tag: str = ""):
+def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dwa"):
     """Run DWA pytest and assert reaching end"""
     global global_path, my_robot, robot_ctr_limits, control_time_step
 
