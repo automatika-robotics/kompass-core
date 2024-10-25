@@ -18,7 +18,6 @@
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
 #include <cmath>
-#include <pcl/common/io.h>
 
 namespace Kompass {
 namespace Control {

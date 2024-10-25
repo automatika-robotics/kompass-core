@@ -5,8 +5,6 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
 #include <vector>
 
 namespace Kompass {

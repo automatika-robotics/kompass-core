@@ -72,44 +72,6 @@ class LaserScanData(BaseAttrs):
             self.angles = self.angles[:minimum_size]
             self.ranges = self.ranges[:minimum_size]
 
-    def __sub__(self, __other):
-        """
-        Substract the scan values of two scans
-
-        :param __other: _description_
-        :type __other: _type_
-        :raises TypeError: If given value is not a LaserScan Data
-        :raises ValueError: If given LaserScanData is incompatible (different min, max or increment)
-        :return: _description_
-        :rtype: LaserScanData
-        """
-        if not isinstance(__other, LaserScanData):
-            raise TypeError(
-                f"Cannot substract LaserScanData and type '{type(__other)}'"
-            )
-
-        if (
-            self.angle_min != __other.angle_min
-            or self.angle_max != __other.angle_max
-            or self.angle_increment != __other.angle_increment
-        ):
-            raise ValueError("Cannot substract incompatible LaserScanData")
-        # TODO: Align angles and values
-        # def normalize_angle(ang):
-        #     value = ang % (2 * math.pi)
-        #     if value < 0:
-        #         value += 2 * math.pi
-        #     return value
-        # ang_min = normalize_angle(self.angle_min)
-        # ang_max = normalize_angle(self.angle_max)
-        # other_min = normalize_angle(__other.angle_min)
-        # other_max = normalize_angle(__other.angle_max)
-
-        result = self
-        result.ranges = self.ranges - __other.ranges
-        result.intensities = self.intensities - __other.intensities
-        return result
-
     def __convert_to_0_2pi(
         cls, value: Union[float, np.ndarray]
     ) -> Union[float, np.ndarray]:
@@ -133,24 +95,58 @@ class LaserScanData(BaseAttrs):
             value += 2 * math.pi
         return value
 
-    def get_ranges(self, angle_min: float, angle_max: float) -> np.ndarray:
-        """Get laserscan ranges values between two given angles
+    def get_ranges(
+        self,
+        right_angle: float,
+        left_angle: float,
+    ) -> np.ndarray:
+        """Get ranges values in a defined zone between a left angle and a right angle
 
-        :param angle_min: Minimum angle (rad)
-        :type angle_min: float
-        :param angle_max:  Maximum angle (rad)
-        :type angle_max: float
+        :param right_angle: Value of the angle on the right of the ranges (rad)
+        :type right_angle: float
+        :param left_angle: Value of the angle on the left of the ranges (rad)
+        :type left_angle: float
 
-        :return: Laserscan values in angles range
+        :return: Ranges values in the specified zone
         :rtype: np.ndarray
         """
-        angles_converted = self.__convert_to_0_2pi(self.angles)
-        if self.__convert_to_0_2pi(angle_min) < self.__convert_to_0_2pi(angle_max):
-            idx_mask = (angles_converted >= self.__convert_to_0_2pi(angle_min)) & (
-                angles_converted <= self.__convert_to_0_2pi(angle_max)
-            )
+        angles: np.ndarray = self.__convert_to_0_2pi(self.angles)
+
+        left_angle = self.__convert_to_0_2pi(left_angle)
+        right_angle = self.__convert_to_0_2pi(right_angle)
+
+        # Get indices of angles in the specified zone
+        if right_angle > left_angle:
+            angles_in_zone = (angles <= left_angle) | (angles >= right_angle)
         else:
-            idx_mask = (angles_converted >= self.__convert_to_0_2pi(angle_min)) | (
-                angles_converted <= self.__convert_to_0_2pi(angle_max)
-            )
-        return self.ranges[idx_mask]
+            angles_in_zone = (angles <= left_angle) & (angles >= right_angle)
+
+        return self.ranges[angles_in_zone]
+
+    def get_angles(
+        self,
+        right_angle: float,
+        left_angle: float,
+    ) -> np.ndarray:
+        """Get ranges values in a defined zone between a left angle and a right angle
+
+        :param right_angle: Value of the angle on the right of the ranges (rad)
+        :type right_angle: float
+        :param left_angle: Value of the angle on the left of the ranges (rad)
+        :type left_angle: float
+
+        :return: Ranges values in the specified zone
+        :rtype: np.ndarray
+        """
+        angles: np.ndarray = self.__convert_to_0_2pi(self.angles)
+
+        left_angle = self.__convert_to_0_2pi(left_angle)
+        right_angle = self.__convert_to_0_2pi(right_angle)
+
+        # Get indices of angles in the specified zone
+        if right_angle > left_angle:
+            angles_in_zone = (angles <= left_angle) | (angles >= right_angle)
+        else:
+            angles_in_zone = (angles <= left_angle) & (angles >= right_angle)
+
+        return self.angles[angles_in_zone]

@@ -118,7 +118,6 @@ void CollisionChecker::updateState(const Path::State current_state) {
 
 void CollisionChecker::updateScan(const std::vector<double> &ranges,
                                   const std::vector<double> &angles) {
-  Eigen::Vector3f trans = sensor_tf_world_.translation();
   convertLaserScanToOctomap(ranges, angles, robotHeight_ / 2);
 }
 
