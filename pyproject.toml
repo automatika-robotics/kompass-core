@@ -13,6 +13,7 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
 ]
+license = { file = "LICENSE" }
 
 keywords = ["robotics", "robots", "navigation", "control", "planning", "mapping"]
 dependencies = [
@@ -47,7 +48,7 @@ log_cli_date_format = "%Y-%m-%d %H:%M:%S"
 testpaths = [
     "tests"
 ]
-python_files = '*pytest.py'
+python_files = 'test*.py'
 
 [tool.interrogate]
 ignore-init-method = true
