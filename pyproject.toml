@@ -19,7 +19,7 @@ keywords = ["robotics", "robots", "navigation", "control", "planning", "mapping"
 dependencies = [
     "numpy==1.26.4",
     "numpy-quaternion==2023.0.3",
-    "python-fcl@git+https://github.com/automatika-robotics/python-fcl",
+    "python-fcl-fork",
     "pybind11",
     "omegaconf",
     "attrs==23.2.0",

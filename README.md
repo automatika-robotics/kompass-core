@@ -9,6 +9,10 @@ Kompass Core is a motion planning and control package for robot navigation. The 
 
 - ```sudo apt-get install libompl-dev libfcl-dev libpcl-dev```
 
+### Install with pip
+
+- ```pip install kompass-core```
+
 ### Install from Source
 
 - ```git clone https://github.com/automatika-robotics/kompass-core```
