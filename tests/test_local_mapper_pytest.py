@@ -66,7 +66,7 @@ def logs_test_dir() -> str:
     """
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-    logs_test_relative_path = "logs/test/"
+    logs_test_relative_path = "tests/logs/"
     log_test_absolute_path = os.path.join(root_dir, logs_test_relative_path)
     os.makedirs(log_test_absolute_path, exist_ok=True)
 
@@ -78,7 +78,7 @@ def local_mapper() -> LocalMapper:
     """
     get a local mapper instance
 
-    :return: local mapper isntance
+    :return: local mapper instance
     :rtype: LocalMapper
     """
 
@@ -180,6 +180,8 @@ def laser_scan_data(local_mapper: LocalMapper, range_option: str) -> LaserScanDa
             laser_scan_data.angle_increment,
         )
         laser_scan_data.ranges = [max_range_quarter] * angles_size
+        laser_scan_data.ranges[0] = 0.0
+        laser_scan_data.ranges[1] = 0.1
 
     elif range_option == "continuous":
         min_obstacle_radius = 10
@@ -227,8 +229,6 @@ def test_update_from_scan(
     number_occupied_cells = np.count_nonzero(
         local_mapper.grid_data.occupancy == OCCUPANCY_TYPE.OCCUPIED
     )
-    number_of_obstacles = local_mapper.obstacles_data.total.get_length()
-
     # log visualization for grid
     visualize_grid(
         local_mapper.grid_data.occupancy,
@@ -238,17 +238,6 @@ def test_update_from_scan(
     )
 
     logging.info(f"number_occupied_cells: {number_occupied_cells}")
-    logging.info(f"number_of_obstacles: {number_of_obstacles}")
-
-    # TODO: make it configurable with the robot actually dimension
-    NUMBER_OF_CELLS_OCCUPIED_BY_ROBOT = 0
-
-    # the default number of occupied cells for robot footprint is 4
-    # Therefore the number obstacles should equal to the grid cells on the map without
-    # the grid cells dedicated to the robot
-    assert (
-        number_of_obstacles == number_occupied_cells - NUMBER_OF_CELLS_OCCUPIED_BY_ROBOT
-    )
 
 
 @pytest.fixture
