@@ -3,11 +3,11 @@ from attrs import define, field, Factory
 import numpy as np
 from ..datatypes.pose import PoseData
 from ..datatypes.laserscan import LaserScanData
-from ..datatypes.obstacles import OBSTACLE_TYPE, OCCUPANCY_TYPE, ObstaclesData
+from ..datatypes.obstacles import OCCUPANCY_TYPE, ObstaclesData
 
 from ..utils.geometry import from_frame1_to_frame2, get_pose_target_in_reference_frame
 
-from .grid import grid_to_local, get_previous_grid_in_current_pose
+from .grid import get_previous_grid_in_current_pose
 from .laserscan_model import LaserScanModelConfig
 from .bresenham import laserscan_to_grid
 from ..utils.common import BaseAttrs, in_range
@@ -53,7 +53,7 @@ class GridData(BaseAttrs):
         data = np.full(
             (self.width, self.height),
             OCCUPANCY_TYPE.UNEXPLORED,
-            dtype=np.int32,
+            dtype=np.int8,
         )
         return data
 
@@ -149,10 +149,6 @@ class LocalMapper:
 
         self.scan_update_model = scan_model_config
 
-        self._local_origin_point = PoseData()
-        self._local_origin_point.set_position(
-            x=config.width / 2, y=config.height / 2, z=0
-        )
         self._local_lower_right_corner_point = PoseData()
         self._local_lower_right_corner_point.set_position(
             x=-1 * config.width / 2, y=-1 * config.height / 2, z=0
@@ -174,7 +170,7 @@ class LocalMapper:
 
         # current obstacles and grid data
         self._pose_robot_in_world = PoseData()
-        self._origin_pose = PoseData()
+        # self._origin_pose = PoseData()
 
         self.odd_log_p_prior = self.scan_update_model.odd_log_p_prior
 
@@ -184,8 +180,6 @@ class LocalMapper:
             height=self.grid_height,
             odd_log_p_prior=self.odd_log_p_prior,
         )
-
-        self.obstacles_data = GridObstacles()
 
         # for bayesian update
         self.previous_grid_prob_transformed = np.copy(
@@ -214,10 +208,7 @@ class LocalMapper:
         """
         Merge grid occupancy data
         """
-        self.grid_data.occupancy = np.maximum(
-            self.grid_data.scan_occupancy, -1
-        )  # , self.grid_data["semantic_occupancy"]
-        # )
+        self.grid_data.occupancy = np.maximum(self.grid_data.scan_occupancy, -1)
 
         UNEXPLORED_THRESHOLD = self.odd_log_p_prior
         self.grid_data.occupancy_prob[
@@ -229,17 +220,6 @@ class LocalMapper:
         self.grid_data.occupancy_prob[
             self.grid_data.scan_occupancy_prob < UNEXPLORED_THRESHOLD
         ] = OCCUPANCY_TYPE.EMPTY
-
-        self.obstacles_data.total = ObstaclesData()
-        self.obstacles_data.total.update_metadata(
-            resolution=self.resolution,
-            width=self.grid_width,
-            height=self.grid_height,
-            origin_pose=self._origin_pose,
-            robot_pose=self._pose_robot_in_world,
-        )
-        self.obstacles_data.total.merge_obstacles(self.obstacles_data.scan)
-        self.obstacles_data.total.merge_obstacles(self.obstacles_data.semantic)
 
     def _calculate_poses(self, current_robot_pose: PoseData):
         """Calculates 3D global poses of the 4 corners of the grid based on the curren robot position
@@ -270,27 +250,8 @@ class LocalMapper:
             )
 
         self._pose_robot_in_world = current_robot_pose
-        self._origin_pose = from_frame1_to_frame2(
-            current_robot_pose, self._local_origin_point
-        )
         self.lower_right_corner_pose = from_frame1_to_frame2(
             current_robot_pose, self._local_lower_right_corner_point
-        )
-
-        self.obstacles_data.scan.update_metadata(
-            resolution=self.resolution,
-            width=self.grid_width,
-            height=self.grid_height,
-            origin_pose=self._origin_pose,
-            robot_pose=self._pose_robot_in_world,
-        )
-
-        self.obstacles_data.semantic.update_metadata(
-            resolution=self.resolution,
-            width=self.grid_width,
-            height=self.grid_height,
-            origin_pose=self._origin_pose,
-            robot_pose=self._pose_robot_in_world,
         )
 
     def update_from_scan(
@@ -321,7 +282,7 @@ class LocalMapper:
         if not pose_laser_scanner_in_robot:
             pose_laser_scanner_in_robot = PoseData()
 
-        robot_orientation = (
+        laserscan_orientation = (
             2
             * np.arctan(pose_laser_scanner_in_robot.qz / pose_laser_scanner_in_robot.qw)
             if pose_laser_scanner_in_robot
@@ -329,51 +290,25 @@ class LocalMapper:
         )
 
         # Reset obstacles detected
-        self.obstacles_data.scan = ObstaclesData()
+        # self.obstacles_data.scan = ObstaclesData()
         self.grid_data.init_scan_data()
         # filter out infinity range and negative range
         filtered_ranges = np.minimum(
             self.scan_update_model.range_max, np.maximum(0.0, laser_scan.ranges)
         )
 
-        obstacle_back = laserscan_to_grid(
+        laserscan_to_grid(
             angles=laser_scan.angles,
             ranges=filtered_ranges,
-            robot_orientation=robot_orientation,
             grid_data=self.grid_data.scan_occupancy,
             grid_data_prob=self.grid_data.scan_occupancy_prob,
             central_point=self._point_central_in_grid,
             resolution=self.resolution,
             laser_scan_pose=pose_laser_scanner_in_robot.get_position(),
+            laser_scan_orientation=laserscan_orientation,
             previous_grid_data_prob=self.previous_grid_prob_transformed,
             **self.scan_update_model.asdict(),
         )
-
-        if get_obstacles:
-            # post-processing after bresenham scanning
-            for grid_point in np.unique(obstacle_back, axis=0):
-                # update obstacle data
-                local_point = grid_to_local(
-                    grid_point, self._point_central_in_grid, self.resolution
-                )
-                local_pose = PoseData()
-                local_pose.set_position(*local_point)
-                global_point = from_frame1_to_frame2(robot_pose, local_pose)
-
-                self.obstacles_data.scan.add_obstacle(
-                    obstacle_type=int(OBSTACLE_TYPE.SCAN),
-                    x_global=global_point.x,
-                    y_global=global_point.y,
-                    x_local=local_pose.x,
-                    y_local=local_pose.y,
-                    i_grid=grid_point[0],
-                    j_grid=grid_point[1],
-                    occupied_zone=self._scan_occupied_radius,
-                    class_id=-1,
-                    object_id=-1,
-                    vx=0.0,
-                    vy=0.0,
-                )
 
         # robot occupied zone - TODO: make it in a separate function and proportional to the actual robot size\
         # self.grid_data["scan_occupancy"][
