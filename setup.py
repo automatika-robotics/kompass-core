@@ -96,7 +96,6 @@ def get_vcpkg_libs():
 
 # OMPL dependencies
 ompl_include_dirs = pkg_config(["ompl", "eigen3"], flag="--cflags-only-I")
-ompl_library_dirs = pkg_config(["ompl"], flag="--libs-only-other")
 
 # Accepted PCL versions
 pcl_versions = ["1.14", "1.13", "1.12", "1.11", "1.10", "1.9"]
