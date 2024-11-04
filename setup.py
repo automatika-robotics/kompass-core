@@ -29,11 +29,9 @@ def find_pkg(package, versions=None):
         try:
             subprocess.check_output(["pkg-config", "--exists", package])
             print(f"FOUND {package}")
-        except subprocess.CalledProcessError as e:
-            raise ModuleNotFoundError(
-                f"'{package}' is required but is not found"
-            ) from e
-        return package
+            return package
+        except subprocess.CalledProcessError:
+            return
     else:
         found_version = None
         for version in versions:
@@ -50,16 +48,15 @@ def find_pkg(package, versions=None):
             break
         if found_version:
             return f"{package}-{found_version}"
-        else:
-            raise ModuleNotFoundError(f"'{package}' is required but is not found")
 
 
-def pkg_config(*packages, flag, versions=None):
+def pkg_config(packages, flag, versions=None):
     """Run pkg-config with given flag"""
     found_packages = []
     # Check if the package exists
-    for pkg in list(packages):
-        found_packages.append(find_pkg(pkg, versions))
+    for pkg in packages:
+        if found_pkg := find_pkg(pkg, versions):
+            found_packages.append(found_pkg)
     try:
         output = (
             subprocess.check_output(["pkg-config", flag] + found_packages)
@@ -77,27 +74,49 @@ def pkg_config(*packages, flag, versions=None):
 # Check that pkg-config is installed
 check_pkg_config()
 
+# get vcpkg paths when building wheels
+vcpkg_path = os.environ.get("VCPKG_ROOT")
+
+
+def get_vcpkg_includes():
+    """Get include dir for vcpkg"""
+    if vcpkg_path:
+        return [f"{vcpkg_path}/installed/x64-linux/include", "/usr/include/python3.9"]
+    else:
+        return []
+
+
+def get_vcpkg_libs():
+    """Get libs dir for vcpkg"""
+    if vcpkg_path:
+        return [f"{vcpkg_path}/installed/x64-linux/lib"]
+    else:
+        return []
+
+
 # OMPL dependencies
-ompl_include_dirs = pkg_config(*["ompl", "eigen3"], flag="--cflags-only-I")
-ompl_library_dirs = pkg_config(*["ompl"], flag="--libs-only-other")
+ompl_include_dirs = pkg_config(["ompl", "eigen3"], flag="--cflags-only-I")
+ompl_library_dirs = pkg_config(["ompl"], flag="--libs-only-other")
 
 # Accepted PCL versions
 pcl_versions = ["1.14", "1.13", "1.12", "1.11", "1.10", "1.9"]
 
 # Kompass CPP dependencies
-eigen_include_dir = pkg_config(*["eigen3"], flag="--cflags-only-I")
+eigen_include_dir = pkg_config(["eigen3"], flag="--cflags-only-I")
 pcl_include_dir = pkg_config(
-    *["pcl_common"], flag="--cflags-only-I", versions=pcl_versions
+    ["pcl_common"], flag="--cflags-only-I", versions=pcl_versions
 )
 
+vcpkg_includes = get_vcpkg_includes()
+vcpkg_libs = get_vcpkg_libs()
 
 ext_modules = [
     Pybind11Extension(
         "ompl",
         glob.glob(os.path.join("src/ompl/src", "*.cpp")),
-        include_dirs=ompl_include_dirs,
+        include_dirs=ompl_include_dirs + vcpkg_includes,
         libraries=["ompl"],
-        library_dirs=ompl_library_dirs,
+        library_dirs=["/usr/lib/x86_64-linux-gnu"] + vcpkg_libs,
         define_macros=[("VERSION_INFO", __version__)],
     ),
     Pybind11Extension(
@@ -107,9 +126,10 @@ ext_modules = [
         ),
         include_dirs=["src/kompass_cpp/kompass_cpp/include"]
         + eigen_include_dir
-        + pcl_include_dir,
+        + pcl_include_dir
+        + vcpkg_includes,
         libraries=["fcl", "pcl_io_ply", "pcl_common"],
-        library_dirs=["/usr/lib/x86_64-linux-gnu"],
+        library_dirs=["/usr/lib/x86_64-linux-gnu"] + vcpkg_libs,
         define_macros=[("VERSION_INFO", __version__)],
     ),
 ]

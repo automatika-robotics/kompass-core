@@ -30,7 +30,7 @@ dependencies = [
     "pandas",
 ]
 
-requires-python = ">=3.8"
+requires-python = ">=3.8.4"
 
 [project.optional-dependencies]
 dev = ["pip-tools", "pytest==8.0.0", "pre-commit"]
@@ -99,3 +99,14 @@ push = true
 "setup.py" = [
     "{version}",
 ]
+
+[tool.cibuildwheel]
+skip = ["pp*", "*musllinux*"]
+test-requires = "pytest"
+test-command = "pytest {package}/tests/test_controllers.py"
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+
+[tool.cibuildwheel.linux]
+before-all = "bash build_dependencies/install_linux.sh"
+archs = ["x86_64", "aarch64"]
