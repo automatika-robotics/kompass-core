@@ -1,3 +1,4 @@
+#include <array>
 #include "controllers/pid.h"
 
 namespace Kompass {
