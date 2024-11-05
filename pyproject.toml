@@ -17,12 +17,12 @@ license = { file = "LICENSE" }
 
 keywords = ["robotics", "robots", "navigation", "control", "planning", "mapping"]
 dependencies = [
-    "numpy==1.26.4",
-    "numpy-quaternion==2023.0.3",
+    "numpy<=1.26.4",
+    "numpy-quaternion>=2023.0.3",
     "python-fcl-fork",
     "pybind11",
     "omegaconf",
-    "attrs==23.2.0",
+    "attrs>=23.2.0",
     "numba",
     "pyyaml",
     "scipy",
@@ -30,7 +30,7 @@ dependencies = [
     "pandas",
 ]
 
-requires-python = ">=3.8.4"
+requires-python = ">=3.8.4,<3.13"
 
 [project.optional-dependencies]
 dev = ["pip-tools", "pytest==8.0.0", "pre-commit"]
@@ -103,10 +103,11 @@ push = true
 [tool.cibuildwheel]
 skip = ["pp*", "*musllinux*"]
 test-requires = "pytest"
-test-command = "pytest {package}/tests/test_controllers.py"
+test-command = "pytest {package}/tests/test_fcl.py"
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
 
 [tool.cibuildwheel.linux]
+environment = {VCPKG_ROOT="/project/deps/vcpkg", LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/x64-linux/lib"}
 before-all = "bash build_dependencies/install_linux.sh"
 archs = ["x86_64", "aarch64"]

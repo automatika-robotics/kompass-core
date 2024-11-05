@@ -12,6 +12,7 @@ bin/
 build/
 develop-eggs/
 dist/
+wheelhouse/
 eggs/
 lib/
 lib64/

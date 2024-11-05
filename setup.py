@@ -1,5 +1,6 @@
 import glob
 import os
+import sys
 
 from pybind11.setup_helpers import (
     Pybind11Extension,
@@ -81,17 +82,24 @@ vcpkg_path = os.environ.get("VCPKG_ROOT")
 def get_vcpkg_includes():
     """Get include dir for vcpkg"""
     if vcpkg_path:
-        return [f"{vcpkg_path}/installed/x64-linux/include", "/usr/include/python3.9"]
+        python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+        headers_dir = next((s for s in os.listdir('/opt/_internal') if python_version in s), None)
+        if not headers_dir:
+            return [f"{vcpkg_path}/installed/x64-linux/include"]
+        return [f"{vcpkg_path}/installed/x64-linux/include", f"/opt/_internal/{headers_dir}/include/python{python_version}"]
     else:
         return []
 
 
 def get_vcpkg_libs():
-    """Get libs dir for vcpkg"""
+    """Get libs dir for vcpkg
+    Add extra libs explicitly for linking because FCL port for vcpkg
+    builds as a static lib that does not link its dependencies
+    """
     if vcpkg_path:
-        return [f"{vcpkg_path}/installed/x64-linux/lib"]
+        return [f"{vcpkg_path}/installed/x64-linux/lib"], ["octomap", "octomath", "ccd"]
     else:
-        return []
+        return [], []
 
 
 # OMPL dependencies
@@ -106,16 +114,16 @@ pcl_include_dir = pkg_config(
     ["pcl_common"], flag="--cflags-only-I", versions=pcl_versions
 )
 
-vcpkg_includes = get_vcpkg_includes()
-vcpkg_libs = get_vcpkg_libs()
+vcpkg_includes_dir = get_vcpkg_includes()
+vcpkg_libs_dir, vcpkg_extra_libs = get_vcpkg_libs()
 
 ext_modules = [
     Pybind11Extension(
         "ompl",
         glob.glob(os.path.join("src/ompl/src", "*.cpp")),
-        include_dirs=ompl_include_dirs + vcpkg_includes,
+        include_dirs=ompl_include_dirs + vcpkg_includes_dir,
         libraries=["ompl"],
-        library_dirs=["/usr/lib/x86_64-linux-gnu"] + vcpkg_libs,
+        library_dirs=["/usr/lib/x86_64-linux-gnu"] + vcpkg_libs_dir,
         define_macros=[("VERSION_INFO", __version__)],
     ),
     Pybind11Extension(
@@ -126,9 +134,9 @@ ext_modules = [
         include_dirs=["src/kompass_cpp/kompass_cpp/include"]
         + eigen_include_dir
         + pcl_include_dir
-        + vcpkg_includes,
-        libraries=["fcl", "pcl_io_ply", "pcl_common"],
-        library_dirs=["/usr/lib/x86_64-linux-gnu"] + vcpkg_libs,
+        + vcpkg_includes_dir,
+        libraries=["fcl", "pcl_io_ply", "pcl_common"] + vcpkg_extra_libs,
+        library_dirs=["/usr/lib/x86_64-linux-gnu"] + vcpkg_libs_dir,
         define_macros=[("VERSION_INFO", __version__)],
     ),
 ]

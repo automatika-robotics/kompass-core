@@ -1,17 +1,15 @@
 # exit immediately on any failed step
 set -xe
+mkdir -p $VCPKG_ROOT
+echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH
 
 # install vcpkg
-git clone --depth 1 https://github.com/microsoft/vcpkg.git
+git clone --depth 1 https://github.com/microsoft/vcpkg.git $VCPKG_ROOT
 yum install -y zip unzip
-cd vcpkg && ./bootstrap-vcpkg.sh -disableMetrics
-export VCPKG_ROOT=$PWD
+$VCPKG_ROOT/bootstrap-vcpkg.sh -disableMetrics
 
 # install dependencies
-./vcpkg install fcl
-./vcpkg install pcl
-./vcpkg install ompl
-cd ..
+$VCPKG_ROOT/vcpkg install fcl
+$VCPKG_ROOT/vcpkg install pcl[core]
+$VCPKG_ROOT/vcpkg install ompl
 
-# install python-devel (for PyBind11)
-yum install -y python39-devel
