@@ -140,7 +140,7 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
   for (double t = 0; t < max_time_; t += time_step_) {
 
     // Alternate between linear and angular movement
-    if (t == 0) {
+    if (int(t / time_step_) % 2 == 0) {
       simulated_pose.yaw += vel.omega * time_step_;
       simulated_velocities.push_back(
           Velocity(0.0, 0.0, vel.omega, vel.steer_ang));

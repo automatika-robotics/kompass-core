@@ -295,7 +295,9 @@ def test_path_interpolation(plot: bool = False):
     assert abs(length_diff) <= EPSILON
 
 
-def test_stanley(plot: bool = False, figure_name: str = "stanley", figure_tag: str = "stanley"):
+def test_stanley(
+    plot: bool = False, figure_name: str = "stanley", figure_tag: str = "stanley"
+):
     """Run Stanley pytest and assert reaching end"""
     global global_path, my_robot, robot_ctr_limits, control_time_step
 

@@ -1,4 +1,3 @@
-from typing import List
 import numba
 import numpy as np
 from ..datatypes.obstacles import OCCUPANCY_TYPE
@@ -91,12 +90,12 @@ def bresenham_line_drawing(pt1: np.ndarray, pt2: np.ndarray) -> np.ndarray:  # n
 def laserscan_to_grid(
     angles: np.ndarray,
     ranges: np.ndarray,
-    robot_orientation: float,
     grid_data: np.ndarray,
     grid_data_prob: np.ndarray,
     central_point: np.ndarray,
     resolution: float,
     laser_scan_pose: np.ndarray,
+    laser_scan_orientation: float,
     previous_grid_data_prob: np.ndarray,
     p_prior: float,
     p_empty: float,
@@ -105,7 +104,7 @@ def laserscan_to_grid(
     range_max: float,
     wall_size: float,
     odd_log_p_prior: float,
-) -> List:
+):
     """
     Processes LaserScan data (angles and ranges) to project on a 2D grid using Bresenham line drawing for each LaserScan beam
 
@@ -150,11 +149,11 @@ def laserscan_to_grid(
         central_point,
         resolution,
     )
-    obstacles_grid_points = []
+
     for angle, current_range in zip(angles, ranges):
         # calculate hit point
-        x = laser_scan_pose[0] + current_range * np.cos(robot_orientation + angle)
-        y = laser_scan_pose[1] + current_range * np.sin(robot_orientation + angle)
+        x = laser_scan_pose[0] + current_range * np.cos(laser_scan_orientation + angle)
+        y = laser_scan_pose[1] + current_range * np.sin(laser_scan_orientation + angle)
         to_point = local_to_grid(np.array([x, y]), central_point, resolution)
 
         line_pts = bresenham_line_drawing(starting_point, to_point)
@@ -167,7 +166,6 @@ def laserscan_to_grid(
             if -1 < x < grid_data.shape[0] and -1 < y < grid_data.shape[1]:
                 ### non-bayesian update ###
                 grid_data[x, y] = max(grid_data[x, y], OCCUPANCY_TYPE.EMPTY.value)
-
                 ### bayesian update ###
                 # NOTE: when previous grid is transformed to align with the current grid
                 # it's not perfectly aligned at the nearest grid cell.
@@ -219,6 +217,3 @@ def laserscan_to_grid(
                 0,
                 OCCUPANCY_TYPE.OCCUPIED,
             )
-            obstacles_grid_points.append(last_grid_point)
-
-    return obstacles_grid_points
