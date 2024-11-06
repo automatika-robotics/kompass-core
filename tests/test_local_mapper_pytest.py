@@ -223,7 +223,6 @@ def test_update_from_scan(
         pose_robot_in_world,
         laser_scan_data,
         pose_laser_scanner_in_robot,
-        get_obstacles=True,
     )
 
     number_occupied_cells = np.count_nonzero(

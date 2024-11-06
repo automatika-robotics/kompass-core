@@ -90,40 +90,6 @@ class MapConfig(BaseAttrs):
     )
 
 
-def _get_starting_point(angle: float, main_point: np.ndarray) -> np.ndarray:
-    """
-    Sets the starting point of a laser beam from the scanner.
-    Assuming that the center of the robot (the scanner) occupy 4 grid cells.
-    each cell is a starting point for each of the 4 quadrant around the robot
-    (the scanner)
-
-    :param      angle: _description_
-    :type       angle: _type_
-    :param      main_point: _description_
-    :type       main_point: _type_
-
-    :return:    i,j coordinates of the starting point
-    :rtype:     numpy array
-    """
-
-    rad_90 = 1.570796326794896  # 90 degrees in radians
-    rad_180 = 3.14159265358979  # 180 degrees in radians
-    rad_270 = 4.7123889803846  # 270 degrees in radians
-
-    grid_robot_point = np.zeros(2)
-    if angle <= rad_90:  # in the first quadrant in the laser scan circle
-        pass
-    if angle > rad_90 and angle <= rad_180:  # in the 2nd quadrant
-        grid_robot_point[0] = main_point[0] + 1
-    elif angle > rad_180 and angle <= rad_270:  # in the 3rd quadrant
-        grid_robot_point[0] = main_point[0] + 1
-        grid_robot_point[1] = main_point[1] + 1
-    else:  # in the 4th and last quadrant
-        grid_robot_point[1] = main_point[1] + 1
-
-    return grid_robot_point
-
-
 class LocalMapper:
     """
     LocalMapper class produces a grid map around the current robot position using LaserScanData
@@ -259,7 +225,6 @@ class LocalMapper:
         robot_pose: PoseData,
         laser_scan: LaserScanData,
         pose_laser_scanner_in_robot: Optional[PoseData] = None,
-        get_obstacles: bool = False,
     ):
         """
         Update the local map using new LaserScan data
@@ -270,8 +235,6 @@ class LocalMapper:
         :type laser_scan: LaserScanData
         :param pose_laser_scanner_in_robot: Pose of the sensor w.r.t the robot, defaults to None
         :type pose_laser_scanner_in_robot: Optional[PoseData], optional
-        :param get_obstacles: Compute obstacle data, defaults to False
-        :type get_obstacles: bool, optional
         """
         # it's important to recalculate the current poses before doing any update
         # In order to get relationship between previous robot state (pose and grid)
@@ -289,8 +252,6 @@ class LocalMapper:
             else 0.0
         )
 
-        # Reset obstacles detected
-        # self.obstacles_data.scan = ObstaclesData()
         self.grid_data.init_scan_data()
         # filter out infinity range and negative range
         filtered_ranges = np.minimum(
