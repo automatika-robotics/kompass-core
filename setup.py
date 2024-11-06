@@ -11,7 +11,7 @@ from pybind11.setup_helpers import (
 from setuptools import find_packages, setup
 import subprocess
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 # DEFAULTS FOR UBUNTU 22.04
 OMPL_INCLUDE_DEFAULT_DIR = "/usr/include/ompl-1.5"
