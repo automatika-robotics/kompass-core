@@ -158,12 +158,12 @@ private:
    * @param admissible_velocity_trajectories
    */
   void getAdmissibleTrajsFromVel(
-      const Velocity vel, const Path::State start_pose,
+      const Velocity &vel, const Path::State &start_pose,
       std::vector<Trajectory>* admissible_velocity_trajectories);
 
   void getAdmissibleTrajsFromVelDiffDrive(
-      Velocity &vel, const Path::State start_pose,
-      std::vector<Trajectory> &admissible_velocity_trajectories);
+      const Velocity &vel, const Path::State &start_pose,
+      std::vector<Trajectory>* admissible_velocity_trajectories);
 
   /**
    * @brief Generate trajectory samples for an ACKERMANN motion model
