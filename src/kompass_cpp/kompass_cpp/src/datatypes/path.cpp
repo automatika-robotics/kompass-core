@@ -151,15 +151,24 @@ void Path::interpolate(double max_interpolation_point_dist,
     points.push_back({x[i], y[i]});
     std::vector<double> x_points, y_points;
 
+    // Add mid point to send 3 points for spline interpolation
+    double mid_x = (x[i + 1] + x[i]) / 2;
+    double mid_y;
+
     // Spline interpolation requires sorted data (x points)
     if (x[i+1] > x[i]){
-        x_points = {x[i], x[i+1]};
-        y_points = {y[i], y[i + 1]};
+      mid_y =
+          y[i] + (mid_x - x[i]) * (y[i + 1] - y[i]) / (x[i + 1] - x[i]);
+      x_points = {x[i], mid_x, x[i + 1]};
+      y_points = {y[i], mid_y, y[i + 1]};
     }
     else{
-      x_points = {x[i+1], x[i]};
-      y_points = {y[i+1], y[i]};
+      mid_y =
+          y[i + 1] + (mid_x - x[i + 1]) * (y[i + 1] - y[i]) / (x[i + 1] - x[i]);
+      x_points = {x[i + 1], mid_x,  x[i]};
+      y_points = {y[i + 1], mid_y, y[i]};
     }
+
     // Create the spline object and set the x and y values
     if (type == InterpolationType::LINEAR) {
       _spline = new tk::spline(x_points, y_points, tk::spline::linear);

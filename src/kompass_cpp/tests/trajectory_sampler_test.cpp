@@ -24,7 +24,7 @@ void testTrajSampler() {
                                   Path::Point(2.0, 0.0)};
   Path::Path raw_path(points);
 
-  // Generic folower to use for raw path interpolation and segmentation
+  // Generic follower to use for raw path interpolation and segmentation
   Control::Follower *follower = new Control::Follower();
   follower->setCurrentPath(raw_path);
   // Get the interpolated/segmented path
