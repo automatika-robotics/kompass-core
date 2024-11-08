@@ -352,6 +352,10 @@ bool CollisionChecker::checkCollisions(const Path::State current_state) {
   m_collManager->collide(m_stateObjPtr, &collisionData,
                        fcl::DefaultCollisionFunction);
 
+  // detele temp objects
+  delete m_stateObjPtr;
+  delete m_collManager;
+
   return collisionData.result.isCollision();
 }
 
