@@ -90,8 +90,8 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
     return;
   }
   Path::State simulated_pose = start_pose;
-  std::vector<Velocity> simulated_velocities; // TODO: should not be vector
-  Path::Path path; // TODO: points should not be vector
+  std::vector<Velocity> simulated_velocities;
+  Path::Path path;
   path.points.push_back(Path::Point(start_pose.x, start_pose.y));
   bool is_collision = false;
 
@@ -175,7 +175,6 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
     std::lock_guard<std::mutex> lock(s_TrajMutex);
     admissible_velocity_trajectories->push_back({simulated_velocities, path});
   }
-
   return;
 }
 
@@ -198,10 +197,6 @@ std::vector<Trajectory> TrajectorySampler::generateTrajectoriesAckermann(
       }
     }
   }
-  // Wait for threads to finish
-  for (auto &f : m_trajectory_futures)
-    f.wait();
-
   return admissible_velocity_trajectories;
 }
 
@@ -229,11 +224,6 @@ std::vector<Trajectory> TrajectorySampler::generateTrajectoriesDiffDrive(
           current_pose, &admissible_velocity_trajectories));
     }
   }
-
-  // Wait for threads to finish
-  for (auto &f : m_trajectory_futures)
-    f.wait();
-
   return admissible_velocity_trajectories;
 }
 
@@ -285,10 +275,6 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity &current_vel,
           current_pose, &admissible_velocity_trajectories));
     }
   }
-  // Wait for threads to finish
-  for (auto &f : m_trajectory_futures)
-    f.wait();
-
   return admissible_velocity_trajectories;
 }
 
