@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <future>
 #include <vector>
 
 namespace Kompass {
@@ -158,20 +159,36 @@ TrajSearchResult DWA::findBestSegment(const std::vector<Trajectory> &samples) {
   double minCost = std::numeric_limits<double>::max();
   Trajectory minCostTraj;
   bool traj_found = false;
-
   Path::Path trackedRefPathSegment = findTrackedPathSegment();
 
-  // Evaluate the samples and get the sample with the minimum cost
-  for (auto sample = samples.begin(); sample != samples.end(); ++sample) {
-    double traj_cost = trajCostEvaluator->getTrajectoryCost(
-        *sample, *currentPath, trackedRefPathSegment, current_segment_index_);
+    std::vector<std::future<double>> futures;
+    futures.reserve(samples.size());
 
-    if (traj_cost < minCost) {
-      minCost = traj_cost;
-      minCostTraj = *sample;
-      traj_found = true;
+    // Launch async tasks for each trajectory sample
+    for (const auto& sample : samples) {
+        futures.push_back(std::async(
+            std::launch::async,
+            [this, &sample, &trackedRefPathSegment](void) -> double {
+                return trajCostEvaluator->getTrajectoryCost(
+                    sample,
+                    *currentPath,
+                    trackedRefPathSegment,
+                    current_segment_index_
+                );
+            }
+        ));
     }
-  }
+
+    // Collect results and find minimum cost
+    for (size_t i = 0; i < samples.size(); ++i) {
+        double traj_cost = futures[i].get();
+
+        if (traj_cost < minCost) {
+            minCost = traj_cost;
+            minCostTraj = samples[i];
+            traj_found = true;
+        }
+    }
 
   return {traj_found, minCost, minCostTraj};
 }

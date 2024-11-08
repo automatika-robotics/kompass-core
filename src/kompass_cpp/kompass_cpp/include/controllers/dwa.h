@@ -108,8 +108,8 @@ public:
                              const std::vector<Point3D> &cloud);
 
 private:
-  TrajectorySampler *trajSampler;
-  CostEvaluator *trajCostEvaluator;
+  TrajectorySampler* trajSampler;
+  CostEvaluator* trajCostEvaluator;
   double max_forward_distance_{0.0};
 
   /**
