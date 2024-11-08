@@ -166,7 +166,7 @@ TrajSearchResult DWA::findBestSegment(const std::vector<Trajectory> &samples) {
 
     // Launch async tasks for each trajectory sample
     for (const auto& sample : samples) {
-        futures.push_back(std::async(
+        futures.emplace_back(std::async(
             std::launch::async,
             [this, &sample, &trackedRefPathSegment](void) -> double {
                 return trajCostEvaluator->getTrajectoryCost(
