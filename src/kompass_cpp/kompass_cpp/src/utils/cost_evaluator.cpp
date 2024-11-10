@@ -54,7 +54,7 @@ CostEvaluator::~CostEvaluator() {
   customTrajCostsPtrs_.clear();
 }
 
-void CostEvaluator::setLaserScan(const LaserScan &scan,
+void CostEvaluator::setPointScan(const LaserScan &scan,
                                  const Path::State &current_state) {
 
   Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
@@ -71,15 +71,15 @@ void CostEvaluator::setLaserScan(const LaserScan &scan,
   }
 }
 
-void CostEvaluator::setPointCloud(const std::vector<Point3D> &cloud,
+void CostEvaluator::setPointScan(const std::vector<Point3D> &cloud,
                                   const Path::State &current_state) {
 
   Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
 
-  for (auto point = cloud.begin(); point < cloud.end(); point++) {
+  for (auto &point : cloud) {
 
     Eigen::Vector3f pose_trans =
-        transformPosition(Eigen::Vector3f(point->x, point->y, point->z),
+        transformPosition(Eigen::Vector3f(point.x, point.y, point.z),
                           sensor_tf_body_ * body_tf_world_);
     obstaclePoints.push_back({pose_trans[0], pose_trans[1]});
   }

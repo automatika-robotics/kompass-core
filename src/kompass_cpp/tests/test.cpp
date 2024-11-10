@@ -41,6 +41,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   double controlHorizon = 0.4;
   int maxLinearSamples = 20;
   int maxAngularSamples = 20;
+  int maxNumThreads = 10;
 
   // Octomap resolution
   double octreeRes = 0.1;
@@ -77,7 +78,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   Control::DWA planner(controlLimits, controlType, timeStep, predictionHorizon,
                        controlHorizon, maxLinearSamples, maxAngularSamples,
                        robotShapeType, robotDimensions, sensor_position_body,
-                       sensor_rotation_body, octreeRes, costWeights);
+                       sensor_rotation_body, octreeRes, costWeights, maxNumThreads);
 
   LOG_INFO("Simulating one step of DWA planner");
 

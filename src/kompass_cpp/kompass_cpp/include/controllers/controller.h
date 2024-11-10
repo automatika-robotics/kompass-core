@@ -3,6 +3,7 @@
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
+#include "utils/threadpool.h"
 
 namespace Kompass {
 namespace Control {
@@ -89,8 +90,10 @@ protected:
   Control::Velocity currentVel;
   Path::State currentState;
   Control::Velocity currentCtr;
+  int maxNumThreads;
 
   ControllerParameters config;
+  // num threads for parallel processing
 };
 
 } // namespace Control

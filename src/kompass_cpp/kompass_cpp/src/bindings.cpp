@@ -342,13 +342,14 @@ PYBIND11_MODULE(kompass_cpp, m) {
                   const std::array<float, 3> &sensor_position_robot,
                   const std::array<float, 4> &sensor_rotation_robot,
                   const double octree_resolution,
-                  Control::CostEvaluator::TrajectoryCostsWeights cost_weights) {
+                  Control::CostEvaluator::TrajectoryCostsWeights cost_weights,
+                  const int max_num_threads) {
                  return new Control::DWA(
                      control_limits, control_type, time_step,
                      prediction_horizon, control_horizon, max_linear_samples,
                      max_angular_samples, robot_shape_type, robot_dimensions,
                      sensor_position_robot, sensor_rotation_robot,
-                     octree_resolution, cost_weights);
+                     octree_resolution, cost_weights, max_num_threads);
                }),
            py::arg("control_limits"), py::arg("control_type"),
            py::arg("time_step"), py::arg("prediction_horizon"),
@@ -356,7 +357,7 @@ PYBIND11_MODULE(kompass_cpp, m) {
            py::arg("max_angular_samples"), py::arg("robot_shape_type"),
            py::arg("robot_dimensions"), py::arg("sensor_position_robot"),
            py::arg("sensor_rotation_robot"), py::arg("octree_resolution") = 0.1,
-           py::arg("cost_weights"))
+           py::arg("cost_weights"), py::arg("max_num_threads") = 1)
 
       //   .def("reconfigure", &Control::DWA::reconfigure)
       .def("compute_velocity_commands",

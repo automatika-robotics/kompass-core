@@ -1,12 +1,12 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
-#include <future>
 #include <mutex>
 #include <vector>
 
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
+#include "utils/threadpool.h"
 #include "utils/trajectory_sampler.h"
 
 namespace Kompass {
@@ -26,7 +26,7 @@ TrajectorySampler::TrajectorySampler(
     int maxAngularSamples, const CollisionChecker::ShapeType robotShapeType,
     const std::vector<float> robotDimensions,
     const std::array<float, 3> &sensor_position_body,
-    const std::array<float, 4> &sensor_rotation_body, const double octreeRes) {
+    const std::array<float, 4> &sensor_rotation_body, const double octreeRes, const int maxNumThreads) {
   // Setup the collision checker
   collChecker = new CollisionChecker(robotShapeType, robotDimensions,
                                      sensor_position_body, sensor_rotation_body,
@@ -45,6 +45,7 @@ TrajectorySampler::TrajectorySampler(
     // Discard Vy limits to eliminate movement on Y axis
     ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
   }
+  this->maxNumThreads = maxNumThreads;
 }
 
 TrajectorySampler::TrajectorySampler(
@@ -52,7 +53,7 @@ TrajectorySampler::TrajectorySampler(
     ControlType controlType, const CollisionChecker::ShapeType robotShapeType,
     const std::vector<float> robotDimensions,
     const std::array<float, 3> &sensor_position_body,
-    const std::array<float, 4> &sensor_rotation_body) {
+    const std::array<float, 4> &sensor_rotation_body, const int maxNumThreads) {
   double octreeRes = config.getParameter<double>("octree_map_resolution");
   // Setup the collision checker
   collChecker = new CollisionChecker(robotShapeType, robotDimensions,
@@ -69,6 +70,7 @@ TrajectorySampler::TrajectorySampler(
     // Discard Vy limits to eliminate movement on Y axis
     ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
   }
+  this->maxNumThreads = maxNumThreads;
 }
 
 TrajectorySampler::~TrajectorySampler() { delete collChecker; }
@@ -107,7 +109,12 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
     // Update the position of the robot in the collision checker (updates the
     // robot collision object) No need to update the Octree (laserscan)
     // collision object as the sensor data is the same
-    is_collision = collChecker->checkCollisions(simulated_pose);
+    if (maxNumThreads > 1) {
+      is_collision = collChecker->checkCollisions(simulated_pose);
+    } else {
+      collChecker->updateState(simulated_pose);
+      collChecker->checkCollisions();
+    }
 
     if (is_collision) {
       // LOG_DEBUG("Detected collision -> dropping sample at x: ",
@@ -122,8 +129,12 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
   }
 
   if (!is_collision) {
-    std::lock_guard<std::mutex> lock(s_TrajMutex);
-    admissible_velocity_trajectories->push_back({simulated_velocities, path});
+    if (maxNumThreads > 1) {
+      std::lock_guard<std::mutex> lock(s_TrajMutex);
+      admissible_velocity_trajectories->push_back({simulated_velocities, path});
+    } else {
+      admissible_velocity_trajectories->push_back({simulated_velocities, path});
+    }
   }
   return;
 }
@@ -162,7 +173,12 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
     // Update the position of the robot in the collision checker (updates the
     // robot collision object) No need to update the Octree (laserscan)
     // collision object as the sensor data is the same
-    is_collision = collChecker->checkCollisions(simulated_pose);
+    if (maxNumThreads > 1) {
+      is_collision = collChecker->checkCollisions(simulated_pose);
+    } else {
+      collChecker->updateState(simulated_pose);
+      collChecker->checkCollisions();
+    }
 
     if (is_collision) {
       break;
@@ -172,8 +188,12 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
   }
 
   if (!is_collision) {
-    std::lock_guard<std::mutex> lock(s_TrajMutex);
-    admissible_velocity_trajectories->push_back({simulated_velocities, path});
+    if (maxNumThreads > 1) {
+      std::lock_guard<std::mutex> lock(s_TrajMutex);
+      admissible_velocity_trajectories->push_back({simulated_velocities, path});
+    } else {
+      admissible_velocity_trajectories->push_back({simulated_velocities, path});
+    }
   }
   return;
 }
@@ -181,19 +201,32 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
 std::vector<Trajectory> TrajectorySampler::generateTrajectoriesAckermann(
     const Velocity &current_vel, const Path::State &current_pose) {
   std::vector<Trajectory> admissible_velocity_trajectories;
-  std::vector<std::future<void>> m_trajectory_futures;
-  // Implements generating smooth arc-like trajectories within the admissable
-  // speed limits
-  for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
-    if (std::abs(vx) >= MIN_VEL) {
-      for (double omega = min_omega_; omega <= max_omega_;
-           omega += ang_sample_resolution_) {
+  if (maxNumThreads > 1) {
+    ThreadPool pool(maxNumThreads);
+    // Implements generating smooth arc-like trajectories within the admissable
+    // speed limits
+    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+      if (std::abs(vx) >= MIN_VEL) {
+        for (double omega = min_omega_; omega <= max_omega_;
+             omega += ang_sample_resolution_) {
 
-        Velocity vel = Velocity(vx, 0.0, omega); // Limit Y movement
-        // Get admissible trajectories in seperate threads
-        m_trajectory_futures.emplace_back(std::async(
-            std::launch::async, &TrajectorySampler::getAdmissibleTrajsFromVel,
-            this, vel, current_pose, &admissible_velocity_trajectories));
+          Velocity vel = Velocity(vx, 0.0, omega); // Limit Y movement
+          // Get admissible trajectories in seperate threads
+          pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
+                       current_pose, &admissible_velocity_trajectories);
+        }
+      }
+    }
+  } else {
+    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+      if (std::abs(vx) >= MIN_VEL) {
+        for (double omega = min_omega_; omega <= max_omega_;
+             omega += ang_sample_resolution_) {
+
+          Velocity vel = Velocity(vx, 0.0, omega); // Limit Y movement
+          getAdmissibleTrajsFromVel(vel, current_pose,
+                                    &admissible_velocity_trajectories);
+        }
       }
     }
   }
@@ -204,24 +237,38 @@ std::vector<Trajectory> TrajectorySampler::generateTrajectoriesDiffDrive(
     const Velocity &current_vel, const Path::State &current_pose) {
 
   std::vector<Trajectory> admissible_velocity_trajectories;
-  std::vector<std::future<void>> m_trajectory_futures;
+  if (maxNumThreads > 1) {
+    ThreadPool pool(maxNumThreads);
 
-  // Generate forward/backward trajectories
-  for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
-    Velocity vel = Velocity(vx, 0.0, 0.0); // Limit Y movement
-    // Get admissible trajectories in seperate threads
-    m_trajectory_futures.emplace_back(std::async(
-        std::launch::async, &TrajectorySampler::getAdmissibleTrajsFromVel, this,
-        vel, current_pose, &admissible_velocity_trajectories));
-    // Generate rotation trajectories (Rotate then move)
-    for (double omega = min_omega_; omega <= max_omega_;
-         omega += ang_sample_resolution_) {
-      Velocity vel = Velocity(vx, 0.0, omega); // Limit Y movement
+    // Generate forward/backward trajectories
+    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+      Velocity vel = Velocity(vx, 0.0, 0.0); // Limit Y movement
       // Get admissible trajectories in seperate threads
-      m_trajectory_futures.emplace_back(std::async(
-          std::launch::async,
-          &TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive, this, vel,
-          current_pose, &admissible_velocity_trajectories));
+      pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
+                   current_pose, &admissible_velocity_trajectories);
+      // Generate rotation trajectories (Rotate then move)
+      for (double omega = min_omega_; omega <= max_omega_;
+           omega += ang_sample_resolution_) {
+        Velocity vel = Velocity(vx, 0.0, omega); // Limit Y movement
+        // Get admissible trajectories in seperate threads
+        pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive,
+                     this, vel, current_pose,
+                     &admissible_velocity_trajectories);
+      }
+    }
+  } else {
+    // Generate forward/backward trajectories
+    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+      Velocity vel = Velocity(vx, 0.0, 0.0); // Limit Y movement
+      getAdmissibleTrajsFromVel(vel, current_pose,
+                                &admissible_velocity_trajectories);
+      // Generate rotation trajectories (Rotate then move)
+      for (double omega = min_omega_; omega <= max_omega_;
+           omega += ang_sample_resolution_) {
+        Velocity vel = Velocity(vx, 0.0, omega); // Limit Y movement
+        getAdmissibleTrajsFromVelDiffDrive(vel, current_pose,
+                                           &admissible_velocity_trajectories);
+      }
     }
   }
   return admissible_velocity_trajectories;
@@ -231,48 +278,81 @@ std::vector<Trajectory>
 TrajectorySampler::generateTrajectoriesOmni(const Velocity &current_vel,
                                             const Path::State &current_pose) {
   std::vector<Trajectory> admissible_velocity_trajectories;
-  std::vector<std::future<void>> m_trajectory_futures;
-  // Generate forward/backward trajectories
-  for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
-    Velocity vel = Velocity(vx, 0.0, 0.0);
-    // Get admissible trajectories in seperate threads
-    m_trajectory_futures.emplace_back(std::async(
-        std::launch::async, &TrajectorySampler::getAdmissibleTrajsFromVel, this,
-        vel, current_pose, &admissible_velocity_trajectories));
-  }
-
-  // Generate lateral left/right trajectories
-  for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
-    Velocity vel = Velocity(0.0, vy, 0.0);
-    // Get admissible trajectories in seperate threads
-    m_trajectory_futures.emplace_back(std::async(
-        std::launch::async, &TrajectorySampler::getAdmissibleTrajsFromVel, this,
-        vel, current_pose, &admissible_velocity_trajectories));
-  }
-
-  // Generate rotation trajectories (Rotate then move forward)
-  for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
-    for (double omega = min_omega_; omega <= max_omega_;
-         omega += ang_sample_resolution_) {
-      Velocity vel = Velocity(vx, 0.0, omega);
+  if (maxNumThreads > 1) {
+    ThreadPool pool(maxNumThreads);
+    // Generate forward/backward trajectories
+    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+      Velocity vel = Velocity(vx, 0.0, 0.0);
       // Get admissible trajectories in seperate threads
-      m_trajectory_futures.emplace_back(std::async(
-          std::launch::async,
-          &TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive, this, vel,
-          current_pose, &admissible_velocity_trajectories));
+      pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
+                   current_pose, &admissible_velocity_trajectories);
     }
-  }
 
-  // Generate rotation trajectories (Rotate then move forward)
-  for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
-    for (double omega = min_omega_; omega <= max_omega_;
-         omega += ang_sample_resolution_) {
-      Velocity vel = Velocity(0.0, vy, omega);
+    // Generate lateral left/right trajectories
+    for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
+      Velocity vel = Velocity(0.0, vy, 0.0);
       // Get admissible trajectories in seperate threads
-      m_trajectory_futures.emplace_back(std::async(
-          std::launch::async,
-          &TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive, this, vel,
-          current_pose, &admissible_velocity_trajectories));
+      pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
+                   current_pose, &admissible_velocity_trajectories);
+    }
+
+    // Generate rotation trajectories (Rotate then move forward)
+    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+      for (double omega = min_omega_; omega <= max_omega_;
+           omega += ang_sample_resolution_) {
+        Velocity vel = Velocity(vx, 0.0, omega);
+        // Get admissible trajectories in seperate threads
+        pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive,
+                     this, vel, current_pose,
+                     &admissible_velocity_trajectories);
+      }
+    }
+
+    // Generate rotation trajectories (Rotate then move forward)
+    for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
+      for (double omega = min_omega_; omega <= max_omega_;
+           omega += ang_sample_resolution_) {
+        Velocity vel = Velocity(0.0, vy, omega);
+        // Get admissible trajectories in seperate threads
+        pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive,
+                     this, vel, current_pose,
+                     &admissible_velocity_trajectories);
+      }
+    }
+  } else {
+
+    // Generate forward/backward trajectories
+    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+      Velocity vel = Velocity(vx, 0.0, 0.0);
+      getAdmissibleTrajsFromVel(vel, current_pose,
+                                &admissible_velocity_trajectories);
+    }
+
+    // Generate lateral left/right trajectories
+    for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
+      Velocity vel = Velocity(0.0, vy, 0.0);
+      getAdmissibleTrajsFromVel(vel, current_pose,
+                                &admissible_velocity_trajectories);
+    }
+
+    // Generate rotation trajectories (Rotate then move forward)
+    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+      for (double omega = min_omega_; omega <= max_omega_;
+           omega += ang_sample_resolution_) {
+        Velocity vel = Velocity(vx, 0.0, omega);
+        getAdmissibleTrajsFromVelDiffDrive(vel, current_pose,
+                                           &admissible_velocity_trajectories);
+      }
+    }
+
+    // Generate rotation trajectories (Rotate then move forward)
+    for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
+      for (double omega = min_omega_; omega <= max_omega_;
+           omega += ang_sample_resolution_) {
+        Velocity vel = Velocity(0.0, vy, omega);
+        getAdmissibleTrajsFromVelDiffDrive(vel, current_pose,
+                                           &admissible_velocity_trajectories);
+      }
     }
   }
   return admissible_velocity_trajectories;

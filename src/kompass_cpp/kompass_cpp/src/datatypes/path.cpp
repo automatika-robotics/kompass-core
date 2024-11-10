@@ -1,6 +1,4 @@
 #include "datatypes/path.h"
-#include "utils/logger.h"
-#include <array>
 #include <stdexcept>
 #include <vector>
 
