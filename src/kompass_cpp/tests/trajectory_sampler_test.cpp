@@ -1,3 +1,4 @@
+#include "test.h"
 #include "controllers/controller.h"
 #include "controllers/follower.h"
 #include "datatypes/control.h"
@@ -78,18 +79,21 @@ void testTrajSampler() {
   // ------------------------------------------------------------------------
   for (size_t j = 0; j < robot_types.size(); j++) {
     Control::TrajectorySampler trajSampler(
-        controlLimits, robot_types[j], timeStep, predictionHorizon, controlHorizon, maxLinearSamples,
-        maxAngularSamples, robotShapeType, robotDimensions,
-        sensor_position_body, sensor_rotation_body, octreeRes);
+        controlLimits, robot_types[j], timeStep, predictionHorizon,
+        controlHorizon, maxLinearSamples, maxAngularSamples, robotShapeType,
+        robotDimensions, sensor_position_body, sensor_rotation_body, octreeRes);
 
     // Robot initial velocity control
     Control::Velocity robotControl;
 
-    std::vector<Control::Trajectory> samples =
-        trajSampler.generateTrajectories(robotControl, robotState, robotScan);
-
-    // Get the cost of each sample
     LOG_INFO("TESTING ", Control::controlTypeToString(robot_types[j]));
+
+    std::vector<Control::Trajectory> samples;
+    {
+      Timer time;
+      samples =
+          trajSampler.generateTrajectories(robotControl, robotState, robotScan);
+    }
 
     // Plot the trajectories (Save to json then run python script for plotting)
     boost::filesystem::path executablePath = boost::dll::program_location();
