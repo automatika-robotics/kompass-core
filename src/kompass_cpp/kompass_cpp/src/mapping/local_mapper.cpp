@@ -8,7 +8,7 @@ namespace Kompass {
 namespace Mapping {
 // Function to convert a point from local coordinates frame of the grid to grid
 // indices
-Eigen::Vector2i localToGrid(const Eigen::Vector3f &poseTargetInCentral,
+Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
                             const Eigen::Vector2i &centralPoint,
                             float resolution) {
 
@@ -59,48 +59,44 @@ void fillGridAroundPoint(Eigen::MatrixXi &gridData,
   }
 }
 /**
- * Processes LaserScan data (angles and ranges) to project on a 2D grid using
- * Bresenham line drawing for each LaserScan beam
+ * Processes Laserscan data (angles and ranges) to project on a 2D grid using
+ * Bresenham line drawing for each Laserscan beam
  *
  * @param angles        LaserScan angles in radians
  * @param ranges         LaserScan ranges in meters
- * @param grid_data      Current grid data
- * @param grid_data_prob Current probabilistic grid data
- * @param central_point  Coordinates of the central point of the grid
+ * @param gridData      Current grid data
+ * @param gridDataProb Current probabilistic grid data
+ * @param centralPoint  Coordinates of the central point of the grid
  * @param resolution     Grid resolution
- * @param laser_scan_pose Pose of the LaserScan sensor w.r.t the robot
- * @param previous_grid_data_prob Previous value of the probabilistic grid data
- * @param p_prior         LaserScan model's prior probability value
- * @param p_empty         LaserScan model's probability value of empty cell
- * @param p_occupied       LaserScan model's probability value of occupied cell
- * @param range_sure        LaserScan model's certain range (m)
- * @param range_max         LaserScan model's max range (m)
- * @param wall_size          LaserScan model's padding size when hitting an
- * obstacle (m)
- * @param odd_log_p_prior    Log Odds of the LaserScan model's prior probability
- * value
- *
- * @return List of occupied grid cells
+ * @param laserscanPosition Position of the LaserScan sensor w.r.t the robot
+ * @param previousGridDataProb Previous value of the probabilistic grid data
+ * @param pPrior         LaserScan model's prior probability value
+ * @param pEmpty         LaserScan model's probability value of empty cell
+ * @param pOccupied       LaserScan model's probability value of occupied cell
+ * @param rangeSure        LaserScan model's certain range (m)
+ * @param rangeMax         LaserScan model's max range (m)
+ * @param wallSize          LaserScan model's padding size when hitting an
+ * @param oddLogPPrior    Log Odds of the LaserScan model's prior probability
  */
 void laserscanToGrid(const Eigen::VectorXd &angles,
                      const Eigen::VectorXd &ranges, Eigen::MatrixXi &gridData,
                      Eigen::MatrixXi &gridDataProb,
                      const Eigen::Vector2i &centralPoint, float resolution,
-                     const Eigen::Vector3f &laserScanPose,
-                     float laserScanOrientation,
+                     const Eigen::Vector3f &laserscanPosition,
+                     float laserscanOrientation,
                      const Eigen::MatrixXi &previousGridDataProb, float pPrior,
                      float pEmpty, float pOccupied, float rangeSure,
                      float rangeMax, float wallSize, float oddLogPPrior) {
 
   Eigen::Vector2i startPoint =
-      localToGrid(laserScanPose, centralPoint, resolution);
+      localToGrid(Eigen::Vector2f(laserscanPosition(0), laserscanPosition(1)), centralPoint, resolution);
 
   for (int i = 0; i < angles.size(); ++i) {
 
     float x =
-        laserScanPose(0) + ranges(i) * cos(laserScanOrientation + angles(i));
+        laserscanPosition(0) + ranges(i) * cos(laserscanOrientation + angles(i));
     float y =
-        laserScanPose(1) + ranges(i) * sin(laserScanOrientation + angles(i));
+        laserscanPosition(1) + ranges(i) * sin(laserscanOrientation + angles(i));
     Eigen::Vector2i toPoint =
         localToGrid(Eigen::Vector2f(x, y), centralPoint, resolution);
     std::vector<Eigen::Vector2i> points;

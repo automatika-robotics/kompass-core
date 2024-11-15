@@ -257,7 +257,7 @@ class LocalMapper:
             grid_data_prob=self.grid_data.scan_occupancy_prob,
             central_point=self._point_central_in_grid,
             resolution=self.resolution,
-            laser_scan_pose=pose_laser_scanner_in_robot.get_position(),
+            laser_scan_position=pose_laser_scanner_in_robot.get_position(),
             laser_scan_orientation=laserscan_orientation,
             previous_grid_data_prob=self.previous_grid_prob_transformed,
             **self.scan_update_model.asdict(),

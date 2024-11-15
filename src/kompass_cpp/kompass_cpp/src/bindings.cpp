@@ -383,7 +383,7 @@ PYBIND11_MODULE(kompass_cpp, m) {
           py::arg("grid_data_prob"),
           py::arg("central_point"),
           py::arg("resolution"),
-          py::arg("laser_scan_pose"),
+          py::arg("laser_scan_position"),
           py::arg("laser_scan_orientation"),
           py::arg("previous_grid_data_prob"),
           py::arg("p_prior"),
