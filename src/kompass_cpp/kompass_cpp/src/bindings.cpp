@@ -379,20 +379,20 @@ PYBIND11_MODULE(kompass_cpp, m) {
           "Convert laser scan data to occupancy grid",
           py::arg("angles"),
           py::arg("ranges"),
-          py::arg("gridData"),
-          py::arg("gridDataProb"),
-          py::arg("centralPoint"),
+          py::arg("grid_data"),
+          py::arg("grid_data_prob"),
+          py::arg("central_point"),
           py::arg("resolution"),
-          py::arg("laserScanPose"),
-          py::arg("laserScanOrientation"),
-          py::arg("previousGridDataProb"),
-          py::arg("pPrior"),
-          py::arg("pEmpty"),
-          py::arg("pOccupied"),
-          py::arg("rangeSure"),
-          py::arg("rangeMax"),
-          py::arg("wallSize"),
-          py::arg("oddLogPPrior"));
+          py::arg("laser_scan_pose"),
+          py::arg("laser_scan_orientation"),
+          py::arg("previous_grid_data_prob"),
+          py::arg("p_prior"),
+          py::arg("p_empty"),
+          py::arg("p_occupied"),
+          py::arg("range_sure"),
+          py::arg("range_max"),
+          py::arg("wall_size"),
+          py::arg("odd_log_p_prior"));
   // ------------------------------------------------------------------------------
   // Utils
   py::enum_<LogLevel>(m, "LogLevel")
