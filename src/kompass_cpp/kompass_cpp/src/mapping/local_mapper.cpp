@@ -87,7 +87,7 @@ void laserscanToGrid(const Eigen::VectorXd &angles,
         gridData(pt(0), pt(1)) = std::max(gridData(pt(0), pt(1)), 0);
 
 
-        // save last point drawn
+        // update last point drawn
         lastGridPoint(0) = pt(0);
         lastGridPoint(1) = pt(1);
 
