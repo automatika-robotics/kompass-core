@@ -8,7 +8,7 @@ namespace Kompass {
 namespace Mapping {
 // Function to convert a point from local coordinates frame of the grid to grid
 // indices
-Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
+Eigen::Vector2i localToGrid(const Eigen::Vector3f &poseTargetInCentral,
                             const Eigen::Vector2i &centralPoint,
                             float resolution) {
 
