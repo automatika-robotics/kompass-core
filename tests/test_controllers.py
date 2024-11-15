@@ -365,6 +365,7 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
         prediction_horizon=1.0,
         control_horizon=0.2,
         control_time_step=control_time_step,
+        max_num_threads=10,
     )
 
     dwa = DWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
