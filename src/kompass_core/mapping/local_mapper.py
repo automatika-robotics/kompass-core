@@ -1,16 +1,17 @@
 from typing import Optional
-from attrs import define, field, Factory
+from attrs import define, field
 import numpy as np
 from ..datatypes.pose import PoseData
 from ..datatypes.laserscan import LaserScanData
-from ..datatypes.obstacles import OCCUPANCY_TYPE, ObstaclesData
+from ..datatypes.obstacles import OCCUPANCY_TYPE
 
 from ..utils.geometry import from_frame1_to_frame2, get_pose_target_in_reference_frame
 
 from .grid import get_previous_grid_in_current_pose
 from .laserscan_model import LaserScanModelConfig
-from .bresenham import laserscan_to_grid
 from ..utils.common import BaseAttrs, in_range
+
+import kompass_cpp
 
 
 @define
@@ -63,15 +64,6 @@ class GridData(BaseAttrs):
         self.scan_occupancy_prob = np.full(
             (self.width, self.height), self.odd_log_p_prior, dtype=np.float64
         )
-
-
-@define
-class GridObstacles(BaseAttrs):
-    """Grid Obstacles class"""
-
-    scan: ObstaclesData = field(default=Factory(ObstaclesData))
-    semantic: ObstaclesData = field(default=Factory(ObstaclesData))
-    total: ObstaclesData = field(default=Factory(ObstaclesData))
 
 
 @define
@@ -258,7 +250,7 @@ class LocalMapper:
             self.scan_update_model.range_max, np.maximum(0.0, laser_scan.ranges)
         )
 
-        laserscan_to_grid(
+        kompass_cpp.mapping.laserscan_to_grid(
             angles=laser_scan.angles,
             ranges=filtered_ranges,
             grid_data=self.grid_data.scan_occupancy,

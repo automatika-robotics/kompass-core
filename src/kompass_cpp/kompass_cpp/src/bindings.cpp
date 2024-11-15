@@ -1,5 +1,6 @@
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/eigen.h>
 #include <pybind11/stl.h>
 #include <vector>
 
@@ -11,6 +12,7 @@
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
 #include "utils/logger.h"
+#include "mapping/local_mapper.h"
 
 namespace py = pybind11;
 
@@ -372,6 +374,25 @@ PYBIND11_MODULE(kompass_cpp, m) {
            py::return_value_policy::reference_internal)
       .def("add_custom_cost", &Control::DWA::addCustomCost);
 
+    auto m_mapping = m.def_submodule("mapping", "Local Mapping module");
+    m_mapping.def("laserscan_to_grid", &Mapping::laserscanToGrid,
+          "Convert laser scan data to occupancy grid",
+          py::arg("angles"),
+          py::arg("ranges"),
+          py::arg("gridData"),
+          py::arg("gridDataProb"),
+          py::arg("centralPoint"),
+          py::arg("resolution"),
+          py::arg("laserScanPose"),
+          py::arg("laserScanOrientation"),
+          py::arg("previousGridDataProb"),
+          py::arg("pPrior"),
+          py::arg("pEmpty"),
+          py::arg("pOccupied"),
+          py::arg("rangeSure"),
+          py::arg("rangeMax"),
+          py::arg("wallSize"),
+          py::arg("oddLogPPrior"));
   // ------------------------------------------------------------------------------
   // Utils
   py::enum_<LogLevel>(m, "LogLevel")
