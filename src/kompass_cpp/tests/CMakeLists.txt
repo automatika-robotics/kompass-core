@@ -24,3 +24,7 @@ add_custom_target(trajectory_sampler_plt ALL
 add_executable(trajectory_sampler_test trajectory_sampler_test.cpp)
 target_link_libraries(trajectory_sampler_test PRIVATE ${PROJECT_NAME} nlohmann_json::nlohmann_json)
 add_test(trajectory_sampler_to_json trajectory_sampler_test)
+
+# Mapper test
+add_executable(mapper_test mapper_test.cpp)
+target_link_libraries(mapper_test PRIVATE ${PROJECT_NAME})
