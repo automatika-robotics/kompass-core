@@ -1,13 +1,11 @@
-#include "mapping/line_drawing.h"
 #include "mapping/local_mapper.h"
+#include "mapping/line_drawing.h"
 
 #include <vector>
 
-
 namespace Kompass {
 namespace Mapping {
-// Function to convert a point from local coordinates frame of the grid to grid
-// indices
+
 Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
                             const Eigen::Vector2i &centralPoint,
                             float resolution) {
@@ -25,14 +23,6 @@ Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
   return gridPoint;
 }
 
-/**
- * @brief Fill an area around a point on the grid with given padding.
- *
- * @param gridData Grid to be filled (2D Eigen matrix).
- * @param gridPoint Grid point indices (i,j) as a Vector2i.
- * @param gridPadding Padding to be filled (number of cells).
- * @param indicator Value to be assigned to filled cells.
- */
 void fillGridAroundPoint(Eigen::MatrixXi &gridData,
                          const Eigen::Vector2i &gridPoint, int gridPadding,
                          int indicator) {
@@ -58,26 +48,7 @@ void fillGridAroundPoint(Eigen::MatrixXi &gridData,
     gridData(i, j) = indicator;
   }
 }
-/**
- * Processes Laserscan data (angles and ranges) to project on a 2D grid using
- * Bresenham line drawing for each Laserscan beam
- *
- * @param angles        LaserScan angles in radians
- * @param ranges         LaserScan ranges in meters
- * @param gridData      Current grid data
- * @param gridDataProb Current probabilistic grid data
- * @param centralPoint  Coordinates of the central point of the grid
- * @param resolution     Grid resolution
- * @param laserscanPosition Position of the LaserScan sensor w.r.t the robot
- * @param previousGridDataProb Previous value of the probabilistic grid data
- * @param pPrior         LaserScan model's prior probability value
- * @param pEmpty         LaserScan model's probability value of empty cell
- * @param pOccupied       LaserScan model's probability value of occupied cell
- * @param rangeSure        LaserScan model's certain range (m)
- * @param rangeMax         LaserScan model's max range (m)
- * @param wallSize          LaserScan model's padding size when hitting an
- * @param oddLogPPrior    Log Odds of the LaserScan model's prior probability
- */
+
 void laserscanToGrid(const Eigen::VectorXd &angles,
                      const Eigen::VectorXd &ranges, Eigen::MatrixXi &gridData,
                      Eigen::MatrixXi &gridDataProb,
@@ -89,14 +60,15 @@ void laserscanToGrid(const Eigen::VectorXd &angles,
                      float rangeMax, float wallSize, float oddLogPPrior) {
 
   Eigen::Vector2i startPoint =
-      localToGrid(Eigen::Vector2f(laserscanPosition(0), laserscanPosition(1)), centralPoint, resolution);
+      localToGrid(Eigen::Vector2f(laserscanPosition(0), laserscanPosition(1)),
+                  centralPoint, resolution);
 
   for (int i = 0; i < angles.size(); ++i) {
 
-    float x =
-        laserscanPosition(0) + ranges(i) * cos(laserscanOrientation + angles(i));
-    float y =
-        laserscanPosition(1) + ranges(i) * sin(laserscanOrientation + angles(i));
+    float x = laserscanPosition(0) +
+              ranges(i) * cos(laserscanOrientation + angles(i));
+    float y = laserscanPosition(1) +
+              ranges(i) * sin(laserscanOrientation + angles(i));
     Eigen::Vector2i toPoint =
         localToGrid(Eigen::Vector2f(x, y), centralPoint, resolution);
     std::vector<Eigen::Vector2i> points;
@@ -110,12 +82,24 @@ void laserscanToGrid(const Eigen::VectorXd &angles,
 
       if (pt(0) >= 0 && pt(0) < gridData.rows() && pt(1) >= 0 &&
           pt(1) < gridData.cols()) {
+
         // non-baysian update
         gridData(pt(0), pt(1)) = std::max(gridData(pt(0), pt(1)), 0);
+
+
+        // save last point drawn
+        lastGridPoint(0) = pt(0);
+        lastGridPoint(1) = pt(1);
 
       } else {
         rayStopped = false;
       }
+    }
+    if (rayStopped) {
+      /* Force non-bayesian map to set ending_point to occupied.
+      this guarantee that when visualizing the map
+      the obstacles detected by the laser scan can be visualized instead
+      of having a map that visualize empty and unknown zones only.*/
       fillGridAroundPoint(gridData, lastGridPoint, 0, 100);
     }
   }
