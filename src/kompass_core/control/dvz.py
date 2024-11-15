@@ -17,6 +17,31 @@ from ..utils.geometry import convert_to_0_2pi
 
 @define
 class DVZConfig(DeformableVirtualZoneParams):
+    """
+
+    ```{list-table}
+    :widths: 10 10 10 70
+    :header-rows: 1
+
+    * - Name
+      - Type
+      - Default
+      - Description
+
+    * - heading_gain
+      - `float`
+      - `0.7`
+      - Heading gain of the internal pure follower control law. Must be between `0.0` and `1e2`.
+
+    * - cross_track_gain
+      - `float`
+       - `1.5`
+      - Gain for cross-track error of the internal pure follower control law. Must be between `0.0` and `1e2`.
+
+
+    ```
+    """
+
     heading_gain: float = field(
         default=1.0, validator=in_range(min_value=0.0, max_value=1e2)
     )
@@ -212,7 +237,7 @@ class DVZ(FollowerTemplate):
         Gettter of the last linear forward velocity control computed by the controller
 
         :return: Linear Velocity Control (m/s)
-        :rtype: float
+        :rtype: List[float]
         """
         if (
             self._robot.robot_type != RobotType.ACKERMANN
@@ -238,7 +263,7 @@ class DVZ(FollowerTemplate):
         Getter the last linear velocity lateral control computed by the controller
 
         :return: Linear Velocity Control (m/s)
-        :rtype: float
+        :rtype: List[float]
         """
         if (
             self._robot.robot_type != RobotType.ACKERMANN
@@ -263,7 +288,7 @@ class DVZ(FollowerTemplate):
         Getter of the last angular velocity control computed by the controller
 
         :return: Angular Velocity Control (rad/s)
-        :rtype: float
+        :rtype: List[float]
         """
         if (
             self._robot.robot_type != RobotType.ACKERMANN

@@ -18,7 +18,41 @@ EPSILON_ANG = 0.01
 @define
 class DeformableVirtualZoneParams(BaseAttrs):
     """
-    Deformable Virtual Zone Parameters
+        Deformable Virtual Zone Parameters
+
+        ```{list-table}
+    :widths: 10 10 10 70
+    :header-rows: 1
+
+    * - Name
+      - Type
+      - Default
+      - Description
+
+    * - min_front_margin
+      - `float`
+      - `1.0`
+      - Minimum front margin distance. Must be between `0.0` and `1e2`.
+    * - K_linear
+      - `float`
+      - `1.0`
+      - Proportional gain for linear control. Must be between `0.1` and `10.0`.
+
+    * - K_angular
+      - `float`
+      - `1.0`
+      - Proportional gain for angular control. Must be between `0.1` and `10.0`.
+
+    * - K_I
+      - `float`
+      - `5.0`
+      - Proportional deformation gain. Must be between `0.1` and `10.0`.
+
+    * - side_margin_width_ratio
+      - `float`
+      - `1.0`
+      - Width ratio between the deformation zone front and side (circle if 1.0). Must be between `1e-2` and `1e2`.
+    ```
     """
 
     min_front_margin: float = field(

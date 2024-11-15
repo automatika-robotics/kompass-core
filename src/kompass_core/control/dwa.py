@@ -24,7 +24,69 @@ from ._trajectory_ import TrajectoryCostsWeights
 @define
 class DWAConfig(FollowerConfig):
     """
-    DWA Local Planner Parameters
+    DWA Parameters
+
+    ```{list-table}
+
+    :widths: 10 10 10 70
+    :header-rows: 1
+
+    * - Name
+      - Type
+      - Default
+      - Description
+
+    * - control_time_step
+      - `float`
+      - `0.1`
+      - Time interval between control actions (sec). Must be between `1e-4` and `1e6`.
+
+    * - prediction_horizon
+      - `float`
+      - `1.0`
+      - Duration over which predictions are made (sec). Must be between `1e-4` and `1e6`.
+
+    * - control_horizon
+      - `float`
+      - `0.2`
+      - Duration over which control actions are planned (sec). Must be between `1e-4` and `1e6`.
+
+    * - max_linear_samples
+      - `int`
+      - `20`
+      - Maximum number of linear control samples. Must be between `1` and `1e3`.
+
+    * - max_angular_samples
+      - `int`
+      - `20`
+      - Maximum number of angular control samples. Must be between `1` and `1e3`.
+
+    * - sensor_position_to_robot
+      - `List[float]`
+      - `[0.0, 0.0, 0.0]`
+      - Position of the sensor relative to the robot in 3D space (x, y, z) coordinates.
+
+    * - sensor_rotation_to_robot
+      - `List[float]`
+      - `[0.0, 0.0, 0.0, 1.0]`
+      - Orientation of the sensor relative to the robot as a quaternion (x, y, z, w).
+
+    * - octree_resolution
+        - `float`
+        - `0.1`
+        - Resolution of the Octree used for collision checking. Must be between `1e-9` and `1e3`.
+
+    * - costs_weights
+      - `TrajectoryCostsWeights`
+      -
+      - Weights for trajectory cost evaluation.
+
+    * - max_num_threads
+      - `int`
+      - `1`
+      - Maximum number of threads used when running the controller. Must be between `1` and `1e2`.
+
+    ```
     """
 
     control_time_step: float = field(
@@ -58,7 +120,7 @@ class DWAConfig(FollowerConfig):
     costs_weights: TrajectoryCostsWeights = Factory(TrajectoryCostsWeights)
 
     max_num_threads: int = field(
-        default=1, validator=in_range(min_value=1, max_value=1e6)
+        default=1, validator=in_range(min_value=1, max_value=1e2)
     )
 
     def __attrs_post_init__(self):
@@ -71,7 +133,49 @@ class DWAConfig(FollowerConfig):
 
 
 class DWA(FollowerTemplate):
-    """DWA."""
+    """
+    DWA is a popular local planning method developed since the 90s. DWA is a sampling-method consists of sampling a set of constant velocity trajectories within a window of admissible reachable velocities. This window of reachable velocities will change based on the current velocity and the acceleration limits, i.e. a Dynamic Window.
+
+    ```python
+    from kompass_core.control import DWAConfig, DWA
+    from kompass_core.models import (
+        AngularCtrlLimits,
+        LinearCtrlLimits,
+        Robot,
+        RobotCtrlLimits,
+        RobotGeometry,
+        RobotType,
+    )
+
+    # Configure the robot
+    my_robot = Robot(
+            robot_type=RobotType.ACKERMANN,
+            geometry_type=RobotGeometry.Type.CYLINDER,
+            geometry_params=np.array([0.1, 0.4]),
+        )
+
+    # Configure the control limits (used to compute the dynamic window)
+    robot_ctr_limits = RobotCtrlLimits(
+        vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
+        omega_limits=AngularCtrlLimits(
+            max_vel=2.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
+        ),
+    )
+
+    # Configure the controller
+    config = DWAConfig(
+            max_linear_samples=20,
+            max_angular_samples=20,
+            octree_resolution=0.1,
+            prediction_horizon=1.0,
+            control_horizon=0.2,
+            control_time_step=0.1,
+        )
+
+    controller = DWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
+    ```
+
+    """
 
     def __init__(
         self,
@@ -273,7 +377,7 @@ class DWA(FollowerTemplate):
         Getter of the last linear forward velocity control computed by the controller
 
         :return: Linear Velocity Control (m/s)
-        :rtype: float
+        :rtype: List[float]
         """
         if self._result.is_found:
             return [vel.vx for vel in self.control_till_horizon]
@@ -285,7 +389,7 @@ class DWA(FollowerTemplate):
         Getter the last linear velocity lateral control computed by the controller
 
         :return: Linear Velocity Control (m/s)
-        :rtype: float
+        :rtype: List[float]
         """
         if self._result.is_found:
             return [vel.vy for vel in self.control_till_horizon]
@@ -297,7 +401,7 @@ class DWA(FollowerTemplate):
         Getter of the last angular velocity control computed by the controller
 
         :return: Angular Velocity Control (rad/s)
-        :rtype: float
+        :rtype: List[float]
         """
         if self._result.is_found:
             return [vel.omega for vel in self.control_till_horizon]

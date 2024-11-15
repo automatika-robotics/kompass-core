@@ -13,6 +13,49 @@ import numpy as np
 class StanleyConfig(FollowerConfig):
     """
     Stanley follower parameters
+
+    ```{list-table}
+    :widths: 10 10 10 70
+    :header-rows: 1
+
+    * - Name
+      - Type
+      - Default
+      - Description
+    * - control_time_step
+      - `float`
+      - `0.1`
+      - Time interval between control actions. Must be between `1e-6` and `1e3`.
+    * - wheel_base
+      - `float`
+      - `0.266`
+      - Distance between the front and rear axles of the robot. Must be between `1e-3` and `1e3`.
+    * - heading_gain
+      - `float`
+      - `0.7`
+      - Gain for heading control. Must be between `0.0` and `1e2`.
+    * - cross_track_min_linear_vel
+      - `float`
+      - `0.05`
+      - Minimum linear velocity for cross-track control. Must be between `1e-4` and `1e2`.
+    * - cross_track_gain
+      - `float`
+      - `1.5`
+      - Gain for cross-track control. Must be between `0.0` and `1e2`.
+    * - max_angle_error
+      - `float`
+      - `np.pi / 16`
+      - Maximum allowable angular error in radians. Must be between `1e-9` and `π`.
+    * - max_distance_error
+      - `float`
+      - `0.1`
+      - Maximum allowable distance error. Must be between `1e-9` and `1e9`.
+    * - min_angular_vel
+      - `float`
+      - `0.01`
+      - Minimum allowable angular velocity. Must be between `0.0` and `1e9`.
+
+    ```
     """
 
     control_time_step: float = field(
@@ -144,7 +187,7 @@ class Stanley(FollowerTemplate):
         Gettter of the last linear forward velocity control computed by the controller
 
         :return: Linear Velocity Control (m/s)
-        :rtype: float
+        :rtype: List[float]
         """
         if self.__generate_reference:
             return [self._planner.get_vx_cmd()] if not self.reached_end() else [0.0]
@@ -169,7 +212,7 @@ class Stanley(FollowerTemplate):
         Getter the last linear velocity lateral control computed by the controller
 
         :return: Linear Velocity Control (m/s)
-        :rtype: float
+        :rtype: List[float]
         """
         if self.__generate_reference:
             return [self._planner.get_vy_cmd()] if not self.reached_end() else [0.0]
@@ -194,7 +237,7 @@ class Stanley(FollowerTemplate):
         Getter of the last angular velocity control computed by the controller
 
         :return: Angular Velocity Control (rad/s)
-        :rtype: float
+        :rtype: List[float]
         """
         if self.__generate_reference:
             return [self._planner.get_omega_cmd()] if not self.reached_end() else [0.0]
