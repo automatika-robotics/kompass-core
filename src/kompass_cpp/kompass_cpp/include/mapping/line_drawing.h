@@ -7,42 +7,29 @@ inline void bresenham(Eigen::Vector2i p1, Eigen::Vector2i p2,
                       std::vector<Eigen::Vector2i> &points) {
   /*Bresenham line drawing algorithm to generate a set of points on a line
    * connecting two provided points*/
-  /*based on http://eugen.dedu.free.fr/projects/bresenham/ */
 
-  int i;                    // loop counter
-  int xstep, ystep;         // the step on y and x axis
-  int error;                // the error accumulated during the increment
-  int errorprev;            // previous value of the error variable
   int x = p1[0], y = p1[1]; // the line points
-  int ddy, ddx; // compulsory variables: the double values of dy and dx
   int dx = p2[0] - p1[0];
   int dy = p2[1] - p1[1];
 
   points.emplace_back(x, y);
 
-  // Set ystep and xstep based on the direction of the line
-  if (dy < 0) {
-    ystep = -1;
-    dy = -dy;
-  } else {
-    ystep = 1;
-  }
+  // Determine step sizes for x and y based on direction
+  int xstep = (dx >= 0) ? 1 : -1;
+  int ystep = (dy >= 0) ? 1 : -1;
 
-  if (dx < 0) {
-    xstep = -1;
-    dx = -dx;
-  } else {
-    xstep = 1;
-  }
+  // Work with absolute values of differences
+  dx = std::abs(dx);
+  dy = std::abs(dy);
 
-  ddy = 2 * dy; // work with double values for full precision
-  ddx = 2 * dx;
+  int ddy = 2 * dy; // work with double values for full precision
+  int ddx = 2 * dx;
 
   if (ddx >= ddy) { // first octant (0 <= slope <= 1)
     // Initialize the error variables
-    error = dx;
+    int error = dx;
 
-    for (i = 0; i < dx; i++) { // do not use the first point (already done)
+    for (int i = 0; i < dx; i++) { // do not use the first point (already done)
       x += xstep;
       error += ddy;
       if (error > ddx) { // increment y if AFTER the middle
@@ -52,14 +39,83 @@ inline void bresenham(Eigen::Vector2i p1, Eigen::Vector2i p2,
       points.emplace_back(x, y); // Add the current point
     }
   } else { // second octant (slope > 1)
-    error = dy;
+    int error = dy;
 
-    for (i = 0; i < dy; i++) {
+    for (int i = 0; i < dy; i++) {
       y += ystep;
       error += ddx;
       if (error > ddy) {
         x += xstep;
         error -= ddy;
+      }
+      points.emplace_back(x, y); // Add the current point
+    }
+  }
+}
+
+inline void bresenhamEnhanced(Eigen::Vector2i p1, Eigen::Vector2i p2,
+                              std::vector<Eigen::Vector2i> &points) {
+  /* Enhanced Bresenham algorithm to generate a set of points on a super-cover
+   * line connecting two provided points*/
+  /*based on http://eugen.dedu.free.fr/projects/bresenham/ */
+
+  int x = p1[0], y = p1[1]; // the line points
+  int dx = p2[0] - p1[0];
+  int dy = p2[1] - p1[1];
+
+  points.emplace_back(x, y);
+
+  // Determine step sizes for x and y based on direction
+  int xstep = (dx >= 0) ? 1 : -1;
+  int ystep = (dy >= 0) ? 1 : -1;
+
+  // Work with absolute values of differences
+  dx = std::abs(dx);
+  dy = std::abs(dy);
+
+  int ddy = 2 * dy; // work with double values for full precision
+  int ddx = 2 * dx;
+
+  if (ddx >= ddy) { // first octant (0 <= slope <= 1)
+    // Initialize the error variables
+    int errorprev = dx;
+    int error = dx;
+
+    for (int i = 0; i < dx; i++) { // do not use the first point (already done)
+      x += xstep;
+      error += ddy;
+      if (error > ddx) { // increment y if AFTER the middle
+        y += ystep;
+        error -= ddx;
+        if (error + errorprev < ddx) {
+          points.emplace_back(x, y - ystep);
+        } else if (error + errorprev > ddx) {
+          points.emplace_back(x - xstep, y);
+        } else {
+          points.emplace_back(x - xstep, y);
+          points.emplace_back(x, y - ystep);
+        }
+      }
+      points.emplace_back(x, y); // Add the current point
+    }
+  } else { // second octant (slope > 1)
+    int errorprev = dy;
+    int error = dy;
+
+    for (int i = 0; i < dy; i++) {
+      y += ystep;
+      error += ddx;
+      if (error > ddy) {
+        x += xstep;
+        error -= ddy;
+        if (error + errorprev < ddy) {
+          points.emplace_back(x - xstep, y);
+        } else if (error + errorprev > ddy) {
+          points.emplace_back(x, y - ystep);
+        } else {
+          points.emplace_back(x - xstep, y);
+          points.emplace_back(x, y - ystep);
+        }
       }
       points.emplace_back(x, y); // Add the current point
     }

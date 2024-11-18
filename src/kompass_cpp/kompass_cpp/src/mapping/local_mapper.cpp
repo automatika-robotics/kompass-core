@@ -96,7 +96,7 @@ void updateGrid(const float angle, const float range,
       localToGrid(Eigen::Vector2f(x, y), centralPoint, resolution);
   std::vector<Eigen::Vector2i> points;
 
-  bresenham(startPoint, toPoint, points);
+  bresenhamEnhanced(startPoint, toPoint, points);
 
   bool rayStopped = true;
   Eigen::Vector2i lastGridPoint = points[0];
