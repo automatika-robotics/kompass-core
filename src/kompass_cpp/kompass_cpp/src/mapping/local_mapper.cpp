@@ -2,6 +2,7 @@
 #include "mapping/line_drawing.h"
 #include "utils/threadpool.h"
 
+#include <Eigen/SparseCore>
 #include <mutex>
 #include <vector>
 
@@ -81,14 +82,12 @@ void updateGrid(const float angle, const float range,
                 const Eigen::Vector2i &startPoint,
                 Eigen::Ref<Eigen::MatrixXi> gridData,
                 Eigen::Ref<Eigen::MatrixXi> gridDataProb,
-                const Eigen::Vector2i &centralPoint,
-                float resolution,
+                const Eigen::Vector2i &centralPoint, float resolution,
                 const Eigen::Vector3f &laserscanPosition,
                 float laserscanOrientation,
-                const Eigen::MatrixXi &previousGridDataProb,
-                float pPrior, float pEmpty, float pOccupied, float rangeSure,
-                float rangeMax, float wallSize, float oddLogPPrior) {
-
+                const Eigen::MatrixXi &previousGridDataProb, float pPrior,
+                float pEmpty, float pOccupied, float rangeSure, float rangeMax,
+                float wallSize, float oddLogPPrior) {
 
   float x = laserscanPosition(0) + (range * cos(laserscanOrientation + angle));
   float y = laserscanPosition(1) + (range * sin(laserscanOrientation + angle));
@@ -102,32 +101,35 @@ void updateGrid(const float angle, const float range,
   bool rayStopped = true;
   Eigen::Vector2i lastGridPoint = points[0];
 
+  // Precompute boundary checks
+  int rows = gridData.rows();
+  int cols = gridData.cols();
+  int prevRows = previousGridDataProb.rows();
+  int prevCols = previousGridDataProb.cols();
+
+  // NOTE: when previous grid is transformed to align with the current
+  // grid it's not perfectly aligned at the nearest grid cell.
+  // Experimentally (empirically), a shift of 1 grid cell reverses the
+  // mis-alignment effect. -> check test_local_grid_mapper.py for more
+  // info
+  int constexpr SHIFT = 1;
+
   for (auto &pt : points) {
 
-    if (pt(0) >= 0 && pt(0) < gridData.rows() && pt(1) >= 0 &&
-        pt(1) < gridData.cols()) {
+    if (pt(0) >= 0 && pt(0) < rows && pt(1) >= 0 && pt(1) < cols) {
 
       // calculations for baysian update
-      // NOTE: when previous grid is transformed to align with the current
-      // grid it's not perfectly aligned at the nearest grid cell.
-      // Experimentally (empirically), a shift of 1 grid cell reverses the
-      // mis-alignment effect. -> check test_local_grid_mapper.py for more
-      // info
-      int constexpr SHIFT = 1;
       int x_prev = pt(0) + SHIFT;
       int y_prev = pt(1) + SHIFT;
 
-      int previousValue;
-      if (x_prev >= 0 && x_prev < previousGridDataProb.rows() && y_prev >= 0 &&
-          y_prev < previousGridDataProb.cols()) {
-        previousValue = previousGridDataProb(x_prev, y_prev);
-      } else {
-        previousValue = oddLogPPrior;
-      }
+      int previousValue =
+          (x_prev >= 0 && x_prev < prevRows && y_prev >= 0 && y_prev < prevCols)
+              ? previousGridDataProb(x_prev, y_prev)
+              : oddLogPPrior;
 
       double distance = (pt - startPoint).norm();
 
-      double newValue = updateGridCellProbability(
+      int newValue = updateGridCellProbability(
           distance, range, previousValue, resolution, pPrior, pEmpty, pOccupied,
           rangeSure, rangeMax, wallSize, oddLogPPrior);
 
@@ -138,7 +140,7 @@ void updateGrid(const float angle, const float range,
         gridData(pt(0), pt(1)) = std::max(gridData(pt(0), pt(1)), 0);
         // baysian update
         gridDataProb(pt(0), pt(1)) =
-            std::max(gridDataProb(pt(0), pt(1)), static_cast<int>(newValue));
+            std::max(gridDataProb(pt(0), pt(1)), newValue);
       }
 
       // update last point drawn
@@ -149,10 +151,10 @@ void updateGrid(const float angle, const float range,
     }
   }
   if (rayStopped) {
+    std::lock_guard<std::mutex> lock(s_gridMutex);
     /* Force non-bayesian map to set ending_point to occupied. So that
        when visualizing the map the detected obstacles can be visualized
        instead of having a map that visualize empty and unknown zones only.*/
-    std::lock_guard<std::mutex> lock(s_gridMutex);
     fillGridAroundPoint(gridData, lastGridPoint, 0, 100);
   }
 }
@@ -175,10 +177,11 @@ void scanToGrid(const std::vector<double> &angles,
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
     for (int i = 0; i < angles.size(); ++i) {
-      pool.enqueue(&updateGrid, angles[i], ranges[i], startPoint, std::ref(gridData),
-                   std::ref(gridDataProb), centralPoint, resolution, laserscanPosition,
-                   laserscanOrientation, previousGridDataProb, pPrior, pEmpty,
-                   pOccupied, rangeSure, rangeMax, wallSize, oddLogPPrior);
+      pool.enqueue(&updateGrid, angles[i], ranges[i], startPoint,
+                   std::ref(gridData), std::ref(gridDataProb), centralPoint,
+                   resolution, laserscanPosition, laserscanOrientation,
+                   previousGridDataProb, pPrior, pEmpty, pOccupied, rangeSure,
+                   rangeMax, wallSize, oddLogPPrior);
     }
   } else {
     for (int i = 0; i < angles.size(); ++i) {
