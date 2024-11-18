@@ -14,7 +14,7 @@ namespace Kompass {
 namespace Control {
 
 // Mutex for trajectory generation
-static std::mutex s_TrajMutex;
+static std::mutex s_trajMutex;
 
 // TODO: Add option for OMNI robot samples generation: Rotate and move at the
 // same time (ON/OFF). Current implementation does not support rotation + linear
@@ -113,7 +113,7 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
       is_collision = collChecker->checkCollisions(simulated_pose);
     } else {
       collChecker->updateState(simulated_pose);
-      collChecker->checkCollisions();
+      is_collision = collChecker->checkCollisions();
     }
 
     if (is_collision) {
@@ -130,7 +130,7 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
 
   if (!is_collision) {
     if (maxNumThreads > 1) {
-      std::lock_guard<std::mutex> lock(s_TrajMutex);
+      std::lock_guard<std::mutex> lock(s_trajMutex);
       admissible_velocity_trajectories->push_back({simulated_velocities, path});
     } else {
       admissible_velocity_trajectories->push_back({simulated_velocities, path});
@@ -177,7 +177,7 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
       is_collision = collChecker->checkCollisions(simulated_pose);
     } else {
       collChecker->updateState(simulated_pose);
-      collChecker->checkCollisions();
+      is_collision = collChecker->checkCollisions();
     }
 
     if (is_collision) {
@@ -189,7 +189,7 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
 
   if (!is_collision) {
     if (maxNumThreads > 1) {
-      std::lock_guard<std::mutex> lock(s_TrajMutex);
+      std::lock_guard<std::mutex> lock(s_trajMutex);
       admissible_velocity_trajectories->push_back({simulated_velocities, path});
     } else {
       admissible_velocity_trajectories->push_back({simulated_velocities, path});
