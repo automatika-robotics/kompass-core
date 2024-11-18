@@ -97,6 +97,7 @@ inline void bresenhamEnhanced(Eigen::Vector2i p1, Eigen::Vector2i p2,
         }
       }
       points.emplace_back(x, y); // Add the current point
+      errorprev = error;
     }
   } else { // second octant (slope > 1)
     int errorprev = dy;
@@ -118,6 +119,7 @@ inline void bresenhamEnhanced(Eigen::Vector2i p1, Eigen::Vector2i p2,
         }
       }
       points.emplace_back(x, y); // Add the current point
+      errorprev = error;
     }
   }
 }
