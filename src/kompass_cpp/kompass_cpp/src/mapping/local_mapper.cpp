@@ -181,7 +181,7 @@ void scanToGrid(const std::vector<double> &angles,
       pool.enqueue(&updateGrid, angles[i], ranges[i], startPoint,
                    std::ref(gridData), std::ref(gridDataProb), centralPoint,
                    resolution, laserscanPosition, laserscanOrientation,
-                   previousGridDataProb, pPrior, pEmpty, pOccupied, rangeSure,
+                   std::ref(previousGridDataProb), pPrior, pEmpty, pOccupied, rangeSure,
                    rangeMax, wallSize, oddLogPPrior);
     }
   } else {
