@@ -1,11 +1,12 @@
 #include "datatypes/trajectory.h"
 #include "mapping/local_mapper.h"
+#include "test.h"
 #include "utils/logger.h"
 #include <Eigen/Dense>
 #include <cmath>
 #include <cstdlib>
-#include <vector>
 #include <iostream>
+#include <vector>
 
 using namespace Kompass;
 
@@ -38,8 +39,9 @@ Eigen::VectorXd stdVectorToEigenVector(const std::vector<double> &std_vector) {
   return eigen_vector;
 }
 
-Control::LaserScan generateLaserScan(double angle_increment, const std::string &shape,
-                            double param = 1.0, int num_points = 100) {
+Control::LaserScan generateLaserScan(double angle_increment,
+                                     const std::string &shape,
+                                     double param = 1.0, int num_points = 100) {
   std::vector<double> angles, ranges;
 
   double angle = 0.0;
@@ -48,8 +50,8 @@ Control::LaserScan generateLaserScan(double angle_increment, const std::string &
     // Generate points forming a circle of radius `param`
     double radius = param;
     while (angle < 2 * M_PI) {
-      angles.push_back(angle);
-      ranges.push_back(radius);
+      angles.emplace_back(angle);
+      ranges.emplace_back(radius);
       angle += angle_increment;
     }
   } else if (shape == "right_corner") {
@@ -57,15 +59,15 @@ Control::LaserScan generateLaserScan(double angle_increment, const std::string &
     double max_range = param;
     // Horizontal line
     for (angle = -M_PI / 4; angle <= M_PI / 4; angle += angle_increment) {
-      angles.push_back(angle);
-      ranges.push_back(max_range /
-                            std::cos(angle)); // Distance along the horizontal
+      angles.emplace_back(angle);
+      ranges.emplace_back(max_range /
+                       std::cos(angle)); // Distance along the horizontal
     }
     // Vertical line
     for (angle = M_PI / 4; angle <= 3 * M_PI / 4; angle += angle_increment) {
-      angles.push_back(angle);
-      ranges.push_back(max_range /
-                            std::sin(angle)); // Distance along the vertical
+      angles.emplace_back(angle);
+      ranges.emplace_back(max_range /
+                       std::sin(angle)); // Distance along the vertical
     }
   } else if (shape == "random_points") {
     // Generate random points
@@ -76,27 +78,26 @@ Control::LaserScan generateLaserScan(double angle_increment, const std::string &
               M_PI; // Random angle
       double range = static_cast<double>(std::rand()) / RAND_MAX *
                      param; // Random range within max distance
-      angles.push_back(angle);
-      ranges.push_back(range);
+      angles.emplace_back(angle);
+      ranges.emplace_back(range);
     }
   } else {
     std::cerr << "Invalid shape specified. Use 'circle', 'right_corner', or "
                  "'random_points'.\n";
   }
 
-  return {angles, ranges};
+  return {ranges, angles};
 }
 
 // Example usage
 int main() {
-  Logger::getInstance().setLogLevel(LogLevel::DEBUG);
 
-  double angle_increment = 0.01;  // Example increment in radians
+  double angle_increment = 0.1; // Example increment in radians
   double corner_distance = 0.5; // Example max range for the right corner
-  int random_points = 50;        // Example number of random points
+  int random_points = 50;       // Example number of random points
 
-  int grid_width = 10;
-  int grid_height = 10;
+  int grid_width = 20;
+  int grid_height = 20;
   float grid_res = 0.1;
   int UNKNOWN_VAL = -1;
   int OCC_VAL = 100;
@@ -114,12 +115,16 @@ int main() {
   int x = static_cast<int>(std::round(grid_width / 2.0)) - 1;
   int y = static_cast<int>(std::round(grid_height / 2.0)) - 1;
   Eigen::Vector2i centralPoint(x, y);
+  std::cout << "Central point" << x << ", " << y << std::endl;
 
   // scan model
   float pPrior = 0.6, pOccupied = 0.9;
   float pEmpty = 1 - pOccupied;
   float rangeSure = 0.1, rangeMax = 20.0, wallSize = 0.075;
   float oddLogPPrior = static_cast<float>(std::log(pPrior / (1.0f - pPrior)));
+  int maxNumThreads = 10;
+
+  Timer timer;
 
   // Generate circle scan with radius 1.0
   double radius = 1.0; // Example radius for the circle
@@ -127,12 +132,11 @@ int main() {
       generateLaserScan(angle_increment, "circle", radius);
   LOG_INFO("Testing with circle points at distance: ", radius,
            ", and grid of width: ", actual_size);
-  Mapping::laserscanToGrid(stdVectorToEigenVector(circle_scan.angles),
-                           stdVectorToEigenVector(circle_scan.ranges), gridData,
-                           gridDataProb, centralPoint, grid_res,
-                           {0.0, 0.0, 0.0}, 0.0, gridDataProb, pPrior,
-                           pEmpty, pOccupied, rangeSure,
-                           rangeMax, wallSize, oddLogPPrior);
+  Mapping::scanToGrid(circle_scan.angles, circle_scan.ranges, gridData,
+                      gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
+                      0.0, gridDataProb, pPrior, pEmpty, pOccupied, rangeSure,
+                      rangeMax, wallSize, oddLogPPrior, maxNumThreads);
+
   int occ_points = countPointsInGrid(gridData, OCC_VAL);
   int free_points = countPointsInGrid(gridData, FREE_VAL);
   int unknown_points = countPointsInGrid(gridData, UNKNOWN_VAL);
@@ -144,15 +148,13 @@ int main() {
   // Generate circle scan with radius 0.5
   gridData.fill(UNKNOWN_VAL);
   radius = 0.5; // Example radius for the circle
-  circle_scan =
-      generateLaserScan(angle_increment, "circle", radius);
+  circle_scan = generateLaserScan(angle_increment, "circle", radius);
   LOG_INFO("Testing with circle points at distance: ", radius,
            ", and grid of width: ", actual_size);
-  Mapping::laserscanToGrid(
-      stdVectorToEigenVector(circle_scan.angles),
-      stdVectorToEigenVector(circle_scan.ranges), gridData, gridDataProb,
-      centralPoint, grid_res, {0.0, 0.0, 0.0}, 0.0, gridDataProb, pPrior,
-      pEmpty, pOccupied, rangeSure, rangeMax, wallSize, oddLogPPrior);
+  Mapping::scanToGrid(circle_scan.angles, circle_scan.ranges, gridData,
+                      gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
+                      0.0, gridDataProb, pPrior, pEmpty, pOccupied, rangeSure,
+                      rangeMax, wallSize, oddLogPPrior, maxNumThreads);
   occ_points = countPointsInGrid(gridData, OCC_VAL);
   free_points = countPointsInGrid(gridData, FREE_VAL);
   unknown_points = countPointsInGrid(gridData, UNKNOWN_VAL);
@@ -167,11 +169,10 @@ int main() {
   circle_scan = generateLaserScan(angle_increment, "circle", radius);
   LOG_INFO("Testing with circle points at distance: ", radius,
            ", and grid of width: ", actual_size);
-  Mapping::laserscanToGrid(
-      stdVectorToEigenVector(circle_scan.angles),
-      stdVectorToEigenVector(circle_scan.ranges), gridData, gridDataProb,
-      centralPoint, grid_res, {0.0, 0.0, 0.0}, 0.0, gridDataProb, pPrior,
-      pEmpty, pOccupied, rangeSure, rangeMax, wallSize, oddLogPPrior);
+  Mapping::scanToGrid(circle_scan.angles, circle_scan.ranges, gridData,
+                      gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
+                      0.0, gridDataProb, pPrior, pEmpty, pOccupied, rangeSure,
+                      rangeMax, wallSize, oddLogPPrior, maxNumThreads);
   occ_points = countPointsInGrid(gridData, OCC_VAL);
   free_points = countPointsInGrid(gridData, FREE_VAL);
   unknown_points = countPointsInGrid(gridData, UNKNOWN_VAL);

@@ -250,7 +250,7 @@ class LocalMapper:
             self.scan_update_model.range_max, np.maximum(0.0, laser_scan.ranges)
         )
 
-        kompass_cpp.mapping.laserscan_to_grid(
+        kompass_cpp.mapping.scan_to_grid(
             angles=laser_scan.angles,
             ranges=filtered_ranges,
             grid_data=self.grid_data.scan_occupancy,

@@ -24,6 +24,29 @@ void fillGridAroundPoint(Eigen::MatrixXi &gridData,
                          int indicator);
 
 /**
+ * @brief Updates a grid cell occupancy probability using the LaserScanModel
+ *
+ * @param distance Hit point distance from the sensor (m)
+ * @param currentRange Scan ray max range (m)
+ * @param oddLogPPrev Log Odds of the previous probability of the grid cell
+ * occupancy
+ * @param resolution Grid resolution (meter/cell)
+ * @param pPrior Prior probability of the model
+ * @param pEmpty Empty probability of the model
+ * @param pOccupied Occupied probability of the model
+ * @param rangeSure Certainty range of the model (m)
+ * @param rangeMax Max range of the sensor (m)
+ * @param wallSize Padding size of the model (m)
+ * @param oddLogPPrior Log Odds of the prior probability
+ *
+ * @return Current occupancy probability
+ */
+double updateGridCellProbability(double distance, double currentRange,
+                                 double oddLogPPrev, double resolution,
+                                 double pPrior, double pEmpty, double pOccupied,
+                                 double rangeSure, double rangeMax,
+                                 double wallSize, double oddLogPPrior);
+/**
  * Processes Laserscan data (angles and ranges) to project on a 2D grid using
  * Bresenham line drawing for each Laserscan beam
  *
@@ -43,15 +66,15 @@ void fillGridAroundPoint(Eigen::MatrixXi &gridData,
  * @param wallSize          LaserScan model's padding size when hitting an
  * @param oddLogPPrior    Log Odds of the LaserScan model's prior probability
  */
-void laserscanToGrid(const Eigen::VectorXd &angles,
-                     const Eigen::VectorXd &ranges, Eigen::MatrixXi &gridData,
+void scanToGrid(const std::vector<double> &angles,
+                     const std::vector<double> &ranges, Eigen::MatrixXi &gridData,
                      Eigen::MatrixXi &gridDataProb,
                      const Eigen::Vector2i &centralPoint, float resolution,
                      const Eigen::Vector3f &laserscanPosition,
                      float laserscanOrientation,
                      const Eigen::MatrixXi &previousGridDataProb, float pPrior,
                      float pEmpty, float pOccupied, float rangeSure,
-                     float rangeMax, float wallSize, float oddLogPPrior);
+                     float rangeMax, float wallSize, float oddLogPPrior, int maxNumThreads = 1);
 
 } // namespace Mapping
 } //namespace Kompass

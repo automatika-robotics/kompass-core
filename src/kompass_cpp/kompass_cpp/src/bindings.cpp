@@ -375,7 +375,7 @@ PYBIND11_MODULE(kompass_cpp, m) {
       .def("add_custom_cost", &Control::DWA::addCustomCost);
 
     auto m_mapping = m.def_submodule("mapping", "Local Mapping module");
-    m_mapping.def("laserscan_to_grid", &Mapping::laserscanToGrid,
+    m_mapping.def("scan_to_grid", &Mapping::scanToGrid,
           "Convert laser scan data to occupancy grid",
           py::arg("angles"),
           py::arg("ranges"),
@@ -392,7 +392,8 @@ PYBIND11_MODULE(kompass_cpp, m) {
           py::arg("range_sure"),
           py::arg("range_max"),
           py::arg("wall_size"),
-          py::arg("odd_log_p_prior"));
+          py::arg("odd_log_p_prior"),
+          py::arg("max_num_threads") = 1);
   // ------------------------------------------------------------------------------
   // Utils
   py::enum_<LogLevel>(m, "LogLevel")
