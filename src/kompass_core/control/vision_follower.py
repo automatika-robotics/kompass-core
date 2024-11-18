@@ -3,6 +3,7 @@ from typing import Optional
 from attrs import define, field
 from ..utils.common import BaseAttrs, in_range
 from ..models import Robot, RobotCtrlLimits, RobotType
+from ..datatypes import TrackingData
 import numpy as np
 
 
@@ -14,17 +15,13 @@ class VisionFollowerConfig(BaseAttrs):
     control_horizon: float = field(
         default=0.2, validator=in_range(min_value=1e-4, max_value=1e6)
     )
-    tolerance: float = field(default=0.05, validator=in_range(min_value=1e-6, max_value=1e3))
+    tolerance: float = field(
+        default=0.1, validator=in_range(min_value=1e-6, max_value=1e3)
+    )
     target_distance: Optional[float] = field(default=None)
-    alpha : float = field(
-        default=1.0, validator=in_range(min_value=1e-9, max_value=1e9)
-    )
-    beta : float = field(
-        default=1.0, validator=in_range(min_value=1e-9, max_value=1e9)
-    )
-    gamma : float = field(
-        default=1.0, validator=in_range(min_value=1e-9, max_value=1e9)
-    )
+    alpha: float = field(default=1.0, validator=in_range(min_value=1e-9, max_value=1e9))
+    beta: float = field(default=1.0, validator=in_range(min_value=1e-9, max_value=1e9))
+    gamma: float = field(default=1.0, validator=in_range(min_value=1e-9, max_value=1e9))
     min_vel: float = field(
         default=0.01, validator=in_range(min_value=1e-9, max_value=1e9)
     )
@@ -60,38 +57,53 @@ class VisionFollower(ControllerTemplate):
             0.0, self.config.control_horizon, self.config.control_time_step
         )
 
-    def reset_target(self,
-        target_size_w:  float,
-        target_size_h: float,
-        target_depth: Optional[float]):
-        self.__target_ref_size = target_size_w * target_size_h
-        if target_depth and not self.config.target_distance:
-            self.config.target_distance = target_depth
+    def reset_target(self, tracking: TrackingData):
+        self.__target_ref_size = (
+            tracking.size_xy[0]
+            * tracking.size_xy[1]
+            / (tracking.img_meta.width * tracking.img_meta.height)
+        )
+        if tracking.depth and not self.config.target_distance:
+            self.config.target_distance = tracking.depth
 
     def loop_step(
         self,
         *,
-        target_image_x: float,
-        target_image_y: float,
-        target_size_w: float,
-        target_size_h: float,
-        target_depth: Optional[float] = None,
+        tracking: TrackingData,
         **_,
-    ):
+    ) -> bool:
         # If depth is provided but no reference distance is available -> set current depth as reference distance to keep
-        if target_depth and not self.config.target_distance:
-            self.config.target_distance = target_depth
+        if tracking.depth and not self.config.target_distance:
+            self.config.target_distance = tracking.depth
         # Otherwise set a reference size (bounding box size)
         elif not self.__target_ref_size:
             # Assume dummy distance of 1 meter at the targeted box size if it is not provided
             self.config.target_distance = self.config.target_distance or 1.0
-            self.__target_ref_size = target_size_w * target_size_h
+            self.__target_ref_size = (
+                tracking.size_xy[0]
+                * tracking.size_xy[1]
+                / (tracking.img_meta.width * tracking.img_meta.height)
+            )
 
         # Get distance (depth) error
-        target_depth = target_depth or self.__target_ref_size / (
-            target_size_w * target_size_h
+        _size = (
+            tracking.size_xy[0]
+            * tracking.size_xy[1]
+            / (tracking.img_meta.width * tracking.img_meta.height)
         )
+        target_depth = tracking.depth or self.__target_ref_size / _size
         distance_error = target_depth - self.config.target_distance
+        import logging
+
+        logging.error(
+            f"ref size: {self.__target_ref_size}, current size: {_size}, error {distance_error}"
+        )
+        logging.error(
+            f"X center: {tracking.center_xy[0]}, mid {tracking.img_meta.width / 2}"
+        )
+        logging.error(
+            f"Y center: {tracking.center_xy[1]}, mid {tracking.img_meta.height / 2}"
+        )
 
         self.__omega_ctrl = len(self._time_steps) * [0.0]
         self.__vx_ctrl = len(self._time_steps) * [0.0]
@@ -99,8 +111,10 @@ class VisionFollower(ControllerTemplate):
 
         if (
             abs(distance_error) > self.config.tolerance
-            or abs(target_image_x) > self.config.tolerance
-            or abs(target_image_y) > self.config.tolerance
+            or abs(tracking.center_xy[0] - tracking.img_meta.width / 2)
+            > self.config.tolerance * tracking.img_meta.width
+            or abs(tracking.center_xy[1] - tracking.img_meta.height / 2)
+            > self.config.tolerance * tracking.img_meta.height
         ):
             simulated_depth = target_depth
             # Simulate over the control horizon
@@ -114,16 +128,22 @@ class VisionFollower(ControllerTemplate):
                     else distance_error * self._ctrl_limits.vx_limits.max_vel
                     + np.sign(distance_error) * self.config.min_vel
                 )
-                omega = - self.config.alpha * target_image_x
-                v = - self.config.beta * target_image_y + self.config.gamma * dist_speed
-                simulated_depth += - v * t
+                omega = -self.config.alpha * (
+                    tracking.center_xy[0] / tracking.img_meta.width - 0.5
+                )
+                v = (
+                    -self.config.beta
+                    * (tracking.center_xy[1] / tracking.img_meta.height - 0.5)
+                    + self.config.gamma * dist_speed
+                )
+                simulated_depth += -v * t
                 if self.__rotate_in_place:
-                    self.__vx_ctrl[i:i + 1] = [0.0, v]
+                    self.__vx_ctrl[i : i + 1] = [0.0, max(v, 0.0)]
                     self.__omega_ctrl[i : i + 1] = [omega, 0.0]
                 else:
-                    self.__vx_ctrl[i] = v
+                    self.__vx_ctrl[i] = max(v, 0.0)
                     self.__omega_ctrl[i] = omega
-            return
+        return True
 
     def logging_info(self) -> str:
         """

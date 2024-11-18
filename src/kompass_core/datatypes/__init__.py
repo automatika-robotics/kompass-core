@@ -14,6 +14,7 @@ from .path import (
 )
 from .pointcloud import PointCloudData, Point3D
 from .pose import PoseData
+from .vision import TrackingData, ImageMetaData
 
 __all__ = [
     "LaserScanData",
@@ -31,4 +32,6 @@ __all__ = [
     "PointCloudData",
     "Point3D",
     "PoseData",
+    "TrackingData",
+    "ImageMetaData",
 ]
