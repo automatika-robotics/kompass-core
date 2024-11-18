@@ -28,7 +28,7 @@ Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
   return gridPoint;
 }
 
-void fillGridAroundPoint(Eigen::MatrixXi &gridData,
+void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
                          const Eigen::Vector2i &gridPoint, int gridPadding,
                          int indicator) {
   int iStart = gridPoint.x() - gridPadding;
@@ -79,8 +79,8 @@ double updateGridCellProbability(double distance, double currentRange,
 
 void updateGrid(const float angle, const float range,
                 const Eigen::Vector2i &startPoint,
-                Eigen::MatrixXi &gridData,
-                Eigen::MatrixXi &gridDataProb,
+                Eigen::Ref<Eigen::MatrixXi> gridData,
+                Eigen::Ref<Eigen::MatrixXi> gridDataProb,
                 const Eigen::Vector2i &centralPoint,
                 float resolution,
                 const Eigen::Vector3f &laserscanPosition,
@@ -159,8 +159,8 @@ void updateGrid(const float angle, const float range,
 
 void scanToGrid(const std::vector<double> &angles,
                 const std::vector<double> &ranges,
-                Eigen::MatrixXi &gridData,
-                Eigen::MatrixXi &gridDataProb,
+                Eigen::Ref<Eigen::MatrixXi> gridData,
+                Eigen::Ref<Eigen::MatrixXi> gridDataProb,
                 const Eigen::Vector2i &centralPoint, float resolution,
                 const Eigen::Vector3f &laserscanPosition,
                 float laserscanOrientation,

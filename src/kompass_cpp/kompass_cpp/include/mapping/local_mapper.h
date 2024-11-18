@@ -19,7 +19,7 @@ Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
  * @param gridPadding Padding to be filled (number of cells).
  * @param indicator Value to be assigned to filled cells.
  */
-void fillGridAroundPoint(Eigen::MatrixXi &gridData,
+void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
                          const Eigen::Vector2i &gridPoint, int gridPadding,
                          int indicator);
 
@@ -67,8 +67,8 @@ double updateGridCellProbability(double distance, double currentRange,
  * @param oddLogPPrior    Log Odds of the LaserScan model's prior probability
  */
 void scanToGrid(const std::vector<double> &angles,
-                     const std::vector<double> &ranges, Eigen::MatrixXi &gridData,
-                     Eigen::MatrixXi &gridDataProb,
+                     const std::vector<double> &ranges, Eigen::Ref<Eigen::MatrixXi> gridData,
+                     Eigen::Ref<Eigen::MatrixXi> gridDataProb,
                      const Eigen::Vector2i &centralPoint, float resolution,
                      const Eigen::Vector3f &laserscanPosition,
                      float laserscanOrientation,
