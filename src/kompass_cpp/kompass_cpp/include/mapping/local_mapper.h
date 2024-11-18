@@ -67,14 +67,16 @@ double updateGridCellProbability(double distance, double currentRange,
  * @param oddLogPPrior    Log Odds of the LaserScan model's prior probability
  */
 void scanToGrid(const std::vector<double> &angles,
-                     const std::vector<double> &ranges, Eigen::Ref<Eigen::MatrixXi> gridData,
-                     Eigen::Ref<Eigen::MatrixXi> gridDataProb,
-                     const Eigen::Vector2i &centralPoint, float resolution,
-                     const Eigen::Vector3f &laserscanPosition,
-                     float laserscanOrientation,
-                     const Eigen::MatrixXi &previousGridDataProb, float pPrior,
-                     float pEmpty, float pOccupied, float rangeSure,
-                     float rangeMax, float wallSize, float oddLogPPrior, int maxNumThreads = 1);
+                const std::vector<double> &ranges,
+                Eigen::Ref<Eigen::MatrixXi> gridData,
+                Eigen::Ref<Eigen::MatrixXi> gridDataProb,
+                const Eigen::Vector2i &centralPoint, float resolution,
+                const Eigen::Vector3f &laserscanPosition,
+                float laserscanOrientation,
+                const Eigen::Ref<const Eigen::MatrixXi> previousGridDataProb,
+                float pPrior, float pEmpty, float pOccupied, float rangeSure,
+                float rangeMax, float wallSize, float oddLogPPrior,
+                int maxNumThreads = 1);
 
 } // namespace Mapping
-} //namespace Kompass
+} // namespace Kompass

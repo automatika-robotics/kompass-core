@@ -85,9 +85,9 @@ void updateGrid(const float angle, const float range,
                 const Eigen::Vector2i &centralPoint, float resolution,
                 const Eigen::Vector3f &laserscanPosition,
                 float laserscanOrientation,
-                const Eigen::MatrixXi &previousGridDataProb, float pPrior,
-                float pEmpty, float pOccupied, float rangeSure, float rangeMax,
-                float wallSize, float oddLogPPrior) {
+                const Eigen::Ref<const Eigen::MatrixXi> previousGridDataProb,
+                float pPrior, float pEmpty, float pOccupied, float rangeSure,
+                float rangeMax, float wallSize, float oddLogPPrior) {
 
   float x = laserscanPosition(0) + (range * cos(laserscanOrientation + angle));
   float y = laserscanPosition(1) + (range * sin(laserscanOrientation + angle));
@@ -166,9 +166,10 @@ void scanToGrid(const std::vector<double> &angles,
                 const Eigen::Vector2i &centralPoint, float resolution,
                 const Eigen::Vector3f &laserscanPosition,
                 float laserscanOrientation,
-                const Eigen::MatrixXi &previousGridDataProb, float pPrior,
-                float pEmpty, float pOccupied, float rangeSure, float rangeMax,
-                float wallSize, float oddLogPPrior, int maxNumThreads) {
+                const Eigen::Ref<const Eigen::MatrixXi> previousGridDataProb,
+                float pPrior, float pEmpty, float pOccupied, float rangeSure,
+                float rangeMax, float wallSize, float oddLogPPrior,
+                int maxNumThreads) {
 
   Eigen::Vector2i startPoint =
       localToGrid(Eigen::Vector2f(laserscanPosition(0), laserscanPosition(1)),
