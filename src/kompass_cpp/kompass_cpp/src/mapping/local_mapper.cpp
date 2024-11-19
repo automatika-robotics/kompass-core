@@ -57,25 +57,25 @@ void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
   }
 }
 
-double updateGridCellProbability(double distance, double currentRange,
-                                 double oddLogPPrev, double resolution,
-                                 double pPrior, double pEmpty, double pOccupied,
-                                 double rangeSure, double rangeMax,
-                                 double wallSize, double oddLogPPrior) {
+float updateGridCellProbability(float distance, float currentRange,
+                                 float oddLogPPrev, float resolution,
+                                 float pPrior, float pEmpty, float pOccupied,
+                                 float rangeSure, float rangeMax,
+                                 float wallSize, float oddLogPPrior) {
   // get the current sensor probability of being occupied for an area in a given
   // distance from the scanner
   distance = distance * resolution;
   currentRange = currentRange - wallSize;
 
-  double pF = (distance < currentRange) ? pEmpty : pOccupied;
-  double delta = (distance < rangeSure) ? 0.0 : 1.0;
+  float pF = (distance < currentRange) ? pEmpty : pOccupied;
+  float delta = (distance < rangeSure) ? 0.0 : 1.0;
 
-  double pSensor =
+  float pSensor =
       pF + (delta * ((distance - rangeSure) / rangeMax) * (pPrior - pF));
 
   // get the current bayesian updated probability given its previous probability
   // and sensor probability
-  double pCurr = oddLogPPrev + log(pSensor / (1.0 - pSensor)) - oddLogPPrior;
+  float pCurr = oddLogPPrev + log(pSensor / (1.0 - pSensor)) - oddLogPPrior;
 
   return pCurr;
 }
@@ -83,11 +83,11 @@ double updateGridCellProbability(double distance, double currentRange,
 void updateGrid(const float angle, const float range,
                 const Eigen::Vector2i &startPoint,
                 Eigen::Ref<Eigen::MatrixXi> gridData,
-                Eigen::Ref<Eigen::MatrixXi> gridDataProb,
+                Eigen::Ref<Eigen::MatrixXf> gridDataProb,
                 const Eigen::Vector2i &centralPoint, float resolution,
                 const Eigen::Vector3f &laserscanPosition,
                 float laserscanOrientation,
-                const Eigen::Ref<const Eigen::MatrixXi> previousGridDataProb,
+                const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb,
                 float pPrior, float pEmpty, float pOccupied, float rangeSure,
                 float rangeMax, float wallSize, float oddLogPPrior) {
 
@@ -129,9 +129,9 @@ void updateGrid(const float angle, const float range,
               ? previousGridDataProb(x_prev, y_prev)
               : oddLogPPrior;
 
-      double distance = (pt - startPoint).norm();
+      float distance = (pt - startPoint).norm();
 
-      int newValue = updateGridCellProbability(
+      float newValue = updateGridCellProbability(
           distance, range, previousValue, resolution, pPrior, pEmpty, pOccupied,
           rangeSure, rangeMax, wallSize, oddLogPPrior);
 
@@ -166,14 +166,15 @@ void updateGrid(const float angle, const float range,
 void scanToGrid(const std::vector<double> &angles,
                 const std::vector<double> &ranges,
                 Eigen::Ref<Eigen::MatrixXi> gridData,
-                Eigen::Ref<Eigen::MatrixXi> gridDataProb,
+                Eigen::Ref<Eigen::MatrixXf> gridDataProb,
                 const Eigen::Vector2i &centralPoint, float resolution,
                 const Eigen::Vector3f &laserscanPosition,
                 float laserscanOrientation,
-                const Eigen::Ref<const Eigen::MatrixXi> previousGridDataProb,
+                const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb,
                 float pPrior, float pEmpty, float pOccupied, float rangeSure,
                 float rangeMax, float wallSize, float oddLogPPrior,
                 int maxNumThreads) {
+  // angles and ranges are handled as floats implicitly
 
   Eigen::Vector2i startPoint =
       localToGrid(Eigen::Vector2f(laserscanPosition(0), laserscanPosition(1)),

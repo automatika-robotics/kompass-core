@@ -103,10 +103,10 @@ int main() {
 
   // Init the grid
   Eigen::MatrixXi gridData(grid_height, grid_width);
-  gridData.fill(Mapping::OccupancyType::UNKNOWN);
+  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNKNOWN));
 
-  Eigen::MatrixXi gridDataProb(grid_height, grid_width);
-  gridDataProb.fill(Mapping::OccupancyType::UNKNOWN);
+  Eigen::MatrixXf gridDataProb(grid_height, grid_width);
+  gridDataProb.fill(static_cast<int>(Mapping::OccupancyType::UNKNOWN));
 
   // Central point
   int x = static_cast<int>(std::round(grid_width / 2.0)) - 1;
@@ -134,16 +134,16 @@ int main() {
                       0.0, gridDataProb, pPrior, pEmpty, pOccupied, rangeSure,
                       rangeMax, wallSize, oddLogPPrior, maxNumThreads);
 
-  int occ_points = countPointsInGrid(gridData, Mapping::OccupancyType::OCCUPIED);
-  int free_points = countPointsInGrid(gridData, Mapping::OccupancyType::FREE);
-  int unknown_points = countPointsInGrid(gridData, Mapping::OccupancyType::OCCUPIED);
+  int occ_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  int free_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::FREE));
+  int unknown_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
   LOG_INFO("Number of occupied cells: ", occ_points);
   LOG_INFO("Number of free cells: ", free_points);
   LOG_INFO("Number of unknown cells: ", unknown_points);
   printMatrix(gridData);
 
   // Generate circle scan with radius 0.5
-  gridData.fill(Mapping::OccupancyType::UNKNOWN);
+  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNKNOWN));
   radius = 0.5; // Example radius for the circle
   circle_scan = generateLaserScan(angle_increment, "circle", radius);
   LOG_INFO("Testing with circle points at distance: ", radius,
@@ -152,16 +152,16 @@ int main() {
                       gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
                       0.0, gridDataProb, pPrior, pEmpty, pOccupied, rangeSure,
                       rangeMax, wallSize, oddLogPPrior, maxNumThreads);
-  occ_points = countPointsInGrid(gridData, Mapping::OccupancyType::OCCUPIED);
-  free_points = countPointsInGrid(gridData, Mapping::OccupancyType::FREE);
-  unknown_points = countPointsInGrid(gridData, Mapping::OccupancyType::OCCUPIED);
+  occ_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  free_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::FREE));
+  unknown_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
   LOG_INFO("Number of occupied cells: ", occ_points);
   LOG_INFO("Number of free cells: ", free_points);
   LOG_INFO("Number of unknown cells: ", unknown_points);
   printMatrix(gridData);
 
   // Generate circle scan with radius 3.5
-  gridData.fill(Mapping::OccupancyType::UNKNOWN);
+  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNKNOWN));
   radius = 10.5; // Example radius for the circle
   circle_scan = generateLaserScan(angle_increment, "circle", radius);
   LOG_INFO("Testing with circle points at distance: ", radius,
@@ -170,9 +170,9 @@ int main() {
                       gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
                       0.0, gridDataProb, pPrior, pEmpty, pOccupied, rangeSure,
                       rangeMax, wallSize, oddLogPPrior, maxNumThreads);
-  occ_points = countPointsInGrid(gridData, Mapping::OccupancyType::OCCUPIED);
-  free_points = countPointsInGrid(gridData, Mapping::OccupancyType::FREE);
-  unknown_points = countPointsInGrid(gridData, Mapping::OccupancyType::OCCUPIED);
+  occ_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  free_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::FREE));
+  unknown_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
   LOG_INFO("Number of occupied cells: ", occ_points);
   LOG_INFO("Number of free cells: ", free_points);
   LOG_INFO("Number of unknown cells: ", unknown_points);

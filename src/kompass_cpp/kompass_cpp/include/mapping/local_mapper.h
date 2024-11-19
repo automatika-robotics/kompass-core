@@ -6,7 +6,7 @@ namespace Kompass {
 namespace Mapping {
 
 // Occupancy types for grid
-enum OccupancyType { UNKNOWN = -1, FREE = 0, OCCUPIED = 100 };
+enum class OccupancyType { UNKNOWN = -1, FREE = 0, OCCUPIED = 100 };
 
 // Function to convert a point from local coordinates frame of the grid to grid
 // indices
@@ -44,11 +44,11 @@ void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
  *
  * @return Current occupancy probability
  */
-double updateGridCellProbability(double distance, double currentRange,
-                                 double oddLogPPrev, double resolution,
-                                 double pPrior, double pEmpty, double pOccupied,
-                                 double rangeSure, double rangeMax,
-                                 double wallSize, double oddLogPPrior);
+float updateGridCellProbability(float distance, float currentRange,
+                                 float oddLogPPrev, float resolution,
+                                 float pPrior, float pEmpty, float pOccupied,
+                                 float rangeSure, float rangeMax,
+                                 float wallSize, float oddLogPPrior);
 /**
  * Processes Laserscan data (angles and ranges) to project on a 2D grid using
  * Bresenham line drawing for each Laserscan beam
@@ -72,11 +72,11 @@ double updateGridCellProbability(double distance, double currentRange,
 void scanToGrid(const std::vector<double> &angles,
                 const std::vector<double> &ranges,
                 Eigen::Ref<Eigen::MatrixXi> gridData,
-                Eigen::Ref<Eigen::MatrixXi> gridDataProb,
+                Eigen::Ref<Eigen::MatrixXf> gridDataProb,
                 const Eigen::Vector2i &centralPoint, float resolution,
                 const Eigen::Vector3f &laserscanPosition,
                 float laserscanOrientation,
-                const Eigen::Ref<const Eigen::MatrixXi> previousGridDataProb,
+                const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb,
                 float pPrior, float pEmpty, float pOccupied, float rangeSure,
                 float rangeMax, float wallSize, float oddLogPPrior,
                 int maxNumThreads = 1);
