@@ -3,15 +3,14 @@ from attrs import define, field, validators
 import numpy as np
 from ..datatypes.pose import PoseData
 from ..datatypes.laserscan import LaserScanData
-from ..datatypes.obstacles import OCCUPANCY_TYPE
+
+from kompass_cpp.mapping import OCCUPANCY_TYPE, scan_to_grid
 
 from ..utils.geometry import from_frame1_to_frame2, get_pose_target_in_reference_frame
 
 from .grid import get_previous_grid_in_current_pose
 from .laserscan_model import LaserScanModelConfig
 from ..utils.common import BaseAttrs, in_range
-
-import kompass_cpp
 
 
 @define
@@ -53,7 +52,7 @@ class GridData(BaseAttrs):
         """
         data = np.full(
             (self.width, self.height),
-            OCCUPANCY_TYPE.UNEXPLORED,
+            OCCUPANCY_TYPE.UNEXPLORED.value,
             dtype=np.int32,
             order="F",
         )
@@ -177,13 +176,13 @@ class LocalMapper:
         UNEXPLORED_THRESHOLD = self.odd_log_p_prior
         self.grid_data.occupancy_prob[
             self.grid_data.scan_occupancy_prob > UNEXPLORED_THRESHOLD
-        ] = OCCUPANCY_TYPE.OCCUPIED
+        ] = OCCUPANCY_TYPE.OCCUPIED.value
         self.grid_data.occupancy_prob[
             self.grid_data.scan_occupancy_prob == UNEXPLORED_THRESHOLD
-        ] = OCCUPANCY_TYPE.UNEXPLORED
+        ] = OCCUPANCY_TYPE.UNEXPLORED.value
         self.grid_data.occupancy_prob[
             self.grid_data.scan_occupancy_prob < UNEXPLORED_THRESHOLD
-        ] = OCCUPANCY_TYPE.EMPTY
+        ] = OCCUPANCY_TYPE.EMPTY.value
 
     def _calculate_poses(self, current_robot_pose: PoseData):
         """Calculates 3D global poses of the 4 corners of the grid based on the curren robot position
@@ -259,7 +258,7 @@ class LocalMapper:
             self.scan_update_model.range_max, np.maximum(0.0, laser_scan.ranges)
         )
 
-        kompass_cpp.mapping.scan_to_grid(
+        scan_to_grid(
             angles=laser_scan.angles,
             ranges=filtered_ranges,
             grid_data=self.grid_data.scan_occupancy,
@@ -277,7 +276,7 @@ class LocalMapper:
         # self.grid_data["scan_occupancy"][
         #     self.grid_robot_point[0] : self.grid_robot_point[0] + 2,
         #     self.grid_robot_point[1] : self.grid_robot_point[1] + 2,
-        # ] = OCCUPANCY_TYPE.OCCUPIED
+        # ] = OCCUPANCY_TYPE.OCCUPIED.value
 
         # flag to enable fetching the mapping data
         self.processed = True

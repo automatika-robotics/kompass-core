@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from kompass_core.datatypes.pose import PoseData
 from kompass_core.datatypes.laserscan import LaserScanData
-from kompass_core.datatypes.obstacles import OCCUPANCY_TYPE
+from kompass_cpp.mapping import OCCUPANCY_TYPE
 
 from kompass_core.mapping import LocalMapper, MapConfig, LaserScanModelConfig
 from kompass_core.utils.visualization import visualize_grid
@@ -226,7 +226,7 @@ def test_update_from_scan(
     )
 
     number_occupied_cells = np.count_nonzero(
-        local_mapper.grid_data.occupancy == OCCUPANCY_TYPE.OCCUPIED
+        local_mapper.grid_data.occupancy == OCCUPANCY_TYPE.OCCUPIED.value
     )
     # log visualization for grid
     visualize_grid(

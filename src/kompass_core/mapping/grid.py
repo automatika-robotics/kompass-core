@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-import kompass_cpp
+from kompass_cpp.mapping import local_to_grid
 
 
 def get_previous_grid_in_current_pose(
@@ -38,7 +38,7 @@ def get_previous_grid_in_current_pose(
     """
     # the new center on the previous map
     # the previous map needs to move to this center
-    current_center = kompass_cpp.mapping.local_to_grid(current_position_in_previous_pose, central_point, resolution)
+    current_center = local_to_grid(current_position_in_previous_pose, central_point, resolution)
     # getting the angle from the difference in quaternion vector
     current_orientation_angle = np.degrees(current_orientation_in_previous_pose)
 
