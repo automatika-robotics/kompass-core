@@ -1,5 +1,5 @@
 from typing import Optional
-from attrs import define, field
+from attrs import define, field, validators
 import numpy as np
 from ..datatypes.pose import PoseData
 from ..datatypes.laserscan import LaserScanData
@@ -54,7 +54,8 @@ class GridData(BaseAttrs):
         data = np.full(
             (self.width, self.height),
             OCCUPANCY_TYPE.UNEXPLORED,
-            dtype=np.int8,
+            dtype=np.int32,
+            order="F",
         )
         return data
 
@@ -62,7 +63,7 @@ class GridData(BaseAttrs):
         """Initialize Scan Occupancy Layers"""
         self.scan_occupancy = self.get_initial_grid_data()
         self.scan_occupancy_prob = np.full(
-            (self.width, self.height), self.odd_log_p_prior, dtype=np.float64
+            (self.width, self.height), self.odd_log_p_prior, dtype=np.float32, order="F"
         )
 
 
@@ -80,6 +81,7 @@ class MapConfig(BaseAttrs):
     padding: float = field(
         default=0.0, validator=in_range(min_value=0.0, max_value=10.0)
     )
+    max_num_threads: int = field(default=1, validator=validators.ge(1))
 
 
 class LocalMapper:
@@ -101,6 +103,7 @@ class LocalMapper:
         """
         self.resolution = config.resolution
         self._scan_occupied_radius = config.resolution
+        self.max_num_threads = config.max_num_threads
 
         # turned to true after the first map update is done
         self.processed = False
@@ -121,10 +124,13 @@ class LocalMapper:
         #     int(self.grid_height / 2) - 1,
         # ]
 
-        self._point_central_in_grid = np.array([
-            round(self.grid_width / 2) - 1,
-            round(self.grid_height / 2) - 1,
-        ])
+        self._point_central_in_grid = np.array(
+            [
+                round(self.grid_width / 2) - 1,
+                round(self.grid_height / 2) - 1,
+            ],
+            dtype=np.int32,
+        )
 
         # current obstacles and grid data
         self._pose_robot_in_world = PoseData()
@@ -166,7 +172,7 @@ class LocalMapper:
         """
         Merge grid occupancy data
         """
-        self.grid_data.occupancy = np.maximum(self.grid_data.scan_occupancy, -1)
+        self.grid_data.occupancy = np.copy(self.grid_data.scan_occupancy)
 
         UNEXPLORED_THRESHOLD = self.odd_log_p_prior
         self.grid_data.occupancy_prob[
@@ -186,19 +192,24 @@ class LocalMapper:
         :type current_robot_pose: PoseData
         """
         if self.processed:
-            # self._pose_robot_in_world has been set already at least once (= we have a t-1 state)
+            # self._pose_robot_in_world has been set already at least once
+            # i.e. we have a t+1 state
             # get current shift in translation and orientation of the new center
             # with respect to the previous old center
             pose_current_robot_in_previous_robot = get_pose_target_in_reference_frame(
                 reference_pose=self._pose_robot_in_world, target_pose=current_robot_pose
             )
-            # current position and orientation with respect to the previous pose
-            current_position = pose_current_robot_in_previous_robot.get_position()
-            current_yaw_orientation = pose_current_robot_in_previous_robot.get_yaw()
+            # new position and orientation with respect to the previous pose
+            _position_in_previous_pose = (
+                pose_current_robot_in_previous_robot.get_position()
+            )
+            _orientation_in_previous_pose = (
+                pose_current_robot_in_previous_robot.get_yaw()
+            )
 
             self.previous_grid_prob_transformed = get_previous_grid_in_current_pose(
-                current_position=current_position,
-                current_2d_orientation=current_yaw_orientation,
+                current_position_in_previous_pose=_position_in_previous_pose,
+                current_orientation_in_previous_pose=_orientation_in_previous_pose,
                 previous_grid_data=self.grid_data.scan_occupancy_prob,
                 central_point=self._point_central_in_grid,
                 grid_width=self.grid_width,
@@ -237,14 +248,12 @@ class LocalMapper:
         if not pose_laser_scanner_in_robot:
             pose_laser_scanner_in_robot = PoseData()
 
-        laserscan_orientation = (
-            2
-            * np.arctan(pose_laser_scanner_in_robot.qz / pose_laser_scanner_in_robot.qw)
-            if pose_laser_scanner_in_robot
-            else 0.0
+        laserscan_orientation = 2 * np.arctan(
+            pose_laser_scanner_in_robot.qz / pose_laser_scanner_in_robot.qw
         )
 
         self.grid_data.init_scan_data()
+
         # filter out infinity range and negative range
         filtered_ranges = np.minimum(
             self.scan_update_model.range_max, np.maximum(0.0, laser_scan.ranges)
@@ -261,6 +270,7 @@ class LocalMapper:
             laser_scan_orientation=laserscan_orientation,
             previous_grid_data_prob=self.previous_grid_prob_transformed,
             **self.scan_update_model.asdict(),
+            max_num_threads=self.max_num_threads,
         )
 
         # robot occupied zone - TODO: make it in a separate function and proportional to the actual robot size\
