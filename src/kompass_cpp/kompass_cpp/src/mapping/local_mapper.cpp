@@ -32,26 +32,28 @@ Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
 void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
                          const Eigen::Vector2i &gridPoint, int gridPadding,
                          int indicator) {
-  int iStart = gridPoint.x() - gridPadding;
-  int iEnd = gridPoint.x() + gridPadding;
-  int jStart = gridPoint.y() - gridPadding;
-  int jEnd = gridPoint.y() + gridPadding;
+  // Calculate the valid range for i and j
+  int rows = gridData.rows();
+  int cols = gridData.cols();
 
+  int iStart = std::max(0, gridPoint.x() - gridPadding);
+  int iEnd = std::min(rows - 1, gridPoint.x() + gridPadding);
+  int jStart = std::max(0, gridPoint.y() - gridPadding);
+  int jEnd = std::min(cols - 1, gridPoint.y() + gridPadding);
+
+  // Fill the grid within the calculated bounds
   for (int i = iStart; i <= iEnd; ++i) {
-    if (i >= 0 && i < gridData.rows()) {
-      for (int j = jStart; j <= jEnd; ++j) {
-        if (j >= 0 && j < gridData.cols()) {
-          gridData(i, j) = indicator;
-        }
-      }
+    for (int j = jStart; j <= jEnd; ++j) {
+      gridData(i, j) = indicator;
     }
   }
 
-  // Ensure the central point is filled
-  int i = gridPoint(0);
-  int j = gridPoint(1);
-  if (i >= 0 && i < gridData.rows() && j >= 0 && j < gridData.cols()) {
-    gridData(i, j) = indicator;
+  // Ensure the central point is filled (though it should be within bounds
+  // already)
+  int iCentral = gridPoint.x();
+  int jCentral = gridPoint.y();
+  if (iCentral >= 0 && iCentral < rows && jCentral >= 0 && jCentral < cols) {
+    gridData(iCentral, jCentral) = indicator;
   }
 }
 
@@ -137,7 +139,8 @@ void updateGrid(const float angle, const float range,
       {
         std::lock_guard<std::mutex> lock(s_gridMutex);
         // non-baysian update
-        gridData(pt(0), pt(1)) = std::max(gridData(pt(0), pt(1)), 0);
+        gridData(pt(0), pt(1)) = std::max(
+            gridData(pt(0), pt(1)), static_cast<int>(OccupancyType::FREE));
         // baysian update
         gridDataProb(pt(0), pt(1)) =
             std::max(gridDataProb(pt(0), pt(1)), newValue);
@@ -155,7 +158,8 @@ void updateGrid(const float angle, const float range,
     /* Force non-bayesian map to set ending_point to occupied. So that
        when visualizing the map the detected obstacles can be visualized
        instead of having a map that visualize empty and unknown zones only.*/
-    fillGridAroundPoint(gridData, lastGridPoint, 0, 100);
+    fillGridAroundPoint(gridData, lastGridPoint, 0,
+                        static_cast<int>(OccupancyType::OCCUPIED));
   }
 }
 
@@ -181,8 +185,8 @@ void scanToGrid(const std::vector<double> &angles,
       pool.enqueue(&updateGrid, angles[i], ranges[i], startPoint,
                    std::ref(gridData), std::ref(gridDataProb), centralPoint,
                    resolution, laserscanPosition, laserscanOrientation,
-                   std::ref(previousGridDataProb), pPrior, pEmpty, pOccupied, rangeSure,
-                   rangeMax, wallSize, oddLogPPrior);
+                   std::ref(previousGridDataProb), pPrior, pEmpty, pOccupied,
+                   rangeSure, rangeMax, wallSize, oddLogPPrior);
     }
   } else {
     for (int i = 0; i < angles.size(); ++i) {

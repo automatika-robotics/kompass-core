@@ -5,6 +5,9 @@
 namespace Kompass {
 namespace Mapping {
 
+// Occupancy types for grid
+enum OccupancyType { UNKNOWN = -1, FREE = 0, OCCUPIED = 100 };
+
 // Function to convert a point from local coordinates frame of the grid to grid
 // indices
 Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
