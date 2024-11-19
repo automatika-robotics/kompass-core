@@ -395,17 +395,17 @@ PYBIND11_MODULE(kompass_cpp, m) {
           py::arg("odd_log_p_prior"),
           py::arg("max_num_threads") = 1);
 
-    py::enum_<Mapping::OccupancyType>(m_mapping, "OCCUPANCY_TYPE")
-        .value("UNKNOWN", Mapping::OccupancyType::UNKNOWN)
-        .value("FREE", Mapping::OccupancyType::FREE)
-        .value("OCCUPIED", Mapping::OccupancyType::OCCUPIED);
-
-    // Bind the localToGrid function
-    m.def("local_to_grid", &Mapping::localToGrid,
+    m_mapping.def("local_to_grid", &Mapping::localToGrid,
           py::arg("pose_target_in_central"),
           py::arg("central_point"),
           py::arg("resolution"),
           "Convert a point from local coordinates frame of the grid to grid indices");
+
+    py::enum_<Mapping::OccupancyType>(m_mapping, "OCCUPANCY_TYPE")
+        .value("UNEXPLORED", Mapping::OccupancyType::UNEXPLORED)
+        .value("EMPTY", Mapping::OccupancyType::EMPTY)
+        .value("OCCUPIED", Mapping::OccupancyType::OCCUPIED);
+
   // ------------------------------------------------------------------------------
   // Utils
   py::enum_<LogLevel>(m, "LogLevel")

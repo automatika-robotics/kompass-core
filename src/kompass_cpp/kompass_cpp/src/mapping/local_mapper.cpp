@@ -140,7 +140,7 @@ void updateGrid(const float angle, const float range,
         std::lock_guard<std::mutex> lock(s_gridMutex);
         // non-baysian update
         gridData(pt(0), pt(1)) = std::max(
-            gridData(pt(0), pt(1)), static_cast<int>(OccupancyType::FREE));
+            gridData(pt(0), pt(1)), static_cast<int>(OccupancyType::EMPTY));
         // baysian update
         gridDataProb(pt(0), pt(1)) =
             std::max(gridDataProb(pt(0), pt(1)), newValue);

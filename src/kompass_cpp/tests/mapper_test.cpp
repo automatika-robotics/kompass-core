@@ -103,10 +103,10 @@ int main() {
 
   // Init the grid
   Eigen::MatrixXi gridData(grid_height, grid_width);
-  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNKNOWN));
+  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
 
   Eigen::MatrixXf gridDataProb(grid_height, grid_width);
-  gridDataProb.fill(static_cast<int>(Mapping::OccupancyType::UNKNOWN));
+  gridDataProb.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
 
   // Central point
   int x = static_cast<int>(std::round(grid_width / 2.0)) - 1;
@@ -135,15 +135,15 @@ int main() {
                       rangeMax, wallSize, oddLogPPrior, maxNumThreads);
 
   int occ_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
-  int free_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::FREE));
-  int unknown_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  int free_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::EMPTY));
+  int unknown_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
   LOG_INFO("Number of occupied cells: ", occ_points);
   LOG_INFO("Number of free cells: ", free_points);
   LOG_INFO("Number of unknown cells: ", unknown_points);
   printMatrix(gridData);
 
   // Generate circle scan with radius 0.5
-  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNKNOWN));
+  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
   radius = 0.5; // Example radius for the circle
   circle_scan = generateLaserScan(angle_increment, "circle", radius);
   LOG_INFO("Testing with circle points at distance: ", radius,
@@ -153,15 +153,15 @@ int main() {
                       0.0, gridDataProb, pPrior, pEmpty, pOccupied, rangeSure,
                       rangeMax, wallSize, oddLogPPrior, maxNumThreads);
   occ_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
-  free_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::FREE));
-  unknown_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  free_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::EMPTY));
+  unknown_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
   LOG_INFO("Number of occupied cells: ", occ_points);
   LOG_INFO("Number of free cells: ", free_points);
   LOG_INFO("Number of unknown cells: ", unknown_points);
   printMatrix(gridData);
 
   // Generate circle scan with radius 3.5
-  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNKNOWN));
+  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
   radius = 10.5; // Example radius for the circle
   circle_scan = generateLaserScan(angle_increment, "circle", radius);
   LOG_INFO("Testing with circle points at distance: ", radius,
@@ -171,8 +171,8 @@ int main() {
                       0.0, gridDataProb, pPrior, pEmpty, pOccupied, rangeSure,
                       rangeMax, wallSize, oddLogPPrior, maxNumThreads);
   occ_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
-  free_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::FREE));
-  unknown_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  free_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::EMPTY));
+  unknown_points = countPointsInGrid(gridData, static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
   LOG_INFO("Number of occupied cells: ", occ_points);
   LOG_INFO("Number of free cells: ", free_points);
   LOG_INFO("Number of unknown cells: ", unknown_points);

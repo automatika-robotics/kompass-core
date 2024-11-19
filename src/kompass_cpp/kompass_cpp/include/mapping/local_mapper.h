@@ -6,7 +6,7 @@ namespace Kompass {
 namespace Mapping {
 
 // Occupancy types for grid
-enum class OccupancyType { UNKNOWN = -1, FREE = 0, OCCUPIED = 100 };
+enum class OccupancyType { UNEXPLORED = -1, EMPTY = 0, OCCUPIED = 100 };
 
 // Function to convert a point from local coordinates frame of the grid to grid
 // indices
