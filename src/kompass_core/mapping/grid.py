@@ -38,7 +38,9 @@ def get_previous_grid_in_current_pose(
     """
     # the new center on the previous map
     # the previous map needs to move to this center
-    current_center = local_to_grid(current_position_in_previous_pose, central_point, resolution)
+    current_center = local_to_grid(
+        current_position_in_previous_pose, central_point, resolution
+    )
     # getting the angle from the difference in quaternion vector
     current_orientation_angle = np.degrees(current_orientation_in_previous_pose)
 
@@ -50,14 +52,12 @@ def get_previous_grid_in_current_pose(
     transformation_matrix[0, 2] += 0.5 * grid_height - current_center[1]
     transformation_matrix[1, 2] += 0.5 * grid_width - current_center[0]
 
-    # Apply the affine transformation using cv2.warpAffine()
-
     previous_grid_data_not_transformed = np.copy(previous_grid_data)
-    previous_grid_data_transformed = cv2.warpAffine(
+
+    # Apply the affine transformation using cv2.warpAffine()
+    return cv2.warpAffine(
         previous_grid_data_not_transformed,
         transformation_matrix,
         (grid_height, grid_width),
         borderValue=unknown_value,
     )
-
-    return previous_grid_data_transformed
