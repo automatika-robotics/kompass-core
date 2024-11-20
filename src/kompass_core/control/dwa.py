@@ -341,13 +341,14 @@ class DWA(FollowerTemplate):
             return self._result.trajectory.velocity[:end_of_ctrl_horizon]
         return None
 
-    def optimal_path(self, msg_header) -> Optional[Path]:
+    def optimal_path(self, msg_header=None) -> Optional[Path]:
         """Get optimal (local) plan."""
         if not self._result.is_found:
             return None
         kompass_cpp_path: kompass_cpp.types.Path = self._result.trajectory.path
         ros_path = Path()
-        ros_path.header = msg_header
+        if msg_header:
+            ros_path.header = msg_header
         parsed_points = []
         for point in kompass_cpp_path.points:
             ros_point = PoseStamped()
