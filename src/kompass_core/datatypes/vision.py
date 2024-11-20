@@ -12,7 +12,9 @@ def _xy_validator(_, attribute, value):
 
 def _xy_optional_validator(_, attribute, value):
     if value and len(value) != 2:
-        raise ValueError(f"Attribute {attribute} should be None or a list of length 2: [x, y]")  # noqa: F821
+        raise ValueError(
+            f"Attribute {attribute} should be None or a list of length 2: [x, y]"
+        )  # noqa: F821
     return
 
 
@@ -30,7 +32,5 @@ class TrackingData(BaseAttrs):
     size_xy: List = field(validator=_xy_validator)
     id: int = field()
     img_meta: ImageMetaData = field()
-    score: Optional[float] = field(default=None, validator=in_range(min_value=0.0, max_value=100.0))
-    centroid_xy: Optional[List] = field(default=None, validator=_xy_optional_validator)
     velocity_xy: Optional[List] = field(default=None, validator=_xy_optional_validator)
     depth: Optional[float] = field(default=None)

@@ -181,9 +181,7 @@ class FollowerTemplate:
     @property
     def path(self) -> bool:
         """
-        Getter of the follower path
-
-        :raises NotImplementedError: If method is not implemented in child
+        Checks if the follower path
         """
         return self.planner.has_path()
 
@@ -223,14 +221,15 @@ class FollowerTemplate:
         """Get optimal (local) plan."""
         pass
 
-    def interpolated_path(self, msg_header) -> Optional[Path]:
+    def interpolated_path(self, msg_header=None) -> Optional[Path]:
         """Get path interpolation."""
         kompass_cpp_path: kompass_cpp.types.Path = self.planner.get_current_path()
         if not kompass_cpp_path:
             return None
         ros_path = Path()
         parsed_points = []
-        ros_path.header = msg_header
+        if msg_header:
+            ros_path.header = msg_header
         for point in kompass_cpp_path.points:
             ros_point = PoseStamped()
             ros_path.header = msg_header
@@ -257,6 +256,8 @@ class FollowerTemplate:
         :return: _description_
         :rtype: RobotState
         """
+        if not self.path:
+            return None
         target: kompass_cpp.control.FollowingTarget = self.planner.get_tracked_target()
         if not target:
             return None
