@@ -5,11 +5,10 @@ import numpy as np
 from ..datatypes.pose import PoseData
 from ..datatypes.laserscan import LaserScanData
 
-from kompass_cpp.mapping import OCCUPANCY_TYPE, scan_to_grid
+from kompass_cpp.mapping import OCCUPANCY_TYPE, scan_to_grid, get_previous_grid_in_current_pose
 
 from ..utils.geometry import from_frame1_to_frame2, get_pose_target_in_reference_frame
 
-from .grid import get_previous_grid_in_current_pose
 from .laserscan_model import LaserScanModelConfig
 from ..utils.common import BaseAttrs, in_range
 

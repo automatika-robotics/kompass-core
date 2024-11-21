@@ -54,7 +54,7 @@ Eigen::MatrixXf getPreviousGridInCurrentPose(
       current_orientation_in_previous_pose; // Negative for clockwise rotation
 
   // Create transformation matrix to translate and rotate the center of the grid
-  Eigen::Matrix3d transformation_matrix;
+  Eigen::Matrix3f transformation_matrix;
   double cos_theta = cos(current_orientation_angle);
   double sin_theta = sin(current_orientation_angle);
 
@@ -73,8 +73,8 @@ Eigen::MatrixXf getPreviousGridInCurrentPose(
   for (int y = 0; y < grid_height; ++y) {
     for (int x = 0; x < grid_width; ++x) {
       // Compute the inverse transformation
-      Eigen::Vector3d src_point(x, y, 1.0);
-      Eigen::Vector3d dst_point = transformation_matrix.inverse() * src_point;
+      Eigen::Vector3f src_point(x, y, 1.0);
+      Eigen::Vector3f dst_point = transformation_matrix.inverse() * src_point;
 
       // Bilinear interpolation coordinates
       double src_x = dst_point(0);
