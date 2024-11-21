@@ -132,7 +132,7 @@ orientation: (qw={self.qw}, qx={self.qx}, qy={self.qy}, qz={self.qz})"""
         :return: List of 3D coordinates for the position
         :rtype: List
         """
-        return np.array([self.x, self.y, self.z])
+        return np.array([self.x, self.y, self.z], dtype=np.float32)
 
     def get_orientation(self) -> quaternion.quaternion:
         """
