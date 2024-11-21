@@ -183,8 +183,6 @@ void updateGrid(const float angle, const float range,
   // Precompute boundary checks
   int rows = gridData.rows();
   int cols = gridData.cols();
-  int prevRows = previousGridDataProb.rows();
-  int prevCols = previousGridDataProb.cols();
 
   for (auto &pt : points) {
 
