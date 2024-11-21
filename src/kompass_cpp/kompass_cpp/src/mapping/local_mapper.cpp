@@ -54,7 +54,7 @@ Eigen::MatrixXf getPreviousGridInCurrentPose(
       current_orientation_in_previous_pose; // Negative for clockwise rotation
 
   // Create transformation matrix to translate and rotate the center of the grid
-  Eigen::Matrix3f transformation_matrix;
+  Eigen::Matrix3d transformation_matrix;
   double cos_theta = cos(current_orientation_angle);
   double sin_theta = sin(current_orientation_angle);
 
