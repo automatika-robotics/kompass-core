@@ -1,5 +1,6 @@
 from typing import Optional
 from attrs import define, field, validators
+import math
 import numpy as np
 from ..datatypes.pose import PoseData
 from ..datatypes.laserscan import LaserScanData
@@ -66,7 +67,7 @@ class GridData(BaseAttrs):
         )
 
 
-@define
+@define(kw_only=True)
 class MapConfig(BaseAttrs):
     """
     Local mapper configuration parameters
@@ -81,6 +82,29 @@ class MapConfig(BaseAttrs):
         default=0.0, validator=in_range(min_value=0.0, max_value=10.0)
     )
     max_num_threads: int = field(default=1, validator=validators.ge(1))
+
+    filter_limit: float = field(
+        validator=in_range(min_value=0.1, max_value=1e2)
+    )
+
+    max_points_per_line: int = field(
+        validator=in_range(min_value=1, max_value=1e3)
+    )
+
+    @filter_limit.default
+    def _set_filter_limit(self) -> float:
+        # calculate scan limit for filtering - diameter of circle inscribing rectangle
+        return (
+            self.width * math.sqrt(2)
+            if self.width >= self.height
+            else self.height * math.sqrt(2)
+        )
+
+    @max_points_per_line.default
+    def _set_max_points_per_line(self) -> float:
+        # estimate max number of points drawn per scan line
+        # at average 1.5 points per setep
+        return round((self.filter_limit / self.resolution) * 1.5)
 
 
 class LocalMapper:
@@ -100,9 +124,11 @@ class LocalMapper:
         :param scan_model_config: LaserScan model config
         :type scan_model_config: LaserScanModelConfig
         """
-        self.resolution = config.resolution
-        self._scan_occupied_radius = config.resolution
-        self.max_num_threads = config.max_num_threads
+
+        self.config = config
+
+        self.grid_width = int(self.config.width / self.config.resolution)
+        self.grid_height = int(self.config.height / self.config.resolution)
 
         # turned to true after the first map update is done
         self.processed = False
@@ -113,9 +139,6 @@ class LocalMapper:
         self._local_lower_right_corner_point.set_position(
             x=-1 * config.width / 2, y=-1 * config.height / 2, z=0
         )
-
-        self.grid_width = int(config.width / self.resolution)
-        self.grid_height = int(config.height / self.resolution)
 
         # TODO: Add robot point to track robot footprint
         # self.grid_robot_point = [
@@ -213,7 +236,7 @@ class LocalMapper:
                 central_point=self._point_central_in_grid,
                 grid_width=self.grid_width,
                 grid_height=self.grid_height,
-                resolution=self.resolution,
+                resolution=self.config.resolution,
                 unknown_value=self.odd_log_p_prior,
             )
 
@@ -253,9 +276,10 @@ class LocalMapper:
 
         self.grid_data.init_scan_data()
 
-        # filter out infinity range and negative range
+        # filter out negative range and points outside grid limit
         filtered_ranges = np.minimum(
-            self.scan_update_model.range_max, np.maximum(0.0, laser_scan.ranges)
+            self.config.filter_limit,
+            np.maximum(0.0, laser_scan.ranges),
         )
 
         scan_to_grid(
@@ -264,12 +288,13 @@ class LocalMapper:
             grid_data=self.grid_data.scan_occupancy,
             grid_data_prob=self.grid_data.scan_occupancy_prob,
             central_point=self._point_central_in_grid,
-            resolution=self.resolution,
+            resolution=self.config.resolution,
             laser_scan_position=pose_laser_scanner_in_robot.get_position(),
             laser_scan_orientation=laserscan_orientation,
             previous_grid_data_prob=self.previous_grid_prob_transformed,
             **self.scan_update_model.asdict(),
-            max_num_threads=self.max_num_threads,
+            max_points_per_line=self.config.max_points_per_line,
+            max_num_threads=self.config.max_num_threads,
         )
 
         # robot occupied zone - TODO: make it in a separate function and proportional to the actual robot size\

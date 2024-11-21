@@ -393,6 +393,7 @@ PYBIND11_MODULE(kompass_cpp, m) {
           py::arg("range_max"),
           py::arg("wall_size"),
           py::arg("odd_log_p_prior"),
+          py::arg("max_points_per_line"),
           py::arg("max_num_threads") = 1);
 
     m_mapping.def("local_to_grid", &Mapping::localToGrid,

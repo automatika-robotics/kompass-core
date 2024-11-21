@@ -12,11 +12,21 @@ namespace Mapping {
 // Mutex for grid update
 static std::mutex s_gridMutex;
 
+Eigen::Vector3f gridToLocal(const Eigen::Vector2i &pointTargetInGrid,
+                            const Eigen::Vector2i &centralPoint,
+                            double resolution, double height) {
+  Eigen::Vector3f poseB;
+  poseB(0) = centralPoint(0) - pointTargetInGrid(0) * resolution;
+  poseB(1) = centralPoint(1) - pointTargetInGrid(1) * resolution;
+  poseB(2) = height;
+
+  return poseB;
+}
+
 Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
                             const Eigen::Vector2i &centralPoint,
                             float resolution) {
 
-  // Initialize result vector with zeros
   Eigen::Vector2i gridPoint;
 
   // Calculate grid point by rounding coordinates in the local frame to nearest
@@ -58,10 +68,10 @@ void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
 }
 
 float updateGridCellProbability(float distance, float currentRange,
-                                 float oddLogPPrev, float resolution,
-                                 float pPrior, float pEmpty, float pOccupied,
-                                 float rangeSure, float rangeMax,
-                                 float wallSize, float oddLogPPrior) {
+                                float oddLogPPrev, float resolution,
+                                float pPrior, float pEmpty, float pOccupied,
+                                float rangeSure, float rangeMax, float wallSize,
+                                float oddLogPPrior) {
   // get the current sensor probability of being occupied for an area in a given
   // distance from the scanner
   distance = distance * resolution;
@@ -89,7 +99,7 @@ void updateGrid(const float angle, const float range,
                 float laserscanOrientation,
                 const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb,
                 float pPrior, float pEmpty, float pOccupied, float rangeSure,
-                float rangeMax, float wallSize, float oddLogPPrior) {
+                float rangeMax, float wallSize, float oddLogPPrior, int maxPointsPerLine) {
 
   float x = laserscanPosition(0) + (range * cos(laserscanOrientation + angle));
   float y = laserscanPosition(1) + (range * sin(laserscanOrientation + angle));
@@ -97,6 +107,7 @@ void updateGrid(const float angle, const float range,
   Eigen::Vector2i toPoint =
       localToGrid(Eigen::Vector2f(x, y), centralPoint, resolution);
   std::vector<Eigen::Vector2i> points;
+  points.reserve(maxPointsPerLine);
 
   bresenhamEnhanced(startPoint, toPoint, points);
 
@@ -173,9 +184,9 @@ void scanToGrid(const std::vector<double> &angles,
                 const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb,
                 float pPrior, float pEmpty, float pOccupied, float rangeSure,
                 float rangeMax, float wallSize, float oddLogPPrior,
-                int maxNumThreads) {
-  // angles and ranges are handled as floats implicitly
+                int maxPointsPerLine, int maxNumThreads) {
 
+  // angles and ranges are handled as floats implicitly
   Eigen::Vector2i startPoint =
       localToGrid(Eigen::Vector2f(laserscanPosition(0), laserscanPosition(1)),
                   centralPoint, resolution);
@@ -187,14 +198,14 @@ void scanToGrid(const std::vector<double> &angles,
                    std::ref(gridData), std::ref(gridDataProb), centralPoint,
                    resolution, laserscanPosition, laserscanOrientation,
                    std::ref(previousGridDataProb), pPrior, pEmpty, pOccupied,
-                   rangeSure, rangeMax, wallSize, oddLogPPrior);
+                   rangeSure, rangeMax, wallSize, oddLogPPrior, maxPointsPerLine);
     }
   } else {
     for (int i = 0; i < angles.size(); ++i) {
       updateGrid(angles[i], ranges[i], startPoint, gridData, gridDataProb,
                  centralPoint, resolution, laserscanPosition,
                  laserscanOrientation, previousGridDataProb, pPrior, pEmpty,
-                 pOccupied, rangeSure, rangeMax, wallSize, oddLogPPrior);
+                 pOccupied, rangeSure, rangeMax, wallSize, oddLogPPrior, maxPointsPerLine);
     }
   }
 }

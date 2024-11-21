@@ -8,6 +8,13 @@ namespace Mapping {
 // Occupancy types for grid
 enum class OccupancyType { UNEXPLORED = -1, EMPTY = 0, OCCUPIED = 100 };
 
+// Transforms a point from grid coordinate (i,j) to the local coordinates frame
+// of the grid (around the central cell) (x,y,z)
+
+Eigen::Vector3f gridToLocal(const Eigen::Vector2i &pointTargetInGrid,
+                            const Eigen::Vector2i &centralPoint,
+                            double resolution, double height = 0.0);
+
 // Function to convert a point from local coordinates frame of the grid to grid
 // indices
 Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
@@ -45,10 +52,10 @@ void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
  * @return Current occupancy probability
  */
 float updateGridCellProbability(float distance, float currentRange,
-                                 float oddLogPPrev, float resolution,
-                                 float pPrior, float pEmpty, float pOccupied,
-                                 float rangeSure, float rangeMax,
-                                 float wallSize, float oddLogPPrior);
+                                float oddLogPPrev, float resolution,
+                                float pPrior, float pEmpty, float pOccupied,
+                                float rangeSure, float rangeMax, float wallSize,
+                                float oddLogPPrior);
 /**
  * Processes Laserscan data (angles and ranges) to project on a 2D grid using
  * Bresenham line drawing for each Laserscan beam
@@ -78,7 +85,7 @@ void scanToGrid(const std::vector<double> &angles,
                 float laserscanOrientation,
                 const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb,
                 float pPrior, float pEmpty, float pOccupied, float rangeSure,
-                float rangeMax, float wallSize, float oddLogPPrior,
+                float rangeMax, float wallSize, float oddLogPPrior, int maxPointsPerLine,
                 int maxNumThreads = 1);
 
 } // namespace Mapping
