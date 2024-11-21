@@ -39,71 +39,71 @@ Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
 }
 
 Eigen::MatrixXf getPreviousGridInCurrentPose(
-    const Eigen::Vector2f &current_position_in_previous_pose,
-    double current_orientation_in_previous_pose,
-    const Eigen::MatrixXf &previous_grid_data,
-    const Eigen::Vector2i &central_point, int grid_width, int grid_height,
-    float resolution, float unknown_value) {
+    const Eigen::Vector2f &currentPositionInPreviousPose,
+    double currentOrientationInPreviousPose,
+    const Eigen::MatrixXf &previousGridData,
+    const Eigen::Vector2i &centralPoint, int gridWidth, int gridHeight,
+    float resolution, float unknownValue) {
   // The new center on the previous map
-  Eigen::Vector2f current_center =
-      localToGrid(current_position_in_previous_pose, central_point, resolution);
+  Eigen::Vector2i currentCenter =
+      localToGrid(currentPositionInPreviousPose, centralPoint, resolution);
 
   // Getting the angle from the difference in quaternion vector
-  double current_orientation_angle =
+  double currentOrientationAngle =
       -1 *
-      current_orientation_in_previous_pose; // Negative for clockwise rotation
+      currentOrientationInPreviousPose; // Negative for clockwise rotation
 
   // Create transformation matrix to translate and rotate the center of the grid
-  Eigen::Matrix3f transformation_matrix;
-  double cos_theta = cos(current_orientation_angle);
-  double sin_theta = sin(current_orientation_angle);
+  Eigen::Matrix3f transformationMatrix;
+  double cosTheta = cos(currentOrientationAngle);
+  double sinTheta = sin(currentOrientationAngle);
 
-  transformation_matrix << cos_theta, -sin_theta,
-      0.5 * grid_height - current_center(1) +
-          (current_center(0) * sin_theta - current_center(1) * cos_theta),
-      sin_theta, cos_theta,
-      0.5 * grid_width - current_center(0) -
-          (current_center(0) * cos_theta + current_center(1) * sin_theta),
+  transformationMatrix << cosTheta, -sinTheta,
+      0.5 * gridHeight - currentCenter(1) +
+          (currentCenter(0) * sinTheta - currentCenter(1) * cosTheta),
+      sinTheta, cosTheta,
+      0.5 * gridWidth - currentCenter(0) -
+          (currentCenter(0) * cosTheta + currentCenter(1) * sinTheta),
       0, 0, 1;
 
-  // Initialize the result matrix with unknown_value
-  Eigen::MatrixXf transformed_grid(grid_height, grid_width);
-  transformed_grid.fill(unknown_value);
+  // Initialize the result matrix with unknownValue
+  Eigen::MatrixXf transformedGrid(gridHeight, gridWidth);
+  transformedGrid.fill(unknownValue);
 
-  for (int y = 0; y < grid_height; ++y) {
-    for (int x = 0; x < grid_width; ++x) {
+  for (int y = 0; y < gridHeight; ++y) {
+    for (int x = 0; x < gridWidth; ++x) {
       // Compute the inverse transformation
-      Eigen::Vector3f src_point(x, y, 1.0);
-      Eigen::Vector3f dst_point = transformation_matrix.inverse() * src_point;
+      Eigen::Vector3f srcPoint(x, y, 1.0);
+      Eigen::Vector3f dstPoint = transformationMatrix.inverse() * srcPoint;
 
       // Bilinear interpolation coordinates
-      double src_x = dst_point(0);
-      double src_y = dst_point(1);
+      double srcX = dstPoint(0);
+      double srcY = dstPoint(1);
 
-      if (src_x >= 0 && src_x < previous_grid_data.cols() - 1 && src_y >= 0 &&
-          src_y < previous_grid_data.rows() - 1) {
+      if (srcX >= 0 && srcX < previousGridData.cols() - 1 && srcY >= 0 &&
+          srcY < previousGridData.rows() - 1) {
 
-        int x0 = static_cast<int>(floor(src_x));
-        int y0 = static_cast<int>(floor(src_y));
+        int x0 = static_cast<int>(floor(srcX));
+        int y0 = static_cast<int>(floor(srcY));
         int x1 = x0 + 1;
         int y1 = y0 + 1;
 
-        float w0 = src_x - x0;
+        float w0 = srcX - x0;
         float w1 = 1.0f - w0;
-        float h0 = src_y - y0;
+        float h0 = srcY - y0;
         float h1 = 1.0f - h0;
 
-        float value = h1 * (w1 * previous_grid_data(y0, x0) +
-                            w0 * previous_grid_data(y0, x1)) +
-                      h0 * (w1 * previous_grid_data(y1, x0) +
-                            w0 * previous_grid_data(y1, x1));
+        float value = h1 * (w1 * previousGridData(y0, x0) +
+                            w0 * previousGridData(y0, x1)) +
+                      h0 * (w1 * previousGridData(y1, x0) +
+                            w0 * previousGridData(y1, x1));
 
-        transformed_grid(y, x) = value;
+        transformedGrid(y, x) = value;
       }
     }
   }
 
-  return transformed_grid;
+  return transformedGrid;
 }
 
 void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,

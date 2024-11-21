@@ -37,11 +37,11 @@ Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
  * @return Transformed grid.
  */
 Eigen::MatrixXf getPreviousGridInCurrentPose(
-    const Eigen::Vector2f &current_position_in_previous_pose,
-    double current_orientation_in_previous_pose,
-    const Eigen::MatrixXf &previous_grid_data,
-    const Eigen::Vector2i &central_point, int grid_width, int grid_height,
-    float resolution, float unknown_value);
+    const Eigen::Vector2f &currentPositionInPreviousPose,
+    double currentOrientationInPreviousPose,
+    const Eigen::MatrixXf &previousGridData,
+    const Eigen::Vector2i &centralPoint, int gridWidth, int gridHeight,
+    float resolution, float unknownValue);
 
 /**
  * @brief Fill an area around a point on the grid with given padding.
