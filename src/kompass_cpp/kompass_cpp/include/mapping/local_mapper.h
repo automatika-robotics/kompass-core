@@ -21,12 +21,14 @@ Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
                             const Eigen::Vector2i &centralPoint,
                             float resolution);
 
-
 /**
- * @brief Transform a grid to be centered in egocentric view of the current position given its previous position.
+ * @brief Transform a grid to be centered in egocentric view of the current
+ * position given its previous position.
  *
- * @param current_position_in_previous_pose Current egocentric position for the transformation.
- * @param current_yaw_orientation_in_previous_pose Current egocentric orientation for the transformation.
+ * @param current_position_in_previous_pose Current egocentric position for the
+ * transformation.
+ * @param current_yaw_orientation_in_previous_pose Current egocentric
+ * orientation for the transformation.
  * @param previous_grid_data Previous grid data (pre-transformation).
  * @param central_point Coordinates of the central grid point.
  * @param grid_width Grid size (width).
@@ -60,7 +62,7 @@ void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
  *
  * @param distance Hit point distance from the sensor (m)
  * @param currentRange Scan ray max range (m)
- * @param oddLogPPrev Log Odds of the previous probability of the grid cell
+ * @param previousProb Previous probability of the grid cell
  * occupancy
  * @param resolution Grid resolution (meter/cell)
  * @param pPrior Prior probability of the model
@@ -69,15 +71,13 @@ void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
  * @param rangeSure Certainty range of the model (m)
  * @param rangeMax Max range of the sensor (m)
  * @param wallSize Padding size of the model (m)
- * @param oddLogPPrior Log Odds of the prior probability
- *
  * @return Current occupancy probability
  */
 float updateGridCellProbability(float distance, float currentRange,
-                                float oddLogPPrev, float resolution,
+                                float previousProb, float resolution,
                                 float pPrior, float pEmpty, float pOccupied,
-                                float rangeSure, float rangeMax, float wallSize,
-                                float oddLogPPrior);
+                                float rangeSure, float rangeMax,
+                                float wallSize);
 /**
  * Processes Laserscan data (angles and ranges) to project on a 2D grid using
  * Bresenham line drawing for each Laserscan beam
@@ -107,7 +107,7 @@ void scanToGrid(const std::vector<double> &angles,
                 float laserscanOrientation,
                 const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb,
                 float pPrior, float pEmpty, float pOccupied, float rangeSure,
-                float rangeMax, float wallSize, float oddLogPPrior, int maxPointsPerLine,
+                float rangeMax, float wallSize, int maxPointsPerLine,
                 int maxNumThreads = 1);
 
 } // namespace Mapping

@@ -44,11 +44,8 @@ class LaserScanModelConfig(BaseAttrs):
     )
 
     wall_size: float = field(
-        default=0.075, validator=in_range(min_value=1e-4, max_value=1e6)
+        default=0.1, validator=in_range(min_value=1e-4, max_value=1e6)
     )
-
-    odd_log_p_prior: float = field(init=False)
 
     def __attrs_post_init__(self):
         self.p_empty = 1 - self.p_occupied
-        self.odd_log_p_prior = float(np.log(self.p_prior / (1 - self.p_prior)))

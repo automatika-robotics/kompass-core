@@ -50,8 +50,7 @@ Eigen::MatrixXf getPreviousGridInCurrentPose(
 
   // Getting the angle from the difference in quaternion vector
   double currentOrientationAngle =
-      -1 *
-      currentOrientationInPreviousPose; // Negative for clockwise rotation
+      -1 * currentOrientationInPreviousPose; // Negative for clockwise rotation
 
   // Create transformation matrix to translate and rotate the center of the grid
   Eigen::Matrix3f transformationMatrix;
@@ -135,10 +134,10 @@ void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
 }
 
 float updateGridCellProbability(float distance, float currentRange,
-                                float oddLogPPrev, float resolution,
+                                float previousProb, float resolution,
                                 float pPrior, float pEmpty, float pOccupied,
-                                float rangeSure, float rangeMax, float wallSize,
-                                float oddLogPPrior) {
+                                float rangeSure, float rangeMax,
+                                float wallSize) {
   // get the current sensor probability of being occupied for an area in a given
   // distance from the scanner
   distance = distance * resolution;
@@ -150,9 +149,9 @@ float updateGridCellProbability(float distance, float currentRange,
   float pSensor =
       pF + (delta * ((distance - rangeSure) / rangeMax) * (pPrior - pF));
 
-  // get the current bayesian updated probability given its previous probability
-  // and sensor probability
-  float pCurr = oddLogPPrev + log(pSensor / (1.0 - pSensor)) - oddLogPPrior;
+  float pCurr =
+      1 - (1 / (1 + ((previousProb / (1 - previousProb)) *
+                     (pSensor / (1.0 - pSensor)) * ((1 - pPrior) / pPrior))));
 
   return pCurr;
 }
@@ -166,8 +165,7 @@ void updateGrid(const float angle, const float range,
                 float laserscanOrientation,
                 const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb,
                 float pPrior, float pEmpty, float pOccupied, float rangeSure,
-                float rangeMax, float wallSize, float oddLogPPrior,
-                int maxPointsPerLine) {
+                float rangeMax, float wallSize, int maxPointsPerLine) {
 
   float x = laserscanPosition(0) + (range * cos(laserscanOrientation + angle));
   float y = laserscanPosition(1) + (range * sin(laserscanOrientation + angle));
@@ -188,31 +186,18 @@ void updateGrid(const float angle, const float range,
   int prevRows = previousGridDataProb.rows();
   int prevCols = previousGridDataProb.cols();
 
-  // NOTE: when previous grid is transformed to align with the current
-  // grid it's not perfectly aligned at the nearest grid cell.
-  // Experimentally (empirically), a shift of 1 grid cell reverses the
-  // mis-alignment effect. -> check test_local_grid_mapper.py for more
-  // info
-  int constexpr SHIFT = 1;
-
   for (auto &pt : points) {
 
     if (pt(0) >= 0 && pt(0) < rows && pt(1) >= 0 && pt(1) < cols) {
 
-      // calculations for baysian update
-      int x_prev = pt(0) + SHIFT;
-      int y_prev = pt(1) + SHIFT;
+      float previousValue = previousGridDataProb(pt(0), pt(1));
 
-      int previousValue =
-          (x_prev >= 0 && x_prev < prevRows && y_prev >= 0 && y_prev < prevCols)
-              ? previousGridDataProb(x_prev, y_prev)
-              : oddLogPPrior;
-
+      // calculation for baysian update
       float distance = (pt - startPoint).norm();
 
       float newValue = updateGridCellProbability(
-          distance, range, previousValue, resolution, pPrior, pEmpty, pOccupied,
-          rangeSure, rangeMax, wallSize, oddLogPPrior);
+          distance, range, previousGridDataProb(pt(0), pt(1)), resolution,
+          pPrior, pEmpty, pOccupied, rangeSure, rangeMax, wallSize);
 
       // grid updates
       {
@@ -221,8 +206,7 @@ void updateGrid(const float angle, const float range,
         gridData(pt(0), pt(1)) = std::max(
             gridData(pt(0), pt(1)), static_cast<int>(OccupancyType::EMPTY));
         // baysian update
-        gridDataProb(pt(0), pt(1)) =
-            std::max(gridDataProb(pt(0), pt(1)), newValue);
+        gridDataProb(pt(0), pt(1)) = newValue;
       }
 
       // update last point drawn
@@ -251,8 +235,8 @@ void scanToGrid(const std::vector<double> &angles,
                 float laserscanOrientation,
                 const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb,
                 float pPrior, float pEmpty, float pOccupied, float rangeSure,
-                float rangeMax, float wallSize, float oddLogPPrior,
-                int maxPointsPerLine, int maxNumThreads) {
+                float rangeMax, float wallSize, int maxPointsPerLine,
+                int maxNumThreads) {
 
   // angles and ranges are handled as floats implicitly
   Eigen::Vector2i startPoint =
@@ -266,16 +250,14 @@ void scanToGrid(const std::vector<double> &angles,
                    std::ref(gridData), std::ref(gridDataProb), centralPoint,
                    resolution, laserscanPosition, laserscanOrientation,
                    std::ref(previousGridDataProb), pPrior, pEmpty, pOccupied,
-                   rangeSure, rangeMax, wallSize, oddLogPPrior,
-                   maxPointsPerLine);
+                   rangeSure, rangeMax, wallSize, maxPointsPerLine);
     }
   } else {
     for (int i = 0; i < angles.size(); ++i) {
       updateGrid(angles[i], ranges[i], startPoint, gridData, gridDataProb,
                  centralPoint, resolution, laserscanPosition,
                  laserscanOrientation, previousGridDataProb, pPrior, pEmpty,
-                 pOccupied, rangeSure, rangeMax, wallSize, oddLogPPrior,
-                 maxPointsPerLine);
+                 pOccupied, rangeSure, rangeMax, wallSize, maxPointsPerLine);
     }
   }
 }

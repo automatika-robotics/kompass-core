@@ -5,7 +5,11 @@ import numpy as np
 from ..datatypes.pose import PoseData
 from ..datatypes.laserscan import LaserScanData
 
-from kompass_cpp.mapping import OCCUPANCY_TYPE, scan_to_grid, get_previous_grid_in_current_pose
+from kompass_cpp.mapping import (
+    OCCUPANCY_TYPE,
+    scan_to_grid,
+    get_previous_grid_in_current_pose,
+)
 
 from ..utils.geometry import from_frame1_to_frame2, get_pose_target_in_reference_frame
 
@@ -82,13 +86,9 @@ class MapConfig(BaseAttrs):
     )
     max_num_threads: int = field(default=1, validator=validators.ge(1))
 
-    filter_limit: float = field(
-        validator=in_range(min_value=0.1, max_value=1e2)
-    )
+    filter_limit: float = field(validator=in_range(min_value=0.1, max_value=1e2))
 
-    max_points_per_line: int = field(
-        validator=in_range(min_value=1, max_value=1e3)
-    )
+    max_points_per_line: int = field(validator=in_range(min_value=1, max_value=1e3))
 
     @filter_limit.default
     def _set_filter_limit(self) -> float:
@@ -155,9 +155,12 @@ class LocalMapper:
 
         # current obstacles and grid data
         self._pose_robot_in_world = PoseData()
-        # self._origin_pose = PoseData()
 
-        self.odd_log_p_prior = self.scan_update_model.odd_log_p_prior
+        self.odd_log_p_prior = float(
+            np.log(
+                self.scan_update_model.p_prior / (1 - self.scan_update_model.p_prior)
+            )
+        )
 
         self.lower_right_corner_pose = PoseData()
         self.grid_data = GridData(
