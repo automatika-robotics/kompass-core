@@ -39,7 +39,7 @@ def get_previous_grid_in_current_pose(
     # the new center on the previous map
     # the previous map needs to move to this center
     current_center = local_to_grid(
-        current_position_in_previous_pose, central_point, resolution
+            current_position_in_previous_pose[0:2], central_point, resolution
     )
     # getting the angle from the difference in quaternion vector
     current_orientation_angle = np.degrees(current_orientation_in_previous_pose)
