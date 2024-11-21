@@ -21,6 +21,28 @@ Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
                             const Eigen::Vector2i &centralPoint,
                             float resolution);
 
+
+/**
+ * @brief Transform a grid to be centered in egocentric view of the current position given its previous position.
+ *
+ * @param current_position_in_previous_pose Current egocentric position for the transformation.
+ * @param current_yaw_orientation_in_previous_pose Current egocentric orientation for the transformation.
+ * @param previous_grid_data Previous grid data (pre-transformation).
+ * @param central_point Coordinates of the central grid point.
+ * @param grid_width Grid size (width).
+ * @param grid_height Grid size (height).
+ * @param resolution Grid resolution (meter/cell).
+ * @param unknown_value Value of unknown occupancy (prior value for grid cells).
+ *
+ * @return Transformed grid.
+ */
+Eigen::MatrixXf getPreviousGridInCurrentPose(
+    const Eigen::Vector2d &current_position_in_previous_pose,
+    double current_orientation_in_previous_pose,
+    const Eigen::MatrixXf &previous_grid_data,
+    const Eigen::Vector2d &central_point, int grid_width, int grid_height,
+    float resolution, float unknown_value);
+
 /**
  * @brief Fill an area around a point on the grid with given padding.
  *

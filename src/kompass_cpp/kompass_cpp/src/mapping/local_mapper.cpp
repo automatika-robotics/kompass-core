@@ -11,7 +11,6 @@ namespace Mapping {
 
 // Mutex for grid update
 static std::mutex s_gridMutex;
-
 Eigen::Vector3f gridToLocal(const Eigen::Vector2i &pointTargetInGrid,
                             const Eigen::Vector2i &centralPoint,
                             double resolution, double height) {
@@ -37,6 +36,74 @@ Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
       centralPoint(1) + static_cast<int>(poseTargetInCentral(1) / resolution);
 
   return gridPoint;
+}
+
+Eigen::MatrixXf getPreviousGridInCurrentPose(
+    const Eigen::Vector2f &current_position_in_previous_pose,
+    double current_orientation_in_previous_pose,
+    const Eigen::MatrixXf &previous_grid_data,
+    const Eigen::Vector2i &central_point, int grid_width, int grid_height,
+    float resolution, float unknown_value) {
+  // The new center on the previous map
+  Eigen::Vector2f current_center =
+      localToGrid(current_position_in_previous_pose, central_point, resolution);
+
+  // Getting the angle from the difference in quaternion vector
+  double current_orientation_angle =
+      -1 *
+      current_orientation_in_previous_pose; // Negative for clockwise rotation
+
+  // Create transformation matrix to translate and rotate the center of the grid
+  Eigen::Matrix3f transformation_matrix;
+  double cos_theta = cos(current_orientation_angle);
+  double sin_theta = sin(current_orientation_angle);
+
+  transformation_matrix << cos_theta, -sin_theta,
+      0.5 * grid_height - current_center(1) +
+          (current_center(0) * sin_theta - current_center(1) * cos_theta),
+      sin_theta, cos_theta,
+      0.5 * grid_width - current_center(0) -
+          (current_center(0) * cos_theta + current_center(1) * sin_theta),
+      0, 0, 1;
+
+  // Initialize the result matrix with unknown_value
+  Eigen::MatrixXf transformed_grid(grid_height, grid_width);
+  transformed_grid.fill(unknown_value);
+
+  for (int y = 0; y < grid_height; ++y) {
+    for (int x = 0; x < grid_width; ++x) {
+      // Compute the inverse transformation
+      Eigen::Vector3d src_point(x, y, 1.0);
+      Eigen::Vector3d dst_point = transformation_matrix.inverse() * src_point;
+
+      // Bilinear interpolation coordinates
+      double src_x = dst_point(0);
+      double src_y = dst_point(1);
+
+      if (src_x >= 0 && src_x < previous_grid_data.cols() - 1 && src_y >= 0 &&
+          src_y < previous_grid_data.rows() - 1) {
+
+        int x0 = static_cast<int>(floor(src_x));
+        int y0 = static_cast<int>(floor(src_y));
+        int x1 = x0 + 1;
+        int y1 = y0 + 1;
+
+        float w0 = src_x - x0;
+        float w1 = 1.0f - w0;
+        float h0 = src_y - y0;
+        float h1 = 1.0f - h0;
+
+        float value = h1 * (w1 * previous_grid_data(y0, x0) +
+                            w0 * previous_grid_data(y0, x1)) +
+                      h0 * (w1 * previous_grid_data(y1, x0) +
+                            w0 * previous_grid_data(y1, x1));
+
+        transformed_grid(y, x) = value;
+      }
+    }
+  }
+
+  return transformed_grid;
 }
 
 void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
@@ -99,7 +166,8 @@ void updateGrid(const float angle, const float range,
                 float laserscanOrientation,
                 const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb,
                 float pPrior, float pEmpty, float pOccupied, float rangeSure,
-                float rangeMax, float wallSize, float oddLogPPrior, int maxPointsPerLine) {
+                float rangeMax, float wallSize, float oddLogPPrior,
+                int maxPointsPerLine) {
 
   float x = laserscanPosition(0) + (range * cos(laserscanOrientation + angle));
   float y = laserscanPosition(1) + (range * sin(laserscanOrientation + angle));
@@ -198,14 +266,16 @@ void scanToGrid(const std::vector<double> &angles,
                    std::ref(gridData), std::ref(gridDataProb), centralPoint,
                    resolution, laserscanPosition, laserscanOrientation,
                    std::ref(previousGridDataProb), pPrior, pEmpty, pOccupied,
-                   rangeSure, rangeMax, wallSize, oddLogPPrior, maxPointsPerLine);
+                   rangeSure, rangeMax, wallSize, oddLogPPrior,
+                   maxPointsPerLine);
     }
   } else {
     for (int i = 0; i < angles.size(); ++i) {
       updateGrid(angles[i], ranges[i], startPoint, gridData, gridDataProb,
                  centralPoint, resolution, laserscanPosition,
                  laserscanOrientation, previousGridDataProb, pPrior, pEmpty,
-                 pOccupied, rangeSure, rangeMax, wallSize, oddLogPPrior, maxPointsPerLine);
+                 pOccupied, rangeSure, rangeMax, wallSize, oddLogPPrior,
+                 maxPointsPerLine);
     }
   }
 }

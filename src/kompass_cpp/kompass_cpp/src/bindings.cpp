@@ -1,6 +1,6 @@
+#include <pybind11/eigen.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
-#include <pybind11/eigen.h>
 #include <pybind11/stl.h>
 #include <vector>
 
@@ -11,8 +11,8 @@
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
-#include "utils/logger.h"
 #include "mapping/local_mapper.h"
+#include "utils/logger.h"
 
 namespace py = pybind11;
 
@@ -374,38 +374,36 @@ PYBIND11_MODULE(kompass_cpp, m) {
            py::return_value_policy::reference_internal)
       .def("add_custom_cost", &Control::DWA::addCustomCost);
 
-    auto m_mapping = m.def_submodule("mapping", "Local Mapping module");
-    m_mapping.def("scan_to_grid", &Mapping::scanToGrid,
-          "Convert laser scan data to occupancy grid",
-          py::arg("angles"),
-          py::arg("ranges"),
-          py::arg("grid_data"),
-          py::arg("grid_data_prob"),
-          py::arg("central_point"),
-          py::arg("resolution"),
-          py::arg("laser_scan_position"),
-          py::arg("laser_scan_orientation"),
-          py::arg("previous_grid_data_prob"),
-          py::arg("p_prior"),
-          py::arg("p_empty"),
-          py::arg("p_occupied"),
-          py::arg("range_sure"),
-          py::arg("range_max"),
-          py::arg("wall_size"),
-          py::arg("odd_log_p_prior"),
-          py::arg("max_points_per_line"),
-          py::arg("max_num_threads") = 1);
+  auto m_mapping = m.def_submodule("mapping", "Local Mapping module");
+  m_mapping.def(
+      "scan_to_grid", &Mapping::scanToGrid,
+      "Convert laser scan data to occupancy grid", py::arg("angles"),
+      py::arg("ranges"), py::arg("grid_data"), py::arg("grid_data_prob"),
+      py::arg("central_point"), py::arg("resolution"),
+      py::arg("laser_scan_position"), py::arg("laser_scan_orientation"),
+      py::arg("previous_grid_data_prob"), py::arg("p_prior"),
+      py::arg("p_empty"), py::arg("p_occupied"), py::arg("range_sure"),
+      py::arg("range_max"), py::arg("wall_size"), py::arg("odd_log_p_prior"),
+      py::arg("max_points_per_line"), py::arg("max_num_threads") = 1);
 
-    m_mapping.def("local_to_grid", &Mapping::localToGrid,
-          py::arg("pose_target_in_central"),
-          py::arg("central_point"),
-          py::arg("resolution"),
-          "Convert a point from local coordinates frame of the grid to grid indices");
+  m_mapping.def("local_to_grid", &Mapping::localToGrid,
+                py::arg("pose_target_in_central"), py::arg("central_point"),
+                py::arg("resolution"),
+                "Convert a point from local coordinates frame of the grid to "
+                "grid indices");
 
-    py::enum_<Mapping::OccupancyType>(m_mapping, "OCCUPANCY_TYPE")
-        .value("UNEXPLORED", Mapping::OccupancyType::UNEXPLORED)
-        .value("EMPTY", Mapping::OccupancyType::EMPTY)
-        .value("OCCUPIED", Mapping::OccupancyType::OCCUPIED);
+  m_mapping.def("get_previous_grid_in_current_pose",
+                &Mapping::getPreviousGridInCurrentPose,
+                py::arg("current_position_in_previous_pose"),
+                py::arg("current_orientation_in_previous_pose"),
+                py::arg("previous_grid_data"), py::arg("central_point"),
+                py::arg("grid_width"), py::arg("grid_height"),
+                py::arg("resolution"), py::arg("unknown_value"));
+
+  py::enum_<Mapping::OccupancyType>(m_mapping, "OCCUPANCY_TYPE")
+      .value("UNEXPLORED", Mapping::OccupancyType::UNEXPLORED)
+      .value("EMPTY", Mapping::OccupancyType::EMPTY)
+      .value("OCCUPIED", Mapping::OccupancyType::OCCUPIED);
 
   // ------------------------------------------------------------------------------
   // Utils
