@@ -2,13 +2,76 @@
 #include "mapping/local_mapper.h"
 #include "test.h"
 #include "utils/logger.h"
+#define BOOST_TEST_MODULE KOMPASS MAPPER TESTS
 #include <Eigen/Dense>
+#include <boost/test/included/unit_test.hpp>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <vector>
 
 using namespace Kompass;
+
+struct GridMapConfig {
+  double angle_increment;
+  double corner_distance;
+  int random_points;
+
+  int grid_width;
+  int grid_height;
+  float grid_res;
+  float actual_size;
+
+  Eigen::MatrixXi gridData;
+  Eigen::MatrixXf gridDataProb;
+  Eigen::MatrixXf prevGridDataProb;
+
+  Eigen::Vector2i centralPoint;
+
+  float pPrior;
+  float pOccupied;
+  float pEmpty;
+  float rangeSure;
+  float rangeMax;
+  float wallSize;
+  int maxNumThreads;
+
+  double limit;
+  int maxPointsPerLine;
+
+  std::vector<double> filtered_ranges;
+
+  // Constructor to initialize the struct
+  GridMapConfig()
+      : angle_increment(0.1), corner_distance(0.5), random_points(50),
+        grid_width(10), grid_height(10), grid_res(0.1),
+        actual_size(grid_width * grid_res),
+        gridData(Eigen::MatrixXi(grid_width, grid_height)),
+        gridDataProb(Eigen::MatrixXf(grid_width, grid_height)),
+        prevGridDataProb(Eigen::MatrixXf(grid_width, grid_height)),
+        centralPoint(std::round(grid_width / 2) - 1,
+                     std::round(grid_height / 2) - 1),
+        pPrior(0.6), pOccupied(0.9), pEmpty(1 - pOccupied), rangeSure(0.1),
+        rangeMax(20.0), wallSize(0.2), maxNumThreads(1),
+        limit(grid_width >= grid_height
+                  ? grid_width * grid_res * std::sqrt(2)
+                  : grid_height * grid_res * std::sqrt(2)),
+        maxPointsPerLine(static_cast<int>((limit / grid_res) * 1.5)),
+        filtered_ranges() {
+    // Initialize the grid
+    gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+    gridDataProb.fill(pPrior);
+    prevGridDataProb.fill(pPrior);
+
+    // Logging the central point and limit circle radius (for demonstration
+    // purposes)
+    std::cout << "Central point: " << centralPoint.x() << ", "
+              << centralPoint.y() << std::endl;
+    std::cout << "Limit Circle Radius: " << limit << std::endl;
+    std::cout << "Max Steps in Grid inscribing the limit circle: "
+              << maxPointsPerLine << std::endl;
+  }
+};
 
 int countPointsInGrid(const Eigen::MatrixXi &matrix, int value) {
   int count = 0;
@@ -21,32 +84,6 @@ int countPointsInGrid(const Eigen::MatrixXi &matrix, int value) {
     }
   }
   return count;
-}
-
-void printMatrix(const Eigen::MatrixXf &matrix) {
-  std::cout << "Matrix (" << matrix.rows() << "x" << matrix.cols() << "):\n";
-  for (int i = 0; i < matrix.rows(); ++i) {
-    for (int j = 0; j < matrix.cols(); ++j) {
-      std::cout << matrix(i, j) << " ";
-    }
-    std::cout << std::endl;
-  }
-}
-
-void printMatrix(const Eigen::MatrixXi &matrix) {
-  std::cout << "Matrix (" << matrix.rows() << "x" << matrix.cols() << "):\n";
-  for (int i = 0; i < matrix.rows(); ++i) {
-    for (int j = 0; j < matrix.cols(); ++j) {
-      std::cout << matrix(i, j) << " ";
-    }
-    std::cout << std::endl;
-  }
-}
-
-Eigen::VectorXd stdVectorToEigenVector(const std::vector<double> &std_vector) {
-  Eigen::Map<const Eigen::VectorXd> eigen_vector(std_vector.data(),
-                                                 std_vector.size());
-  return eigen_vector;
 }
 
 Control::LaserScan generateLaserScan(double angle_increment,
@@ -95,55 +132,12 @@ Control::LaserScan generateLaserScan(double angle_increment,
     std::cerr << "Invalid shape specified. Use 'circle', 'right_corner', or "
                  "'random_points'.\n";
   }
-
   return {ranges, angles};
 }
 
-// Example usage
-int main() {
+BOOST_FIXTURE_TEST_SUITE(s, GridMapConfig)
 
-  double angle_increment = 0.1; // Example increment in radians
-  double corner_distance = 0.5; // Example max range for the right corner
-  int random_points = 50;       // Example number of random points
-
-  int grid_width = 10;
-  int grid_height = 10;
-  float grid_res = 0.1;
-  float actual_size = grid_width * grid_res;
-
-  // Init the grid
-  Eigen::MatrixXi gridData(grid_width, grid_height);
-  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
-
-  Eigen::MatrixXf gridDataProb(grid_width, grid_height);
-  Eigen::MatrixXf prevGridDataProb(grid_width, grid_height);
-
-  // Central point
-  int x = std::round(grid_width / 2) - 1;
-  int y = std::round(grid_height / 2) - 1;
-  Eigen::Vector2i centralPoint(x, y);
-  LOG_INFO("Central point:", x, ",", y);
-
-  // scan model
-  float pPrior = 0.6, pOccupied = 0.9;
-  float pEmpty = 1 - pOccupied;
-  float rangeSure = 0.1, rangeMax = 20.0, wallSize = 0.2;
-  int maxNumThreads = 1;
-  gridDataProb.fill(pPrior);
-  prevGridDataProb.fill(pPrior);
-
-  // limit ranges to an elipse inscribing the grid
-  double limit = grid_width >= grid_height ? grid_width * grid_res * sqrt(2)
-                                           : grid_height * grid_res * sqrt(2);
-
-  LOG_INFO("Limit Circle Radius:", limit);
-
-  int maxPointsPerLine =
-      (limit / grid_res) * 1.5; // on average 1.5 cells highlighted per step
-  LOG_INFO("Max Steps in Grid inscribing the limit circle:", maxPointsPerLine);
-
-  // Vector to store the filtered ranges
-  std::vector<double> filtered_ranges;
+BOOST_AUTO_TEST_CASE(test_mapper_circles) {
 
   // Generate circle scan with radius 1.0
   double radius = 0.3; // Example radius for the circle
@@ -159,8 +153,9 @@ int main() {
     Timer timer;
     Mapping::scanToGrid(circle_scan.angles, filtered_ranges, gridData,
                         gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
-                        0.0, prevGridDataProb, pPrior, pEmpty, pOccupied, rangeSure,
-                        rangeMax, wallSize, maxPointsPerLine, maxNumThreads);
+                        0.0, prevGridDataProb, pPrior, pEmpty, pOccupied,
+                        rangeSure, rangeMax, wallSize, maxPointsPerLine,
+                        maxNumThreads);
   }
 
   int occ_points = countPointsInGrid(
@@ -172,8 +167,8 @@ int main() {
   LOG_INFO("Number of occupied cells: ", occ_points);
   LOG_INFO("Number of free cells: ", free_points);
   LOG_INFO("Number of unknown cells: ", unknown_points);
-  printMatrix(gridData);
-  printMatrix(gridDataProb);
+  std::cout << gridData << std::endl;
+  std::cout << gridDataProb << std::endl;
 
   // Generate circle scan with radius 0.5
   gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
@@ -189,8 +184,9 @@ int main() {
     Timer timer;
     Mapping::scanToGrid(circle_scan.angles, filtered_ranges, gridData,
                         gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
-                        0.0, prevGridDataProb, pPrior, pEmpty, pOccupied, rangeSure,
-                        rangeMax, wallSize, maxPointsPerLine, maxNumThreads);
+                        0.0, prevGridDataProb, pPrior, pEmpty, pOccupied,
+                        rangeSure, rangeMax, wallSize, maxPointsPerLine,
+                        maxNumThreads);
   }
   occ_points = countPointsInGrid(
       gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
@@ -201,12 +197,12 @@ int main() {
   LOG_INFO("Number of occupied cells: ", occ_points);
   LOG_INFO("Number of free cells: ", free_points);
   LOG_INFO("Number of unknown cells: ", unknown_points);
-  printMatrix(gridData);
-  printMatrix(gridDataProb);
+  std::cout << gridData << std::endl;
+  std::cout << gridDataProb << std::endl;
 
   // Generate circle scan with radius 10.5
   gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
-  radius = 10.5; // Example radius for the circle
+  radius = 2;
   circle_scan = generateLaserScan(angle_increment, "circle", radius);
   LOG_INFO("Testing with circle points at distance: ", radius,
            "and grid of width: ", actual_size);
@@ -218,8 +214,9 @@ int main() {
     Timer timer;
     Mapping::scanToGrid(circle_scan.angles, filtered_ranges, gridData,
                         gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
-                        0.0, prevGridDataProb, pPrior, pEmpty, pOccupied, rangeSure,
-                        rangeMax, wallSize, maxPointsPerLine, maxNumThreads);
+                        0.0, prevGridDataProb, pPrior, pEmpty, pOccupied,
+                        rangeSure, rangeMax, wallSize, maxPointsPerLine,
+                        maxNumThreads);
   }
   occ_points = countPointsInGrid(
       gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
@@ -230,8 +227,8 @@ int main() {
   LOG_INFO("Number of occupied cells: ", occ_points);
   LOG_INFO("Number of free cells: ", free_points);
   LOG_INFO("Number of unknown cells: ", unknown_points);
-  printMatrix(gridData);
-  printMatrix(gridDataProb);
-
-  return 0;
+  std::cout << gridData << std::endl;
+  std::cout << gridDataProb << std::endl;
 }
+
+BOOST_AUTO_TEST_SUITE_END()

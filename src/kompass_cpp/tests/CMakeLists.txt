@@ -1,10 +1,10 @@
 find_package(nlohmann_json 3.2.0 REQUIRED)
 find_package(Boost COMPONENTS unit_test_framework REQUIRED)
 
-# BOOST TESTS
-add_executable(tests test.cpp)
-target_link_libraries(tests PRIVATE ${PROJECT_NAME} Boost::unit_test_framework)
-add_test(boost_tests tests)
+# Controller Tests
+add_executable(controller_test controller_test.cpp)
+target_link_libraries(controller_test PRIVATE ${PROJECT_NAME} Boost::unit_test_framework)
+add_test(controller_tests controller_test)
 
 
 # Find Python interpreter
@@ -23,8 +23,9 @@ add_custom_target(trajectory_sampler_plt ALL
 # Trajectory Sampler Test (Generate and Plot Samples)
 add_executable(trajectory_sampler_test trajectory_sampler_test.cpp)
 target_link_libraries(trajectory_sampler_test PRIVATE ${PROJECT_NAME} nlohmann_json::nlohmann_json)
-add_test(trajectory_sampler_to_json trajectory_sampler_test)
+add_test(trajectory_sampler_tests trajectory_sampler_test)
 
-# Mapper test
+# Mapper tests
 add_executable(mapper_test mapper_test.cpp)
-target_link_libraries(mapper_test PRIVATE ${PROJECT_NAME})
+target_link_libraries(mapper_test PRIVATE ${PROJECT_NAME} Boost::unit_test_framework)
+add_test(mapper_tests mapper_test)
