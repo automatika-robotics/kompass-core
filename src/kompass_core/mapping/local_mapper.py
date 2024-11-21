@@ -232,7 +232,7 @@ class LocalMapper:
             )
 
             self.previous_grid_prob_transformed = get_previous_grid_in_current_pose(
-                current_position_in_previous_pose=_position_in_previous_pose,
+                current_position_in_previous_pose=_position_in_previous_pose[:2],
                 current_orientation_in_previous_pose=_orientation_in_previous_pose,
                 previous_grid_data=self.grid_data.scan_occupancy_prob,
                 central_point=self._point_central_in_grid,
