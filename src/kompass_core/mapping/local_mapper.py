@@ -33,7 +33,7 @@ class GridData(BaseAttrs):
 
     width: int = field()
     height: int = field()
-    odd_log_p_prior: float = field()
+    p_prior: float = field(default=0.5)
     occupancy: np.ndarray = field(init=False)
     occupancy_prob: np.ndarray = field(init=False)
     scan_occupancy: np.ndarray = field(init=False)
@@ -66,7 +66,7 @@ class GridData(BaseAttrs):
         """Initialize Scan Occupancy Layers"""
         self.scan_occupancy = self.get_initial_grid_data()
         self.scan_occupancy_prob = np.full(
-            (self.width, self.height), self.odd_log_p_prior, dtype=np.float32, order="F"
+            (self.width, self.height), self.p_prior, dtype=np.float32, order="F"
         )
 
 
@@ -102,7 +102,7 @@ class MapConfig(BaseAttrs):
     @max_points_per_line.default
     def _set_max_points_per_line(self) -> float:
         # estimate max number of points drawn per scan line
-        # at average 1.5 points per setep
+        # at average 1.5 points per setup
         return round((self.filter_limit / self.resolution) * 1.5)
 
 
@@ -156,17 +156,11 @@ class LocalMapper:
         # current obstacles and grid data
         self._pose_robot_in_world = PoseData()
 
-        self.odd_log_p_prior = float(
-            np.log(
-                self.scan_update_model.p_prior / (1 - self.scan_update_model.p_prior)
-            )
-        )
-
         self.lower_right_corner_pose = PoseData()
         self.grid_data = GridData(
             width=self.grid_width,
             height=self.grid_height,
-            odd_log_p_prior=self.odd_log_p_prior,
+            p_prior=self.scan_update_model.p_prior,
         )
 
         # for bayesian update
@@ -198,7 +192,7 @@ class LocalMapper:
         """
         self.grid_data.occupancy = np.copy(self.grid_data.scan_occupancy)
 
-        UNEXPLORED_THRESHOLD = self.odd_log_p_prior
+        UNEXPLORED_THRESHOLD = self.scan_update_model.p_prior
         self.grid_data.occupancy_prob[
             self.grid_data.scan_occupancy_prob > UNEXPLORED_THRESHOLD
         ] = OCCUPANCY_TYPE.OCCUPIED.value
@@ -239,7 +233,7 @@ class LocalMapper:
                 grid_width=self.grid_width,
                 grid_height=self.grid_height,
                 resolution=self.config.resolution,
-                unknown_value=self.odd_log_p_prior,
+                unknown_value=self.scan_update_model.p_prior,
             )
 
         self._pose_robot_in_world = current_robot_pose
@@ -263,10 +257,7 @@ class LocalMapper:
         :param pose_laser_scanner_in_robot: Pose of the sensor w.r.t the robot, defaults to None
         :type pose_laser_scanner_in_robot: Optional[PoseData], optional
         """
-        # it's important to recalculate the current poses before doing any update
-        # In order to get relationship between previous robot state (pose and grid)
-        # with respect to the current state.
-
+        # Get transformation between the previous robot state (pose and grid) w.r.t the current state.
         self._calculate_poses(robot_pose)
 
         if not pose_laser_scanner_in_robot:
