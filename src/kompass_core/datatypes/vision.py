@@ -1,6 +1,6 @@
-from ..utils.common import BaseAttrs, in_range
+from ..utils.common import BaseAttrs
 from attrs import define, field
-from typing import Optional, List
+from typing import Optional, List, Union
 import numpy as np
 
 
@@ -20,9 +20,16 @@ def _xy_optional_validator(_, attribute, value):
 
 @define
 class ImageMetaData(BaseAttrs):
+    frame_id: str = field()
     width: int = field()
     height: int = field()
     encoding: str = field(default="rgb8")
+
+
+@define
+class CompressedImageMetaData(BaseAttrs):
+    frame_id: str = field()
+    encoding: str = field(default="png")
 
 
 @define
@@ -31,6 +38,6 @@ class TrackingData(BaseAttrs):
     center_xy: List = field(validator=_xy_validator)
     size_xy: List = field(validator=_xy_validator)
     id: int = field()
-    img_meta: ImageMetaData = field()
+    img_meta: Union[ImageMetaData, CompressedImageMetaData, None] = field()
     velocity_xy: Optional[List] = field(default=None, validator=_xy_optional_validator)
     depth: Optional[float] = field(default=None)
