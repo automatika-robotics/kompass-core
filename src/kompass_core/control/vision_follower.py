@@ -138,8 +138,12 @@ class VisionFollower(ControllerTemplate):
                 )
                 simulated_depth += -v * t
                 if self.__rotate_in_place:
-                    self.__vx_ctrl[i : i + 1] = [0.0, max(v, 0.0)]
-                    self.__omega_ctrl[i : i + 1] = [omega, 0.0]
+                    if abs(v) < 1e-2:
+                        self.__vx_ctrl[i : i + 1] = [0.0, 0.0]
+                        self.__omega_ctrl[i : i + 1] = [omega, omega]
+                    else:
+                        self.__vx_ctrl[i : i + 1] = [0.0, max(v, 0.0)]
+                        self.__omega_ctrl[i : i + 1] = [omega, 0.0]
                 else:
                     self.__vx_ctrl[i] = max(v, 0.0)
                     self.__omega_ctrl[i] = omega
