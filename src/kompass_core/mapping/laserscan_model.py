@@ -1,4 +1,3 @@
-import numpy as np
 from ..utils.common import BaseAttrs, in_range
 from attrs import define, field
 
