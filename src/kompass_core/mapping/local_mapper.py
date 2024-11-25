@@ -153,8 +153,9 @@ class LocalMapper:
 
         # current obstacles and grid data
         self._pose_robot_in_world = PoseData()
-
         self.lower_right_corner_pose = PoseData()
+
+        self.scan_update_model = scan_model_config
         self.grid_data = GridData(
             width=self.grid_width,
             height=self.grid_height,
@@ -162,7 +163,6 @@ class LocalMapper:
         )
 
         # for bayesian update
-        self.scan_update_model = scan_model_config
         self.previous_grid_prob_transformed = np.copy(
             self.grid_data.scan_occupancy_prob
         )
