@@ -151,7 +151,7 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   }
   {
     Timer timer;
-    Mapping::scanToGrid(circle_scan.angles, filtered_ranges, gridData,
+    Mapping::scanToGridBaysian(circle_scan.angles, filtered_ranges, gridData,
                         gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
                         0.0, prevGridDataProb, pPrior, pEmpty, pOccupied,
                         rangeSure, rangeMax, wallSize, maxPointsPerLine,
@@ -182,7 +182,7 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   }
   {
     Timer timer;
-    Mapping::scanToGrid(circle_scan.angles, filtered_ranges, gridData,
+    Mapping::scanToGridBaysian(circle_scan.angles, filtered_ranges, gridData,
                         gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
                         0.0, prevGridDataProb, pPrior, pEmpty, pOccupied,
                         rangeSure, rangeMax, wallSize, maxPointsPerLine,
@@ -212,7 +212,7 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   }
   {
     Timer timer;
-    Mapping::scanToGrid(circle_scan.angles, filtered_ranges, gridData,
+    Mapping::scanToGridBaysian(circle_scan.angles, filtered_ranges, gridData,
                         gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
                         0.0, prevGridDataProb, pPrior, pEmpty, pOccupied,
                         rangeSure, rangeMax, wallSize, maxPointsPerLine,

@@ -378,12 +378,20 @@ PYBIND11_MODULE(kompass_cpp, m) {
   m_mapping.def(
       "scan_to_grid", &Mapping::scanToGrid,
       "Convert laser scan data to occupancy grid", py::arg("angles"),
-      py::arg("ranges"), py::arg("grid_data"), py::arg("grid_data_prob"),
+      py::arg("ranges"), py::arg("grid_data"),
       py::arg("central_point"), py::arg("resolution"),
       py::arg("laser_scan_position"), py::arg("laser_scan_orientation"),
-      py::arg("previous_grid_data_prob"), py::arg("p_prior"),
-      py::arg("p_empty"), py::arg("p_occupied"), py::arg("range_sure"),
-      py::arg("range_max"), py::arg("wall_size"),
+      py::arg("max_points_per_line"), py::arg("max_num_threads") = 1);
+
+  m_mapping.def(
+      "scan_to_grid_baysian", &Mapping::scanToGridBaysian,
+      "Convert laser scan data to occupancy grid, with baysian update",
+      py::arg("angles"), py::arg("ranges"), py::arg("grid_data"),
+      py::arg("grid_data_prob"), py::arg("central_point"),
+      py::arg("resolution"), py::arg("laser_scan_position"),
+      py::arg("laser_scan_orientation"), py::arg("previous_grid_data_prob"),
+      py::arg("p_prior"), py::arg("p_empty"), py::arg("p_occupied"),
+      py::arg("range_sure"), py::arg("range_max"), py::arg("wall_size"),
       py::arg("max_points_per_line"), py::arg("max_num_threads") = 1);
 
   m_mapping.def("local_to_grid", &Mapping::localToGrid,

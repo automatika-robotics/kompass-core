@@ -85,6 +85,26 @@ float updateGridCellProbability(float distance, float currentRange,
  * @param angles        LaserScan angles in radians
  * @param ranges         LaserScan ranges in meters
  * @param gridData      Current grid data
+ * @param centralPoint  Coordinates of the central point of the grid
+ * @param resolution     Grid resolution
+ * @param laserscanPosition Position of the LaserScan sensor w.r.t the robot
+ * @param oddLogPPrior    Log Odds of the LaserScan model's prior probability
+ */
+void scanToGrid(const std::vector<double> &angles,
+                const std::vector<double> &ranges,
+                Eigen::Ref<Eigen::MatrixXi> gridData,
+                const Eigen::Vector2i &centralPoint, float resolution,
+                const Eigen::Vector3f &laserscanPosition,
+                float laserscanOrientation, int maxPointsPerLine,
+                int maxNumThreads);
+
+/**
+ * Processes Laserscan data (angles and ranges) to project on a 2D grid using
+ * Bresenham line drawing for each Laserscan beam and baysian map updates
+ *
+ * @param angles        LaserScan angles in radians
+ * @param ranges         LaserScan ranges in meters
+ * @param gridData      Current grid data
  * @param gridDataProb Current probabilistic grid data
  * @param centralPoint  Coordinates of the central point of the grid
  * @param resolution     Grid resolution
@@ -98,17 +118,15 @@ float updateGridCellProbability(float distance, float currentRange,
  * @param wallSize          LaserScan model's padding size when hitting an
  * @param oddLogPPrior    Log Odds of the LaserScan model's prior probability
  */
-void scanToGrid(const std::vector<double> &angles,
-                const std::vector<double> &ranges,
-                Eigen::Ref<Eigen::MatrixXi> gridData,
-                Eigen::Ref<Eigen::MatrixXf> gridDataProb,
-                const Eigen::Vector2i &centralPoint, float resolution,
-                const Eigen::Vector3f &laserscanPosition,
-                float laserscanOrientation,
-                const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb,
-                float pPrior, float pEmpty, float pOccupied, float rangeSure,
-                float rangeMax, float wallSize, int maxPointsPerLine,
-                int maxNumThreads = 1);
+void scanToGridBaysian(
+    const std::vector<double> &angles, const std::vector<double> &ranges,
+    Eigen::Ref<Eigen::MatrixXi> gridData,
+    Eigen::Ref<Eigen::MatrixXf> gridDataProb,
+    const Eigen::Vector2i &centralPoint, float resolution,
+    const Eigen::Vector3f &laserscanPosition, float laserscanOrientation,
+    const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb, float pPrior,
+    float pEmpty, float pOccupied, float rangeSure, float rangeMax,
+    float wallSize, int maxPointsPerLine, int maxNumThreads = 1);
 
 } // namespace Mapping
 } // namespace Kompass

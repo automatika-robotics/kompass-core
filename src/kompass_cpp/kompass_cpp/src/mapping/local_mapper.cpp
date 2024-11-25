@@ -12,17 +12,6 @@ namespace Mapping {
 // Mutex for grid update
 static std::mutex s_gridMutex;
 
-/**
- * @brief Transforms a point from grid indices (i,j) to the local coordinates
- frame of the grid (around the central cell) (x,y)
-
- *
- * @param pointTargetInGrid  Point indices in the grid (i, j)
- * @param centralPoint  Central grid point local coordinates (x, y)
- * @param resolution  Grid resolution
- * @param height  2D grid height along the z axis
- * @return Eigen::Vector3f
- */
 Eigen::Vector3f gridToLocal(const Eigen::Vector2i &pointTargetInGrid,
                             const Eigen::Vector2i &centralPoint,
                             double resolution, double height) {
@@ -34,15 +23,6 @@ Eigen::Vector3f gridToLocal(const Eigen::Vector2i &pointTargetInGrid,
   return poseB;
 }
 
-/**
- * @brief Transforms a point from the local coordinates frame of the grid
- * (around the central cell) (x,y) to the grid indices (i,j)
- *
- * @param poseTargetInCentral
- * @param centralPoint
- * @param resolution
- * @return Eigen::Vector2i
- */
 Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
                             const Eigen::Vector2i &centralPoint,
                             float resolution) {
@@ -59,20 +39,6 @@ Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral,
   return gridPoint;
 }
 
-/**
- * @brief Transform a grid to be centered in egocentric view of the current
- * position given its previous position
- *
- * @param currentPositionInPreviousPose
- * @param currentOrientationInPreviousPose
- * @param previousGridData
- * @param centralPoint
- * @param gridWidth
- * @param gridHeight
- * @param resolution
- * @param unknownValue
- * @return Eigen::MatrixXf
- */
 Eigen::MatrixXf getPreviousGridInCurrentPose(
     const Eigen::Vector2f &currentPositionInPreviousPose,
     double currentOrientationInPreviousPose,
@@ -140,14 +106,6 @@ Eigen::MatrixXf getPreviousGridInCurrentPose(
   return transformedGrid;
 }
 
-/**
- * @brief Fill an area around a point on the grid with given padding
- *
- * @param gridData
- * @param gridPoint  Grid point indices (i,j)
- * @param gridPadding
- * @param indicator
- */
 void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
                          const Eigen::Vector2i &gridPoint, int gridPadding,
                          int indicator) {
@@ -176,21 +134,6 @@ void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
   }
 }
 
-/**
- * @brief Updates a grid cell occupancy probability using a LaserScan Model
- *
- * @param distance  Hit pint distance from the sensor (m)
- * @param currentRange  Scan ray max range (m)
- * @param previousProb  Previous probability of the grid cell occupancy
- * @param resolution  Grid resolution (meter/cell)
- * @param pPrior  Prior probability of the model
- * @param pEmpty  Empty probability of the model
- * @param pOccupied  Occupied probability of the model
- * @param rangeSure  Certainty range of the model (m)
- * @param rangeMax  Max range of the sensor (m)
- * @param wallSize  Padding size of the model (m)
- * @return float
- */
 float updateGridCellProbability(float distance, float currentRange,
                                 float previousProb, float resolution,
                                 float pPrior, float pEmpty, float pOccupied,
@@ -214,38 +157,67 @@ float updateGridCellProbability(float distance, float currentRange,
   return pCurr;
 }
 
-/**
- * @brief Update the occupnacu grid using LaserScan data (angles and ranges)
- * using Bresenham line drawing for each LaserScan beam
- *
- * @param angle
- * @param range
- * @param startPoint
- * @param gridData
- * @param gridDataProb
- * @param centralPoint
- * @param resolution
- * @param laserscanPosition
- * @param laserscanOrientation
- * @param previousGridDataProb
- * @param pPrior
- * @param pEmpty
- * @param pOccupied
- * @param rangeSure
- * @param rangeMax
- * @param wallSize
- * @param maxPointsPerLine
- */
 void updateGrid(const float angle, const float range,
                 const Eigen::Vector2i &startPoint,
                 Eigen::Ref<Eigen::MatrixXi> gridData,
-                Eigen::Ref<Eigen::MatrixXf> gridDataProb,
                 const Eigen::Vector2i &centralPoint, float resolution,
                 const Eigen::Vector3f &laserscanPosition,
-                float laserscanOrientation,
-                const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb,
-                float pPrior, float pEmpty, float pOccupied, float rangeSure,
-                float rangeMax, float wallSize, int maxPointsPerLine) {
+                float laserscanOrientation, int maxPointsPerLine) {
+
+  float x = laserscanPosition(0) + (range * cos(laserscanOrientation + angle));
+  float y = laserscanPosition(1) + (range * sin(laserscanOrientation + angle));
+
+  Eigen::Vector2i toPoint =
+      localToGrid(Eigen::Vector2f(x, y), centralPoint, resolution);
+  std::vector<Eigen::Vector2i> points;
+  points.reserve(maxPointsPerLine);
+
+  bresenhamEnhanced(startPoint, toPoint, points);
+
+  bool rayStopped = true;
+  Eigen::Vector2i lastGridPoint = points[0];
+
+  // Precompute boundary checks
+  int rows = gridData.rows();
+  int cols = gridData.cols();
+
+  for (auto &pt : points) {
+
+    if (pt(0) >= 0 && pt(0) < rows && pt(1) >= 0 && pt(1) < cols) {
+
+      // grid update
+      {
+        std::lock_guard<std::mutex> lock(s_gridMutex);
+        gridData(pt(0), pt(1)) = std::max(
+            gridData(pt(0), pt(1)), static_cast<int>(OccupancyType::EMPTY));
+      }
+
+      // update last point drawn
+      lastGridPoint(0) = pt(0);
+      lastGridPoint(1) = pt(1);
+    } else {
+      rayStopped = false;
+    }
+  }
+  if (rayStopped) {
+    std::lock_guard<std::mutex> lock(s_gridMutex);
+    /* Force non-bayesian map to set ending_point to occupied. So that
+       when visualizing the map the detected obstacles can be visualized
+       instead of having a map that visualize empty and unknown zones only.*/
+    fillGridAroundPoint(gridData, lastGridPoint, 0,
+                        static_cast<int>(OccupancyType::OCCUPIED));
+  }
+}
+
+void updateGridBaysian(
+    const float angle, const float range, const Eigen::Vector2i &startPoint,
+    Eigen::Ref<Eigen::MatrixXi> gridData,
+    Eigen::Ref<Eigen::MatrixXf> gridDataProb,
+    const Eigen::Vector2i &centralPoint, float resolution,
+    const Eigen::Vector3f &laserscanPosition, float laserscanOrientation,
+    const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb, float pPrior,
+    float pEmpty, float pOccupied, float rangeSure, float rangeMax,
+    float wallSize, int maxPointsPerLine) {
 
   float x = laserscanPosition(0) + (range * cos(laserscanOrientation + angle));
   float y = laserscanPosition(1) + (range * sin(laserscanOrientation + angle));
@@ -304,37 +276,12 @@ void updateGrid(const float angle, const float range,
   }
 }
 
-/**
- * @brief Updates the occupancy grid from LaserScan data in one or multi-threaded execution
- *
- * @param angles
- * @param ranges
- * @param gridData
- * @param gridDataProb
- * @param centralPoint
- * @param resolution
- * @param laserscanPosition
- * @param laserscanOrientation
- * @param previousGridDataProb
- * @param pPrior
- * @param pEmpty
- * @param pOccupied
- * @param rangeSure
- * @param rangeMax
- * @param wallSize
- * @param maxPointsPerLine
- * @param maxNumThreads
- */
 void scanToGrid(const std::vector<double> &angles,
                 const std::vector<double> &ranges,
                 Eigen::Ref<Eigen::MatrixXi> gridData,
-                Eigen::Ref<Eigen::MatrixXf> gridDataProb,
                 const Eigen::Vector2i &centralPoint, float resolution,
                 const Eigen::Vector3f &laserscanPosition,
-                float laserscanOrientation,
-                const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb,
-                float pPrior, float pEmpty, float pOccupied, float rangeSure,
-                float rangeMax, float wallSize, int maxPointsPerLine,
+                float laserscanOrientation, int maxPointsPerLine,
                 int maxNumThreads) {
 
   // angles and ranges are handled as floats implicitly
@@ -346,6 +293,37 @@ void scanToGrid(const std::vector<double> &angles,
     ThreadPool pool(maxNumThreads);
     for (int i = 0; i < angles.size(); ++i) {
       pool.enqueue(&updateGrid, angles[i], ranges[i], startPoint,
+                   std::ref(gridData), centralPoint, resolution,
+                   laserscanPosition, laserscanOrientation, maxPointsPerLine);
+    }
+  } else {
+    for (int i = 0; i < angles.size(); ++i) {
+      updateGrid(angles[i], ranges[i], startPoint, gridData, centralPoint,
+                 resolution, laserscanPosition, laserscanOrientation,
+                 maxPointsPerLine);
+    }
+  }
+}
+
+void scanToGridBaysian(
+    const std::vector<double> &angles, const std::vector<double> &ranges,
+    Eigen::Ref<Eigen::MatrixXi> gridData,
+    Eigen::Ref<Eigen::MatrixXf> gridDataProb,
+    const Eigen::Vector2i &centralPoint, float resolution,
+    const Eigen::Vector3f &laserscanPosition, float laserscanOrientation,
+    const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb, float pPrior,
+    float pEmpty, float pOccupied, float rangeSure, float rangeMax,
+    float wallSize, int maxPointsPerLine, int maxNumThreads) {
+
+  // angles and ranges are handled as floats implicitly
+  Eigen::Vector2i startPoint =
+      localToGrid(Eigen::Vector2f(laserscanPosition(0), laserscanPosition(1)),
+                  centralPoint, resolution);
+
+  if (maxNumThreads > 1) {
+    ThreadPool pool(maxNumThreads);
+    for (int i = 0; i < angles.size(); ++i) {
+      pool.enqueue(&updateGridBaysian, angles[i], ranges[i], startPoint,
                    std::ref(gridData), std::ref(gridDataProb), centralPoint,
                    resolution, laserscanPosition, laserscanOrientation,
                    std::ref(previousGridDataProb), pPrior, pEmpty, pOccupied,
@@ -353,10 +331,11 @@ void scanToGrid(const std::vector<double> &angles,
     }
   } else {
     for (int i = 0; i < angles.size(); ++i) {
-      updateGrid(angles[i], ranges[i], startPoint, gridData, gridDataProb,
-                 centralPoint, resolution, laserscanPosition,
-                 laserscanOrientation, previousGridDataProb, pPrior, pEmpty,
-                 pOccupied, rangeSure, rangeMax, wallSize, maxPointsPerLine);
+      updateGridBaysian(angles[i], ranges[i], startPoint, gridData,
+                        gridDataProb, centralPoint, resolution,
+                        laserscanPosition, laserscanOrientation,
+                        previousGridDataProb, pPrior, pEmpty, pOccupied,
+                        rangeSure, rangeMax, wallSize, maxPointsPerLine);
     }
   }
 }
