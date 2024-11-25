@@ -156,6 +156,7 @@ class LocalMapper:
         self.lower_right_corner_pose = PoseData()
 
         self.scan_update_model = scan_model_config
+
         self.grid_data = GridData(
             width=self.grid_width,
             height=self.grid_height,
@@ -163,9 +164,13 @@ class LocalMapper:
         )
 
         # for bayesian update
-        self.previous_grid_prob_transformed = np.copy(
-            self.grid_data.scan_occupancy_prob
-        )
+        if self.config.baysian_update:
+            self.previous_grid_prob_transformed = np.full(
+                (self.grid_data.width, self.grid_data.height),
+                self.grid_data.p_prior,
+                dtype=np.float32,
+                order="F",
+            )
         # turned to true after the first map update is done
         self.processed = False
 
