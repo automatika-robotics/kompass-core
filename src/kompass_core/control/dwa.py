@@ -57,6 +57,10 @@ class DWAConfig(FollowerConfig):
 
     costs_weights: TrajectoryCostsWeights = Factory(TrajectoryCostsWeights)
 
+    max_num_threads: int = field(
+        default=1, validator=in_range(min_value=1, max_value=1e6)
+    )
+
     def __attrs_post_init__(self):
         """Attrs post init"""
         if self.control_horizon > self.prediction_horizon:
@@ -122,6 +126,7 @@ class DWA(FollowerTemplate):
             sensor_rotation_robot=config.sensor_rotation_to_robot,
             octree_resolution=config.octree_resolution,
             cost_weights=config.costs_weights.to_kompass_cpp(),
+            max_num_threads=config.max_num_threads,
         )
 
         # Init the following result

@@ -1,59 +1,16 @@
+#include "test.h"
 #include "datatypes/trajectory.h"
 #include "utils/cost_evaluator.h"
 #define BOOST_TEST_MODULE KOMPASS TESTS
 #include <boost/test/included/unit_test.hpp>
 
-#include <chrono>
 #include <cmath>
 #include <vector>
 
 #include "controllers/dwa.h"
 #include "utils/logger.h"
 
-#ifndef _COLORS_
-#define _COLORS_
-
-/* FOREGROUND */
-#define RST "\x1B[0m"
-#define KRED "\x1B[31m"
-#define KGRN "\x1B[32m"
-#define KYEL "\x1B[33m"
-#define KBLU "\x1B[34m"
-#define KMAG "\x1B[35m"
-#define KCYN "\x1B[36m"
-#define KWHT "\x1B[37m"
-
-#define FRED(x) KRED x RST
-#define FGRN(x) KGRN x RST
-#define FYEL(x) KYEL x RST
-#define FBLU(x) KBLU x RST
-#define FMAG(x) KMAG x RST
-#define FCYN(x) KCYN x RST
-#define FWHT(x) KWHT x RST
-
-#define BOLD(x) "\x1B[1m" x RST
-#define UNDL(x) "\x1B[4m" x RST
-
-#endif /* _COLORS_ */
-
 using namespace Kompass;
-
-struct Timer {
-  std::chrono::high_resolution_clock::time_point start;
-  std::chrono::high_resolution_clock::time_point end;
-  std::chrono::duration<float> duration;
-
-  Timer() {
-    start = std::chrono::high_resolution_clock::now();
-    Logger::getInstance().setLogLevel(LogLevel::DEBUG);
-  }
-  ~Timer() {
-    end = std::chrono::high_resolution_clock::now();
-    duration = end - start;
-    LOG_INFO(BOLD(FBLU("Time taken for test: ")), KBLU,
-             duration.count() * 1000.0f, RST, BOLD(FBLU(" ms\n")));
-  }
-};
 
 void applyControl(Path::State &robotState, const Control::Velocity control,
                   const double timeStep) {
@@ -80,10 +37,11 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
 
   // Sampling configuration
   double timeStep = 0.1;
-  double predictionHorizon = 1.0;
-  double controlHorizon = 0.2;
-  int maxLinearSamples = 4;
-  int maxAngularSamples = 4;
+  double predictionHorizon = 4.0;
+  double controlHorizon = 0.4;
+  int maxLinearSamples = 20;
+  int maxAngularSamples = 20;
+  int maxNumThreads = 10;
 
   // Octomap resolution
   double octreeRes = 0.1;
@@ -120,7 +78,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   Control::DWA planner(controlLimits, controlType, timeStep, predictionHorizon,
                        controlHorizon, maxLinearSamples, maxAngularSamples,
                        robotShapeType, robotDimensions, sensor_position_body,
-                       sensor_rotation_body, octreeRes, costWeights);
+                       sensor_rotation_body, octreeRes, costWeights, maxNumThreads);
 
   LOG_INFO("Simulating one step of DWA planner");
 

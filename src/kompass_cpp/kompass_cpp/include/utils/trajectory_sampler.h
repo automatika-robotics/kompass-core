@@ -73,14 +73,15 @@ public:
                     const std::vector<float> robotDimensions,
                     const std::array<float, 3> &sensor_position_body,
                     const std::array<float, 4> &sensor_rotation_body,
-                    const double octreeRes);
+                    const double octreeRes, const int maxNumThreads = 1);
 
   TrajectorySampler(TrajectorySamplerParameters config,
                     ControlLimitsParams controlLimits, ControlType controlType,
                     const CollisionChecker::ShapeType robotShapeType,
                     const std::vector<float> robotDimensions,
                     const std::array<float, 3> &sensor_position_body,
-                    const std::array<float, 4> &sensor_rotation_body);
+                    const std::array<float, 4> &sensor_rotation_body,
+                    const int maxNumThreads = 1);
 
   /**
    * @brief Destroy the Trajectory Sampler object
@@ -112,6 +113,7 @@ protected:
   ControlType ctrType;
   ControlLimitsParams ctrlimits;
   CollisionChecker *collChecker;
+  int maxNumThreads;
 
 private:
   double time_step_{0.0};
@@ -158,12 +160,12 @@ private:
    * @param admissible_velocity_trajectories
    */
   void getAdmissibleTrajsFromVel(
-      const Velocity &vel, const Path::State start_pose,
-      std::vector<Trajectory> &admissible_velocity_trajectories);
+      const Velocity &vel, const Path::State &start_pose,
+      std::vector<Trajectory> *admissible_velocity_trajectories);
 
   void getAdmissibleTrajsFromVelDiffDrive(
-      Velocity &vel, const Path::State start_pose,
-      std::vector<Trajectory> &admissible_velocity_trajectories);
+      const Velocity &vel, const Path::State &start_pose,
+      std::vector<Trajectory> *admissible_velocity_trajectories);
 
   /**
    * @brief Generate trajectory samples for an ACKERMANN motion model

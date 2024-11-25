@@ -166,10 +166,10 @@ public:
     };
   }
 
-  void setLaserScan(const LaserScan &scan, const Path::State &curren_state);
+  void setPointScan(const LaserScan &scan, const Path::State &curren_state);
 
-  void setPointCloud(const std::vector<Point3D> &cloud,
-                     const Path::State &curren_state);
+  void setPointScan(const std::vector<Point3D> &cloud,
+                    const Path::State &curren_state);
 
 protected:
   // Protected member variables

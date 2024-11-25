@@ -332,4 +332,31 @@ bool CollisionChecker::checkCollisions(const std::vector<double> &ranges,
 
 bool CollisionChecker::checkCollisions() { return checkCollisionsOctree(); }
 
+bool CollisionChecker::checkCollisions(const Path::State current_state) {
+  auto m_stateObjPtr = new fcl::CollisionObjectf(bodyGeometry);
+  // Get the body tf matrix from euler angles / new position
+  Eigen::Matrix3f rotation =
+      Control::eulerToRotationMatrix(0.0, 0.0, current_state.yaw);
+
+  m_stateObjPtr->setTransform(Control::getTransformation(
+      rotation, Eigen::Vector3f(current_state.x, current_state.y, 0.0)));
+  m_stateObjPtr->computeAABB();
+
+  // Setup a new collision manager and give it the state object
+  fcl::DefaultCollisionData<float> collisionData;
+  auto m_collManager = new fcl::DynamicAABBTreeCollisionManagerf();
+
+  m_collManager->clear();
+  m_collManager->registerObjects(OctreeBoxes);
+  m_collManager->setup();
+  m_collManager->collide(m_stateObjPtr, &collisionData,
+                       fcl::DefaultCollisionFunction);
+
+  // detele temp objects
+  delete m_stateObjPtr;
+  delete m_collManager;
+
+  return collisionData.result.isCollision();
+}
+
 } // namespace Kompass

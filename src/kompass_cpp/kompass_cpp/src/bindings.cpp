@@ -1,3 +1,4 @@
+#include <pybind11/eigen.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -10,6 +11,7 @@
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
+#include "mapping/local_mapper.h"
 #include "utils/logger.h"
 
 namespace py = pybind11;
@@ -342,13 +344,14 @@ PYBIND11_MODULE(kompass_cpp, m) {
                   const std::array<float, 3> &sensor_position_robot,
                   const std::array<float, 4> &sensor_rotation_robot,
                   const double octree_resolution,
-                  Control::CostEvaluator::TrajectoryCostsWeights cost_weights) {
+                  Control::CostEvaluator::TrajectoryCostsWeights cost_weights,
+                  const int max_num_threads) {
                  return new Control::DWA(
                      control_limits, control_type, time_step,
                      prediction_horizon, control_horizon, max_linear_samples,
                      max_angular_samples, robot_shape_type, robot_dimensions,
                      sensor_position_robot, sensor_rotation_robot,
-                     octree_resolution, cost_weights);
+                     octree_resolution, cost_weights, max_num_threads);
                }),
            py::arg("control_limits"), py::arg("control_type"),
            py::arg("time_step"), py::arg("prediction_horizon"),
@@ -356,7 +359,7 @@ PYBIND11_MODULE(kompass_cpp, m) {
            py::arg("max_angular_samples"), py::arg("robot_shape_type"),
            py::arg("robot_dimensions"), py::arg("sensor_position_robot"),
            py::arg("sensor_rotation_robot"), py::arg("octree_resolution") = 0.1,
-           py::arg("cost_weights"))
+           py::arg("cost_weights"), py::arg("max_num_threads") = 1)
 
       //   .def("reconfigure", &Control::DWA::reconfigure)
       .def("compute_velocity_commands",
@@ -370,6 +373,45 @@ PYBIND11_MODULE(kompass_cpp, m) {
                &Control::DWA::computeVelocityCommandsSet),
            py::return_value_policy::reference_internal)
       .def("add_custom_cost", &Control::DWA::addCustomCost);
+
+  auto m_mapping = m.def_submodule("mapping", "Local Mapping module");
+  m_mapping.def(
+      "scan_to_grid", &Mapping::scanToGrid,
+      "Convert laser scan data to occupancy grid", py::arg("angles"),
+      py::arg("ranges"), py::arg("grid_data"),
+      py::arg("central_point"), py::arg("resolution"),
+      py::arg("laser_scan_position"), py::arg("laser_scan_orientation"),
+      py::arg("max_points_per_line"), py::arg("max_num_threads") = 1);
+
+  m_mapping.def(
+      "scan_to_grid_baysian", &Mapping::scanToGridBaysian,
+      "Convert laser scan data to occupancy grid, with baysian update",
+      py::arg("angles"), py::arg("ranges"), py::arg("grid_data"),
+      py::arg("grid_data_prob"), py::arg("central_point"),
+      py::arg("resolution"), py::arg("laser_scan_position"),
+      py::arg("laser_scan_orientation"), py::arg("previous_grid_data_prob"),
+      py::arg("p_prior"), py::arg("p_empty"), py::arg("p_occupied"),
+      py::arg("range_sure"), py::arg("range_max"), py::arg("wall_size"),
+      py::arg("max_points_per_line"), py::arg("max_num_threads") = 1);
+
+  m_mapping.def("local_to_grid", &Mapping::localToGrid,
+                py::arg("pose_target_in_central"), py::arg("central_point"),
+                py::arg("resolution"),
+                "Convert a point from local coordinates frame of the grid to "
+                "grid indices");
+
+  m_mapping.def("get_previous_grid_in_current_pose",
+                &Mapping::getPreviousGridInCurrentPose,
+                py::arg("current_position_in_previous_pose"),
+                py::arg("current_orientation_in_previous_pose"),
+                py::arg("previous_grid_data"), py::arg("central_point"),
+                py::arg("grid_width"), py::arg("grid_height"),
+                py::arg("resolution"), py::arg("unknown_value"));
+
+  py::enum_<Mapping::OccupancyType>(m_mapping, "OCCUPANCY_TYPE")
+      .value("UNEXPLORED", Mapping::OccupancyType::UNEXPLORED)
+      .value("EMPTY", Mapping::OccupancyType::EMPTY)
+      .value("OCCUPIED", Mapping::OccupancyType::OCCUPIED);
 
   // ------------------------------------------------------------------------------
   // Utils

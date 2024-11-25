@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from kompass_core.datatypes.pose import PoseData
 from kompass_core.datatypes.laserscan import LaserScanData
-from kompass_core.datatypes.obstacles import OCCUPANCY_TYPE
+from kompass_cpp.mapping import OCCUPANCY_TYPE
 
 from kompass_core.mapping import LocalMapper, MapConfig, LaserScanModelConfig
 from kompass_core.utils.visualization import visualize_grid
@@ -146,11 +146,11 @@ def laser_scan_data(local_mapper: LocalMapper, range_option: str) -> LaserScanDa
     ).shape[0]
 
     laser_scan_data.intensities = [0.0] * angles_size
-    width = local_mapper.grid_width * local_mapper.resolution
-    height = local_mapper.grid_height * local_mapper.resolution
+    width = local_mapper.grid_width * local_mapper.config.resolution
+    height = local_mapper.grid_height * local_mapper.config.resolution
     max_range_quarter = 0.25 * min(width, height)
     max_range_half = 0.5 * min(width, height)
-    min_range_from_robot = local_mapper.resolution * 2.0
+    min_range_from_robot = local_mapper.config.resolution * 2.0
     angle_increment_45 = 0.785398
 
     if range_option == "out_of_grid":
@@ -226,7 +226,7 @@ def test_update_from_scan(
     )
 
     number_occupied_cells = np.count_nonzero(
-        local_mapper.grid_data.occupancy == OCCUPANCY_TYPE.OCCUPIED
+        local_mapper.grid_data.occupancy == OCCUPANCY_TYPE.OCCUPIED.value
     )
     # log visualization for grid
     visualize_grid(

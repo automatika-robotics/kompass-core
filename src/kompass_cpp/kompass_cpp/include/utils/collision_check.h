@@ -190,6 +190,17 @@ public:
   bool checkCollisions(const std::vector<double> &ranges,
                        const std::vector<double> &angles, double height = 0.1);
 
+
+  /**
+   * @brief Check collisions between the given robot state and existing
+   * Octomap data defined
+   *
+   * @param current_state
+   * @return true
+   * @return false
+   */
+  bool checkCollisions(const Path::State current_state);
+
 private:
   // Collision Manager
   fcl::DynamicAABBTreeCollisionManagerf *collManager;
