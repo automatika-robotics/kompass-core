@@ -1,7 +1,7 @@
 from ..utils.common import BaseAttrs
 from attrs import define, field
 from typing import Optional, List, Union
-import numpy as np
+import kompass_cpp
 
 
 def _xy_validator(_, attribute, value):
@@ -41,3 +41,6 @@ class TrackingData(BaseAttrs):
     img_meta: Union[ImageMetaData, CompressedImageMetaData, None] = field()
     velocity_xy: Optional[List] = field(default=None, validator=_xy_optional_validator)
     depth: Optional[float] = field(default=None)
+
+    def to_kompass_cpp(self):
+        return kompass_cpp.types.TrackingData(size_xy=self.size_xy, center_xy=self.center_xy, img_width=self.img_meta.width, img_height=self.img_meta.height, depth=self.depth or -1.0)

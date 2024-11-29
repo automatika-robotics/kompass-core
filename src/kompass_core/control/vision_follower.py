@@ -4,7 +4,7 @@ from attrs import define, field
 from ..utils.common import BaseAttrs, in_range
 from ..models import Robot, RobotCtrlLimits, RobotType
 from ..datatypes import TrackingData
-import numpy as np
+import kompass_cpp
 
 
 @define
@@ -26,6 +26,17 @@ class VisionFollowerConfig(BaseAttrs):
         default=0.01, validator=in_range(min_value=1e-9, max_value=1e9)
     )
 
+    def to_kompass_cpp(self) -> kompass_cpp.control.VisionFollowerParameters:
+        """
+        Convert to kompass_cpp lib config format
+
+        :return: _description_
+        :rtype: kompass_cpp.control.VisionFollowerParameters
+        """
+        vision_config = kompass_cpp.control.VisionFollowerParameters()
+        vision_config.from_dict(self.asdict())
+        return vision_config
+
 
 class VisionFollower(ControllerTemplate):
     def __init__(
@@ -37,34 +48,22 @@ class VisionFollower(ControllerTemplate):
         config_yaml_root_name: Optional[str] = None,
         **_,
     ):
-        self._ctrl_limits = ctrl_limits
 
-        self.config = config or VisionFollowerConfig()
+        config = config or VisionFollowerConfig()
 
         if config_file:
-            self.config.from_yaml(config_file, config_yaml_root_name, get_common=False)
+            config.from_yaml(config_file, config_yaml_root_name, get_common=False)
 
-        # Vx, Vy, Omega
-        self.__vx_ctrl = []
-        self.__vy_ctrl = []
-        self.__omega_ctrl = []
-
-        self.__target_ref_size = None
-
-        self.__rotate_in_place: bool = robot.robot_type != RobotType.ACKERMANN.value
-
-        self._time_steps = np.arange(
-            0.0, self.config.control_horizon, self.config.control_time_step
+        self.__controller = kompass_cpp.control.VisionFollower(
+            control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
+            control_limits=ctrl_limits.to_kompass_cpp_lib(),
+            config=config.to_kompass_cpp()
         )
+
+        self._found_ctrl = False
 
     def reset_target(self, tracking: TrackingData):
-        self.__target_ref_size = (
-            tracking.size_xy[0]
-            * tracking.size_xy[1]
-            / (tracking.img_meta.width * tracking.img_meta.height)
-        )
-        if tracking.depth and not self.config.target_distance:
-            self.config.target_distance = tracking.depth
+        self.__controller.reset_target(tracking.to_kompass_cpp())
 
     def loop_step(
         self,
@@ -72,82 +71,9 @@ class VisionFollower(ControllerTemplate):
         tracking: TrackingData,
         **_,
     ) -> bool:
-        # If depth is provided but no reference distance is available -> set current depth as reference distance to keep
-        if tracking.depth and not self.config.target_distance:
-            self.config.target_distance = tracking.depth
-        # Otherwise set a reference size (bounding box size)
-        elif not self.__target_ref_size:
-            # Assume dummy distance of 1 meter at the targeted box size if it is not provided
-            self.config.target_distance = self.config.target_distance or 1.0
-            self.__target_ref_size = (
-                tracking.size_xy[0]
-                * tracking.size_xy[1]
-                / (tracking.img_meta.width * tracking.img_meta.height)
-            )
-
-        # Get distance (depth) error
-        _size = (
-            tracking.size_xy[0]
-            * tracking.size_xy[1]
-            / (tracking.img_meta.width * tracking.img_meta.height)
-        )
-        target_depth = tracking.depth or self.__target_ref_size / _size
-        distance_error = target_depth - self.config.target_distance
-        import logging
-
-        logging.error(
-            f"ref size: {self.__target_ref_size}, current size: {_size}, error {distance_error}"
-        )
-        logging.error(
-            f"X center: {tracking.center_xy[0]}, mid {tracking.img_meta.width / 2}"
-        )
-        logging.error(
-            f"Y center: {tracking.center_xy[1]}, mid {tracking.img_meta.height / 2}"
-        )
-
-        self.__omega_ctrl = len(self._time_steps) * [0.0]
-        self.__vx_ctrl = len(self._time_steps) * [0.0]
-        self.__vy_ctrl = len(self._time_steps) * [0.0]
-
-        if (
-            abs(distance_error) > self.config.tolerance
-            or abs(tracking.center_xy[0] - tracking.img_meta.width / 2)
-            > self.config.tolerance * tracking.img_meta.width
-            or abs(tracking.center_xy[1] - tracking.img_meta.height / 2)
-            > self.config.tolerance * tracking.img_meta.height
-        ):
-            simulated_depth = target_depth
-            # Simulate over the control horizon
-            for i, t in enumerate(self._time_steps):
-                if self.__rotate_in_place and i % 2 != 0:
-                    continue
-                distance_error = simulated_depth - self.config.target_distance
-                dist_speed = (
-                    np.sign(distance_error) * self._ctrl_limits.vx_limits.max_vel
-                    if abs(distance_error) > 0.5
-                    else distance_error * self._ctrl_limits.vx_limits.max_vel
-                    + np.sign(distance_error) * self.config.min_vel
-                )
-                omega = -self.config.alpha * (
-                    tracking.center_xy[0] / tracking.img_meta.width - 0.5
-                )
-                v = (
-                    -self.config.beta
-                    * (tracking.center_xy[1] / tracking.img_meta.height - 0.5)
-                    + self.config.gamma * dist_speed
-                )
-                simulated_depth += -v * t
-                if self.__rotate_in_place:
-                    if abs(v) < 1e-2:
-                        self.__vx_ctrl[i : i + 1] = [0.0, 0.0]
-                        self.__omega_ctrl[i : i + 1] = [omega, omega]
-                    else:
-                        self.__vx_ctrl[i : i + 1] = [0.0, max(v, 0.0)]
-                        self.__omega_ctrl[i : i + 1] = [omega, 0.0]
-                else:
-                    self.__vx_ctrl[i] = max(v, 0.0)
-                    self.__omega_ctrl[i] = omega
-        return True
+        self._found_ctrl = self.__controller.run(tracking.to_kompass_cpp())
+        if self._found_ctrl:
+            self._ctrl = self.__controller.get_ctrl()
 
     def logging_info(self) -> str:
         """
@@ -166,7 +92,7 @@ class VisionFollower(ControllerTemplate):
         :return: Linear Velocity Control (m/s)
         :rtype: List[float]
         """
-        return self.__vx_ctrl
+        return self._ctrl.vx if self._found_ctrl else None
 
     @property
     def linear_y_control(self):
@@ -176,7 +102,7 @@ class VisionFollower(ControllerTemplate):
         :return: Linear Velocity Control (m/s)
         :rtype: List[float]
         """
-        return self.__vy_ctrl
+        return self._ctrl.vy if self._found_ctrl else None
 
     @property
     def angular_control(self):
@@ -186,4 +112,4 @@ class VisionFollower(ControllerTemplate):
         :return: Angular Velocity Control (rad/s)
         :rtype: List[float]
         """
-        return self.__omega_ctrl
+        return self._ctrl.omega if self._found_ctrl else None
