@@ -1,7 +1,8 @@
 #include "controllers/vision_follower.h"
 #include "datatypes/control.h"
-#include "datatypes/trajectory.h"
+#include "utils/logger.h"
 #include <cmath>
+#include <memory>
 
 namespace Kompass {
 namespace Control {
@@ -24,6 +25,7 @@ VisionFollower::VisionFollower(const ControlType robotCtrlType,
   _rotate_in_place = _ctrlType != ControlType::ACKERMANN;
 }
 
+
 void VisionFollower::resetTarget(const TrackingData tracking) {
   double size = (tracking.size_xy[0] * tracking.size_xy[1]) /
                 (tracking.img_width * tracking.img_height);
@@ -31,6 +33,7 @@ void VisionFollower::resetTarget(const TrackingData tracking) {
     _config.set_target_distance(tracking.depth);
   }
   _target_ref_size = size;
+  _last_tracking = std::make_unique<TrackingData>(tracking);
 }
 
 void VisionFollower::generate_search_commands(double total_rotation,
@@ -72,12 +75,25 @@ std::array<double, 3> VisionFollower::findTarget() {
   // Generate new search commands if starting a new search or no commands are
   // available
   if (_recorded_search_time == 0.0 || _search_commands_queue.empty()) {
+    double last_direction = 1.0;
+    if (_last_tracking != nullptr) {
+      last_direction = ((_last_tracking->center_xy[0] -
+                                _last_tracking->img_width / 2.0) > 0.0)
+                                  ? 1.0
+                                  : -1.0;
+    }
+    LOG_INFO("Generating new search commands for total search time ",
+             _config.target_search_timeout());
+
     _search_commands_queue = std::queue<std::array<double, 3>>();
-    generate_search_commands(M_PI / 2, _config.target_search_radius(),
+    generate_search_commands(last_direction * M_PI / 2,
+                             _config.target_search_radius(),
                              _config.target_search_timeout() / 3);
-    generate_search_commands(-M_PI, _config.target_search_radius(),
+    generate_search_commands(-last_direction * M_PI,
+                             _config.target_search_radius(),
                              2 * _config.target_search_timeout() / 3);
   }
+  LOG_INFO("Number of search commands remaining: ", _search_commands_queue.size());
   std::array<double, 3> command = _search_commands_queue.front();
   _search_commands_queue.pop();
   _recorded_search_time += _config.control_time_step();
@@ -89,7 +105,8 @@ bool VisionFollower::run(const std::optional<TrackingData> tracking) {
   // Check if tracking has a value
   if (tracking.has_value()) {
     // Access the TrackingData object
-    const auto &data = *tracking;
+    const auto &data = tracking.value();
+    _last_tracking = std::make_unique<TrackingData>(data);
     // ensure size_xy or depth have valid values
     tracking_available = ((data.size_xy[0] > 0 && data.size_xy[1] > 0) ||
                        data.depth > 0);
@@ -134,9 +151,9 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
   std::fill(_out_vel.omega.begin(), _out_vel.omega.end(), 0.0);
 
   if (std::abs(distance_error) > _config.tolerance() ||
-      std::abs(tracking.center_xy[0] - tracking.img_width / 2) >
+      std::abs(tracking.center_xy[0] - tracking.img_width / 2.0) >
           _config.tolerance() * tracking.img_width ||
-      std::abs(tracking.center_xy[1] - tracking.img_height / 2) >
+      std::abs(tracking.center_xy[1] - tracking.img_height / 2.0) >
           _config.tolerance() * tracking.img_height) {
     double simulated_depth = target_depth;
     for (size_t i = 0; i < _time_steps.size(); ++i) {

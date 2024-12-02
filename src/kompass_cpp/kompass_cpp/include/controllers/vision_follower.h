@@ -66,6 +66,8 @@ public:
                  const ControlLimitsParams ctrl_limits,
                  const VisionFollowerConfig config = VisionFollowerConfig());
 
+  ~VisionFollower();
+
   void resetTarget(const TrackingData tracking);
 
   bool run(const std::optional<TrackingData> tracking);
@@ -85,6 +87,7 @@ private:
   double _recorded_search_time = 0.0;
   std::queue<std::array<double, 3>> _search_commands_queue;
   std::array<double, 3> _search_command;
+  std::unique_ptr<TrackingData> _last_tracking;
 
   void generate_search_commands(double total_rotation, double search_radius,
                                 double max_rotation_time);

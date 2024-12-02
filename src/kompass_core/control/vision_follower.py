@@ -62,9 +62,7 @@ class VisionFollower(ControllerTemplate):
         logging.info(
             f"Init with {robot.robot_type} -> {RobotType.to_kompass_cpp_lib(robot.robot_type)} {type(RobotType.to_kompass_cpp_lib(robot.robot_type))}"
         )
-        logging.info(
-            f"Init with control_limits -> {ctrl_limits.to_kompass_cpp_lib()} {type(ctrl_limits.to_kompass_cpp_lib())}"
-        )
+        logging.info(f"Init with control_limits -> {ctrl_limits}")
         self.__controller = kompass_cpp.control.VisionFollower(
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
