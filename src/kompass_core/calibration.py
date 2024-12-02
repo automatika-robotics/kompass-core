@@ -161,7 +161,7 @@ class Calibration:
 
         :param model_fitting: Model fitting object
         :type model_fitting: ModelFitting
-        :param robot_data: Recorded robot data for caliobration
+        :param robot_data: Recorded robot data for calibration
         :type robot_data: MotionSample
 
         :return: Calibrated model
@@ -172,7 +172,7 @@ class Calibration:
         return calibrated_model
 
     @classmethod
-    def visulaize_calibration(cls, robot_data: MotionSample, modeled_path: PathSample):
+    def vis_calibration(cls, robot_data: MotionSample, modeled_path: PathSample):
         """
         Plot the robot calibration results (real data vs. model output)
 

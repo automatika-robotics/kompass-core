@@ -1,7 +1,7 @@
 from typing import Optional, List
-
+import logging
 from attrs import define, field
-from ..utils.common import in_range
+from ..utils.common import base_validators
 
 import kompass_cpp
 from ..models import Robot, RobotCtrlLimits, RobotState, RobotType
@@ -59,35 +59,36 @@ class StanleyConfig(FollowerConfig):
     """
 
     control_time_step: float = field(
-        default=0.1, validator=in_range(min_value=1e-6, max_value=1e3)
+        default=0.1, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
     )
 
     wheel_base: float = field(
-        default=0.266, validator=in_range(min_value=1e-3, max_value=1e3)
+        default=0.266, validator=base_validators.in_range(min_value=1e-3, max_value=1e3)
     )
 
     heading_gain: float = field(
-        default=0.7, validator=in_range(min_value=0.0, max_value=1e2)
+        default=0.7, validator=base_validators.in_range(min_value=0.0, max_value=1e2)
     )
 
     cross_track_min_linear_vel: float = field(
-        default=0.05, validator=in_range(min_value=1e-4, max_value=1e2)
+        default=0.05, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
     )
 
     cross_track_gain: float = field(
-        default=1.5, validator=in_range(min_value=0.0, max_value=1e2)
+        default=1.5, validator=base_validators.in_range(min_value=0.0, max_value=1e2)
     )
 
     max_angle_error: float = field(
-        default=np.pi / 16, validator=in_range(min_value=1e-9, max_value=np.pi)
+        default=np.pi / 16,
+        validator=base_validators.in_range(min_value=1e-9, max_value=np.pi),
     )
 
     max_distance_error: float = field(
-        default=0.1, validator=in_range(min_value=1e-9, max_value=1e9)
+        default=0.1, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
 
     min_angular_vel: float = field(
-        default=0.01, validator=in_range(min_value=0.0, max_value=1e9)
+        default=0.01, validator=base_validators.in_range(min_value=0.0, max_value=1e9)
     )
 
     def to_kompass_cpp(self) -> kompass_cpp.control.StanleyParameters:
@@ -149,6 +150,7 @@ class Stanley(FollowerTemplate):
 
         # Init the following result
         self._result = kompass_cpp.control.FollowingResult()
+        logging.info("STANLEY PATH CONTROLLER IS READY")
 
     @property
     def planner(self) -> kompass_cpp.control.Follower:
@@ -184,7 +186,7 @@ class Stanley(FollowerTemplate):
     @property
     def linear_x_control(self) -> List[float]:
         """
-        Gettter of the last linear forward velocity control computed by the controller
+        Getter of the last linear forward velocity control computed by the controller
 
         :return: Linear Velocity Control (m/s)
         :rtype: List[float]

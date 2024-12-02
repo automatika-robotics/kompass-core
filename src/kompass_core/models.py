@@ -2,6 +2,7 @@ from enum import Enum
 from typing import List, Optional, Union
 
 from .utils import common as CommonUtils
+from .utils.common import BaseAttrs, base_validators, set_params_from_yaml
 from .utils import geometry as GeometryUtils
 
 import numpy as np
@@ -15,33 +16,33 @@ import kompass_cpp
 
 
 @define
-class MotionModel2DParams(CommonUtils.BaseAttrs):
+class MotionModel2DParams(BaseAttrs):
     """MotionModel2DParams."""
 
     # Motion in x direction
     x_dot_prop_vx: float = field(
         default=1.0,
-        validator=CommonUtils.in_range(min_value=0.0, max_value=1.5),
+        validator=base_validators.in_range(min_value=0.0, max_value=1.5),
     )
 
     x_dot_prop_vy: float = field(
         default=0.0,
-        validator=CommonUtils.in_range(min_value=0.0, max_value=1.5),
+        validator=base_validators.in_range(min_value=0.0, max_value=1.5),
     )  # default 0 for non-holonomic motion
     # Motion in y direction
     y_dot_prop_vx: float = field(
         default=1.0,
-        validator=CommonUtils.in_range(min_value=0.0, max_value=1.5),
+        validator=base_validators.in_range(min_value=0.0, max_value=1.5),
     )
 
     y_dot_prop_vy: float = field(
         default=0.0,
-        validator=CommonUtils.in_range(min_value=0.0, max_value=1.5),
+        validator=base_validators.in_range(min_value=0.0, max_value=1.5),
     )  # default 0 for non-holonomic motion
     # Rotational motion
     yaw_dot_prop: float = field(
         default=1.0,
-        validator=CommonUtils.in_range(min_value=0.0, max_value=1.5),
+        validator=base_validators.in_range(min_value=0.0, max_value=1.5),
     )
 
 
@@ -283,7 +284,7 @@ class RobotState:
             ("robot_initial_heading", "yaw"),
             ("robot_initial_speed", "speed"),
         ]
-        CommonUtils.set_params_from_yaml(
+        set_params_from_yaml(
             self,
             path_to_file,
             param_names=params_map,
@@ -465,7 +466,7 @@ class CircularFootprint:
         :param path_to_file: Path to YAML file
         :type path_to_file: str
         """
-        CommonUtils.set_params_from_yaml(
+        set_params_from_yaml(
             self,
             path_to_file,
             param_names=[("robot_radius", "radius")],
@@ -557,7 +558,7 @@ class RectangleFootprint:
         :param path_to_file: Path to YAML file
         :type path_to_file: str
         """
-        CommonUtils.set_params_from_yaml(
+        set_params_from_yaml(
             self,
             path_to_file,
             param_names=[("robot_width", "width"), ("robot_length", "length")],
@@ -1150,13 +1151,13 @@ control_types = {
 
 
 @define(kw_only=True)
-class LinearCtrlLimits(CommonUtils.BaseAttrs):
+class LinearCtrlLimits(BaseAttrs):
     """Limitations of a linear control (Velocity, Acceleration and Deceleration)
-    Deceleration is provided seperatly as many application requires higher deceleration values: emergency stopping for example. However, a default value if provided equal to the acceleration limit
+    Deceleration is provided separately as many application requires higher deceleration values: emergency stopping for example. However, a default value if provided equal to the acceleration limit
 
     max_vel: Maximum velocity [m/s]
     max_acc: Maximum acceleration  [m/s^2]
-    max_decel: Maximum deceleration, added seperatly to allow the robot to have a faster stopping [m/s^2]
+    max_decel: Maximum deceleration, added separately to allow the robot to have a faster stopping [m/s^2]
     """
 
     max_vel: float = field(validator=validators.ge(0.0))  # m/s
@@ -1165,8 +1166,8 @@ class LinearCtrlLimits(CommonUtils.BaseAttrs):
 
 
 @define(kw_only=True)
-class AngularCtrlLimits(CommonUtils.BaseAttrs):
-    """Limitations of anangular control (Velocity, Angle, Acceleration and Deceleration)"""
+class AngularCtrlLimits(BaseAttrs):
+    """Limitations of angular control (Velocity, Angle, Acceleration and Deceleration)"""
 
     max_vel: float = field(validator=validators.ge(0.0))
     max_steer: float = field(validator=validators.ge(0.0))
@@ -1175,7 +1176,7 @@ class AngularCtrlLimits(CommonUtils.BaseAttrs):
 
 
 @define(kw_only=True)
-class RobotCtrlLimits(CommonUtils.BaseAttrs):
+class RobotCtrlLimits(BaseAttrs):
     """Robot 2D movement control limits
     Defaults to an Ackermann model with lateral control limits equal zero
     """
@@ -1188,7 +1189,7 @@ class RobotCtrlLimits(CommonUtils.BaseAttrs):
 
     def to_kompass_cpp_lib(self) -> kompass_cpp.control.ControlLimitsParams:
         """
-        Get the control limits parameters transfered to Robotctrl library format
+        Get the control limits parameters transferred to Robotctrl library format
 
         :return: 2D control limits
         :rtype: kompass_cpp.control.ctr_limits_params

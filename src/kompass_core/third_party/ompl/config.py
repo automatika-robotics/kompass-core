@@ -2,7 +2,7 @@ import inspect
 from typing import Any
 
 from attrs import field, make_class
-from ...utils.common import BaseAttrs, in_, in_range_discretized
+from ...utils.common import BaseAttrs, base_validators
 
 import ompl
 
@@ -17,7 +17,7 @@ class PlanningAlgorithms(object):
     DOUBLE = 4
 
     def __init__(self, module):
-        """Follows the pattern specified in ompl pythong bindings
+        """Follows the pattern specified in ompl python bindings
         for compatibility
         :param module: ompl.geometric
         """
@@ -110,7 +110,7 @@ def create_field(input_tuple: tuple):
     """
     Create one attrs field with validators from OMPL param tuple
 
-    :param input_tuple: OMPL paramter tuple (name, type, rangeSuggestion, default_value)
+    :param input_tuple: OMPL parameter tuple (name, type, rangeSuggestion, default_value)
     :type input_tuple: tuple
 
     :return: Attrs class field
@@ -126,13 +126,13 @@ def create_field(input_tuple: tuple):
             return field(
                 type=type(default),
                 default=default,
-                validator=in_(input_tuple[2]),
+                validator=base_validators.in_(input_tuple[2]),
             )
         min_val, step, max_val = input_tuple[2]
         return field(
             type=field_type,
             default=default,
-            validator=in_range_discretized(
+            validator=base_validators.in_range_discretized(
                 step=step, min_value=min_val, max_value=max_val
             ),
         )

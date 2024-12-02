@@ -6,7 +6,7 @@ import numpy as np
 import kompass_cpp
 from ..models import RobotState
 from attrs import define, field
-from ..utils.common import BaseAttrs, in_range
+from ..utils.common import BaseAttrs, base_validators
 from ..utils.geometry import convert_to_plus_minus_pi
 from ..datatypes.laserscan import LaserScanData
 from kompass_cpp.types import PathInterpolationType
@@ -19,27 +19,27 @@ class FollowerConfig(BaseAttrs):
     """
 
     max_point_interpolation_distance: float = field(
-        default=0.01, validator=in_range(min_value=1e-4, max_value=1e2)
+        default=0.01, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
     )
 
     lookahead_distance: float = field(
-        default=1.0, validator=in_range(min_value=1e-4, max_value=1e2)
+        default=1.0, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
     )
 
     goal_dist_tolerance: float = field(
-        default=0.1, validator=in_range(min_value=1e-4, max_value=1e2)
+        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
     )
 
     goal_orientation_tolerance: float = field(
-        default=0.1, validator=in_range(min_value=1e-4, max_value=np.pi)
+        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=np.pi)
     )
 
     path_segment_length: float = field(
-        default=1.0, validator=in_range(min_value=1e-4, max_value=1e2)
+        default=1.0, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
     )
 
     loosing_goal_distance: float = field(
-        default=0.2, validator=in_range(min_value=1e-4, max_value=1e2)
+        default=0.2, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
     )
 
 
@@ -99,7 +99,7 @@ class ControllerTemplate:
     @abstractmethod
     def linear_x_control(self):
         """
-        Gettter of the last linear forward velocity control computed by the controller
+        Getter of the last linear forward velocity control computed by the controller
 
         :return: Linear Velocity Control (m/s)
         :rtype: float

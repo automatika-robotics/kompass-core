@@ -15,7 +15,7 @@ from kompass_cpp.mapping import (
 from ..utils.geometry import from_frame1_to_frame2, get_pose_target_in_reference_frame
 
 from .laserscan_model import LaserScanModelConfig
-from ..utils.common import BaseAttrs, in_range
+from ..utils.common import BaseAttrs, base_validators
 
 
 @define
@@ -78,20 +78,28 @@ class MapConfig(BaseAttrs):
     Local mapper configuration parameters
     """
 
-    width: float = field(default=3.0, validator=in_range(min_value=0.1, max_value=1e2))
-    height: float = field(default=3.0, validator=in_range(min_value=0.1, max_value=1e2))
+    width: float = field(
+        default=3.0, validator=base_validators.in_range(min_value=0.1, max_value=1e2)
+    )
+    height: float = field(
+        default=3.0, validator=base_validators.in_range(min_value=0.1, max_value=1e2)
+    )
     resolution: float = field(
-        default=0.1, validator=in_range(min_value=1e-9, max_value=1e2)
+        default=0.1, validator=base_validators.in_range(min_value=1e-9, max_value=1e2)
     )
     padding: float = field(
-        default=0.0, validator=in_range(min_value=0.0, max_value=10.0)
+        default=0.0, validator=base_validators.in_range(min_value=0.0, max_value=10.0)
     )
     baysian_update: bool = field(default=False)
     max_num_threads: int = field(default=1, validator=validators.ge(1))
 
-    filter_limit: float = field(validator=in_range(min_value=0.1, max_value=1e2))
+    filter_limit: float = field(
+        validator=base_validators.in_range(min_value=0.1, max_value=1e2)
+    )
 
-    max_points_per_line: int = field(validator=in_range(min_value=1, max_value=1e3))
+    max_points_per_line: int = field(
+        validator=base_validators.in_range(min_value=1, max_value=1e3)
+    )
 
     @filter_limit.default
     def _set_filter_limit(self) -> float:

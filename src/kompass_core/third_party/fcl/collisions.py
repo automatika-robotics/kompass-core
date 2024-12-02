@@ -21,7 +21,7 @@ class FCL:
         :param map_3d: 3D array for map PointCloud data, defaults to None
         :type map_3d: np.ndarray | None, optional
 
-        :raises Exception: FCL execptions
+        :raises Exception: FCL exceptions
         """
         try:
             if config:

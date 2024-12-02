@@ -2,7 +2,7 @@ from typing import Union
 
 import fcl
 from attrs import define, field
-from ...utils.common import BaseAttrs, in_range
+from ...utils.common import BaseAttrs, base_validators
 
 from ...models import RobotGeometry
 
@@ -24,7 +24,7 @@ class FCLConfig(BaseAttrs):
     """
 
     map_resolution: float = field(
-        default=0.01, validator=in_range(min_value=1e-9, max_value=1e9)
+        default=0.01, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
 
     robot_geometry_type: Union[str, RobotGeometry.Type] = field(

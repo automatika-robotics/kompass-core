@@ -11,7 +11,7 @@ from ..models import Robot, RobotCtrlLimits, RobotState, RobotType
 from ._base_ import FollowerTemplate
 from .stanley import Stanley, StanleyConfig
 from attrs import define, field
-from ..utils.common import in_range
+from ..utils.common import base_validators
 from ..utils.geometry import convert_to_0_2pi
 
 
@@ -43,11 +43,11 @@ class DVZConfig(DeformableVirtualZoneParams):
     """
 
     heading_gain: float = field(
-        default=1.0, validator=in_range(min_value=0.0, max_value=1e2)
+        default=1.0, validator=base_validators.in_range(min_value=0.0, max_value=1e2)
     )
 
     cross_track_gain: float = field(
-        default=2.0, validator=in_range(min_value=0.0, max_value=1e2)
+        default=2.0, validator=base_validators.in_range(min_value=0.0, max_value=1e2)
     )
 
 
@@ -102,7 +102,7 @@ class DVZ(FollowerTemplate):
             heading_gain=config.heading_gain, cross_track_gain=config.cross_track_gain
         )
         # Setup a stanley follower to generate the reference commands
-        self.__refrence_cmd_generator = Stanley(
+        self.__reference_cmd_generator = Stanley(
             robot=robot,
             ctrl_limits=ctrl_limits,
             config=generator_config,
@@ -110,7 +110,7 @@ class DVZ(FollowerTemplate):
             config_yaml_root_name=config_yaml_root_name,
             generate_reference=True,
         )
-        logging.info("DVZ Controller is ready")
+        logging.info("DVZ PATH CONTROLLER IS READY")
         self.rotating_in_place: bool = False
 
     def reached_end(self) -> bool:
@@ -119,7 +119,7 @@ class DVZ(FollowerTemplate):
         :return: If goal is reached
         :rtype: bool
         """
-        return self.__refrence_cmd_generator.reached_end()
+        return self.__reference_cmd_generator.reached_end()
 
     def interpolated_path(self, msg_header) -> kompass_cpp.types.Path:
         """

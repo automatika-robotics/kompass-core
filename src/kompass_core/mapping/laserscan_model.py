@@ -1,4 +1,4 @@
-from ..utils.common import BaseAttrs, in_range
+from ..utils.common import BaseAttrs, base_validators
 from attrs import define, field
 
 
@@ -25,25 +25,25 @@ class LaserScanModelConfig(BaseAttrs):
     """
 
     p_prior: float = field(
-        default=0.6, validator=in_range(min_value=0.0, max_value=1.0)
+        default=0.6, validator=base_validators.in_range(min_value=0.0, max_value=1.0)
     )
 
     p_empty: float = field(init=False)
 
     p_occupied: float = field(
-        default=0.9, validator=in_range(min_value=0.0, max_value=1.0)
+        default=0.9, validator=base_validators.in_range(min_value=0.0, max_value=1.0)
     )
 
     range_sure: float = field(
-        default=0.1, validator=in_range(min_value=1e-4, max_value=1e6)
+        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
 
     range_max: float = field(
-        default=20.0, validator=in_range(min_value=1e-4, max_value=1e6)
+        default=20.0, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
 
     wall_size: float = field(
-        default=0.1, validator=in_range(min_value=1e-4, max_value=1e6)
+        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
 
     def __attrs_post_init__(self):

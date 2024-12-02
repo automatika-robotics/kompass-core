@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 from typing import List, Optional
 from xml.dom import minidom
 
-from ..utils.common import BaseAttrs, in_range, in_
+from ..utils.common import BaseAttrs, base_validators
 from ..utils.geometry import convert_to_plus_minus_pi
 import numpy as np
 from attrs import define, field
@@ -26,28 +26,28 @@ follower_types = {"STANLEY_FOLLOWER": 1}
 class PathExecutorParams(BaseAttrs):
     max_end_ori_error: float = field(
         default=1.0,
-        validator=in_range(min_value=0.0, max_value=2 * math.pi),
+        validator=base_validators.in_range(min_value=0.0, max_value=2 * math.pi),
     )  # Maximum allowed orientation error at the end of the path (rad)
 
     max_end_dist_error: float = field(
-        default=0.3, validator=in_range(min_value=0.0, max_value=1e6)
+        default=0.3, validator=base_validators.in_range(min_value=0.0, max_value=1e6)
     )  # Maximum allowed displacement at the end of the path (m)
 
     min_interpolation_dist: float = field(
-        default=2.0, validator=in_range(min_value=1e-3, max_value=1e6)
+        default=2.0, validator=base_validators.in_range(min_value=1e-3, max_value=1e6)
     )  # Minimum path interpolation distance (m)
 
     follower_type: int = field(
         default=follower_types["STANLEY_FOLLOWER"],
-        validator=in_(list(follower_types.values())),
+        validator=base_validators.in_(list(follower_types.values())),
     )
 
     spline_segment_length: float = field(
-        default=0.1, validator=in_range(min_value=1e-6, max_value=1e6)
+        default=0.1, validator=base_validators.in_range(min_value=1e-6, max_value=1e6)
     )  # Segment length of the interpolated spline (m)
 
     min_segment_length: float = field(
-        default=0.05, validator=in_range(min_value=1e-6, max_value=1e3)
+        default=0.05, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
     )  # Spline segment step length (m)
 
     frame_id: str = field(default="map")

@@ -1,5 +1,5 @@
 from attrs import field, define
-from ..utils.common import BaseAttrs, in_range
+from ..utils.common import BaseAttrs, base_validators
 import kompass_cpp
 
 
@@ -44,23 +44,23 @@ class TrajectoryCostsWeights(BaseAttrs):
     """
 
     reference_path_distance_weight: float = field(
-        default=3.0, validator=in_range(min_value=0.0, max_value=1e3)
+        default=3.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
     )
 
     goal_distance_weight: float = field(
-        default=3.0, validator=in_range(min_value=0.0, max_value=1e3)
+        default=3.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
     )
 
     obstacles_distance_weight: float = field(
-        default=1.0, validator=in_range(min_value=0.0, max_value=1e3)
+        default=1.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
     )
 
     smoothness_weight: float = field(
-        default=0.0, validator=in_range(min_value=0.0, max_value=1e3)
+        default=0.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
     )
 
     jerk_weight: float = field(
-        default=0.0, validator=in_range(min_value=0.0, max_value=1e3)
+        default=0.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
     )
 
     def to_kompass_cpp(self) -> kompass_cpp.control.TrajectoryCostWeights:

@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from ..utils.common import in_range, BaseAttrs
+from ..utils.common import base_validators, BaseAttrs
 from ..utils.geometry import convert_to_0_2pi, convert_to_plus_minus_pi
 import matplotlib.pyplot as plt
 import numpy as np
@@ -56,21 +56,23 @@ class DeformableVirtualZoneParams(BaseAttrs):
     """
 
     min_front_margin: float = field(
-        default=1.0, validator=in_range(min_value=0.0, max_value=1e2)
+        default=1.0, validator=base_validators.in_range(min_value=0.0, max_value=1e2)
     )
 
     K_linear: float = field(
-        default=1.0, validator=in_range(min_value=0.1, max_value=10.0)
+        default=1.0, validator=base_validators.in_range(min_value=0.1, max_value=10.0)
     )
 
     K_angular: float = field(
-        default=1.0, validator=in_range(min_value=0.1, max_value=10.0)
+        default=1.0, validator=base_validators.in_range(min_value=0.1, max_value=10.0)
     )
 
-    K_I: float = field(default=5.0, validator=in_range(min_value=0.1, max_value=10.0))
+    K_I: float = field(
+        default=5.0, validator=base_validators.in_range(min_value=0.1, max_value=10.0)
+    )
 
     side_margin_width_ratio: float = field(
-        default=1.0, validator=in_range(min_value=1e-2, max_value=1e2)
+        default=1.0, validator=base_validators.in_range(min_value=1e-2, max_value=1e2)
     )
 
 

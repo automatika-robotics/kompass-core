@@ -4,7 +4,7 @@ import numpy as np
 from attrs import Factory, define, field
 from ..datatypes.laserscan import LaserScanData
 from ..datatypes.pointcloud import PointCloudData
-from ..utils.common import in_range
+from ..utils.common import base_validators
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 
@@ -90,23 +90,23 @@ class DWAConfig(FollowerConfig):
     """
 
     control_time_step: float = field(
-        default=0.1, validator=in_range(min_value=1e-4, max_value=1e6)
+        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
 
     prediction_horizon: float = field(
-        default=1.0, validator=in_range(min_value=1e-4, max_value=1e6)
+        default=1.0, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
 
     control_horizon: float = field(
-        default=0.2, validator=in_range(min_value=1e-4, max_value=1e6)
+        default=0.2, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
 
     max_linear_samples: int = field(
-        default=20, validator=in_range(min_value=1, max_value=1e3)
+        default=20, validator=base_validators.in_range(min_value=1, max_value=1e3)
     )
 
     max_angular_samples: int = field(
-        default=20, validator=in_range(min_value=1, max_value=1e3)
+        default=20, validator=base_validators.in_range(min_value=1, max_value=1e3)
     )
 
     sensor_position_to_robot: List[float] = field(default=[0.0, 0.0, 0.0])
@@ -114,13 +114,13 @@ class DWAConfig(FollowerConfig):
     sensor_rotation_to_robot: List[float] = field(default=[0.0, 0.0, 0.0, 1.0])
 
     octree_resolution: float = field(
-        default=0.1, validator=in_range(min_value=1e-9, max_value=1e3)
+        default=0.1, validator=base_validators.in_range(min_value=1e-9, max_value=1e3)
     )
 
     costs_weights: TrajectoryCostsWeights = Factory(TrajectoryCostsWeights)
 
     max_num_threads: int = field(
-        default=1, validator=in_range(min_value=1, max_value=1e2)
+        default=1, validator=base_validators.in_range(min_value=1, max_value=1e2)
     )
 
     def __attrs_post_init__(self):
@@ -235,7 +235,7 @@ class DWA(FollowerTemplate):
 
         # Init the following result
         self._result = kompass_cpp.control.SamplingControlResult()
-        logging.info("DWA PLANNER IS READY")
+        logging.info("DWA PATH CONTROLLER IS READY")
 
     @property
     def planner(self) -> kompass_cpp.control.Follower:

@@ -2,7 +2,7 @@ from typing import Callable, Optional, Dict
 
 import numpy as np
 from attrs import asdict, define, field
-from ...utils.common import BaseAttrs, in_, in_range
+from ...utils.common import BaseAttrs, base_validators
 from ...utils.geometry import convert_to_plus_minus_pi
 
 import ompl
@@ -19,32 +19,33 @@ class OMPLGeometricConfig(BaseAttrs):
     """OMPL Geometric Setup Config."""
 
     planning_timeout: float = field(
-        default=5.0, validator=in_range(min_value=1e-6, max_value=1e6)
+        default=5.0, validator=base_validators.in_range(min_value=1e-6, max_value=1e6)
     )  # seconds
     simplification_timeout: float = field(
-        default=1.0, validator=in_range(min_value=1e-6, max_value=1e6)
+        default=1.0, validator=base_validators.in_range(min_value=1e-6, max_value=1e6)
     )  # seconds
     goal_tolerance: float = field(
-        default=1e-3, validator=in_range(min_value=1e-9, max_value=1e3)
+        default=1e-3, validator=base_validators.in_range(min_value=1e-9, max_value=1e3)
     )
 
     optimization_objective: str = field(
         default=optimization_objectives["length"],
-        validator=in_(list(optimization_objectives.values())),
+        validator=base_validators.in_(list(optimization_objectives.values())),
     )
 
     planner_id: str = field(default="ompl.geometric.TRRT")
 
     optimization_objective_threshold: float = field(
-        default=1.0, validator=in_range(min_value=1e-9, max_value=1e3)
+        default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1e3)
     )
 
     log_level: str = field(
-        default="WARN", validator=in_(["DEBUG", "INFO", "WARN", "ERROR"])
+        default="WARN",
+        validator=base_validators.in_(["DEBUG", "INFO", "WARN", "ERROR"]),
     )
 
     map_resolution: float = field(
-        default=0.01, validator=in_range(min_value=1e-9, max_value=1e9)
+        default=0.01, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
 
 

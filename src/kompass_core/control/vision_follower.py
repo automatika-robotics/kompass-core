@@ -1,7 +1,8 @@
 from ._base_ import ControllerTemplate
+import logging
 from typing import Optional
 from attrs import define, field
-from ..utils.common import BaseAttrs, in_range
+from ..utils.common import BaseAttrs, base_validators
 from ..models import Robot, RobotCtrlLimits, RobotType
 from ..datatypes import TrackingData
 import kompass_cpp
@@ -10,20 +11,26 @@ import kompass_cpp
 @define
 class VisionFollowerConfig(BaseAttrs):
     control_time_step: float = field(
-        default=0.1, validator=in_range(min_value=1e-4, max_value=1e6)
+        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
     control_horizon: float = field(
-        default=0.2, validator=in_range(min_value=1e-4, max_value=1e6)
+        default=0.2, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
     tolerance: float = field(
-        default=0.1, validator=in_range(min_value=1e-6, max_value=1e3)
+        default=0.1, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
     )
     target_distance: Optional[float] = field(default=None)
-    alpha: float = field(default=1.0, validator=in_range(min_value=1e-9, max_value=1e9))
-    beta: float = field(default=1.0, validator=in_range(min_value=1e-9, max_value=1e9))
-    gamma: float = field(default=1.0, validator=in_range(min_value=1e-9, max_value=1e9))
+    alpha: float = field(
+        default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
+    )
+    beta: float = field(
+        default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
+    )
+    gamma: float = field(
+        default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
+    )
     min_vel: float = field(
-        default=0.01, validator=in_range(min_value=1e-9, max_value=1e9)
+        default=0.01, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
 
     def to_kompass_cpp(self) -> kompass_cpp.control.VisionFollowerParameters:
@@ -48,19 +55,24 @@ class VisionFollower(ControllerTemplate):
         config_yaml_root_name: Optional[str] = None,
         **_,
     ):
-
         config = config or VisionFollowerConfig()
 
         if config_file:
             config.from_yaml(config_file, config_yaml_root_name, get_common=False)
-
+        logging.info(
+            f"Init with {robot.robot_type} -> {RobotType.to_kompass_cpp_lib(robot.robot_type)} {type(RobotType.to_kompass_cpp_lib(robot.robot_type))}"
+        )
+        logging.info(
+            f"Init with control_limits -> {ctrl_limits.to_kompass_cpp_lib()} {type(ctrl_limits.to_kompass_cpp_lib())}"
+        )
         self.__controller = kompass_cpp.control.VisionFollower(
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
-            config=config.to_kompass_cpp()
+            config=config.to_kompass_cpp(),
         )
 
         self._found_ctrl = False
+        logging.info("VISION TARGET FOLLOWING CONTROLLER IS READY")
 
     def reset_target(self, tracking: TrackingData):
         self.__controller.reset_target(tracking.to_kompass_cpp())
@@ -71,9 +83,11 @@ class VisionFollower(ControllerTemplate):
         tracking: TrackingData,
         **_,
     ) -> bool:
-        self._found_ctrl = self.__controller.run(tracking.to_kompass_cpp())
+        tracking_cpp = tracking.to_kompass_cpp() if tracking else None
+        self._found_ctrl = self.__controller.run(tracking_cpp)
         if self._found_ctrl:
             self._ctrl = self.__controller.get_ctrl()
+        return self._found_ctrl
 
     def logging_info(self) -> str:
         """

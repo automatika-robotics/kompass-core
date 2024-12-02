@@ -24,7 +24,7 @@ class PathPoint:
 
     def __sub__(self, other: object):
         if not isinstance(other, PathPoint):
-            raise TypeError(f"Cannot substract PathPoint and type {type(other)}")
+            raise TypeError(f"Cannot subtract PathPoint and type {type(other)}")
         else:
             return PathPoint(
                 x=self.x - other.x,
@@ -163,7 +163,7 @@ class TrajectorySample:
         :type y_points: np.ndarray
         :param heading_points: Heading of the trajectory points
         :type heading_points: np.ndarray
-        :param time_points: Time of the trajectory pointsion_
+        :param time_points: Trajectory time points (sec)
         :type time_points: np.ndarray
         """
         self.path_sample.set_path(x_points, y_points, heading_points)
@@ -171,7 +171,7 @@ class TrajectorySample:
 
     def set_traj_from_path(self, path_sample: PathSample, time: np.ndarray):
         """
-        Set the trajectory sample using a ptha sample
+        Set the trajectory sample using a path sample
 
         :param path_sample: Path sample
         :type path_sample: PathSample
@@ -330,7 +330,7 @@ class MotionSample(TrajectorySample):
             self.control[idx, 2] = angular_control
 
         except AssertionError as e:
-            logging.error(f"{e}. Given control indeces should be in [0, {self.length}]")
+            logging.error(f"{e}. Given control indices should be in [0, {self.length}]")
 
     def set_motion_point(
         self,
