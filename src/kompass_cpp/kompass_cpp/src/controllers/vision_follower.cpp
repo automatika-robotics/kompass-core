@@ -6,10 +6,12 @@
 namespace Kompass {
 namespace Control {
 
-VisionFollower::VisionFollower(const ControlType &robotCtrlType,
-                               const ControlLimitsParams &ctrl_limits,
-                               const VisionFollowerConfig &config)
-    : _ctrlType(robotCtrlType), _ctrl_limits(ctrl_limits), _config(config) {
+VisionFollower::VisionFollower(const ControlType robotCtrlType,
+                               const ControlLimitsParams robotCtrlLimits,
+                               const VisionFollowerConfig config){
+  _ctrlType = robotCtrlType;
+  _ctrl_limits = robotCtrlLimits;
+  _config = config;
   // Initialize time steps
   int num_steps =
       static_cast<int>(_config.control_horizon() / _config.control_time_step());
@@ -22,20 +24,13 @@ VisionFollower::VisionFollower(const ControlType &robotCtrlType,
   _rotate_in_place = _ctrlType != ControlType::ACKERMANN;
 }
 
-void VisionFollower::resetTarget(const TrackingData &tracking) {
+void VisionFollower::resetTarget(const TrackingData tracking) {
   double size = (tracking.size_xy[0] * tracking.size_xy[1]) /
                 (tracking.img_width * tracking.img_height);
   if (_config.target_distance() < 0 && tracking.depth > 0) {
     _config.set_target_distance(tracking.depth);
   }
   _target_ref_size = size;
-}
-
-bool VisionFollower::isValidTrackingData(
-    const TrackingData &tracking) const {
-  // Example checks: ensure size_xy, depth, and center_xy have valid values
-  return ((tracking.size_xy[0] > 0 && tracking.size_xy[1] > 0) ||
-          tracking.depth > 0);
 }
 
 void VisionFollower::generate_search_commands(double total_rotation,
@@ -89,23 +84,32 @@ std::array<double, 3> VisionFollower::findTarget() {
   return command;
 }
 
-bool VisionFollower::run(const TrackingData &tracking) {
-  if (isValidTrackingData(tracking)) {
-    // Reset the search time
-    _recorded_search_time = 0.0;
-    // Track the target
-    trackTarget(tracking);
-    return true;
-  } else {
-    if (_recorded_search_time < _config.target_search_timeout()) {
-      _search_command = findTarget();
-      return true;
-    } else {
+bool VisionFollower::run(const std::optional<TrackingData> tracking) {
+  bool tracking_available = false;
+  // Check if tracking has a value
+  if (tracking.has_value()) {
+    // Access the TrackingData object
+    const auto &data = *tracking;
+    // ensure size_xy or depth have valid values
+    tracking_available = ((data.size_xy[0] > 0 && data.size_xy[1] > 0) ||
+                       data.depth > 0);
+    if(tracking_available){
       _recorded_search_time = 0.0;
-      // Failed to find target
-      return false;
+      // Track the target
+      trackTarget(data);
+      return true;
     }
   }
+  // Tracking not available
+  if (_recorded_search_time < _config.target_search_timeout()) {
+    _search_command = findTarget();
+    return true;
+  } else {
+    _recorded_search_time = 0.0;
+    // Failed to find target
+    return false;
+  }
+
 }
 
 void VisionFollower::trackTarget(const TrackingData &tracking) {

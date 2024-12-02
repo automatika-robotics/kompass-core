@@ -148,8 +148,8 @@ PYBIND11_MODULE(kompass_cpp, m) {
 
   // Vision types
   py::class_<Control::VisionFollower::TrackingData>(m_types, "TrackingData")
-      .def(py::init<std::array<double, 2>, int, int, double,
-                    std::array<double, 2>>(),
+      .def(py::init<std::array<double, 2>, int, int,
+                    std::array<double, 2> , double>(),
            py::arg("size_xy"), py::arg("img_width"), py::arg("img_height"),
            py::arg("center_xy"), py::arg("depth") = -1.0)
       .def_readwrite("size_xy", &Control::VisionFollower::TrackingData::size_xy)
@@ -197,9 +197,6 @@ PYBIND11_MODULE(kompass_cpp, m) {
            (void(Parameters::*)(const std::string &, double, double, double)) &
                Parameters::addParameter)
       .def("from_dict", &set_parameters_from_dict);
-
-  py::class_<Control::Controller::ControllerParameters, Parameters>(m_config, "ControllerConfig")
-      .def(py::init<>());
 
   // ------------------------------------------------------------------------------
   // Control base bindings submodule
@@ -412,13 +409,13 @@ PYBIND11_MODULE(kompass_cpp, m) {
   py::class_<Control::VisionFollower, Control::Controller>(m_control,
                                                            "VisionFollower")
       .def(py::init(
-               [](const Control::ControlType &control_type,
-                  const Control::ControlLimitsParams &control_limits,
-                  const Control::VisionFollower::VisionFollowerConfig &config) {
+               [](const Control::ControlType control_type,
+                  const Control::ControlLimitsParams control_limits,
+                  const Control::VisionFollower::VisionFollowerConfig config) {
                  return new Control::VisionFollower(control_type,
                                                     control_limits, config);
                }),
-           py::arg("robot_type"), py::arg("ctrl_limits"), py::arg("config"))
+           py::arg("control_type"), py::arg("control_limits"), py::arg("config"))
 
       .def("reset_target", &Control::VisionFollower::resetTarget)
       .def("get_ctrl", &Control::VisionFollower::getCtrl)

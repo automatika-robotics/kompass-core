@@ -3,8 +3,7 @@
 #include "controller.h"
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
-#include "datatypes/trajectory.h"
-#include <array>
+#include <optional>
 #include <queue>
 #include <vector>
 
@@ -17,9 +16,9 @@ public:
     std::array<double, 2> size_xy; // width and height of the bounding box
     int img_width;
     int img_height;
-    double depth; // optional
     std::array<double, 2>
         center_xy; // x, y coordinates of the object center in image frame
+    double depth; // -1 is equivalent to none
   };
 
   class VisionFollowerConfig : public ControllerParameters {
@@ -63,13 +62,13 @@ public:
     double min_vel() const { return getParameter<double>("min_vel"); }
   };
 
-  VisionFollower(const ControlType &robotCtrlType,
-                 const ControlLimitsParams &ctrl_limits,
-                 const VisionFollowerConfig &config = VisionFollowerConfig());
+  VisionFollower(const ControlType robotCtrlType,
+                 const ControlLimitsParams ctrl_limits,
+                 const VisionFollowerConfig config = VisionFollowerConfig());
 
-  void resetTarget(const TrackingData &tracking);
+  void resetTarget(const TrackingData tracking);
 
-  bool run(const TrackingData &tracking);
+  bool run(const std::optional<TrackingData> tracking);
 
   const Velocities getCtrl() const;
 
@@ -87,7 +86,6 @@ private:
   std::queue<std::array<double, 3>> _search_commands_queue;
   std::array<double, 3> _search_command;
 
-  bool isValidTrackingData(const TrackingData &tracking) const;
   void generate_search_commands(double total_rotation, double search_radius,
                                 double max_rotation_time);
   std::array<double, 3> findTarget();
