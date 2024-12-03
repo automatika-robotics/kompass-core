@@ -43,29 +43,26 @@ void VisionFollower::generate_search_commands(double total_rotation,
   double rotation_sign = (total_rotation < 0.0) ? -1.0 : 1.0;
   double abs_rotation = std::abs(total_rotation);
 
-  // For rotation in place
-  double omega = rotation_sign *
-                std::min(abs_rotation / max_rotation_time,
-                         static_cast<double>(_ctrl_limits.omegaParams.maxOmega));
+  double rotation_time = std::min(max_rotation_time, abs_rotation / _ctrl_limits.omegaParams.maxOmega);
 
   // For Non-holonomic circular motion
   double circumference = 2.0f * M_PI * search_radius;
-  double linear_velocity =
-      std::min(circumference / max_rotation_time,
-               static_cast<double>(_ctrl_limits.velXParams.maxVel));
   // Generate velocity commands
   int num_steps =
-      static_cast<int>(max_rotation_time / _config.control_time_step());
+      static_cast<int>(rotation_time / _config.control_time_step());
 
   for (int i = 0; i <= num_steps; ++i) {
     if (_ctrlType != ControlType::ACKERMANN) {
       // In-place rotation
-      _search_commands_queue.emplace(std::array<double, 3>{0.0, 0.0, omega});
+      _search_commands_queue.emplace(
+          std::array<double, 3>{0.0, 0.0, _ctrl_limits.omegaParams.maxOmega});
     } else {
       // Angular velocity based on linear velocity and radius
-      double omega_ackermann = rotation_sign * linear_velocity / search_radius;
+      double omega_ackermann =
+          rotation_sign * _ctrl_limits.velXParams.maxVel / search_radius;
       // Non-holonomic circular motion
-      _search_commands_queue.emplace(std::array<double, 3>{linear_velocity, 0.0, omega_ackermann});
+      _search_commands_queue.emplace(std::array<double, 3>{
+          _ctrl_limits.velXParams.maxVel, 0.0, omega_ackermann});
     }
   }
   return;
@@ -83,7 +80,7 @@ std::array<double, 3> VisionFollower::findTarget() {
                                   : -1.0;
     }
     LOG_INFO("Generating new search commands for total search time ",
-             _config.target_search_timeout());
+             last_direction);
 
     _search_commands_queue = std::queue<std::array<double, 3>>();
     generate_search_commands(last_direction * M_PI / 2,
@@ -99,6 +96,7 @@ std::array<double, 3> VisionFollower::findTarget() {
   _recorded_search_time += _config.control_time_step();
   return command;
 }
+
 
 bool VisionFollower::run(const std::optional<TrackingData> tracking) {
   bool tracking_available = false;

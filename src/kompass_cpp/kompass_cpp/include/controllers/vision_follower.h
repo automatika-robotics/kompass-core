@@ -3,6 +3,7 @@
 #include "controller.h"
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
+#include <memory>
 #include <optional>
 #include <queue>
 #include <vector>
@@ -66,7 +67,8 @@ public:
                  const ControlLimitsParams ctrl_limits,
                  const VisionFollowerConfig config = VisionFollowerConfig());
 
-  ~VisionFollower();
+  // Default Destructor
+  ~VisionFollower() = default;
 
   void resetTarget(const TrackingData tracking);
 
@@ -87,7 +89,7 @@ private:
   double _recorded_search_time = 0.0;
   std::queue<std::array<double, 3>> _search_commands_queue;
   std::array<double, 3> _search_command;
-  std::unique_ptr<TrackingData> _last_tracking;
+  std::unique_ptr<TrackingData> _last_tracking = nullptr;
 
   void generate_search_commands(double total_rotation, double search_radius,
                                 double max_rotation_time);
