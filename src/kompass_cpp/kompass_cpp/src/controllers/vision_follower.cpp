@@ -51,11 +51,14 @@ void VisionFollower::generate_search_commands(double total_rotation,
   int num_steps =
       static_cast<int>(rotation_time / _config.control_time_step());
 
-  for (int i = 0; i <= num_steps; ++i) {
+  for (int i = 0; i <= num_steps; i=i+2) {
     if (_ctrlType != ControlType::ACKERMANN) {
       // In-place rotation
       _search_commands_queue.emplace(
-          std::array<double, 3>{0.0, 0.0, _ctrl_limits.omegaParams.maxOmega});
+          std::array<double, 3>{0.0, 0.0, rotation_sign * _ctrl_limits.omegaParams.maxOmega});
+      // zero command to wait
+      _search_commands_queue.emplace(
+          std::array<double, 3>{0.0, 0.0, 0.0});
     } else {
       // Angular velocity based on linear velocity and radius
       double omega_ackermann =
@@ -63,6 +66,9 @@ void VisionFollower::generate_search_commands(double total_rotation,
       // Non-holonomic circular motion
       _search_commands_queue.emplace(std::array<double, 3>{
           _ctrl_limits.velXParams.maxVel, 0.0, omega_ackermann});
+      // zero command to wait
+      _search_commands_queue.emplace(
+          std::array<double, 3>{0.0, 0.0, 0.0});
     }
   }
   return;
@@ -140,15 +146,17 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
   }
 
   double target_depth =
-      tracking.depth > 0 ? tracking.depth : _target_ref_size / size;
-  double distance_error = target_depth - _config.target_distance();
+      tracking.depth > 0 ? tracking.depth : size / _target_ref_size;
+  double distance_error = _config.target_distance() - target_depth;
 
   // Initialize control vectors
   std::fill(_out_vel.vx.begin(), _out_vel.vx.end(), 0.0);
   std::fill(_out_vel.vy.begin(), _out_vel.vy.end(), 0.0);
   std::fill(_out_vel.omega.begin(), _out_vel.omega.end(), 0.0);
 
-  if (std::abs(distance_error) > _config.tolerance() ||
+  LOG_INFO("Distance error: ", distance_error);
+
+  if (distance_error > _config.tolerance() ||
       std::abs(tracking.center_xy[0] - tracking.img_width / 2.0) >
           _config.tolerance() * tracking.img_width ||
       std::abs(tracking.center_xy[1] - tracking.img_height / 2.0) >
