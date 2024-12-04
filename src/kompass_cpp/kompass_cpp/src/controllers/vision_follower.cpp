@@ -51,14 +51,11 @@ void VisionFollower::generate_search_commands(double total_rotation,
   int num_steps =
       static_cast<int>(rotation_time / _config.control_time_step());
 
-  for (int i = 0; i <= num_steps; i=i+2) {
+  for (int i = 0; i <= num_steps; i=i+1) {
     if (_ctrlType != ControlType::ACKERMANN) {
       // In-place rotation
       _search_commands_queue.emplace(
           std::array<double, 3>{0.0, 0.0, rotation_sign * _ctrl_limits.omegaParams.maxOmega});
-      // zero command to wait
-      _search_commands_queue.emplace(
-          std::array<double, 3>{0.0, 0.0, 0.0});
     } else {
       // Angular velocity based on linear velocity and radius
       double omega_ackermann =
@@ -66,9 +63,11 @@ void VisionFollower::generate_search_commands(double total_rotation,
       // Non-holonomic circular motion
       _search_commands_queue.emplace(std::array<double, 3>{
           _ctrl_limits.velXParams.maxVel, 0.0, omega_ackermann});
-      // zero command to wait
-      _search_commands_queue.emplace(
-          std::array<double, 3>{0.0, 0.0, 0.0});
+    }
+    // Add zero commands for search pause
+    for (int j = 0; j <= _config.search_pause(); j++)
+    {
+      _search_commands_queue.emplace(std::array<double, 3>{0.0, 0.0, 0.0});
     }
   }
   return;

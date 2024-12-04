@@ -32,6 +32,7 @@ public:
                    Parameter(-1.0, -1.0, 1e9)); // Use -1 for None
       addParameter("target_search_timeout", Parameter(30.0, 1e-4, 1e4));
       addParameter("target_search_radius", Parameter(0.5, 1e-4, 1e4));
+      addParameter("target_search_pause", Parameter(0.2, 1e-4, 1e4));
       addParameter("alpha", Parameter(1.0, 1e-9, 1e9));
       addParameter("beta", Parameter(1.0, 1e-9, 1e9));
       addParameter("gamma", Parameter(1.0, 1e-9, 1e9));
@@ -45,6 +46,10 @@ public:
     }
     double target_search_radius() const {
       return getParameter<double>("target_search_radius");
+    }
+    int search_pause() const {
+      return static_cast<int>(getParameter<double>("target_search_pause") /
+                              control_time_step());
     }
     double control_horizon() const {
       return getParameter<double>("control_horizon");

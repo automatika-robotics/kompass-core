@@ -20,6 +20,15 @@ class VisionFollowerConfig(BaseAttrs):
         default=0.1, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
     )
     target_distance: Optional[float] = field(default=None)
+    target_search_timeout: float = field(
+        default=30.0, validator=base_validators.in_range(min_value=1e-4, max_value=1e4)
+    )
+    target_search_radius: float = field(
+        default=0.5, validator=base_validators.in_range(min_value=1e-4, max_value=1e4)
+    )
+    target_search_pause: float = field(
+        default=0.2, validator=base_validators.in_range(min_value=1e-4, max_value=1e4)
+    )
     alpha: float = field(
         default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
