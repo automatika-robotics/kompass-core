@@ -97,7 +97,7 @@ private:
   std::unique_ptr<TrackingData> _last_tracking = nullptr;
 
   void generate_search_commands(double total_rotation, double search_radius,
-                                double max_rotation_time);
+                                double max_rotation_time, bool enable_pause = false);
   std::array<double, 3> findTarget();
   void trackTarget(const TrackingData &tracking);
   //

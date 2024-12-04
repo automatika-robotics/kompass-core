@@ -38,7 +38,8 @@ void VisionFollower::resetTarget(const TrackingData tracking) {
 
 void VisionFollower::generate_search_commands(double total_rotation,
                                               double search_radius,
-                                              double max_rotation_time) {
+                                              double max_rotation_time,
+                                              bool enable_pause) {
   // Calculate rotation direction and magnitude
   double rotation_sign = (total_rotation < 0.0) ? -1.0 : 1.0;
   double abs_rotation = std::abs(total_rotation);
@@ -64,10 +65,11 @@ void VisionFollower::generate_search_commands(double total_rotation,
       _search_commands_queue.emplace(std::array<double, 3>{
           _ctrl_limits.velXParams.maxVel, 0.0, omega_ackermann});
     }
-    // Add zero commands for search pause
-    for (int j = 0; j <= _config.search_pause(); j++)
-    {
-      _search_commands_queue.emplace(std::array<double, 3>{0.0, 0.0, 0.0});
+    if (enable_pause){
+      // Add zero commands for search pause
+      for (int j = 0; j <= _config.search_pause(); j++) {
+        _search_commands_queue.emplace(std::array<double, 3>{0.0, 0.0, 0.0});
+      }
     }
   }
   return;
@@ -88,12 +90,24 @@ std::array<double, 3> VisionFollower::findTarget() {
              last_direction);
 
     _search_commands_queue = std::queue<std::array<double, 3>>();
+    // rotate pi/2
     generate_search_commands(last_direction * M_PI / 2,
                              _config.target_search_radius(),
-                             _config.target_search_timeout() / 3);
-    generate_search_commands(-last_direction * M_PI,
+                             _config.target_search_timeout() / 4,
+                             true);
+    // go back
+    generate_search_commands(-last_direction * M_PI / 2,
                              _config.target_search_radius(),
-                             2 * _config.target_search_timeout() / 3);
+                             2 * _config.target_search_timeout() / 4);
+    // rotate pi / 2
+    generate_search_commands(-last_direction * M_PI / 2,
+                             _config.target_search_radius(),
+                             2 * _config.target_search_timeout() / 4,
+                             true);
+    // go back
+    generate_search_commands(last_direction * M_PI / 2,
+                             _config.target_search_radius(),
+                             2 * _config.target_search_timeout() / 4);
   }
   LOG_INFO("Number of search commands remaining: ", _search_commands_queue.size());
   std::array<double, 3> command = _search_commands_queue.front();
