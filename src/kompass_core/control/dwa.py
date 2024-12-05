@@ -5,8 +5,6 @@ from attrs import Factory, define, field
 from ..datatypes.laserscan import LaserScanData
 from ..datatypes.pointcloud import PointCloudData
 from ..utils.common import base_validators
-from nav_msgs.msg import Path
-from geometry_msgs.msg import PoseStamped
 
 import kompass_cpp
 from ..models import (
@@ -309,7 +307,7 @@ class DWA(FollowerTemplate):
 
         return self._result.is_found
 
-    def set_path(self, global_path: Path, **_) -> None:
+    def set_path(self, global_path, **_) -> None:
         """
         Set global path to be tracked by the planner
 
@@ -341,24 +339,11 @@ class DWA(FollowerTemplate):
             return self._result.trajectory.velocity[:end_of_ctrl_horizon]
         return None
 
-    def optimal_path(self, msg_header=None) -> Optional[Path]:
+    def optimal_path(self) -> Optional[kompass_cpp.types.Path]:
         """Get optimal (local) plan."""
         if not self._result.is_found:
             return None
-        kompass_cpp_path: kompass_cpp.types.Path = self._result.trajectory.path
-        ros_path = Path()
-        if msg_header:
-            ros_path.header = msg_header
-        parsed_points = []
-        for point in kompass_cpp_path.points:
-            ros_point = PoseStamped()
-            ros_point.header = msg_header
-            ros_point.pose.position.x = point.x
-            ros_point.pose.position.y = point.y
-            parsed_points.append(ros_point)
-
-        ros_path.poses = parsed_points
-        return ros_path
+        return self._result.trajectory.path
 
     @property
     def result_cost(self) -> Optional[float]:

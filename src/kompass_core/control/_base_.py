@@ -1,7 +1,5 @@
 from abc import abstractmethod
 from typing import Optional, List
-from nav_msgs.msg import Path
-from geometry_msgs.msg import PoseStamped
 import numpy as np
 import kompass_cpp
 from ..models import RobotState
@@ -161,7 +159,7 @@ class FollowerTemplate:
         """
         return self.planner.is_goal_reached()
 
-    def set_path(self, global_path: Path, **_) -> None:
+    def set_path(self, global_path, **_) -> None:
         """
         Set global path to be tracked by the planner
 
@@ -217,28 +215,13 @@ class FollowerTemplate:
         """
         raise NotImplementedError
 
-    def optimal_path(self, *args, **kwargs) -> Optional[Path]:
+    def optimal_path(self) -> Optional[kompass_cpp.types.Path]:
         """Get optimal (local) plan."""
         pass
 
-    def interpolated_path(self, msg_header=None) -> Optional[Path]:
+    def interpolated_path(self) -> Optional[kompass_cpp.types.Path]:
         """Get path interpolation."""
-        kompass_cpp_path: kompass_cpp.types.Path = self.planner.get_current_path()
-        if not kompass_cpp_path:
-            return None
-        ros_path = Path()
-        parsed_points = []
-        if msg_header:
-            ros_path.header = msg_header
-        for point in kompass_cpp_path.points:
-            ros_point = PoseStamped()
-            ros_path.header = msg_header
-            ros_point.pose.position.x = point.x
-            ros_point.pose.position.y = point.y
-            parsed_points.append(ros_point)
-
-        ros_path.poses = parsed_points
-        return ros_path
+        return self.planner.get_current_path()
 
     def set_interpolation_type(self, interpolation_type: PathInterpolationType):
         """Set the follower path interpolation type
