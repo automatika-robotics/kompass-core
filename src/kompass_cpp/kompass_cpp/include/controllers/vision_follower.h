@@ -37,6 +37,10 @@ public:
       addParameter("beta", Parameter(1.0, 1e-9, 1e9));
       addParameter("gamma", Parameter(1.0, 1e-9, 1e9));
       addParameter("min_vel", Parameter(0.01, 1e-9, 1e9));
+      addParameter("enable_search", Parameter(true));
+    }
+    bool enable_search() const{
+      return getParameter<bool>("enable_search");
     }
     double control_time_step() const {
       return getParameter<double>("control_time_step");

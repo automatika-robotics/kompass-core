@@ -135,7 +135,7 @@ bool VisionFollower::run(const std::optional<TrackingData> tracking) {
     }
   }
   // Tracking not available
-  if (_recorded_search_time < _config.target_search_timeout()) {
+  if ((_recorded_search_time < _config.target_search_timeout()) && _config.enable_search()) {
     _search_command = findTarget();
     return true;
   } else {
@@ -182,10 +182,8 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
         continue;
       distance_error = simulated_depth - _config.target_distance();
       double dist_speed =
-          std::abs(distance_error) > 0.5
-              ? std::signbit(distance_error) * _ctrl_limits.velXParams.maxVel
-              : distance_error * _ctrl_limits.velXParams.maxVel +
-                    std::signbit(distance_error) * _config.min_vel();
+          std::abs(distance_error) > _config.tolerance()
+              ? distance_error * _ctrl_limits.velXParams.maxVel : 0.0;
 
       double omega = - _config.alpha() *
                      (tracking.center_xy[0] / tracking.img_width - 0.5);

@@ -90,15 +90,10 @@ class VisionFollower(ControllerTemplate):
         tracking: TrackingData,
         **_,
     ) -> bool:
-        logging.info("new step")
         tracking_cpp = tracking.to_kompass_cpp() if tracking else None
-        logging.info("converted tracking")
         self._found_ctrl = self.__controller.run(tracking_cpp)
-        logging.info(f"found control: {self._found_ctrl}")
         if self._found_ctrl:
-            logging.info("getting control")
             self._ctrl = self.__controller.get_ctrl()
-            logging.info("got control")
         return self._found_ctrl
 
     def logging_info(self) -> str:
