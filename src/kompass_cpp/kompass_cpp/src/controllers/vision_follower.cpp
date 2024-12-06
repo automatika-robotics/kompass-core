@@ -14,8 +14,7 @@ VisionFollower::VisionFollower(const ControlType robotCtrlType,
   _ctrl_limits = robotCtrlLimits;
   _config = config;
   // Initialize time steps
-  int num_steps =
-      static_cast<int>(_config.control_horizon() / _config.control_time_step());
+  int num_steps = _config.control_horizon();
   _time_steps.resize(num_steps);
   for (int i = 0; i < num_steps; ++i) {
     _time_steps[i] = i * _config.control_time_step();
@@ -23,6 +22,7 @@ VisionFollower::VisionFollower(const ControlType robotCtrlType,
   // Initialize control vectors
   _out_vel = Velocities(num_steps);
   _rotate_in_place = _ctrlType != ControlType::ACKERMANN;
+  LOG_INFO("Ready with: ", num_steps);
 }
 
 
@@ -174,6 +174,8 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
           _config.tolerance() * tracking.img_width ||
       std::abs(tracking.center_xy[1] - tracking.img_height / 2.0) >
           _config.tolerance() * tracking.img_height) {
+    LOG_INFO("Center error: ",
+             (tracking.center_xy[0] / tracking.img_width - 0.5));
     double simulated_depth = target_depth;
     for (size_t i = 0; i < _time_steps.size(); ++i) {
       if (_rotate_in_place && i % 2 != 0)
@@ -185,7 +187,7 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
               : distance_error * _ctrl_limits.velXParams.maxVel +
                     std::signbit(distance_error) * _config.min_vel();
 
-      double omega = -_config.alpha() *
+      double omega = - _config.alpha() *
                      (tracking.center_xy[0] / tracking.img_width - 0.5);
       double v = -_config.beta() *
                      (tracking.center_xy[1] / tracking.img_height - 0.5) +
@@ -219,6 +221,7 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
 
 const Velocities VisionFollower::getCtrl() const {
   if (_recorded_search_time <= 0.0){
+    LOG_INFO("out vel size: ", _out_vel._length);
     return _out_vel;
   }
   else{

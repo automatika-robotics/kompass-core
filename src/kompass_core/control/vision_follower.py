@@ -13,8 +13,8 @@ class VisionFollowerConfig(BaseAttrs):
     control_time_step: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
-    control_horizon: float = field(
-        default=0.2, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
+    control_horizon: int = field(
+        default=2, validator=base_validators.in_range(min_value=1, max_value=1000)
     )
     tolerance: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
@@ -90,10 +90,15 @@ class VisionFollower(ControllerTemplate):
         tracking: TrackingData,
         **_,
     ) -> bool:
+        logging.info("new step")
         tracking_cpp = tracking.to_kompass_cpp() if tracking else None
+        logging.info("converted tracking")
         self._found_ctrl = self.__controller.run(tracking_cpp)
+        logging.info(f"found control: {self._found_ctrl}")
         if self._found_ctrl:
+            logging.info("getting control")
             self._ctrl = self.__controller.get_ctrl()
+            logging.info("got control")
         return self._found_ctrl
 
     def logging_info(self) -> str:

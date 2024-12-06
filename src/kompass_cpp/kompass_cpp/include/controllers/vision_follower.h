@@ -26,7 +26,7 @@ public:
   public:
     VisionFollowerConfig() : ControllerParameters() {
       addParameter("control_time_step", Parameter(0.1, 1e-4, 1e6));
-      addParameter("control_horizon", Parameter(0.2, 1e-4, 1e6));
+      addParameter("control_horizon", Parameter(2, 1, 1000));
       addParameter("tolerance", Parameter(0.1, 1e-6, 1e3));
       addParameter("target_distance",
                    Parameter(-1.0, -1.0, 1e9)); // Use -1 for None
@@ -51,8 +51,8 @@ public:
       return static_cast<int>(getParameter<double>("target_search_pause") /
                               control_time_step());
     }
-    double control_horizon() const {
-      return getParameter<double>("control_horizon");
+    int control_horizon() const {
+      return getParameter<int>("control_horizon");
     }
     double tolerance() const { return getParameter<double>("tolerance"); }
     double target_distance() const {
