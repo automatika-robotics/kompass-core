@@ -20,27 +20,28 @@ class VisionFollowerConfig(BaseAttrs):
         default=0.1, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
     )
     target_distance: Optional[float] = field(default=None)
-    target_search_timeout: float = field(
-        default=30.0, validator=base_validators.in_range(min_value=1e-4, max_value=1e4)
-    )
+    target_search_timeout: int = field(
+        default=30, validator=base_validators.in_range(min_value=0, max_value=1000)
+    )  # number of steps to timeout
+    target_search_pause: int = field(
+        default=2, validator=base_validators.in_range(min_value=0, max_value=1000)
+    )  # number of steps to pause
     target_search_radius: float = field(
         default=0.5, validator=base_validators.in_range(min_value=1e-4, max_value=1e4)
     )
-    target_search_pause: float = field(
-        default=0.2, validator=base_validators.in_range(min_value=1e-4, max_value=1e4)
-    )
-    alpha: float = field(
+    rotation_multiple: float = field(
         default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
-    beta: float = field(
+    speed_height_multiple: float = field(
         default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
-    gamma: float = field(
+    speed_depth_multiple: float = field(
         default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
     min_vel: float = field(
         default=0.01, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
+    enable_search: bool = field(default=True)
 
     def to_kompass_cpp(self) -> kompass_cpp.control.VisionFollowerParameters:
         """
@@ -68,10 +69,6 @@ class VisionFollower(ControllerTemplate):
 
         if config_file:
             config.from_yaml(config_file, config_yaml_root_name, get_common=False)
-        logging.info(
-            f"Init with {robot.robot_type} -> {RobotType.to_kompass_cpp_lib(robot.robot_type)} {type(RobotType.to_kompass_cpp_lib(robot.robot_type))}"
-        )
-        logging.info(f"Init with control_limits -> {ctrl_limits}")
         self.__controller = kompass_cpp.control.VisionFollower(
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
             control_limits=ctrl_limits.to_kompass_cpp_lib(),

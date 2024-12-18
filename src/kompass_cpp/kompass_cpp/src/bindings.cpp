@@ -39,14 +39,14 @@ void set_parameters_from_dict(Parameters &params,
     try {
       auto it = params.parameters.find(name);
       if (it != params.parameters.end()) {
-        if (py::isinstance<py::int_>(value)) {
-          it->second.setValue(value.cast<int>());
+        if (py::isinstance<py::bool_>(value)) {
+          it->second.setValue(value.cast<bool>());
         } else if (py::isinstance<py::float_>(value)) {
           it->second.setValue(value.cast<double>());
         } else if (py::isinstance<py::str>(value)) {
           it->second.setValue(py::str(value).cast<std::string>());
-        } else if (py::isinstance<py::bool_>(value)) {
-          it->second.setValue(value.cast<bool>());
+        } else if (py::isinstance<py::int_>(value)) {
+          it->second.setValue(value.cast<int>());
         }
       }
     } catch (const std::exception &e) {

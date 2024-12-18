@@ -30,14 +30,14 @@ public:
       addParameter("tolerance", Parameter(0.1, 1e-6, 1e3));
       addParameter("target_distance",
                    Parameter(-1.0, -1.0, 1e9)); // Use -1 for None
-      addParameter("target_search_timeout", Parameter(30.0, 1e-4, 1e4));
+      addParameter("target_search_timeout", Parameter(30, 0, 1000));
       addParameter("target_search_radius", Parameter(0.5, 1e-4, 1e4));
-      addParameter("target_search_pause", Parameter(0.2, 1e-4, 1e4));
-      addParameter("alpha", Parameter(1.0, 1e-9, 1e9));
-      addParameter("beta", Parameter(1.0, 1e-9, 1e9));
-      addParameter("gamma", Parameter(1.0, 1e-9, 1e9));
+      addParameter("target_search_pause", Parameter(0, 0, 1000));
+      addParameter("rotation_multiple", Parameter(1.0, 1e-9, 1e9));
+      addParameter("speed_height_multiple", Parameter(1.0, 1e-9, 1e9));
+      addParameter("speed_depth_multiple", Parameter(1.0, 1e-9, 1e9));
       addParameter("min_vel", Parameter(0.01, 1e-9, 1e9));
-      addParameter("enable_search", Parameter(true));
+      addParameter("enable_search", Parameter(false));
     }
     bool enable_search() const{
       return getParameter<bool>("enable_search");
@@ -45,15 +45,14 @@ public:
     double control_time_step() const {
       return getParameter<double>("control_time_step");
     }
-    double target_search_timeout() const {
-      return getParameter<double>("target_search_timeout");
+    int target_search_timeout() const {
+      return getParameter<int>("target_search_timeout");
     }
     double target_search_radius() const {
       return getParameter<double>("target_search_radius");
     }
     int search_pause() const {
-      return static_cast<int>(getParameter<double>("target_search_pause") /
-                              control_time_step());
+      return getParameter<int>("target_search_pause");
     }
     int control_horizon() const {
       return getParameter<int>("control_horizon");
@@ -66,9 +65,13 @@ public:
     void set_target_distance(double value) {
       setParameter("target_distance", value);
     }
-    double alpha() const { return getParameter<double>("alpha"); }
-    double beta() const { return getParameter<double>("beta"); }
-    double gamma() const { return getParameter<double>("gamma"); }
+    double alpha() const { return getParameter<double>("rotation_multiple"); }
+    double beta() const {
+      return getParameter<double>("speed_height_multiple");
+    }
+    double gamma() const {
+      return getParameter<double>("speed_depth_multiple");
+    }
     double min_vel() const { return getParameter<double>("min_vel"); }
   };
 
@@ -92,7 +95,6 @@ private:
 
   bool _rotate_in_place;
   double _target_ref_size = 0.0;
-  std::vector<double> _time_steps;
   Velocities _out_vel;
   bool _ctrl_available;
   double _recorded_search_time = 0.0;
@@ -101,7 +103,7 @@ private:
   std::unique_ptr<TrackingData> _last_tracking = nullptr;
 
   void generate_search_commands(double total_rotation, double search_radius,
-                                double max_rotation_time, bool enable_pause = false);
+                                int max_rotation_steps, bool enable_pause = false);
   std::array<double, 3> findTarget();
   void trackTarget(const TrackingData &tracking);
   //
