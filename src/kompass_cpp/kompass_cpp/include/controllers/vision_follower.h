@@ -33,9 +33,8 @@ public:
       addParameter("target_search_timeout", Parameter(30, 0, 1000));
       addParameter("target_search_radius", Parameter(0.5, 1e-4, 1e4));
       addParameter("target_search_pause", Parameter(0, 0, 1000));
-      addParameter("rotation_multiple", Parameter(1.0, 1e-9, 1e9));
-      addParameter("speed_height_multiple", Parameter(1.0, 1e-9, 1e9));
-      addParameter("speed_depth_multiple", Parameter(1.0, 1e-9, 1e9));
+      addParameter("rotation_multiple", Parameter(1.0, 1e-9, 1.0));
+      addParameter("speed_depth_multiple", Parameter(0.7, 1e-9, 1.0));
       addParameter("min_vel", Parameter(0.01, 1e-9, 1e9));
       addParameter("enable_search", Parameter(false));
     }
@@ -67,9 +66,6 @@ public:
     }
     double alpha() const { return getParameter<double>("rotation_multiple"); }
     double beta() const {
-      return getParameter<double>("speed_height_multiple");
-    }
-    double gamma() const {
       return getParameter<double>("speed_depth_multiple");
     }
     double min_vel() const { return getParameter<double>("min_vel"); }

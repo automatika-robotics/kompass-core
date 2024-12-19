@@ -116,6 +116,7 @@ bool VisionFollower::run(const std::optional<TrackingData> tracking) {
   bool tracking_available = false;
   // Check if tracking has a value
   if (tracking.has_value()) {
+    LOG_INFO("Tracking has value!");
     // Access the TrackingData object
     const auto &data = tracking.value();
     _last_tracking = std::make_unique<TrackingData>(data);
@@ -132,8 +133,10 @@ bool VisionFollower::run(const std::optional<TrackingData> tracking) {
   // Tracking not available
   if ((_recorded_search_time < _config.target_search_timeout()) && _config.enable_search()) {
     _search_command = findTarget();
+    LOG_INFO("Searching Tracking has no value!");
     return true;
   } else {
+    LOG_INFO("Ending search");
     _recorded_search_time = 0.0;
     // Failed to find target
     return false;
@@ -149,38 +152,53 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
     _config.set_target_distance(tracking.depth);
   } else if (!_target_ref_size) {
     _config.set_target_distance(
-        _config.target_distance() < 0 ? 1.0 : _config.target_distance());
+        _config.target_distance() < 0 ? size : _config.target_distance());
     _target_ref_size = size;
   }
 
-  double target_depth =
-      tracking.depth > 0 ? tracking.depth : size / _target_ref_size;
-  double distance_error = _config.target_distance() - target_depth;
+  double current_distance =
+      tracking.depth > 0 ? tracking.depth : size;
+  double distance_error = _config.target_distance() - current_distance;
+
+  LOG_INFO("Distance error: ", distance_error);
+  double temp_y = (tracking.center_xy[1] / tracking.img_height - 0.5);
+  double temp_x = (tracking.center_xy[0] / tracking.img_width - 0.5);
+  LOG_INFO("image Y error: ", temp_y);
+  LOG_INFO("image X error: ", temp_x);
 
   // Initialize control vectors
   std::fill(_out_vel.vx.begin(), _out_vel.vx.end(), 0.0);
   std::fill(_out_vel.vy.begin(), _out_vel.vy.end(), 0.0);
   std::fill(_out_vel.omega.begin(), _out_vel.omega.end(), 0.0);
 
-  if (distance_error > _config.tolerance() ||
+  if (distance_error > _config.tolerance() * _config.target_distance() ||
       std::abs(tracking.center_xy[0] - tracking.img_width / 2.0) >
           _config.tolerance() * tracking.img_width ||
       std::abs(tracking.center_xy[1] - tracking.img_height / 2.0) >
           _config.tolerance() * tracking.img_height) {
-    double simulated_depth = target_depth;
+    double simulated_depth = current_distance;
     for (size_t i = 0; i < _out_vel._length; ++i) {
       if (_rotate_in_place && i % 2 != 0)
         continue;
-      distance_error = simulated_depth - _config.target_distance();
+      distance_error = _config.target_distance() - simulated_depth;
       double dist_speed =
           std::abs(distance_error) > _config.tolerance()
               ? distance_error * _ctrl_limits.velXParams.maxVel : 0.0;
 
+      // X center error : (2.0 * tracking.center_xy[0] / tracking.img_width - 1.0) in [-1, 1]
+      // Omega in [-alpha * omega_max, alpha * omega_max]
       double omega =
-          - _config.alpha() * (tracking.center_xy[0] / tracking.img_width - 0.5);
+          - _config.alpha() * (2.0 * tracking.center_xy[0] / tracking.img_width - 1.0) * _ctrl_limits.omegaParams.maxOmega;
+
+      // Y center error : (2.0 * tracking.center_xy[1] / tracking.img_height - 1.0) in [-1, 1]
+      // V in [-speed_max, speed_max]
       double v =
-          _config.beta() * (tracking.center_xy[1] / tracking.img_height - 0.5) +
-          _config.gamma() * dist_speed;
+          _config.beta() * (2.0 * tracking.center_xy[1] / tracking.img_height - 1.0) * _ctrl_limits.velXParams.maxVel -
+          (1 - _config.beta()) * dist_speed;
+
+      // Limit by the minimum allowed velocity to avoid sending meaningless low commands to the robot
+      omega = std::abs(omega) >= _config.min_vel() ? omega : 0.0;
+      v = std::abs(v) >= _config.min_vel() ? v : 0.0;
 
       simulated_depth += -v * _config.control_time_step();
       if (_rotate_in_place) {
