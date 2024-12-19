@@ -159,67 +159,71 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
   double current_distance =
       tracking.depth > 0 ? tracking.depth : size;
   double distance_error = _config.target_distance() - current_distance;
+  double distance_tolerance =  _config.tolerance() * _config.target_distance();
 
-  LOG_INFO("Distance error: ", distance_error);
-  double temp_y = (tracking.center_xy[1] / tracking.img_height - 0.5);
-  double temp_x = (tracking.center_xy[0] / tracking.img_width - 0.5);
-  LOG_INFO("image Y error: ", temp_y);
-  LOG_INFO("image X error: ", temp_x);
+  LOG_INFO("Distance error: ", distance_error, ", tolerance: ", distance_tolerance);
+  double error_y = (2 * tracking.center_xy[1] / tracking.img_height - 1.0);
+  double error_x = (2 * tracking.center_xy[0] / tracking.img_width - 1.0);
+  LOG_INFO("image Y error: ", error_y);
+  LOG_INFO("image X error: ", error_x);
 
   // Initialize control vectors
   std::fill(_out_vel.vx.begin(), _out_vel.vx.end(), 0.0);
   std::fill(_out_vel.vy.begin(), _out_vel.vy.end(), 0.0);
   std::fill(_out_vel.omega.begin(), _out_vel.omega.end(), 0.0);
 
-  if (distance_error > _config.tolerance() * _config.target_distance() ||
-      std::abs(tracking.center_xy[0] - tracking.img_width / 2.0) >
-          _config.tolerance() * tracking.img_width ||
-      std::abs(tracking.center_xy[1] - tracking.img_height / 2.0) >
-          _config.tolerance() * tracking.img_height) {
-    double simulated_depth = current_distance;
-    for (size_t i = 0; i < _out_vel._length; ++i) {
-      if (_rotate_in_place && i % 2 != 0)
-        continue;
-      distance_error = _config.target_distance() - simulated_depth;
-      double dist_speed =
-          std::abs(distance_error) > _config.tolerance()
-              ? distance_error * _ctrl_limits.velXParams.maxVel : 0.0;
+  double simulated_depth = current_distance;
+  for (size_t i = 0; i < _out_vel._length; ++i) {
+    // If all errors are within limits -> break
+    if (distance_error < distance_tolerance &&
+      std::abs(error_y) < _config.tolerance() &&
+      std::abs(error_x) < _config.tolerance())
+      {
+        break;
+      }
+    if (_rotate_in_place && i % 2 != 0)
+      continue;
 
-      // X center error : (2.0 * tracking.center_xy[0] / tracking.img_width - 1.0) in [-1, 1]
-      // Omega in [-alpha * omega_max, alpha * omega_max]
-      double omega =
-          - _config.alpha() * (2.0 * tracking.center_xy[0] / tracking.img_width - 1.0) * _ctrl_limits.omegaParams.maxOmega;
+    double dist_speed =
+        std::abs(distance_error) > _config.tolerance()
+            ? distance_error * _ctrl_limits.velXParams.maxVel : 0.0;
 
-      // Y center error : (2.0 * tracking.center_xy[1] / tracking.img_height - 1.0) in [-1, 1]
-      // V in [-speed_max, speed_max]
-      double v =
-          _config.beta() * (2.0 * tracking.center_xy[1] / tracking.img_height - 1.0) * _ctrl_limits.velXParams.maxVel -
-          (1 - _config.beta()) * dist_speed;
+    // X center error : (2.0 * tracking.center_xy[0] / tracking.img_width - 1.0) in [-1, 1]
+    // Omega in [-alpha * omega_max, alpha * omega_max]
+    double omega = - _config.alpha() * error_x * _ctrl_limits.omegaParams.maxOmega;
 
-      // Limit by the minimum allowed velocity to avoid sending meaningless low commands to the robot
-      omega = std::abs(omega) >= _config.min_vel() ? omega : 0.0;
-      v = std::abs(v) >= _config.min_vel() ? v : 0.0;
+    // Y center error : (2.0 * tracking.center_xy[1] / tracking.img_height - 1.0) in [-1, 1]
+    // V in [-speed_max, speed_max]
+    double v = - error_y * _ctrl_limits.velXParams.maxVel - _config.beta() * dist_speed;
+    LOG_INFO("image Y speed: ", - error_y * _ctrl_limits.velXParams.maxVel, ", dist speed: ", - _config.beta() * dist_speed);
 
-      simulated_depth += -v * _config.control_time_step();
-      if (_rotate_in_place) {
-        if (std::abs(v) < 1e-2) {
-          // Set vx_ctrl[i] and vx_ctrl[i+1] to 0.0
-          _out_vel.set(i, 0.0, 0.0, omega);
-          if (i + 1 < _out_vel._length) {
-            _out_vel.set(i + 1, 0.0, 0.0, omega);
-          }
-        } else {
-          // Set vx_ctrl[i] to 0.0
-          _out_vel.set(i, 0.0, 0.0, omega);
-          // Set vx_ctrl[i+1] to max(v, 0.0)
-          if (i + 1 < _out_vel._length) {
-            _out_vel.set(i + 1, 0.0, 0.0, omega);
-          }
-          _out_vel.set(i, std::max(v, 0.0), 0.0, 0.0);
+
+    // Limit by the minimum allowed velocity to avoid sending meaningless low commands to the robot
+    omega = std::abs(omega) >= _config.min_vel() ? omega : 0.0;
+    v = std::abs(v) >= _config.min_vel() ? v : 0.0;
+
+    simulated_depth += -v * _config.control_time_step();
+    // Update distance error
+    distance_error = _config.target_distance() - simulated_depth;
+
+    if (_rotate_in_place) {
+      if (std::abs(v) < 1e-2) {
+        // Set vx_ctrl[i] and vx_ctrl[i+1] to 0.0
+        _out_vel.set(i, 0.0, 0.0, omega);
+        if (i + 1 < _out_vel._length) {
+          _out_vel.set(i + 1, 0.0, 0.0, omega);
         }
       } else {
-        _out_vel.set(i, std::max(v, 0.0), 0.0, omega);
+        // Set vx_ctrl[i] to 0.0
+        _out_vel.set(i, 0.0, 0.0, omega);
+        // Set vx_ctrl[i+1] to max(v, 0.0)
+        if (i + 1 < _out_vel._length) {
+          _out_vel.set(i + 1, 0.0, 0.0, omega);
+        }
+        _out_vel.set(i, std::max(v, 0.0), 0.0, 0.0);
       }
+    } else {
+      _out_vel.set(i, std::max(v, 0.0), 0.0, omega);
     }
   }
 
