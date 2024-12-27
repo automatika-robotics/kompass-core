@@ -116,7 +116,6 @@ bool VisionFollower::run(const std::optional<TrackingData> tracking) {
   bool tracking_available = false;
   // Check if tracking has a value
   if (tracking.has_value()) {
-    LOG_INFO("Tracking has value!");
     // Access the TrackingData object
     const auto &data = tracking.value();
     _last_tracking = std::make_unique<TrackingData>(data);
@@ -133,10 +132,8 @@ bool VisionFollower::run(const std::optional<TrackingData> tracking) {
   // Tracking not available
   if ((_recorded_search_time < _config.target_search_timeout()) && _config.enable_search()) {
     _search_command = findTarget();
-    LOG_INFO("Searching Tracking has no value!");
     return true;
   } else {
-    LOG_INFO("Ending search");
     _recorded_search_time = 0.0;
     // Failed to find target
     return false;
@@ -161,11 +158,8 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
   double distance_error = _config.target_distance() - current_distance;
   double distance_tolerance =  _config.tolerance() * _config.target_distance();
 
-  LOG_INFO("Distance error: ", distance_error, ", tolerance: ", distance_tolerance);
   double error_y = (2 * tracking.center_xy[1] / tracking.img_height - 1.0);
   double error_x = (2 * tracking.center_xy[0] / tracking.img_width - 1.0);
-  LOG_INFO("image Y error: ", error_y);
-  LOG_INFO("image X error: ", error_x);
 
   // Initialize control vectors
   std::fill(_out_vel.vx.begin(), _out_vel.vx.end(), 0.0);
@@ -195,7 +189,6 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
     // Y center error : (2.0 * tracking.center_xy[1] / tracking.img_height - 1.0) in [-1, 1]
     // V in [-speed_max, speed_max]
     double v = - error_y * _ctrl_limits.velXParams.maxVel - _config.beta() * dist_speed;
-    LOG_INFO("image Y speed: ", - error_y * _ctrl_limits.velXParams.maxVel, ", dist speed: ", - _config.beta() * dist_speed);
 
 
     // Limit by the minimum allowed velocity to avoid sending meaningless low commands to the robot
