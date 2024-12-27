@@ -6,7 +6,6 @@
 #include <memory>
 #include <optional>
 #include <queue>
-#include <vector>
 
 namespace Kompass {
 namespace Control {
@@ -19,7 +18,7 @@ public:
     int img_height;
     std::array<double, 2>
         center_xy; // x, y coordinates of the object center in image frame
-    double depth; // -1 is equivalent to none
+    double depth;  // -1 is equivalent to none
   };
 
   class VisionFollowerConfig : public ControllerParameters {
@@ -38,9 +37,7 @@ public:
       addParameter("min_vel", Parameter(0.01, 1e-9, 1e9));
       addParameter("enable_search", Parameter(false));
     }
-    bool enable_search() const{
-      return getParameter<bool>("enable_search");
-    }
+    bool enable_search() const { return getParameter<bool>("enable_search"); }
     double control_time_step() const {
       return getParameter<double>("control_time_step");
     }
@@ -53,9 +50,7 @@ public:
     int search_pause() const {
       return getParameter<int>("target_search_pause");
     }
-    int control_horizon() const {
-      return getParameter<int>("control_horizon");
-    }
+    int control_horizon() const { return getParameter<int>("control_horizon"); }
     double tolerance() const { return getParameter<double>("tolerance"); }
     double target_distance() const {
       double val = getParameter<double>("target_distance");
@@ -65,9 +60,7 @@ public:
       setParameter("target_distance", value);
     }
     double alpha() const { return getParameter<double>("rotation_multiple"); }
-    double beta() const {
-      return getParameter<double>("speed_depth_multiple");
-    }
+    double beta() const { return getParameter<double>("speed_depth_multiple"); }
     double min_vel() const { return getParameter<double>("min_vel"); }
   };
 
@@ -99,7 +92,8 @@ private:
   std::unique_ptr<TrackingData> _last_tracking = nullptr;
 
   void generate_search_commands(double total_rotation, double search_radius,
-                                int max_rotation_steps, bool enable_pause = false);
+                                int max_rotation_steps,
+                                bool enable_pause = false);
   std::array<double, 3> findTarget();
   void trackTarget(const TrackingData &tracking);
   //
