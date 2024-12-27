@@ -368,14 +368,14 @@ class SplineInterpolatedPath:
         :param path: Provided path
         :type path: autonav_path_follower.PathClasses.Path
         :param x: Robot x-coordinates
-        :param x: Robot x-coordinnates (m)
+        :param x: Robot x-coordinates (m)
         :type x: float
-        :param y: Robot y-coordinnates (m)
+        :param y: Robot y-coordinates (m)
         :type y: float
         :return: Reached End
         :rtype: bool
         """
-        # TODO Cosider orientation at the end of path
+        # TODO Consider orientation at the end of path
         path_end = self.end_point
         lat_dist = math.sqrt((x - path_end.x) ** 2 + (y - path_end.y) ** 2)
         if abs(lat_dist) < self.LAT_DIST_ERROR_MAX_TRACKING:

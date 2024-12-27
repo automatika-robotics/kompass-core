@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cmath>
+#include <stdexcept>
+#include <vector>
 
 // Namespace for Control Types
 namespace Kompass {
@@ -19,6 +21,49 @@ struct Velocity {
   Velocity(double velx = 0.0, double vely = 0.0, double velomega = 0.0,
            double steerVal = 0.0)
       : vx(velx), vy(vely), omega(velomega), steer_ang(steerVal) {}
+};
+
+struct Velocities {
+  std::vector<double> vx; // Speed on x-asix (m/s)
+  std::vector<double> vy;
+  std::vector<double> omega; // angular velocity (rad/s)
+  int _length;
+
+  Velocities() {
+    // Initialize control vectors
+    vx = {};
+    vy= {};
+    omega = {};
+    _length = 0;
+  };
+
+  Velocities(const int length){
+    // Initialize control vectors
+    vx.resize(length, 0.0);
+    vy.resize(length, 0.0);
+    omega.resize(length, 0.0);
+    _length = length;
+  };
+  void set(int index, double x_velocity, double y_velocity,
+           double angular_velocity) {
+    if (index >= 0 && index < vx.size()) {
+      vx[index] = x_velocity;
+      vy[index] = y_velocity;
+      omega[index] = angular_velocity;
+    } else {
+      throw std::out_of_range("Index out of range for Velocities");
+    }
+  };
+  void set(std::vector<double> x_velocity, std::vector<double> y_velocity,
+           std::vector<double> angular_velocity) {
+    if (x_velocity.size() == y_velocity.size() == angular_velocity.size() == _length) {
+      vx = x_velocity;
+      vy = y_velocity;
+      omega = angular_velocity;
+    } else {
+      throw std::length_error("Incompatible vector size to the Velocities length");
+    }
+  }
 };
 
 // Structure for Forward Linear Velocity Control parameters

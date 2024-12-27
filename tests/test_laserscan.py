@@ -71,7 +71,7 @@ def test_laserscan_polar_tf(laser_scan_data: LaserScanData, plot: bool = False):
         )
         fig.legend()
         dir_name = os.path.dirname(os.path.abspath(__file__))
-        plt.savefig(os.path.join(dir_name, "resources/laserscan_tf_test.png"))
+        plt.savefig(os.path.join(dir_name, "laserscan_tf_test.png"))
 
     old_range = laser_scan_data.ranges[
         laser_scan_data.angles == laser_scan_data.angle_min
@@ -114,7 +114,7 @@ def test_laserscan_partial_data(laser_scan_data: LaserScanData, plot: bool = Fal
         ax.plot(partial_angles, partial_ranges, label="Partial LaserScan")
         fig.legend()
         dir_name = os.path.dirname(os.path.abspath(__file__))
-        plt.savefig(os.path.join(dir_name, "resources/laserscan_partial_test.png"))
+        plt.savefig(os.path.join(dir_name, "laserscan_partial_test.png"))
 
     assert len(partial_angles) <= laser_scan_data.angles.size
     assert len(partial_ranges) <= laser_scan_data.ranges.size

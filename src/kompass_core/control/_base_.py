@@ -1,12 +1,10 @@
 from abc import abstractmethod
 from typing import Optional, List
-from nav_msgs.msg import Path
-from geometry_msgs.msg import PoseStamped
 import numpy as np
 import kompass_cpp
 from ..models import RobotState
 from attrs import define, field
-from ..utils.common import BaseAttrs, in_range
+from ..utils.common import BaseAttrs, base_validators
 from ..utils.geometry import convert_to_plus_minus_pi
 from ..datatypes.laserscan import LaserScanData
 from kompass_cpp.types import PathInterpolationType
@@ -19,27 +17,27 @@ class FollowerConfig(BaseAttrs):
     """
 
     max_point_interpolation_distance: float = field(
-        default=0.01, validator=in_range(min_value=1e-4, max_value=1e2)
+        default=0.01, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
     )
 
     lookahead_distance: float = field(
-        default=1.0, validator=in_range(min_value=1e-4, max_value=1e2)
+        default=1.0, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
     )
 
     goal_dist_tolerance: float = field(
-        default=0.1, validator=in_range(min_value=1e-4, max_value=1e2)
+        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
     )
 
     goal_orientation_tolerance: float = field(
-        default=0.1, validator=in_range(min_value=1e-4, max_value=np.pi)
+        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=np.pi)
     )
 
     path_segment_length: float = field(
-        default=1.0, validator=in_range(min_value=1e-4, max_value=1e2)
+        default=1.0, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
     )
 
     loosing_goal_distance: float = field(
-        default=0.2, validator=in_range(min_value=1e-4, max_value=1e2)
+        default=0.2, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
     )
 
 
@@ -99,7 +97,7 @@ class ControllerTemplate:
     @abstractmethod
     def linear_x_control(self):
         """
-        Gettter of the last linear forward velocity control computed by the controller
+        Getter of the last linear forward velocity control computed by the controller
 
         :return: Linear Velocity Control (m/s)
         :rtype: float
@@ -161,7 +159,7 @@ class FollowerTemplate:
         """
         return self.planner.is_goal_reached()
 
-    def set_path(self, global_path: Path, **_) -> None:
+    def set_path(self, global_path, **_) -> None:
         """
         Set global path to be tracked by the planner
 
@@ -181,9 +179,7 @@ class FollowerTemplate:
     @property
     def path(self) -> bool:
         """
-        Getter of the follower path
-
-        :raises NotImplementedError: If method is not implemented in child
+        Checks if the follower path
         """
         return self.planner.has_path()
 
@@ -219,27 +215,13 @@ class FollowerTemplate:
         """
         raise NotImplementedError
 
-    def optimal_path(self, *args, **kwargs) -> Optional[Path]:
+    def optimal_path(self) -> Optional[kompass_cpp.types.Path]:
         """Get optimal (local) plan."""
         pass
 
-    def interpolated_path(self, msg_header) -> Optional[Path]:
+    def interpolated_path(self) -> Optional[kompass_cpp.types.Path]:
         """Get path interpolation."""
-        kompass_cpp_path: kompass_cpp.types.Path = self.planner.get_current_path()
-        if not kompass_cpp_path:
-            return None
-        ros_path = Path()
-        parsed_points = []
-        ros_path.header = msg_header
-        for point in kompass_cpp_path.points:
-            ros_point = PoseStamped()
-            ros_path.header = msg_header
-            ros_point.pose.position.x = point.x
-            ros_point.pose.position.y = point.y
-            parsed_points.append(ros_point)
-
-        ros_path.poses = parsed_points
-        return ros_path
+        return self.planner.get_current_path()
 
     def set_interpolation_type(self, interpolation_type: PathInterpolationType):
         """Set the follower path interpolation type
@@ -257,6 +239,8 @@ class FollowerTemplate:
         :return: _description_
         :rtype: RobotState
         """
+        if not self.path:
+            return None
         target: kompass_cpp.control.FollowingTarget = self.planner.get_tracked_target()
         if not target:
             return None

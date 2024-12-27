@@ -47,4 +47,3 @@ struct Timer {
              duration.count() * 1000.0f, RST, BOLD(FBLU(" ms\n")));
   }
 };
-

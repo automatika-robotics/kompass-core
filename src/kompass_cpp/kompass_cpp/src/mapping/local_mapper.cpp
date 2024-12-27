@@ -240,8 +240,6 @@ void updateGridBaysian(
 
     if (pt(0) >= 0 && pt(0) < rows && pt(1) >= 0 && pt(1) < cols) {
 
-      float previousValue = previousGridDataProb(pt(0), pt(1));
-
       // calculation for baysian update
       float distance = (pt - startPoint).norm();
 
@@ -291,13 +289,13 @@ void scanToGrid(const std::vector<double> &angles,
 
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
-    for (int i = 0; i < angles.size(); ++i) {
+    for (std::vector<int>::size_type i = 0; i < angles.size(); ++i) {
       pool.enqueue(&updateGrid, angles[i], ranges[i], startPoint,
                    std::ref(gridData), centralPoint, resolution,
                    laserscanPosition, laserscanOrientation, maxPointsPerLine);
     }
   } else {
-    for (int i = 0; i < angles.size(); ++i) {
+    for (std::vector<int>::size_type i = 0; i < angles.size(); ++i) {
       updateGrid(angles[i], ranges[i], startPoint, gridData, centralPoint,
                  resolution, laserscanPosition, laserscanOrientation,
                  maxPointsPerLine);
@@ -322,7 +320,7 @@ void scanToGridBaysian(
 
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
-    for (int i = 0; i < angles.size(); ++i) {
+    for (std::vector<int>::size_type i = 0; i < angles.size(); ++i) {
       pool.enqueue(&updateGridBaysian, angles[i], ranges[i], startPoint,
                    std::ref(gridData), std::ref(gridDataProb), centralPoint,
                    resolution, laserscanPosition, laserscanOrientation,
@@ -330,7 +328,7 @@ void scanToGridBaysian(
                    rangeSure, rangeMax, wallSize, maxPointsPerLine);
     }
   } else {
-    for (int i = 0; i < angles.size(); ++i) {
+    for (std::vector<int>::size_type i = 0; i < angles.size(); ++i) {
       updateGridBaysian(angles[i], ranges[i], startPoint, gridData,
                         gridDataProb, centralPoint, resolution,
                         laserscanPosition, laserscanOrientation,

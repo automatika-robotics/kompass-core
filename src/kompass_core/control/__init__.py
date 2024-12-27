@@ -10,6 +10,7 @@ from ._trajectory_ import TrajectoryCostsWeights
 from .dvz import DVZ, DVZConfig
 from .dwa import DWA, DWAConfig
 from .stanley import StanleyConfig, Stanley
+from .vision_follower import VisionFollower, VisionFollowerConfig
 
 ControllerType = FollowerTemplate
 
@@ -77,6 +78,12 @@ ControlClasses = {
     LocalPlannersID.DWA: DWA,
 }
 
+ControlConfigClasses = {
+    LocalPlannersID.STANLEY: StanleyConfig,
+    LocalPlannersID.DVZ: DVZConfig,
+    LocalPlannersID.DWA: DWAConfig,
+}
+
 
 __all__ = [
     "StrEnum",
@@ -85,10 +92,13 @@ __all__ = [
     "DVZConfig",
     "LocalPlannersID",
     "ControlClasses",
+    "ControlConfigClasses",
     "Stanley",
     "StanleyConfig",
     "FollowingStatus",
     "DWA",
     "DWAConfig",
     "TrajectoryCostsWeights",
+    "VisionFollower",
+    "VisionFollowerConfig",
 ]

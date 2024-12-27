@@ -15,7 +15,7 @@ def _equal_approx(
     :param      v1:                 vector 1
     :type       v1:                 numpy/ numpy-quaternion
     :param      v2:                 vector 2
-    :type       v2:                 vector numpy / numpy-quaternon
+    :type       v2:                 vector numpy / numpy-quaternion
     :param      is_quaternion:      is it quaternion check?, defaults to False
     :type       is_quaternion:      bool, optional
     :param      absolute_tolerance: tolerate some difference if exist, defaults to 0.01
@@ -78,13 +78,13 @@ class PoseData:
         """
         set orientation of the 3D pose from quaternion components
 
-        :param      qw:     w compomement
+        :param      qw:     w component
         :type       qw:     float
-        :param      qx:     x compomement
+        :param      qx:     x component
         :type       qx:     float
-        :param      qy:     y compomement
+        :param      qy:     y component
         :type       qy:     float
-        :param      qz:     z compomement
+        :param      qz:     z component
         :type       qz:     float
         """
         self.qw = qw
@@ -105,13 +105,13 @@ class PoseData:
         :type       y:      float
         :param      z:      z-direction
         :type       z:      float
-        :param      qw:     w compomement
+        :param      qw:     w component
         :type       qw:     float
-        :param      qx:     x compomement
+        :param      qx:     x component
         :type       qx:     float
-        :param      qy:     y compomement
+        :param      qy:     y component
         :type       qy:     float
-        :param      qz:     z compomement
+        :param      qz:     z component
         :type       qz:     float
         """
         self.set_position(x, y, z)

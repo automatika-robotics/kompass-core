@@ -10,7 +10,7 @@
  * @brief Class used to define a configuration parameter of type [integer,
  * double, string, boolean] A Parameter is defined with a default value, max and
  * min value (if applicable). A string description of the parameter can be
- * optionally addded.
+ * optionally added.
  */
 class Parameter {
 public:

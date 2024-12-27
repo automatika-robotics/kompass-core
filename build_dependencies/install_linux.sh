@@ -18,4 +18,3 @@ $VCPKG_ROOT/bootstrap-vcpkg.sh -disableMetrics
 $VCPKG_ROOT/vcpkg install fcl
 $VCPKG_ROOT/vcpkg install pcl[core]
 $VCPKG_ROOT/vcpkg install ompl
-

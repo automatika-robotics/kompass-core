@@ -1,5 +1,7 @@
 #include "controllers/dwa.h"
+#include "controllers/follower.h"
 #include "datatypes/control.h"
+#include "datatypes/path.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -148,9 +150,9 @@ Path::Path DWA::findTrackedPathSegment() {
       }
     }
     // Add distance between last point and new point
+    Path::Point back_point = trackedPathSegment.points.back();
     segment_length += calculateDistance(
-        trackedPathSegment.points.back(),
-        currentPath->segments[segment_index].points[point_index]);
+        back_point, currentPath->segments[segment_index].points[point_index]);
     trackedPathSegment.points.push_back(
         currentPath->segments[segment_index].points[point_index]);
     point_index++;

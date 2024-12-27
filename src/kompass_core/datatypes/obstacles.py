@@ -178,7 +178,7 @@ class ObstaclesData:
         """
         Merge the current existing obstacles with new obstacles
 
-        :param obstacles: obstales to merge with the existing obstacles
+        :param obstacles: obstacles to merge with the existing obstacles
         :type obstacles: Obstacles
         """
         self.obstacle_type.extend(obstacles.obstacle_type)
@@ -209,7 +209,7 @@ class ObstaclesData:
         :type       resolution:         float
         :param      width:              width of the map (1st dimension) in number of cell in the vertical direction
         :type       width:              int
-        :param      height:             height of the map (2nddimension) in number of cell in the horizontal direction
+        :param      height:             height of the map (2nd dimension) in number of cell in the horizontal direction
         :type       height:             int
         :param      origin_pose:        Pose in 3D space referenced by the global frame for the upper left corner, being the (0,0) point on the grid
         :type       origin_pose:        PoseData
@@ -245,7 +245,7 @@ def split_obstacles_by_type(
     obstacles: ObstaclesData,
 ) -> Tuple[ObstaclesData, ObstaclesData]:
     """
-    split obstacles by osbtacle_type into new instances
+    split obstacles by obstacle_type into new instances
 
     :param obstacles: Obstacles to split
     :type obstacles: ObstaclesData

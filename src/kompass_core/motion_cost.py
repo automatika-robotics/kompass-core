@@ -326,11 +326,8 @@ class ReferenceCost:
             return (displacement, heading_error)
 
         except AssertionError as e:
-            error_logging = (
-                "For reference path cost the reseference input should be of type"
-            )
             logging.error(
-                f"Error: {e}. {error_logging} {self._types[self.reference_type]}"
+                f"Error: {e}. For reference path cost the input should be of type {self._types[self.reference_type]}"
             )
             raise
 
@@ -378,8 +375,8 @@ class MotionCostsParams:
         """
         self.static_collision_margin = self._COLLISION_MARGIN_METERS
         self.static_collision_weight = self._STATIC_COST_DEFAULT_WEIGHT
-        self.dynamic_colloision_margin = self._COLLISION_MARGIN_METERS
-        self.dynamic_colloision_weight = self._COST_DEFAULT_WEIGHT
+        self.dynamic_collision_margin = self._COLLISION_MARGIN_METERS
+        self.dynamic_collision_weight = self._COST_DEFAULT_WEIGHT
         self.goal_lat_err_weight = self._COST_DEFAULT_WEIGHT
         self.goal_heading_err_weight = self._ORIENTATION_COST_DEFAULT_WEIGHT
 
@@ -387,8 +384,8 @@ class MotionCostsParams:
         self,
         static_collision_margin: float,
         static_collision_weight: float,
-        dynamic_colloision_margin: float,
-        dynamic_colloision_weight: float,
+        dynamic_collision_margin: float,
+        dynamic_collision_weight: float,
         goal_lat_err_weight: float,
         goal_heading_err_weight: float,
     ):
@@ -399,10 +396,10 @@ class MotionCostsParams:
         :type static_collision_margin: float
         :param static_collision_weight: Weight of the static collision cost in the overall motion cost
         :type static_collision_weight: float
-        :param dynamic_colloision_margin: Safety distance margin with dynamic obstacles by considering a collision cost starting from this distance (m)
-        :type dynamic_colloision_margin: float
-        :param dynamic_colloision_weight: Weight of the dynamic collision cost in the overall motion cost
-        :type dynamic_colloision_weight: float
+        :param dynamic_collision_margin: Safety distance margin with dynamic obstacles by considering a collision cost starting from this distance (m)
+        :type dynamic_collision_margin: float
+        :param dynamic_collision_weight: Weight of the dynamic collision cost in the overall motion cost
+        :type dynamic_collision_weight: float
         :param goal_lat_err_weight: Weight of the displacement cost from end destination in the overall motion cost
         :type goal_lat_err_weight: float
         :param goal_heading_err_weight: Weight of the heading error cost from end destination heading in the overall motion cost
@@ -410,8 +407,8 @@ class MotionCostsParams:
         """
         self.static_collision_margin = static_collision_margin
         self.static_collision_weight = static_collision_weight
-        self.dynamic_colloision_margin = dynamic_colloision_margin
-        self.dynamic_colloision_weight = dynamic_colloision_weight
+        self.dynamic_collision_margin = dynamic_collision_margin
+        self.dynamic_collision_weight = dynamic_collision_weight
         self.goal_lat_err_weight = goal_lat_err_weight
         self.goal_heading_err_weight = goal_heading_err_weight
 
@@ -425,8 +422,8 @@ class MotionCostsParams:
         params_map = [
             "static_collision_margin",
             "static_collision_weight",
-            "dynamic_colloision_margin",
-            "dynamic_colloision_weight",
+            "dynamic_collision_margin",
+            "dynamic_collision_weight",
             "goal_lat_err_weight",
             "goal_heading_err_weight",
         ]

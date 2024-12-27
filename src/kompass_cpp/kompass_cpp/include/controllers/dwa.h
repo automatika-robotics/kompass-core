@@ -2,10 +2,7 @@
  * *********************************************************
  *
  * @file: dwa.h
- * @brief: Contains the Dynamic window approach by AI Winter
- * @author: AI Winter
- * @date: 2024-01-12
- * @version: 1.0
+ * @brief: Contains the Dynamic window approach, based on the implementation by AI Winter
  *
  * Copyright (c) 2024, AI Winter.
  * All rights reserved.

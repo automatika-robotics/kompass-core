@@ -4,9 +4,11 @@
 #include <pybind11/stl.h>
 #include <vector>
 
+#include "controllers/controller.h"
 #include "controllers/dwa.h"
 #include "controllers/pid.h"
 #include "controllers/stanley.h"
+#include "controllers/vision_follower.h"
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
@@ -37,14 +39,14 @@ void set_parameters_from_dict(Parameters &params,
     try {
       auto it = params.parameters.find(name);
       if (it != params.parameters.end()) {
-        if (py::isinstance<py::int_>(value)) {
-          it->second.setValue(value.cast<int>());
+        if (py::isinstance<py::bool_>(value)) {
+          it->second.setValue(value.cast<bool>());
         } else if (py::isinstance<py::float_>(value)) {
           it->second.setValue(value.cast<double>());
         } else if (py::isinstance<py::str>(value)) {
           it->second.setValue(py::str(value).cast<std::string>());
-        } else if (py::isinstance<py::bool_>(value)) {
-          it->second.setValue(value.cast<bool>());
+        } else if (py::isinstance<py::int_>(value)) {
+          it->second.setValue(value.cast<int>());
         }
       }
     } catch (const std::exception &e) {
@@ -104,6 +106,16 @@ PYBIND11_MODULE(kompass_cpp, m) {
       .def_readwrite("steer_ang", &Control::Velocity::steer_ang)
       .def("__str__", &printControlCmd);
 
+  py::class_<Control::Velocities>(m_types, "ControlCmdList")
+      .def(py::init<>(), "Default constructor")
+      .def(py::init<int>(), "Constructor with length", py::arg("length"))
+      .def_readwrite("vx", &Control::Velocities::vx, "Speed on x-axis (m/s)")
+      .def_readwrite("vy", &Control::Velocities::vy, "Speed on y-axis (m/s)")
+      .def_readwrite("omega", &Control::Velocities::omega,
+                     "Angular velocity (rad/s)")
+      .def_readwrite("length", &Control::Velocities::_length,
+                     "Length of the vectors");
+
   py::class_<Control::Trajectory>(m_types, "Trajectory")
       .def(py::init<>())
       .def_readwrite("velocity", &Control::Trajectory::velocity)
@@ -133,6 +145,21 @@ PYBIND11_MODULE(kompass_cpp, m) {
           return CollisionChecker::ShapeType::BOX;
         throw std::runtime_error("Invalid key");
       });
+
+  // Vision types
+  py::class_<Control::VisionFollower::TrackingData>(m_types, "TrackingData")
+      .def(py::init<std::array<double, 2>, int, int, std::array<double, 2>,
+                    double>(),
+           py::arg("size_xy"), py::arg("img_width"), py::arg("img_height"),
+           py::arg("center_xy"), py::arg("depth") = -1.0)
+      .def_readwrite("size_xy", &Control::VisionFollower::TrackingData::size_xy)
+      .def_readwrite("img_width",
+                     &Control::VisionFollower::TrackingData::img_width)
+      .def_readwrite("img_height",
+                     &Control::VisionFollower::TrackingData::img_height)
+      .def_readwrite("center_xy",
+                     &Control::VisionFollower::TrackingData::center_xy)
+      .def_readwrite("depth", &Control::VisionFollower::TrackingData::depth);
 
   // --------------------------------------------------------------------------------
   // Config parameters bindings submodule
@@ -172,7 +199,7 @@ PYBIND11_MODULE(kompass_cpp, m) {
       .def("from_dict", &set_parameters_from_dict);
 
   // ------------------------------------------------------------------------------
-  // Control base bindings submodule
+  // Control bindings submodule
   auto m_control = m.def_submodule("control", "Control module");
 
   py::enum_<Control::ControlType>(m_control, "ControlType")
@@ -361,7 +388,6 @@ PYBIND11_MODULE(kompass_cpp, m) {
            py::arg("sensor_rotation_robot"), py::arg("octree_resolution") = 0.1,
            py::arg("cost_weights"), py::arg("max_num_threads") = 1)
 
-      //   .def("reconfigure", &Control::DWA::reconfigure)
       .def("compute_velocity_commands",
            py::overload_cast<const Control::Velocity &,
                              const Control::LaserScan &>(
@@ -374,14 +400,38 @@ PYBIND11_MODULE(kompass_cpp, m) {
            py::return_value_policy::reference_internal)
       .def("add_custom_cost", &Control::DWA::addCustomCost);
 
+  // Vision Follower
+  py::class_<Control::VisionFollower::VisionFollowerConfig,
+             Control::Controller::ControllerParameters, Parameters>(
+      m_control, "VisionFollowerParameters")
+      .def(py::init<>());
+
+  py::class_<Control::VisionFollower, Control::Controller>(m_control,
+                                                           "VisionFollower")
+      .def(py::init(
+               [](const Control::ControlType control_type,
+                  const Control::ControlLimitsParams control_limits,
+                  const Control::VisionFollower::VisionFollowerConfig config) {
+                 return new Control::VisionFollower(control_type,
+                                                    control_limits, config);
+               }),
+           py::arg("control_type"), py::arg("control_limits"),
+           py::arg("config"))
+
+      .def("reset_target", &Control::VisionFollower::resetTarget)
+      .def("get_ctrl", &Control::VisionFollower::getCtrl)
+      .def("run", &Control::VisionFollower::run);
+
+  // ------------------------------------------------------------------------------
+  // Mapping bindings submodule
   auto m_mapping = m.def_submodule("mapping", "Local Mapping module");
-  m_mapping.def(
-      "scan_to_grid", &Mapping::scanToGrid,
-      "Convert laser scan data to occupancy grid", py::arg("angles"),
-      py::arg("ranges"), py::arg("grid_data"),
-      py::arg("central_point"), py::arg("resolution"),
-      py::arg("laser_scan_position"), py::arg("laser_scan_orientation"),
-      py::arg("max_points_per_line"), py::arg("max_num_threads") = 1);
+  m_mapping.def("scan_to_grid", &Mapping::scanToGrid,
+                "Convert laser scan data to occupancy grid", py::arg("angles"),
+                py::arg("ranges"), py::arg("grid_data"),
+                py::arg("central_point"), py::arg("resolution"),
+                py::arg("laser_scan_position"),
+                py::arg("laser_scan_orientation"),
+                py::arg("max_points_per_line"), py::arg("max_num_threads") = 1);
 
   m_mapping.def(
       "scan_to_grid_baysian", &Mapping::scanToGridBaysian,
@@ -414,7 +464,7 @@ PYBIND11_MODULE(kompass_cpp, m) {
       .value("OCCUPIED", Mapping::OccupancyType::OCCUPIED);
 
   // ------------------------------------------------------------------------------
-  // Utils
+  // Utils bindings submodule
   py::enum_<LogLevel>(m, "LogLevel")
       .value("DEBUG", LogLevel::DEBUG)
       .value("INFO", LogLevel::INFO)

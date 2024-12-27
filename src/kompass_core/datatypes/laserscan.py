@@ -3,7 +3,7 @@ from typing import Union
 import numpy as np
 from attrs import define, field
 
-from ..utils.common import BaseAttrs, in_range
+from ..utils.common import BaseAttrs, base_validators
 
 
 @define
@@ -29,27 +29,32 @@ class LaserScanData(BaseAttrs):
     """
 
     angle_min: float = field(
-        default=0.0, validator=in_range(min_value=-2 * math.pi, max_value=2 * math.pi)
+        default=0.0,
+        validator=base_validators.in_range(
+            min_value=-2 * math.pi, max_value=2 * math.pi
+        ),
     )
     angle_max: float = field(
         default=2 * math.pi,
-        validator=in_range(min_value=-2 * math.pi, max_value=2 * math.pi),
+        validator=base_validators.in_range(
+            min_value=-2 * math.pi, max_value=2 * math.pi
+        ),
     )
     angle_increment: float = field(
         default=0.01 * math.pi,
-        validator=in_range(min_value=-math.pi, max_value=math.pi),
+        validator=base_validators.in_range(min_value=-math.pi, max_value=math.pi),
     )
     time_increment: float = field(
-        default=1e-3, validator=in_range(min_value=0.0, max_value=1e3)
+        default=1e-3, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
     )
     scan_time: float = field(
-        default=1e-3, validator=in_range(min_value=0.0, max_value=1e3)
+        default=1e-3, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
     )
     range_min: float = field(
-        default=0.0, validator=in_range(min_value=0.0, max_value=1e3)
+        default=0.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
     )
     range_max: float = field(
-        default=20.0, validator=in_range(min_value=1e-3, max_value=1e3)
+        default=20.0, validator=base_validators.in_range(min_value=1e-3, max_value=1e3)
     )
     ranges: np.ndarray = field(default=np.empty(0))
     angles: np.ndarray = field(default=np.empty(0))
