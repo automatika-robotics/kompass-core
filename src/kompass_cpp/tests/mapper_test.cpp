@@ -17,8 +17,8 @@ struct GridMapConfig {
   double corner_distance;
   int random_points;
 
-  int grid_width;
   int grid_height;
+  int grid_width;
   float grid_res;
   float actual_size;
 
@@ -38,33 +38,37 @@ struct GridMapConfig {
 
   double limit;
   int maxPointsPerLine;
-
   std::vector<double> filtered_ranges;
+
+  Mapping::LocalMapper local_mapper;
 
   // Constructor to initialize the struct
   GridMapConfig()
       : angle_increment(0.1), corner_distance(0.5), random_points(50),
-        grid_width(10), grid_height(10), grid_res(0.1),
+        grid_height(10), grid_width(10), grid_res(0.1),
         actual_size(grid_width * grid_res),
-        gridData(Eigen::MatrixXi(grid_width, grid_height)),
-        gridDataProb(Eigen::MatrixXf(grid_width, grid_height)),
-        prevGridDataProb(Eigen::MatrixXf(grid_width, grid_height)),
-        centralPoint(std::round(grid_width / 2) - 1,
-                     std::round(grid_height / 2) - 1),
+        gridData(Eigen::MatrixXi(grid_height, grid_width)),
+        gridDataProb(Eigen::MatrixXf(grid_height, grid_width)),
+        prevGridDataProb(Eigen::MatrixXf(grid_height, grid_width)),
+        centralPoint(std::round(grid_height / 2) - 1,
+                     std::round(grid_width / 2) - 1),
         pPrior(0.6), pOccupied(0.9), pEmpty(1 - pOccupied), rangeSure(0.1),
-        rangeMax(20.0), wallSize(0.2), maxNumThreads(1),
-        limit(grid_width >= grid_height
-                  ? grid_width * grid_res * std::sqrt(2)
-                  : grid_height * grid_res * std::sqrt(2)),
+        rangeMax(20.0), wallSize(0.2), maxNumThreads(10),
+        limit(grid_width > grid_height ? grid_width * grid_res * std::sqrt(2)
+                                       : grid_height * grid_res * std::sqrt(2)),
         maxPointsPerLine(static_cast<int>((limit / grid_res) * 1.5)),
-        filtered_ranges() {
-    // Initialize the grid
+        local_mapper(Mapping::LocalMapper(
+            grid_height, grid_width, grid_res, {0.0, 0.0, 0.0}, 0.0, pPrior,
+            pOccupied, pEmpty, rangeSure, rangeMax, wallSize, maxPointsPerLine,
+            maxNumThreads)) {
+
+    // initialize the grid
     gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
     gridDataProb.fill(pPrior);
     prevGridDataProb.fill(pPrior);
 
-    // Logging the central point and limit circle radius (for demonstration
-    // purposes)
+    // Logging the central point and limit circle radius
+    // (for demonstration purposes)
     std::cout << "Central point: " << centralPoint.x() << ", "
               << centralPoint.y() << std::endl;
     std::cout << "Limit Circle Radius: " << limit << std::endl;
@@ -139,8 +143,8 @@ BOOST_FIXTURE_TEST_SUITE(s, GridMapConfig)
 
 BOOST_AUTO_TEST_CASE(test_mapper_circles) {
 
-  // Generate circle scan with radius 1.0
-  double radius = 0.3; // Example radius for the circle
+  // Generate circle scan with radius 0.3
+  double radius = 0.3;
   Control::LaserScan circle_scan =
       generateLaserScan(angle_increment, "circle", radius);
   LOG_INFO("Testing with circle points at distance: ", radius,
@@ -151,11 +155,8 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   }
   {
     Timer timer;
-    Mapping::scanToGridBaysian(circle_scan.angles, filtered_ranges, gridData,
-                        gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
-                        0.0, prevGridDataProb, pPrior, pEmpty, pOccupied,
-                        rangeSure, rangeMax, wallSize, maxPointsPerLine,
-                        maxNumThreads);
+    local_mapper.scanToGridBaysian(circle_scan.angles, filtered_ranges,
+                                   gridData, gridDataProb, prevGridDataProb);
   }
 
   int occ_points = countPointsInGrid(
@@ -182,11 +183,8 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   }
   {
     Timer timer;
-    Mapping::scanToGridBaysian(circle_scan.angles, filtered_ranges, gridData,
-                        gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
-                        0.0, prevGridDataProb, pPrior, pEmpty, pOccupied,
-                        rangeSure, rangeMax, wallSize, maxPointsPerLine,
-                        maxNumThreads);
+    local_mapper.scanToGridBaysian(circle_scan.angles, filtered_ranges,
+                                   gridData, gridDataProb, prevGridDataProb);
   }
   occ_points = countPointsInGrid(
       gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
@@ -212,11 +210,8 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   }
   {
     Timer timer;
-    Mapping::scanToGridBaysian(circle_scan.angles, filtered_ranges, gridData,
-                        gridDataProb, centralPoint, grid_res, {0.0, 0.0, 0.0},
-                        0.0, prevGridDataProb, pPrior, pEmpty, pOccupied,
-                        rangeSure, rangeMax, wallSize, maxPointsPerLine,
-                        maxNumThreads);
+    local_mapper.scanToGridBaysian(circle_scan.angles, filtered_ranges,
+                                   gridData, gridDataProb, prevGridDataProb);
   }
   occ_points = countPointsInGrid(
       gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
@@ -232,3 +227,4 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
 }
 
 BOOST_AUTO_TEST_SUITE_END()
+
