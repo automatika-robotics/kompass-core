@@ -12,32 +12,6 @@ namespace Mapping {
 // Mutex for grid update
 static std::mutex s_gridMutex;
 
-Eigen::Vector3f
-LocalMapper::gridToLocal(const Eigen::Vector2i &pointTargetInGrid,
-                         double height) {
-  Eigen::Vector3f poseB;
-  poseB(0) = (m_centralPoint(0) - pointTargetInGrid(0)) * m_resolution;
-  poseB(1) = (m_centralPoint(1) - pointTargetInGrid(1)) * m_resolution;
-  poseB(2) = height;
-
-  return poseB;
-}
-
-Eigen::Vector2i
-LocalMapper::localToGrid(const Eigen::Vector2f &poseTargetInCentral) {
-
-  Eigen::Vector2i gridPoint;
-
-  // Calculate grid point by rounding coordinates in the local frame to nearest
-  // cell boundaries
-  gridPoint(0) = m_centralPoint(0) +
-                 static_cast<int>(poseTargetInCentral(0) / m_resolution);
-  gridPoint(1) = m_centralPoint(1) +
-                 static_cast<int>(poseTargetInCentral(1) / m_resolution);
-
-  return gridPoint;
-}
-
 Eigen::MatrixXf LocalMapper::getPreviousGridInCurrentPose(
     const Eigen::Vector2f &currentPositionInPreviousPose,
     double currentOrientationInPreviousPose,

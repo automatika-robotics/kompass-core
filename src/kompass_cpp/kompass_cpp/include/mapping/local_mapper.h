@@ -51,11 +51,30 @@ public:
   // Transforms a point from grid coordinate (i,j) to the local coordinates
   // frame of the grid (around the central cell) (x,y,z)
   Eigen::Vector3f gridToLocal(const Eigen::Vector2i &pointTargetInGrid,
-                              double height = 0.0);
+                              double height) {
+    Eigen::Vector3f poseB;
+    poseB(0) = (m_centralPoint(0) - pointTargetInGrid(0)) * m_resolution;
+    poseB(1) = (m_centralPoint(1) - pointTargetInGrid(1)) * m_resolution;
+    poseB(2) = height;
+
+    return poseB;
+  }
 
   // Function to convert a point from local coordinates frame of the grid to
   // grid indices
-  Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral);
+  Eigen::Vector2i localToGrid(const Eigen::Vector2f &poseTargetInCentral) {
+
+    Eigen::Vector2i gridPoint;
+
+    // Calculate grid point by rounding coordinates in the local frame to
+    // nearest cell boundaries
+    gridPoint(0) = m_centralPoint(0) +
+                   static_cast<int>(poseTargetInCentral(0) / m_resolution);
+    gridPoint(1) = m_centralPoint(1) +
+                   static_cast<int>(poseTargetInCentral(1) / m_resolution);
+
+    return gridPoint;
+  }
 
   /**
    * @brief Transform a grid to be centered in egocentric view of the current
