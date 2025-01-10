@@ -44,11 +44,6 @@ void bindings_mapping(py::module_ &m) {
            py::arg("angles"), py::arg("ranges"), py::arg("grid_data"),
            py::arg("grid_data_prob"), py::arg("previous_grid_data_prob"))
 
-      .def("local_to_grid", &Mapping::LocalMapper::localToGrid,
-           "Convert a point from local coordinates frame of the grid to "
-           "grid indices",
-           py::arg("pose_target_in_central"))
-
       .def("get_previous_grid_in_current_pose",
            &Mapping::LocalMapper::getPreviousGridInCurrentPose,
            py::arg("current_position_in_previous_pose"),

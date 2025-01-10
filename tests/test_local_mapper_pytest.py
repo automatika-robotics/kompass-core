@@ -44,19 +44,6 @@ def pose_robot_in_world() -> PoseData:
 
 
 @pytest.fixture
-def pose_laser_scanner_in_robot() -> PoseData:
-    """
-    get random pose of the laser scanner in the robot frame
-
-    :return: laser scan pose in the robot frame
-    :rtype: PoseData
-    """
-    pose_laser_scanner_in_robot = PoseData()
-
-    return pose_laser_scanner_in_robot
-
-
-@pytest.fixture
 def logs_test_dir() -> str:
     """
     get root test directory
@@ -156,12 +143,12 @@ def laser_scan_data(local_mapper: LocalMapper, range_option: str) -> LaserScanDa
     if range_option == "out_of_grid":
         map_half_diagonal_in_meter = math.sqrt(math.pow(width, 2) + math.pow(height, 2))
 
-        laser_scan_data.ranges = [map_half_diagonal_in_meter] * angles_size
+        laser_scan_data.ranges = np.array([map_half_diagonal_in_meter] * angles_size)
     elif range_option == "circle_in_grid":
-        laser_scan_data.ranges = [max_range_quarter] * angles_size
+        laser_scan_data.ranges = np.array([max_range_quarter] * angles_size)
 
     elif range_option == "circle_at_edge":
-        laser_scan_data.ranges = [max_range_half] * angles_size
+        laser_scan_data.ranges = np.array([max_range_half] * angles_size)
 
     elif range_option == "random_in_grid":
         laser_scan_data.ranges = np.random.uniform(
@@ -179,7 +166,7 @@ def laser_scan_data(local_mapper: LocalMapper, range_option: str) -> LaserScanDa
             laser_scan_data.angle_max,
             laser_scan_data.angle_increment,
         )
-        laser_scan_data.ranges = [max_range_quarter] * angles_size
+        laser_scan_data.ranges = np.array([max_range_quarter] * angles_size)
         laser_scan_data.ranges[0] = 0.0
         laser_scan_data.ranges[1] = 0.1
 
@@ -188,15 +175,15 @@ def laser_scan_data(local_mapper: LocalMapper, range_option: str) -> LaserScanDa
         max_obstacle_radius = 20
         laser_scan_data.ranges = []
         i = 0
+        laser_scan_data.ranges = np.zeros(angles_size)
         while i < angles_size:
             c = random.randint(min_obstacle_radius, max_obstacle_radius)
             r = random.uniform(min_range_from_robot, max_range_half)
             c = c if c + i <= angles_size else angles_size - i
+            laser_scan_data.ranges[i] = r
             i += c
-            for _ in range(c):
-                laser_scan_data.ranges.append(r)
 
-        assert len(laser_scan_data.ranges) == angles_size
+        assert laser_scan_data.ranges.size == angles_size
     else:  # random
         laser_scan_data.ranges = np.random.uniform(
             low=min_range_from_robot,
@@ -211,7 +198,6 @@ def test_update_from_scan(
     local_mapper: LocalMapper,
     laser_scan_data: LaserScanData,
     pose_robot_in_world: PoseData,
-    pose_laser_scanner_in_robot: PoseData,
     logs_test_dir: str,
     range_option: str,
 ):
@@ -222,7 +208,6 @@ def test_update_from_scan(
     local_mapper.update_from_scan(
         pose_robot_in_world,
         laser_scan_data,
-        pose_laser_scanner_in_robot,
     )
 
     number_occupied_cells = np.count_nonzero(
@@ -268,6 +253,6 @@ def laser_scan_data_fixed() -> LaserScanData:
 
     laser_scan_data.intensities = [0.0] * angles_size
 
-    laser_scan_data.ranges = [1.0] * angles_size
+    laser_scan_data.ranges = np.array([1.0] * angles_size)
 
     return laser_scan_data
