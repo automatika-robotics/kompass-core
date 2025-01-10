@@ -199,13 +199,14 @@ void Path::interpolate(double max_interpolation_point_dist,
 void  Path::segment(double pathSegmentLength) {
   segments.clear();
   double totalLength = totalPathLength();
+  Path new_segment;
   if (pathSegmentLength >= totalLength) {
-    Path new_segment = Path(points);
+    new_segment = Path(points);
     segments.push_back(new_segment);
   } else {
     int segmentsNumber = std::max(totalLength / pathSegmentLength, 1.0);
     if (segmentsNumber == 1) {
-      Path new_segment = Path(points);
+      new_segment = Path(points);
       segments.push_back(new_segment);
       return;
     }
@@ -225,6 +226,7 @@ void Path::segmentBySegmentNumber(int numSegments) {
   int remainder = points.size() % numSegments;
 
   auto it = points.begin();
+  Path new_segment;
   for (int i = 0; i < numSegments; ++i) {
     std::vector<Point> segment_points;
     for (int j = 0; j < segmentSize; ++j) {
@@ -234,7 +236,7 @@ void Path::segmentBySegmentNumber(int numSegments) {
       segment_points.push_back(*it++);
       --remainder;
     }
-    Path new_segment = Path(segment_points);
+    new_segment = Path(segment_points);
     segments.push_back(new_segment);
   }
 }
@@ -246,13 +248,13 @@ void Path::segmentByPointsNumber(int segmentLength) {
     throw std::invalid_argument(
         "Invalid segment length or empty points vector.");
   }
-
+  Path new_segment;
   for (size_t i = 0; i < points.size(); i += segmentLength) {
     std::vector<Point> segment_points;
     for (size_t j = i; j < i + segmentLength && j < points.size(); ++j) {
       segment_points.push_back(points[j]);
     }
-    Path new_segment = Path(segment_points);
+    new_segment = Path(segment_points);
     segments.push_back(new_segment);
   }
 }
