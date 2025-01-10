@@ -46,7 +46,7 @@ struct Velocities {
   };
   void set(int index, double x_velocity, double y_velocity,
            double angular_velocity) {
-    if (index >= 0 && index < vx.size()) {
+    if (index >= 0 && index < (int)vx.size()) {
       vx[index] = x_velocity;
       vy[index] = y_velocity;
       omega[index] = angular_velocity;
