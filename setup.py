@@ -190,6 +190,9 @@ if not check_acpp():
     kompass_cpp_source_files = [
         f_name for f_name in kompass_cpp_source_files if not f_name.endswith("gpu.cpp")
     ]
+    extra_args = []
+else:
+    extra_args = ["-DGPU=1"]
 
 ext_modules = [
     Pybind11Extension(
@@ -208,7 +211,7 @@ ext_modules = [
         libraries=["fcl", "pcl_io_ply", "pcl_common"] + vcpkg_extra_libs,
         library_dirs=get_libraries_dir(),
         define_macros=[("VERSION_INFO", __version__)],
-        extra_compile_args=["-O3"],
+        extra_compile_args=["-O3"] + extra_args,
     ),
 ]
 

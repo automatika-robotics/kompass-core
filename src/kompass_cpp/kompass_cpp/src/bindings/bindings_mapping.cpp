@@ -8,7 +8,9 @@
 namespace py = pybind11;
 using namespace Kompass;
 
+#if GPU
 void bindings_mapping_gpu(py::module_ &);
+#endif
 
 // Mapping bindings submodule
 void bindings_mapping(py::module_ &m) {
@@ -53,6 +55,8 @@ void bindings_mapping(py::module_ &m) {
            py::arg("current_orientation_in_previous_pose"),
            py::arg("previous_grid_data"), py::arg("unknown_value"));
 
+#if GPU
   bindings_mapping_gpu(m_mapping);
+#endif
 
 }
