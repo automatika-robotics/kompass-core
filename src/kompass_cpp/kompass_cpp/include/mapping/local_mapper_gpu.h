@@ -1,9 +1,5 @@
 #pragma once
 
-#ifndef GPU
-#define GPU 1
-#endif // !GPU
-
 #include "local_mapper.h"
 #include <Eigen/Dense>
 #include <sycl/sycl.hpp>
