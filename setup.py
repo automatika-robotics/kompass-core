@@ -38,6 +38,19 @@ def check_pkg_config():
         ) from e
 
 
+def check_acpp():
+    """Check if AdaptiveCPP is available"""
+    try:
+        subprocess.check_output(["acpp", "--version"])
+        print("AdaptiveCPP found. Building with acpp.")
+    except subprocess.CalledProcessError:
+        print("AdaptiveCPP is not installed. Building with default compiler available.")
+        return False
+    # change compiler to acpp
+    os.environ["CXX"] = "acpp"
+    return True
+
+
 def find_pkg(package, versions=None):
     """Find a given package using pkg-config"""
     if not versions:
@@ -170,7 +183,13 @@ kompass_cpp_module_includes = (
     if not kompass_cpp_dependency_includes
     else ["src/kompass_cpp/kompass_cpp/include"] + kompass_cpp_dependency_includes
 )
-
+kompass_cpp_source_files = glob.glob(
+    os.path.join("src/kompass_cpp/kompass_cpp/src/**", "*.cpp"), recursive=True
+)
+if not check_acpp():
+    kompass_cpp_source_files = [
+        f_name for f_name in kompass_cpp_source_files if not f_name.endswith("gpu.cpp")
+    ]
 
 ext_modules = [
     Pybind11Extension(
@@ -180,16 +199,16 @@ ext_modules = [
         libraries=["ompl"],
         library_dirs=get_libraries_dir(),
         define_macros=[("VERSION_INFO", __version__)],
+        extra_compile_args=["-O3"],
     ),
     Pybind11Extension(
         "kompass_cpp",
-        glob.glob(
-            os.path.join("src/kompass_cpp/kompass_cpp/src/**", "*.cpp"), recursive=True
-        ),
+        kompass_cpp_source_files,
         include_dirs=kompass_cpp_module_includes,
         libraries=["fcl", "pcl_io_ply", "pcl_common"] + vcpkg_extra_libs,
         library_dirs=get_libraries_dir(),
         define_macros=[("VERSION_INFO", __version__)],
+        extra_compile_args=["-O3"],
     ),
 ]
 
@@ -201,4 +220,5 @@ setup(
     ext_modules=ext_modules,
     cmdclass={"build_ext": build_ext},
     zip_safe=False,
+    version=__version__,
 )
