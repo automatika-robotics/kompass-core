@@ -27,7 +27,7 @@ struct Velocities {
   std::vector<double> vx; // Speed on x-asix (m/s)
   std::vector<double> vy;
   std::vector<double> omega; // angular velocity (rad/s)
-  int _length;
+  unsigned int _length;
 
   Velocities() {
     // Initialize control vectors
@@ -56,13 +56,16 @@ struct Velocities {
   };
   void set(std::vector<double> x_velocity, std::vector<double> y_velocity,
            std::vector<double> angular_velocity) {
-    if (x_velocity.size() == y_velocity.size() == angular_velocity.size() == _length) {
-      vx = x_velocity;
-      vy = y_velocity;
-      omega = angular_velocity;
-    } else {
-      throw std::length_error("Incompatible vector size to the Velocities length");
-    }
+    if ((x_velocity.size() == y_velocity.size()) &&
+        (y_velocity.size() == angular_velocity.size()) &&
+        (angular_velocity.size() == _length)) {
+        vx = x_velocity;
+        vy = y_velocity;
+        omega = angular_velocity;
+      } else {
+        throw std::length_error(
+            "Incompatible vector size to the Velocities length");
+      }
   }
 };
 

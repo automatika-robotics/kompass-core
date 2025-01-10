@@ -200,11 +200,13 @@ void  Path::segment(double pathSegmentLength) {
   segments.clear();
   double totalLength = totalPathLength();
   if (pathSegmentLength >= totalLength) {
-    segments.push_back(Path(points));
+    Path new_segment = Path(points);
+    segments.push_back(new_segment);
   } else {
     int segmentsNumber = std::max(totalLength / pathSegmentLength, 1.0);
     if (segmentsNumber == 1) {
-      segments.push_back(Path(points));
+      Path new_segment = Path(points);
+      segments.push_back(new_segment);
       return;
     }
     segmentBySegmentNumber(segmentsNumber);
@@ -232,7 +234,8 @@ void Path::segmentBySegmentNumber(int numSegments) {
       segment_points.push_back(*it++);
       --remainder;
     }
-    segments.push_back(Path(segment_points));
+    Path new_segment = Path(segment_points);
+    segments.push_back(new_segment);
   }
 }
 
@@ -249,7 +252,8 @@ void Path::segmentByPointsNumber(int segmentLength) {
     for (size_t j = i; j < i + segmentLength && j < points.size(); ++j) {
       segment_points.push_back(points[j]);
     }
-    segments.push_back(Path(segment_points));
+    Path new_segment = Path(segment_points);
+    segments.push_back(new_segment);
   }
 }
 }

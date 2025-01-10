@@ -85,7 +85,6 @@ private:
   bool _rotate_in_place;
   double _target_ref_size = 0.0;
   Velocities _out_vel;
-  bool _ctrl_available;
   double _recorded_search_time = 0.0;
   std::queue<std::array<double, 3>> _search_commands_queue;
   std::array<double, 3> _search_command;

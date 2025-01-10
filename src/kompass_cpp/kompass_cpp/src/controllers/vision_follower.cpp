@@ -36,14 +36,6 @@ void VisionFollower::generate_search_commands(double total_rotation,
                                               bool enable_pause) {
   // Calculate rotation direction and magnitude
   double rotation_sign = (total_rotation < 0.0) ? -1.0 : 1.0;
-  double abs_rotation = std::abs(total_rotation);
-
-  double rotation_time =
-      std::min(max_rotation_steps * _config.control_time_step(),
-               abs_rotation / _ctrl_limits.omegaParams.maxOmega);
-
-  // For Non-holonomic circular motion
-  double circumference = 2.0f * M_PI * search_radius;
 
   // Generate velocity commands
   for (int i = 0; i <= max_rotation_steps; i = i + 1) {

@@ -16,7 +16,7 @@ __version__ = "0.4.0"
 # DEFAULTS FOR UBUNTU 22.04
 OMPL_INCLUDE_DEFAULT_DIR = "/usr/include/ompl-1.5"
 EIGEN_INCLUDE_DEFAULT_DIR = "/usr/include/eigen3"
-PCL_INCLUDE_DEFAULT_DIR = "/usr/include/pcl-1.12"
+PCL_INCLUDE_DEFAULT_DIR = "/usr/include/pcl-1.14"
 
 
 def get_libraries_dir():
@@ -43,7 +43,7 @@ def check_acpp():
     try:
         subprocess.check_output(["acpp", "--version"])
         print("AdaptiveCPP found. Building with acpp.")
-    except subprocess.CalledProcessError:
+    except Exception:
         print("AdaptiveCPP is not installed. Building with default compiler available.")
         return False
     # change compiler to acpp
@@ -147,7 +147,7 @@ pcl_versions = ["1.14", "1.13", "1.12", "1.11", "1.10", "1.9"]
 eigen_include_dir = pkg_config(["eigen3"], flag="--cflags-only-I")
 pcl_include_dir = pkg_config(
     ["pcl_common"], flag="--cflags-only-I", versions=pcl_versions
-)
+) or [PCL_INCLUDE_DEFAULT_DIR]
 
 # vcpkg paths when running in CI
 vcpkg_includes_dir = get_vcpkg_includes()

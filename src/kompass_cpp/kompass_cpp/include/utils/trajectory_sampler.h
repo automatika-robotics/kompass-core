@@ -124,7 +124,6 @@ private:
   double lin_sample_x_resolution_;
   double lin_sample_y_resolution_;
   double ang_sample_resolution_;
-  double min_velocity_{0.01};
   double max_vx_;
   double min_vx_;
   double max_vy_;
