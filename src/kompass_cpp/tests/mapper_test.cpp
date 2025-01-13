@@ -1,7 +1,6 @@
 #include "datatypes/trajectory.h"
 #include "mapping/local_mapper.h"
 #include "test.h"
-#include "utils/logger.h"
 #define BOOST_TEST_MODULE KOMPASS MAPPER TESTS
 #include <Eigen/Dense>
 #include <boost/test/included/unit_test.hpp>
@@ -69,11 +68,10 @@ struct GridMapConfig {
 
     // Logging the central point and limit circle radius
     // (for demonstration purposes)
-    std::cout << "Central point: " << centralPoint.x() << ", "
-              << centralPoint.y() << std::endl;
-    std::cout << "Limit Circle Radius: " << limit << std::endl;
-    std::cout << "Max Steps in Grid inscribing the limit circle: "
-              << maxPointsPerLine << std::endl;
+    LOG_INFO("Central point: ", centralPoint.x(), ", ", centralPoint.y());
+    LOG_INFO("Limit Circle Radius: ", limit);
+    LOG_INFO("Max Steps in Grid inscribing the limit circle: ",
+             maxPointsPerLine);
   }
 };
 
@@ -133,8 +131,8 @@ Control::LaserScan generateLaserScan(double angle_increment,
       ranges.emplace_back(range);
     }
   } else {
-    std::cerr << "Invalid shape specified. Use 'circle', 'right_corner', or "
-                 "'random_points'.\n";
+    LOG_ERROR("Invalid shape specified. Use 'circle', 'right_corner', or "
+              "'random_points'.");
   }
   return {ranges, angles};
 }
@@ -227,4 +225,3 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-

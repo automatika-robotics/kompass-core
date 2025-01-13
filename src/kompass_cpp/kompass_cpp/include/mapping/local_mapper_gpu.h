@@ -1,6 +1,7 @@
 #pragma once
 
 #include "local_mapper.h"
+#include "utils/logger.h"
 #include <Eigen/Dense>
 #include <sycl/sycl.hpp>
 
@@ -24,8 +25,7 @@ public:
     m_q = sycl::queue{sycl::default_selector_v,
                       sycl::property::queue::in_order{}};
     auto dev = m_q.get_device();
-    std::cout << "Running on :" << dev.get_info<sycl::info::device::name>()
-              << std::endl;
+    LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
     m_out.resize(m_gridHeight * m_gridWidth);
     m_devicePtrRanges = sycl::malloc_device<double>(scanSize, m_q);
     m_devicePtrAngles = sycl::malloc_device<double>(scanSize, m_q);

@@ -140,7 +140,7 @@ void LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
 
 
   } catch (const sycl::exception &e) {
-    std::cout << "Exception caught: " << e.what() << std::endl;
+    LOG_ERROR("Exception caught: ", e.what());
   }
 }
 } // namespace Mapping

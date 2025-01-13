@@ -1,14 +1,12 @@
 #include "test.h"
+#include "controllers/dwa.h"
 #include "datatypes/trajectory.h"
 #include "utils/cost_evaluator.h"
 #define BOOST_TEST_MODULE KOMPASS TESTS
 #include <boost/test/included/unit_test.hpp>
-
 #include <cmath>
 #include <vector>
 
-#include "controllers/dwa.h"
-#include "utils/logger.h"
 
 using namespace Kompass;
 
