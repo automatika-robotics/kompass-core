@@ -213,7 +213,7 @@ class LocalMapper:
                 scan_size=scan_size,
                 max_points_per_line=self.config.max_points_per_line,
             )
-        except ModuleNotFoundError:
+        except ImportError:
             from kompass_cpp.mapping import LocalMapper as LocalMapperCpp
             self.local_mapper = LocalMapperCpp(
                 grid_height=self.grid_height,
