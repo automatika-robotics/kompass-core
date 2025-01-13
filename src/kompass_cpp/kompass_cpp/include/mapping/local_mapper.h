@@ -48,6 +48,65 @@ public:
   // Default destructor
   virtual ~LocalMapper() = default;
 
+  /**
+   * @brief Transform a grid to be centered in egocentric view of the current
+   * position given its previous position.
+   *
+   * @param current_position_in_previous_pose Current egocentric position for
+   * the transformation.
+   * @param current_yaw_orientation_in_previous_pose Current egocentric
+   * orientation for the transformation.
+   * @param previous_grid_data Previous grid data (pre-transformation).
+   * @param unknown_value Value of unknown occupancy (prior value for grid
+   * cells).
+   *
+   * @return Transformed grid.
+   */
+  Eigen::MatrixXf getPreviousGridInCurrentPose(
+      const Eigen::Vector2f &currentPositionInPreviousPose,
+      double currentOrientationInPreviousPose,
+      const Eigen::MatrixXf &previousGridData, float unknownValue);
+
+  /**
+   * @brief Updates a grid cell occupancy probability using the LaserScanModel
+   *
+   * @param distance Hit point distance from the sensor (m)
+   * @param currentRange Scan ray hit range (m)
+   * @param previousProb Previous probability assigned to grid cell
+   */
+  float updateGridCellProbability(float distance, float currentRange,
+                                  float previousProb);
+
+  /**
+   * Processes Laserscan data (angles and ranges) to project on a 2D grid
+   * using Bresenham line drawing for each Laserscan beam
+   *
+   * @param angles        LaserScan angles in radians
+   * @param ranges         LaserScan ranges in meters
+   * @param gridData      Current grid data
+   */
+  void scanToGrid(const std::vector<double> &angles,
+                  const std::vector<double> &ranges,
+                  Eigen::Ref<Eigen::MatrixXi> gridData);
+
+  /**
+   * Processes Laserscan data (angles and ranges) to project on a 2D grid
+   * using Bresenham line drawing for each Laserscan beam and baysian map
+   * updates
+   *
+   * @param angles        LaserScan angles in radians
+   * @param ranges         LaserScan ranges in meters
+   * @param gridData      Current grid data
+   * @param gridDataProb Current probabilistic grid data
+   * @param previousGridDataProb Previous value of the probabilistic grid data
+   */
+  void scanToGridBaysian(
+      const std::vector<double> &angles, const std::vector<double> &ranges,
+      Eigen::Ref<Eigen::MatrixXi> gridData,
+      Eigen::Ref<Eigen::MatrixXf> gridDataProb,
+      const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb);
+
+protected:
   // Transforms a point from grid coordinate (i,j) to the local coordinates
   // frame of the grid (around the central cell) (x,y,z)
   Eigen::Vector3f gridToLocal(const Eigen::Vector2i &pointTargetInGrid,
@@ -76,24 +135,16 @@ public:
     return gridPoint;
   }
 
-  /**
-   * @brief Transform a grid to be centered in egocentric view of the current
-   * position given its previous position.
-   *
-   * @param current_position_in_previous_pose Current egocentric position for
-   * the transformation.
-   * @param current_yaw_orientation_in_previous_pose Current egocentric
-   * orientation for the transformation.
-   * @param previous_grid_data Previous grid data (pre-transformation).
-   * @param unknown_value Value of unknown occupancy (prior value for grid
-   * cells).
-   *
-   * @return Transformed grid.
-   */
-  Eigen::MatrixXf getPreviousGridInCurrentPose(
-      const Eigen::Vector2f &currentPositionInPreviousPose,
-      double currentOrientationInPreviousPose,
-      const Eigen::MatrixXf &previousGridData, float unknownValue);
+  // Update method for scanToGrid
+  void updateGrid_(const float angle, const float range,
+                   Eigen::Ref<Eigen::MatrixXi> gridData);
+
+  // Update method for scanToGridBaysian
+  void updateGridBaysian_(
+      const float angle, const float range,
+      Eigen::Ref<Eigen::MatrixXi> gridData,
+      Eigen::Ref<Eigen::MatrixXf> gridDataProb,
+      const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb);
 
   /**
    * @brief Fill an area around a point on the grid with given padding.
@@ -106,54 +157,6 @@ public:
   void fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
                            const Eigen::Vector2i &gridPoint, int gridPadding,
                            int indicator);
-
-  /**
-   * @brief Updates a grid cell occupancy probability using the LaserScanModel
-   *
-   * @param distance Hit point distance from the sensor (m)
-   * @param currentRange Scan ray hit range (m)
-   * @param previousProb Previous probability assigned to grid cell
-   */
-  float updateGridCellProbability(float distance, float currentRange,
-                                  float previousProb);
-
-  // Update method for scanToGrid
-  void updateGrid_(const float angle, const float range,
-                   Eigen::Ref<Eigen::MatrixXi> gridData);
-  /**
-   * Processes Laserscan data (angles and ranges) to project on a 2D grid
-   * using Bresenham line drawing for each Laserscan beam
-   *
-   * @param angles        LaserScan angles in radians
-   * @param ranges         LaserScan ranges in meters
-   * @param gridData      Current grid data
-   */
-  void scanToGrid(const std::vector<double> &angles,
-                  const std::vector<double> &ranges,
-                  Eigen::Ref<Eigen::MatrixXi> gridData);
-
-  // Update method for scanToGridBaysian
-  void updateGridBaysian_(
-      const float angle, const float range,
-      Eigen::Ref<Eigen::MatrixXi> gridData,
-      Eigen::Ref<Eigen::MatrixXf> gridDataProb,
-      const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb);
-  /**
-   * Processes Laserscan data (angles and ranges) to project on a 2D grid
-   * using Bresenham line drawing for each Laserscan beam and baysian map
-   * updates
-   *
-   * @param angles        LaserScan angles in radians
-   * @param ranges         LaserScan ranges in meters
-   * @param gridData      Current grid data
-   * @param gridDataProb Current probabilistic grid data
-   * @param previousGridDataProb Previous value of the probabilistic grid data
-   */
-  void scanToGridBaysian(
-      const std::vector<double> &angles, const std::vector<double> &ranges,
-      Eigen::Ref<Eigen::MatrixXi> gridData,
-      Eigen::Ref<Eigen::MatrixXf> gridDataProb,
-      const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb);
 
 protected:
   const int m_gridHeight;
