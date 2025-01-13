@@ -1,4 +1,14 @@
 # Kompass Core
+[![PyPI][pypi-badge]][pypi-url]
+[![MIT licensed][mit-badge]][mit-url]
+[![Python Version][python-badge]][python-url]
+
+[pypi-badge]: https://img.shields.io/pypi/v/kompass-core.svg
+[pypi-url]: https://pypi.org/project/kompass-core/
+[mit-badge]: https://img.shields.io/pypi/l/kompass-core.svg
+[mit-url]: https://github.com/automatika-robotics/kompass-core/LICENSE
+[python-badge]: https://img.shields.io/pypi/pyversions/kompass-core.svg
+[python-url]: https://www.python.org/downloads/
 
 Kompass Core is a fast, GPU powered motion planning and control package for robot navigation. The package contains C++ implementation for core algorithms along with Python wrappers. It also implements third party integrations with [OMPL](https://ompl.kavrakilab.org/) and [FCL](https://github.com/flexible-collision-library/fcl). The Kompass philosophy is to be blazzingly fast and highly reliable, by implementing parallelized algorithms which are agnostic to underlying hardware. Thus Kompass Core can be run on CPUs, GPUs, NPUs or FPGAs from a wide variety of vendors, making it easy for robot manufacturers to switch underlying compute architecture.
 
