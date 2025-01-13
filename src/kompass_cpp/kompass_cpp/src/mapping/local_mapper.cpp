@@ -136,6 +136,8 @@ void LocalMapper::updateGrid_(const float angle, const float range,
   points.reserve(m_maxPointsPerLine);
 
   bresenhamEnhanced(m_startPoint, toPoint, points);
+  bool rayStopped = true;
+  Eigen::Vector2i lastGridPoint = points[0];
 
   for (auto &pt : points) {
 
@@ -145,16 +147,23 @@ void LocalMapper::updateGrid_(const float angle, const float range,
       // grid update
       {
         std::lock_guard<std::mutex> lock(s_gridMutex);
-        if (pt(0) == toPoint(0) && pt(1) == toPoint(1)) {
-          // fill grid for obstacles
-          fillGridAroundPoint(gridData, pt, 0,
-                              static_cast<int>(OccupancyType::OCCUPIED));
-        } else {
-          gridData(pt(0), pt(1)) = std::max(
-              gridData(pt(0), pt(1)), static_cast<int>(OccupancyType::EMPTY));
-        }
+        gridData(pt(0), pt(1)) = std::max(
+            gridData(pt(0), pt(1)), static_cast<int>(OccupancyType::EMPTY));
       }
+      // update last point drawn
+      lastGridPoint(0) = pt(0);
+      lastGridPoint(1) = pt(1);
+    } else {
+      rayStopped = false;
     }
+  }
+  if (rayStopped) {
+    std::lock_guard<std::mutex> lock(s_gridMutex);
+    /* Force non-bayesian map to set ending_point to occupied. So that
+       when visualizing the map the detected obstacles can be visualized
+       instead of having a map that visualize empty and unknown zones only.*/
+    fillGridAroundPoint(gridData, lastGridPoint, 0,
+                        static_cast<int>(OccupancyType::OCCUPIED));
   }
 }
 
@@ -174,6 +183,9 @@ void LocalMapper::updateGridBaysian_(
 
   bresenhamEnhanced(m_startPoint, toPoint, points);
 
+  bool rayStopped = true;
+  Eigen::Vector2i lastGridPoint = points[0];
+
   for (auto &pt : points) {
 
     if (pt(0) >= 0 && pt(0) < m_gridHeight && pt(1) >= 0 &&
@@ -189,18 +201,26 @@ void LocalMapper::updateGridBaysian_(
       {
         std::lock_guard<std::mutex> lock(s_gridMutex);
         // non-bayesian update
-        if (pt(0) == toPoint(0) && pt(1) == toPoint(1)) {
-          // fill grid for obstacles
-          fillGridAroundPoint(gridData, pt, 0,
-                              static_cast<int>(OccupancyType::OCCUPIED));
-        } else {
-          gridData(pt(0), pt(1)) = std::max(
-              gridData(pt(0), pt(1)), static_cast<int>(OccupancyType::EMPTY));
-        }
+        gridData(pt(0), pt(1)) = std::max(
+            gridData(pt(0), pt(1)), static_cast<int>(OccupancyType::EMPTY));
+
         // bayesian update
         gridDataProb(pt(0), pt(1)) = newValue;
       }
+      // update last point drawn
+      lastGridPoint(0) = pt(0);
+      lastGridPoint(1) = pt(1);
+    } else {
+      rayStopped = false;
     }
+  }
+  if (rayStopped) {
+    std::lock_guard<std::mutex> lock(s_gridMutex);
+    /* Force non-bayesian map to set ending_point to occupied. So that
+       when visualizing the map the detected obstacles can be visualized
+       instead of having a map that visualize empty and unknown zones only.*/
+    fillGridAroundPoint(gridData, lastGridPoint, 0,
+                        static_cast<int>(OccupancyType::OCCUPIED));
   }
 }
 
