@@ -4,18 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kompass_core"
-version = "0.4.0"
+dynamic = ["version"]
 description = "Navigation Algorithms for Kompass"
 authors = [{ name = "Automatika Robotics", email = "contact@automatikarobotics.com" }]
 readme = "README.md"
 classifiers = [
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-]
-license = { file = "LICENSE" }
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12"]
+license = { text = "MIT" }
 
 keywords = ["robotics", "robots", "navigation", "control", "planning", "mapping"]
+
 dependencies = [
     "numpy<=1.26.4",
     "numpy-quaternion>=2023.0.3",
@@ -33,6 +35,9 @@ requires-python = ">=3.8.4,<3.13"
 
 [project.optional-dependencies]
 dev = ["pip-tools", "pytest==8.0.0", "pre-commit"]
+
+[project.urls]
+Homepage = "https://github.com/automatika-robotics/kompass-core"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -92,9 +97,6 @@ tag = true
 push = true
 
 [tool.bumpver.file_patterns]
-"pyproject.toml" = [
-    'version = "{version}"',
-]
 "setup.py" = [
     "{version}",
 ]

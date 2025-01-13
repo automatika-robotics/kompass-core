@@ -11,8 +11,7 @@ message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 # project statement
 project(
   kompass_cpp
-  VERSION 0.1
-  LANGUAGES CXX)
+  LANGUAGES C CXX)
 
 set(PKG_DESC "KOMPASS CPP Robot Motion Control and Planning Library")
 

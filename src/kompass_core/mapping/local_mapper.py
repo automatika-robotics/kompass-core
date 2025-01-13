@@ -7,9 +7,6 @@ from ..datatypes.laserscan import LaserScanData
 
 from kompass_cpp.mapping import (
     OCCUPANCY_TYPE,
-    scan_to_grid,
-    scan_to_grid_baysian,
-    get_previous_grid_in_current_pose,
 )
 
 from ..utils.geometry import from_frame1_to_frame2, get_pose_target_in_reference_frame
@@ -126,7 +123,12 @@ class LocalMapper:
     - Probabilistic Occupancy
     """
 
-    def __init__(self, config: MapConfig, scan_model_config: LaserScanModelConfig):
+    def __init__(
+        self,
+        config: MapConfig,
+        scan_model_config: LaserScanModelConfig,
+        pose_laser_scanner_in_robot: Optional[PoseData] = None,
+    ):
         """Initialize a LocalMapper
 
         :param config: Mapper config
@@ -151,19 +153,17 @@ class LocalMapper:
         #     int(self.grid_height / 2) - 1,
         # ]
 
-        self._point_central_in_grid = np.array(
-            [
-                round(self.grid_width / 2) - 1,
-                round(self.grid_height / 2) - 1,
-            ],
-            dtype=np.int32,
-        )
-
         # current obstacles and grid data
         self._pose_robot_in_world = PoseData()
         self.lower_right_corner_pose = PoseData()
 
         self.scan_update_model = scan_model_config
+
+        self.pose_laserscanner_in_robot = pose_laser_scanner_in_robot if pose_laser_scanner_in_robot else PoseData()
+
+        self.laserscan_orientation_in_robot = 2 * np.arctan(
+            self.pose_laserscanner_in_robot.qz / self.pose_laserscanner_in_robot.qw
+        )
 
         self.grid_data = GridData(
             width=self.grid_width,
@@ -200,6 +200,32 @@ class LocalMapper:
         """
         return self.grid_data.occupancy_prob
 
+    def _initialize_mapper(self, scan_size: int) -> None:
+        """Initialize cpp local mapper"""
+        try:
+            from kompass_cpp.mapping import LocalMapperGPU
+            self.local_mapper = LocalMapperGPU(
+                grid_height=self.grid_height,
+                grid_width=self.grid_width,
+                resolution=self.config.resolution,
+                laserscan_position=self.pose_laserscanner_in_robot.get_position(),
+                laserscan_orientation=self.laserscan_orientation_in_robot,
+                scan_size=scan_size,
+                max_points_per_line=self.config.max_points_per_line,
+            )
+        except ImportError:
+            from kompass_cpp.mapping import LocalMapper as LocalMapperCpp
+            self.local_mapper = LocalMapperCpp(
+                grid_height=self.grid_height,
+                grid_width=self.grid_width,
+                resolution=self.config.resolution,
+                laserscan_position=self.pose_laserscanner_in_robot.get_position(),
+                laserscan_orientation=self.laserscan_orientation_in_robot,
+                **self.scan_update_model.asdict(),
+                max_points_per_line=self.config.max_points_per_line,
+                max_num_threads=self.config.max_num_threads,
+            )
+
     def _calculate_poses(self, current_robot_pose: PoseData):
         """Calculates 3D global poses of the 4 corners of the grid based on the curren robot position
 
@@ -222,15 +248,13 @@ class LocalMapper:
                 pose_current_robot_in_previous_robot.get_yaw()
             )
 
-            self.previous_grid_prob_transformed = get_previous_grid_in_current_pose(
-                current_position_in_previous_pose=_position_in_previous_pose[:2],
-                current_orientation_in_previous_pose=_orientation_in_previous_pose,
-                previous_grid_data=self.grid_data.scan_occupancy_prob,
-                central_point=self._point_central_in_grid,
-                grid_width=self.grid_width,
-                grid_height=self.grid_height,
-                resolution=self.config.resolution,
-                unknown_value=self.scan_update_model.p_prior,
+            self.previous_grid_prob_transformed = (
+                self.local_mapper.get_previous_grid_in_current_pose(
+                    current_position_in_previous_pose=_position_in_previous_pose[:2],
+                    current_orientation_in_previous_pose=_orientation_in_previous_pose,
+                    previous_grid_data=self.grid_data.scan_occupancy_prob,
+                    unknown_value=self.scan_update_model.p_prior,
+                )
             )
 
         self._pose_robot_in_world = current_robot_pose
@@ -242,7 +266,6 @@ class LocalMapper:
         self,
         robot_pose: PoseData,
         laser_scan: LaserScanData,
-        pose_laser_scanner_in_robot: Optional[PoseData] = None,
     ):
         """
         Update the local map using new LaserScan data
@@ -255,14 +278,11 @@ class LocalMapper:
         :type pose_laser_scanner_in_robot: Optional[PoseData], optional
         """
         # Get transformation between the previous robot state (pose and grid) w.r.t the current state.
+
+        if not self.processed:
+            self._initialize_mapper(laser_scan.ranges.size)
+
         self._calculate_poses(robot_pose)
-
-        if not pose_laser_scanner_in_robot:
-            pose_laser_scanner_in_robot = PoseData()
-
-        laserscan_orientation = 2 * np.arctan(
-            pose_laser_scanner_in_robot.qz / pose_laser_scanner_in_robot.qw
-        )
 
         # filter out negative range and points outside grid limit
         filtered_ranges = np.minimum(
@@ -273,19 +293,11 @@ class LocalMapper:
         self.grid_data.init_scan_data(self.config.baysian_update)
 
         if self.config.baysian_update:
-            scan_to_grid_baysian(
+            self.local_mapper.scan_to_grid_baysian(
                 angles=laser_scan.angles,
                 ranges=filtered_ranges,
                 grid_data=self.grid_data.scan_occupancy,
                 grid_data_prob=self.grid_data.scan_occupancy_prob,
-                central_point=self._point_central_in_grid,
-                resolution=self.config.resolution,
-                laser_scan_position=pose_laser_scanner_in_robot.get_position(),
-                laser_scan_orientation=laserscan_orientation,
-                previous_grid_data_prob=self.previous_grid_prob_transformed,
-                **self.scan_update_model.asdict(),
-                max_points_per_line=self.config.max_points_per_line,
-                max_num_threads=self.config.max_num_threads,
             )
 
             # flag to enable fetching the mapping data
@@ -305,16 +317,10 @@ class LocalMapper:
             ] = OCCUPANCY_TYPE.EMPTY.value
 
         else:
-            scan_to_grid(
+            self.local_mapper.scan_to_grid(
                 angles=laser_scan.angles,
                 ranges=filtered_ranges,
                 grid_data=self.grid_data.scan_occupancy,
-                central_point=self._point_central_in_grid,
-                resolution=self.config.resolution,
-                laser_scan_position=pose_laser_scanner_in_robot.get_position(),
-                laser_scan_orientation=laserscan_orientation,
-                max_points_per_line=self.config.max_points_per_line,
-                max_num_threads=self.config.max_num_threads,
             )
 
             # Update grid

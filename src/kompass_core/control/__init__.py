@@ -62,7 +62,7 @@ class StrEnum(Enum):
         return self.value
 
 
-class LocalPlannersID(StrEnum):
+class ControllersID(StrEnum):
     """
     Local planners compute a local plan along with the commands to follow it (work in standalone fashion)
     """
@@ -70,18 +70,19 @@ class LocalPlannersID(StrEnum):
     STANLEY = "Stanley"
     DWA = "DWA"
     DVZ = "DVZ"
+    VISION = "VisionFollower"
 
 
 ControlClasses = {
-    LocalPlannersID.STANLEY: Stanley,
-    LocalPlannersID.DVZ: DVZ,
-    LocalPlannersID.DWA: DWA,
+    ControllersID.STANLEY: Stanley,
+    ControllersID.DVZ: DVZ,
+    ControllersID.DWA: DWA,
 }
 
 ControlConfigClasses = {
-    LocalPlannersID.STANLEY: StanleyConfig,
-    LocalPlannersID.DVZ: DVZConfig,
-    LocalPlannersID.DWA: DWAConfig,
+    ControllersID.STANLEY: StanleyConfig,
+    ControllersID.DVZ: DVZConfig,
+    ControllersID.DWA: DWAConfig,
 }
 
 
@@ -90,7 +91,7 @@ __all__ = [
     "ControllerType",
     "DVZ",
     "DVZConfig",
-    "LocalPlannersID",
+    "ControllersID",
     "ControlClasses",
     "ControlConfigClasses",
     "Stanley",

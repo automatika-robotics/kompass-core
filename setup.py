@@ -16,7 +16,7 @@ __version__ = "0.4.0"
 # DEFAULTS FOR UBUNTU 22.04
 OMPL_INCLUDE_DEFAULT_DIR = "/usr/include/ompl-1.5"
 EIGEN_INCLUDE_DEFAULT_DIR = "/usr/include/eigen3"
-PCL_INCLUDE_DEFAULT_DIR = "/usr/include/pcl-1.12"
+PCL_INCLUDE_DEFAULT_DIR = "/usr/include/pcl-1.14"
 
 
 def get_libraries_dir():
@@ -36,6 +36,19 @@ def check_pkg_config():
         raise RuntimeError(
             "pkg-config is not installed, but it is required for building this package."
         ) from e
+
+
+def check_acpp():
+    """Check if AdaptiveCPP is available"""
+    try:
+        subprocess.check_output(["acpp", "--version"])
+        print("AdaptiveCPP found. Building with acpp.")
+    except Exception:
+        print("AdaptiveCPP is not installed. Building with default compiler available.")
+        return False
+    # change compiler to acpp
+    os.environ["CXX"] = "acpp"
+    return True
 
 
 def find_pkg(package, versions=None):
@@ -134,7 +147,7 @@ pcl_versions = ["1.14", "1.13", "1.12", "1.11", "1.10", "1.9"]
 eigen_include_dir = pkg_config(["eigen3"], flag="--cflags-only-I")
 pcl_include_dir = pkg_config(
     ["pcl_common"], flag="--cflags-only-I", versions=pcl_versions
-)
+) or [PCL_INCLUDE_DEFAULT_DIR]
 
 # vcpkg paths when running in CI
 vcpkg_includes_dir = get_vcpkg_includes()
@@ -170,7 +183,16 @@ kompass_cpp_module_includes = (
     if not kompass_cpp_dependency_includes
     else ["src/kompass_cpp/kompass_cpp/include"] + kompass_cpp_dependency_includes
 )
-
+kompass_cpp_source_files = glob.glob(
+    os.path.join("src/kompass_cpp/kompass_cpp/src/**", "*.cpp"), recursive=True
+)
+if not check_acpp():
+    kompass_cpp_source_files = [
+        f_name for f_name in kompass_cpp_source_files if not f_name.endswith("gpu.cpp")
+    ]
+    extra_args = []
+else:
+    extra_args = ["-DGPU=1"]
 
 ext_modules = [
     Pybind11Extension(
@@ -180,16 +202,16 @@ ext_modules = [
         libraries=["ompl"],
         library_dirs=get_libraries_dir(),
         define_macros=[("VERSION_INFO", __version__)],
+        extra_compile_args=["-O3"],
     ),
     Pybind11Extension(
         "kompass_cpp",
-        glob.glob(
-            os.path.join("src/kompass_cpp/kompass_cpp/src/**", "*.cpp"), recursive=True
-        ),
+        kompass_cpp_source_files,
         include_dirs=kompass_cpp_module_includes,
         libraries=["fcl", "pcl_io_ply", "pcl_common"] + vcpkg_extra_libs,
         library_dirs=get_libraries_dir(),
         define_macros=[("VERSION_INFO", __version__)],
+        extra_compile_args=["-O3"] + extra_args,
     ),
 ]
 
@@ -201,4 +223,5 @@ setup(
     ext_modules=ext_modules,
     cmdclass={"build_ext": build_ext},
     zip_safe=False,
+    version=__version__,
 )
