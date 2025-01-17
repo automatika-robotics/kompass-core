@@ -11,7 +11,7 @@ on:
       - published
 
 jobs:
-  build_wheels:
+  build_wheels_x86_64:
     name: Build wheels on linux x86_64
     runs-on: ubuntu-latest
 
@@ -19,11 +19,30 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build wheels
+        env:
+            CIBW_ARCHS: x86_64
         uses: pypa/cibuildwheel@v2.21.3
 
       - uses: actions/upload-artifact@v4
         with:
           name: cibw-x86-wheels-${{ strategy.job-index }}
+          path: ./wheelhouse/*.whl
+
+  build_wheels_aarch64:
+    name: Build wheels on linux aarch64
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build wheels
+        env:
+            CIBW_ARCHS: aarch64
+        uses: pypa/cibuildwheel@v2.21.3
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cibw-aarch64-wheels-${{ strategy.job-index }}
           path: ./wheelhouse/*.whl
 
   build_sdist:
@@ -37,11 +56,11 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: cibw-x86-sdist
+          name: cibw-sdist
           path: dist/*.tar.gz
 
   upload_pypi:
-    needs: [build_wheels, build_sdist]
+    needs: [build_wheels_x86_64, build_wheels_aarch64, build_sdist]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -51,7 +70,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           # unpacks all CIBW x86 artifacts into dist/
-          pattern: cibw-x86-*
+          pattern: cibw-*
           path: dist
           merge-multiple: true
 

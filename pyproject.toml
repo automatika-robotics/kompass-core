@@ -111,4 +111,3 @@ manylinux-aarch64-image = "manylinux_2_28"
 [tool.cibuildwheel.linux]
 environment = {VCPKG_ROOT="/project/deps/vcpkg", LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/x64-linux/lib:$VCPKG_ROOT/installed/arm64-linux/lib"}
 before-all = "bash build_dependencies/install_linux.sh"
-archs = ["x86_64"]
