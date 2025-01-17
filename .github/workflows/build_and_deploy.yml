@@ -12,8 +12,6 @@ on:
 
 jobs:
   build_wheels:
-    name: Build wheels on ${{ matrix.os }} ${{ matrix.arch }}
-    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os-arch:
@@ -21,6 +19,9 @@ jobs:
             arch: x86_64
           - os: ubuntu-24.04-arm
             arch: aarch64
+
+    name: Build wheels on ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
