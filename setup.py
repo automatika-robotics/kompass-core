@@ -138,7 +138,7 @@ def get_vcpkg_extra_libs():
 
 
 # OMPL dependencies
-ompl_include_dirs = pkg_config(["ompl"], flag="--cflags-only-I")
+ompl_include_dir = pkg_config(["ompl"], flag="--cflags-only-I")
 
 # Accepted PCL versions
 pcl_versions = ["1.14", "1.13", "1.12", "1.11", "1.10", "1.9"]
@@ -156,19 +156,19 @@ vcpkg_extra_libs = get_vcpkg_extra_libs()
 
 ## Check include dirs
 # for OMPL
-ompl_module_includes = ompl_include_dirs + vcpkg_includes_dir
+ompl_module_includes = vcpkg_includes_dir + ompl_include_dir
 # try a static path when pkg_config does not return anything and not in CI
 if not ompl_module_includes:
     ompl_module_includes = [OMPL_INCLUDE_DEFAULT_DIR]
 
-eigen_include_dir = eigen_include_dir + vcpkg_includes_dir
+eigen_include_dir = vcpkg_includes_dir + eigen_include_dir
 # try a static path when pkg_config does not return anything and not in CI
 if not eigen_include_dir:
     eigen_include_dir = [EIGEN_INCLUDE_DEFAULT_DIR]
 
 # for Kompass CPP
 kompass_cpp_dependency_includes = (
-    eigen_include_dir + pcl_include_dir + vcpkg_includes_dir
+    vcpkg_includes_dir + eigen_include_dir + pcl_include_dir
 )
 kompass_cpp_module_includes = [
     "src/kompass_cpp/kompass_cpp/include"
