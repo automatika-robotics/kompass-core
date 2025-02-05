@@ -226,40 +226,34 @@ class LocalMapper:
                 max_num_threads=self.config.max_num_threads,
             )
 
-    def _calculate_poses(self, current_robot_pose: PoseData):
-        """Calculates 3D global poses of the 4 corners of the grid based on the curren robot position
+    def _calculate_grid_shift(self, current_robot_pose: PoseData):
+        """Calculates 3D global pose shift of the last step probability grid based on the current robot position
 
         :param current_robot_pose: Current robot position in global frame
         :type current_robot_pose: PoseData
         """
-        if self.processed:
-            # self._pose_robot_in_world has been set already at least once
-            # i.e. we have a t+1 state
-            # get current shift in translation and orientation of the new center
-            # with respect to the previous old center
-            pose_current_robot_in_previous_robot = get_pose_target_in_reference_frame(
-                reference_pose=self._pose_robot_in_world, target_pose=current_robot_pose
-            )
-            # new position and orientation with respect to the previous pose
-            _position_in_previous_pose = (
-                pose_current_robot_in_previous_robot.get_position()
-            )
-            _orientation_in_previous_pose = (
-                pose_current_robot_in_previous_robot.get_yaw()
-            )
+        # self._pose_robot_in_world has been set already at least once
+        # i.e. we have a t+1 state
+        # get current shift in translation and orientation of the new center
+        # with respect to the previous old center
+        pose_current_robot_in_previous_robot = get_pose_target_in_reference_frame(
+            reference_pose=self._pose_robot_in_world, target_pose=current_robot_pose
+        )
+        # new position and orientation with respect to the previous pose
+        _position_in_previous_pose = (
+            pose_current_robot_in_previous_robot.get_position()
+        )
+        _orientation_in_previous_pose = (
+            pose_current_robot_in_previous_robot.get_yaw()
+        )
 
-            self.previous_grid_prob_transformed = (
-                self.local_mapper.get_previous_grid_in_current_pose(
-                    current_position_in_previous_pose=_position_in_previous_pose[:2],
-                    current_orientation_in_previous_pose=_orientation_in_previous_pose,
-                    previous_grid_data=self.grid_data.scan_occupancy_prob,
-                    unknown_value=self.scan_update_model.p_prior,
-                )
+        self.previous_grid_prob_transformed = (
+            self.local_mapper.get_previous_grid_in_current_pose(
+                current_position_in_previous_pose=_position_in_previous_pose[:2],
+                current_orientation_in_previous_pose=_orientation_in_previous_pose,
+                previous_grid_data=self.grid_data.scan_occupancy_prob,
+                unknown_value=self.scan_update_model.p_prior,
             )
-
-        self._pose_robot_in_world = current_robot_pose
-        self.lower_right_corner_pose = from_frame1_to_frame2(
-            current_robot_pose, self._local_lower_right_corner_point
         )
 
     def update_from_scan(
@@ -282,26 +276,29 @@ class LocalMapper:
         if not self.processed:
             self._initialize_mapper(laser_scan.ranges.size)
 
-        self._calculate_poses(robot_pose)
-
         # filter out negative range and points outside grid limit
         filtered_ranges = np.minimum(
             self.config.filter_limit,
             np.maximum(0.0, laser_scan.ranges),
         )
 
-        self.grid_data.init_scan_data(self.config.baysian_update)
+        # Calculate new grid pose
+        self._pose_robot_in_world = robot_pose
+        self.lower_right_corner_pose = from_frame1_to_frame2(
+            robot_pose, self._local_lower_right_corner_point
+        )
 
         if self.config.baysian_update:
+            if self.processed:
+                self._calculate_grid_shift(robot_pose)
+            self.grid_data.init_scan_data(self.config.baysian_update)
             self.local_mapper.scan_to_grid_baysian(
                 angles=laser_scan.angles,
                 ranges=filtered_ranges,
                 grid_data=self.grid_data.scan_occupancy,
                 grid_data_prob=self.grid_data.scan_occupancy_prob,
+                previous_grid_data_prob=self.previous_grid_prob_transformed
             )
-
-            # flag to enable fetching the mapping data
-            self.processed = True
 
             # Update grid
             self.grid_data.occupancy = np.copy(self.grid_data.scan_occupancy)
@@ -317,6 +314,7 @@ class LocalMapper:
             ] = OCCUPANCY_TYPE.EMPTY.value
 
         else:
+            self.grid_data.init_scan_data(self.config.baysian_update)
             self.local_mapper.scan_to_grid(
                 angles=laser_scan.angles,
                 ranges=filtered_ranges,
@@ -325,6 +323,9 @@ class LocalMapper:
 
             # Update grid
             self.grid_data.occupancy = np.copy(self.grid_data.scan_occupancy)
+
+        # flag to enable fetching the mapping data
+        self.processed = True
 
         # robot occupied zone - TODO: make it in a separate function and proportional to the actual robot size\
         # self.grid_data["scan_occupancy"][
