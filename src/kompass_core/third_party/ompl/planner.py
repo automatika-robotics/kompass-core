@@ -199,7 +199,7 @@ class OMPLGeometric:
         self.setup.clear()
 
     @property
-    def path_cost(self) -> float | None:
+    def path_cost(self) -> Optional[float]:
         """
         Getter of solution path cost using the configured optimization objective
 
@@ -214,7 +214,7 @@ class OMPLGeometric:
             return cost.value()
         return None
 
-    def get_cost_using_objective(self, objective_key: str) -> float | None:
+    def get_cost_using_objective(self, objective_key: str) -> Optional[float]:
         """
         Get solution cost using a specific objective
         This is used to get the cost using an objective other than the configured objective
