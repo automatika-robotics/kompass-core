@@ -159,7 +159,9 @@ class LocalMapper:
 
         self.scan_update_model = scan_model_config
 
-        self.pose_laserscanner_in_robot = pose_laser_scanner_in_robot if pose_laser_scanner_in_robot else PoseData()
+        self.pose_laserscanner_in_robot = (
+            pose_laser_scanner_in_robot if pose_laser_scanner_in_robot else PoseData()
+        )
 
         self.laserscan_orientation_in_robot = 2 * np.arctan(
             self.pose_laserscanner_in_robot.qz / self.pose_laserscanner_in_robot.qw
@@ -204,6 +206,7 @@ class LocalMapper:
         """Initialize cpp local mapper"""
         try:
             from kompass_cpp.mapping import LocalMapperGPU
+
             self.local_mapper = LocalMapperGPU(
                 grid_height=self.grid_height,
                 grid_width=self.grid_width,
@@ -215,6 +218,7 @@ class LocalMapper:
             )
         except ImportError:
             from kompass_cpp.mapping import LocalMapper as LocalMapperCpp
+
             self.local_mapper = LocalMapperCpp(
                 grid_height=self.grid_height,
                 grid_width=self.grid_width,
@@ -240,12 +244,8 @@ class LocalMapper:
             reference_pose=self._pose_robot_in_world, target_pose=current_robot_pose
         )
         # new position and orientation with respect to the previous pose
-        _position_in_previous_pose = (
-            pose_current_robot_in_previous_robot.get_position()
-        )
-        _orientation_in_previous_pose = (
-            pose_current_robot_in_previous_robot.get_yaw()
-        )
+        _position_in_previous_pose = pose_current_robot_in_previous_robot.get_position()
+        _orientation_in_previous_pose = pose_current_robot_in_previous_robot.get_yaw()
 
         self.previous_grid_prob_transformed = (
             self.local_mapper.get_previous_grid_in_current_pose(
@@ -297,7 +297,7 @@ class LocalMapper:
                 ranges=filtered_ranges,
                 grid_data=self.grid_data.scan_occupancy,
                 grid_data_prob=self.grid_data.scan_occupancy_prob,
-                previous_grid_data_prob=self.previous_grid_prob_transformed
+                previous_grid_data_prob=self.previous_grid_prob_transformed,
             )
 
             # Update grid

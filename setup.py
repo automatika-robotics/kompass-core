@@ -110,9 +110,11 @@ def get_vcpkg_includes():
     """Get include dir for vcpkg"""
     if vcpkg_path:
         python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
-        headers_dir = next(
-            (s for s in os.listdir("/opt/_internal") if python_version in s), None
-        ) if os.path.exists("/opt/_internal") else None
+        headers_dir = (
+            next((s for s in os.listdir("/opt/_internal") if python_version in s), None)
+            if os.path.exists("/opt/_internal")
+            else None
+        )
         if not headers_dir:
             return [
                 f"{vcpkg_path}/installed/x64-linux/include",

@@ -128,14 +128,14 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
     simulated_velocities.push_back(vel);
   }
 
-  if (!is_collision) {
-    if (maxNumThreads > 1) {
-      std::lock_guard<std::mutex> lock(s_trajMutex);
-      admissible_velocity_trajectories->push_back({simulated_velocities, path});
-    } else {
-      admissible_velocity_trajectories->push_back({simulated_velocities, path});
-    }
+  // if (!is_collision) {
+  if (maxNumThreads > 1) {
+    std::lock_guard<std::mutex> lock(s_trajMutex);
+    admissible_velocity_trajectories->push_back({simulated_velocities, path});
+  } else {
+    admissible_velocity_trajectories->push_back({simulated_velocities, path});
   }
+  // }
   return;
 }
 
@@ -187,14 +187,14 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
     path.points.push_back(Path::Point(simulated_pose.x, simulated_pose.y));
   }
 
-  if (!is_collision) {
-    if (maxNumThreads > 1) {
-      std::lock_guard<std::mutex> lock(s_trajMutex);
-      admissible_velocity_trajectories->push_back({simulated_velocities, path});
-    } else {
-      admissible_velocity_trajectories->push_back({simulated_velocities, path});
-    }
+  // if (!is_collision) {
+  if (maxNumThreads > 1) {
+    std::lock_guard<std::mutex> lock(s_trajMutex);
+    admissible_velocity_trajectories->push_back({simulated_velocities, path});
+  } else {
+    admissible_velocity_trajectories->push_back({simulated_velocities, path});
   }
+  // }
   return;
 }
 
@@ -203,7 +203,7 @@ std::vector<Trajectory> TrajectorySampler::generateTrajectoriesAckermann(
   std::vector<Trajectory> admissible_velocity_trajectories;
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
-    // Implements generating smooth arc-like trajectories within the admissable
+    // Implements generating smooth arc-like trajectories within the admissible
     // speed limits
     for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
       if (std::abs(vx) >= MIN_VEL) {
@@ -211,7 +211,7 @@ std::vector<Trajectory> TrajectorySampler::generateTrajectoriesAckermann(
              omega += ang_sample_resolution_) {
 
           Velocity vel = Velocity(vx, 0.0, omega); // Limit Y movement
-          // Get admissible trajectories in seperate threads
+          // Get admissible trajectories in separate threads
           pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
                        current_pose, &admissible_velocity_trajectories);
         }
@@ -243,14 +243,14 @@ std::vector<Trajectory> TrajectorySampler::generateTrajectoriesDiffDrive(
     // Generate forward/backward trajectories
     for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
       Velocity vel = Velocity(vx, 0.0, 0.0); // Limit Y movement
-      // Get admissible trajectories in seperate threads
+      // Get admissible trajectories in separate threads
       pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
                    current_pose, &admissible_velocity_trajectories);
       // Generate rotation trajectories (Rotate then move)
       for (double omega = min_omega_; omega <= max_omega_;
            omega += ang_sample_resolution_) {
         Velocity vel = Velocity(vx, 0.0, omega); // Limit Y movement
-        // Get admissible trajectories in seperate threads
+        // Get admissible trajectories in separate threads
         pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive,
                      this, vel, current_pose,
                      &admissible_velocity_trajectories);
@@ -283,7 +283,7 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity &current_vel,
     // Generate forward/backward trajectories
     for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
       Velocity vel = Velocity(vx, 0.0, 0.0);
-      // Get admissible trajectories in seperate threads
+      // Get admissible trajectories in separate threads
       pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
                    current_pose, &admissible_velocity_trajectories);
     }
@@ -291,7 +291,7 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity &current_vel,
     // Generate lateral left/right trajectories
     for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
       Velocity vel = Velocity(0.0, vy, 0.0);
-      // Get admissible trajectories in seperate threads
+      // Get admissible trajectories in separate threads
       pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
                    current_pose, &admissible_velocity_trajectories);
     }
@@ -301,7 +301,7 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity &current_vel,
       for (double omega = min_omega_; omega <= max_omega_;
            omega += ang_sample_resolution_) {
         Velocity vel = Velocity(vx, 0.0, omega);
-        // Get admissible trajectories in seperate threads
+        // Get admissible trajectories in separate threads
         pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive,
                      this, vel, current_pose,
                      &admissible_velocity_trajectories);
@@ -313,7 +313,7 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity &current_vel,
       for (double omega = min_omega_; omega <= max_omega_;
            omega += ang_sample_resolution_) {
         Velocity vel = Velocity(0.0, vy, omega);
-        // Get admissible trajectories in seperate threads
+        // Get admissible trajectories in separate threads
         pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive,
                      this, vel, current_pose,
                      &admissible_velocity_trajectories);
