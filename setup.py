@@ -169,8 +169,10 @@ if not eigen_include_dir:
     eigen_include_dir = [EIGEN_INCLUDE_DEFAULT_DIR]
 
 # for Kompass CPP
-kompass_cpp_dependency_includes = list(
-    set(vcpkg_includes_dir + eigen_include_dir + pcl_include_dir)
+kompass_cpp_dependency_includes = (
+    vcpkg_includes_dir
+    + list(set(eigen_include_dir) - set(vcpkg_includes_dir))
+    + pcl_include_dir
 )
 
 # try a static path when pkg_config does not return anything and not in CI
