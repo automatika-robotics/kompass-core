@@ -132,7 +132,7 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
     simulated_velocities.push_back(vel);
   }
 
-  if (path.points.size() > 1) {
+  if (!is_collision) {
     if (maxNumThreads > 1) {
       std::lock_guard<std::mutex> lock(s_trajMutex);
       admissible_velocity_trajectories->push_back({simulated_velocities, path});
@@ -185,16 +185,13 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
     }
 
     if (is_collision) {
-      if(t == 0){
-        LOG_INFO("Collision at the current position!");
-      }
       break;
     }
 
     path.points.push_back(Path::Point(simulated_pose.x, simulated_pose.y));
   }
 
-  if (path.points.size() > 1) {
+  if (!is_collision) {
     if (maxNumThreads > 1) {
       std::lock_guard<std::mutex> lock(s_trajMutex);
       admissible_velocity_trajectories->push_back({simulated_velocities, path});

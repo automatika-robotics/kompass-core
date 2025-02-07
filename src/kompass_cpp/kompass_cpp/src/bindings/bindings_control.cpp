@@ -214,7 +214,7 @@ void bindings_control(py::module_ &m) {
                              const std::vector<Control::Point3D> &>(
                &Control::DWA::computeVelocityCommandsSet),
            py::return_value_policy::reference_internal)
-      .def("add_custom_cost", &Control::DWA::addCustomCost);
+      .def("add_custom_cost", &Control::DWA::addCustomCost)
       .def("set_resolution", &Control::DWA::resetOctreeResolution);
 
   // Vision Follower
