@@ -183,7 +183,6 @@ class DWA(FollowerTemplate):
         config_file: Optional[str] = None,
         config_yaml_root_name: Optional[str] = None,
         control_time_step: Optional[float] = None,
-        prediction_horizon: Optional[float] = None,
         **_,
     ):
         """
@@ -206,9 +205,6 @@ class DWA(FollowerTemplate):
 
         if control_time_step:
             config.control_time_step = control_time_step
-
-        if prediction_horizon:
-            config.prediction_horizon = prediction_horizon
 
         self._got_path = False
 
@@ -246,6 +242,7 @@ class DWA(FollowerTemplate):
         laser_scan: Optional[LaserScanData] = None,
         point_cloud: Optional[PointCloudData] = None,
         local_map: Optional[np.ndarray] = None,
+        local_map_resolution: Optional[float] = None,
         **_,
     ) -> bool:
         """
@@ -266,6 +263,9 @@ class DWA(FollowerTemplate):
         self._planner.set_current_state(
             current_state.x, current_state.y, current_state.yaw, current_state.speed
         )
+
+        if local_map_resolution:
+            self._planner.set_resolution(local_map_resolution)
 
         # If end point is reached -> no need to compute a new control
         if self.reached_end():

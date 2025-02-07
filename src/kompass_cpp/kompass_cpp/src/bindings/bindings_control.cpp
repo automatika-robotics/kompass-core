@@ -215,6 +215,7 @@ void bindings_control(py::module_ &m) {
                &Control::DWA::computeVelocityCommandsSet),
            py::return_value_policy::reference_internal)
       .def("add_custom_cost", &Control::DWA::addCustomCost);
+      .def("set_resolution", &Control::DWA::resetOctreeResolution);
 
   // Vision Follower
   py::class_<Control::VisionFollower::VisionFollowerConfig,

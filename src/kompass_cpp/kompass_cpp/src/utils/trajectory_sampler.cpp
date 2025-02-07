@@ -8,7 +8,7 @@
 #include "datatypes/trajectory.h"
 #include "utils/threadpool.h"
 #include "utils/trajectory_sampler.h"
-
+#include "utils/logger.h"
 namespace Kompass {
 
 namespace Control {
@@ -75,6 +75,10 @@ TrajectorySampler::TrajectorySampler(
 
 TrajectorySampler::~TrajectorySampler() { delete collChecker; }
 
+void TrajectorySampler::resetOctreeResolution(const double resolution) {
+  collChecker->resetOctreeResolution(resolution);
+}
+
 void TrajectorySampler::updateParams(TrajectorySamplerParameters config) {
   time_step_ = config.getParameter<double>("time_step");
   max_time_ = config.getParameter<double>("prediction_horizon");
@@ -128,14 +132,14 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
     simulated_velocities.push_back(vel);
   }
 
-  // if (!is_collision) {
-  if (maxNumThreads > 1) {
-    std::lock_guard<std::mutex> lock(s_trajMutex);
-    admissible_velocity_trajectories->push_back({simulated_velocities, path});
-  } else {
-    admissible_velocity_trajectories->push_back({simulated_velocities, path});
+  if (path.points.size() > 1) {
+    if (maxNumThreads > 1) {
+      std::lock_guard<std::mutex> lock(s_trajMutex);
+      admissible_velocity_trajectories->push_back({simulated_velocities, path});
+    } else {
+      admissible_velocity_trajectories->push_back({simulated_velocities, path});
+    }
   }
-  // }
   return;
 }
 
@@ -181,20 +185,23 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
     }
 
     if (is_collision) {
+      if(t == 0){
+        LOG_INFO("Collision at the current position!");
+      }
       break;
     }
 
     path.points.push_back(Path::Point(simulated_pose.x, simulated_pose.y));
   }
 
-  // if (!is_collision) {
-  if (maxNumThreads > 1) {
-    std::lock_guard<std::mutex> lock(s_trajMutex);
-    admissible_velocity_trajectories->push_back({simulated_velocities, path});
-  } else {
-    admissible_velocity_trajectories->push_back({simulated_velocities, path});
+  if (path.points.size() > 1) {
+    if (maxNumThreads > 1) {
+      std::lock_guard<std::mutex> lock(s_trajMutex);
+      admissible_velocity_trajectories->push_back({simulated_velocities, path});
+    } else {
+      admissible_velocity_trajectories->push_back({simulated_velocities, path});
+    }
   }
-  // }
   return;
 }
 
@@ -271,6 +278,7 @@ std::vector<Trajectory> TrajectorySampler::generateTrajectoriesDiffDrive(
       }
     }
   }
+  LOG_INFO("Got admissible trajectories: ", admissible_velocity_trajectories.size());
   return admissible_velocity_trajectories;
 }
 
