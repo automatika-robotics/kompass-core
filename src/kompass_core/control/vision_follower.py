@@ -16,6 +16,9 @@ class VisionFollowerConfig(BaseAttrs):
     control_horizon: int = field(
         default=2, validator=base_validators.in_range(min_value=1, max_value=1000)
     )
+    buffer_size : int = field(
+        default=3, validator=base_validators.in_range(min_value=1, max_value=10)
+    )
     tolerance: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
     )
@@ -33,10 +36,10 @@ class VisionFollowerConfig(BaseAttrs):
         default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1.0)
     )
     speed_depth_multiple: float = field(
-        default=0.7, validator=base_validators.in_range(min_value=1e-9, max_value=1.0)
+        default=0.7, validator=base_validators.in_range(min_value=1e-9, max_value=10.0)
     )
     min_vel: float = field(
-        default=0.01, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
+        default=0.1, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
     enable_search: bool = field(default=True)
 

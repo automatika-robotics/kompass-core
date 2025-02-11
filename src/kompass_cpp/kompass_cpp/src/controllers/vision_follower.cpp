@@ -143,7 +143,7 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
   }
 
   double current_distance = tracking.depth > 0 ? tracking.depth : size;
-  double distance_error = _config.target_distance() - current_distance;
+  double distance_error = current_distance - _config.target_distance();
   double distance_tolerance = _config.tolerance() * _config.target_distance();
 
   double error_y = (2 * tracking.center_xy[1] / tracking.img_height - 1.0);
@@ -165,7 +165,7 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
     if (_rotate_in_place && i % 2 != 0)
       continue;
 
-    double dist_speed = std::abs(distance_error) > _config.tolerance()
+    double dist_speed = distance_error > distance_tolerance
                             ? distance_error * _ctrl_limits.velXParams.maxVel
                             : 0.0;
 
@@ -189,23 +189,30 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
     distance_error = _config.target_distance() - simulated_depth;
 
     if (_rotate_in_place) {
-      if (std::abs(v) < 1e-2) {
+      if (std::abs(v) < _config.min_vel()) {
         // Set vx_ctrl[i] and vx_ctrl[i+1] to 0.0
         _out_vel.set(i, 0.0, 0.0, omega);
         if (i + 1 < _out_vel._length) {
           _out_vel.set(i + 1, 0.0, 0.0, omega);
         }
-      } else {
+      }
+      else if (std::abs(omega) < _config.min_vel()){
+        // Set vx_ctrl[i] and vx_ctrl[i+1] to 0.0
+        _out_vel.set(i, v, 0.0, 0.0);
+        if (i + 1 < _out_vel._length) {
+          _out_vel.set(i + 1, v, 0.0, 0.0);
+        }
+      }
+      else {
         // Set vx_ctrl[i] to 0.0
-        _out_vel.set(i, 0.0, 0.0, omega);
+        _out_vel.set(i, v, 0.0, 0.0);
         // Set vx_ctrl[i+1] to max(v, 0.0)
         if (i + 1 < _out_vel._length) {
           _out_vel.set(i + 1, 0.0, 0.0, omega);
         }
-        _out_vel.set(i, std::max(v, 0.0), 0.0, 0.0);
       }
     } else {
-      _out_vel.set(i, std::max(v, 0.0), 0.0, omega);
+      _out_vel.set(i, v, 0.0, omega);
     }
   }
 
