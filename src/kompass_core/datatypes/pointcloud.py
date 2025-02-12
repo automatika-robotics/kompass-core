@@ -25,7 +25,9 @@ class PointCloudData(BaseAttrs):
         ]
 
     @classmethod
-    def numpy_to_kompass_cpp(cls, data: np.ndarray, height: float = 0.05) -> List[Point3D]:
+    def numpy_to_kompass_cpp(
+        cls, data: np.ndarray, height: float = 0.05
+    ) -> List[Point3D]:
         """Convert to kompass_cpp PointCloud structure
 
         :return:

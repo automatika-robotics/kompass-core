@@ -16,19 +16,22 @@ class VisionFollowerConfig(BaseAttrs):
     control_horizon: int = field(
         default=2, validator=base_validators.in_range(min_value=1, max_value=1000)
     )
-    buffer_size : int = field(
+    buffer_size: int = field(
         default=3, validator=base_validators.in_range(min_value=1, max_value=10)
     )
     tolerance: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
     )
     target_distance: Optional[float] = field(default=None)
-    target_search_timeout: int = field(
-        default=30, validator=base_validators.in_range(min_value=0, max_value=1000)
-    )  # number of steps to timeout
-    target_search_pause: int = field(
-        default=2, validator=base_validators.in_range(min_value=0, max_value=1000)
-    )  # number of steps to pause
+    target_wait_timeout: float = field(
+        default=30.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
+    )  # wait for target to appear again timeout (seconds), used if search is disabled
+    target_search_timeout: float = field(
+        default=30.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
+    )  # search timeout in seconds
+    target_search_pause: float = field(
+        default=2.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
+    )  # pause between search actions to find target (seconds)
     target_search_radius: float = field(
         default=0.5, validator=base_validators.in_range(min_value=1e-4, max_value=1e4)
     )

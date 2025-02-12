@@ -239,4 +239,3 @@ void bindings_control(py::module_ &m) {
       .def("get_ctrl", &Control::VisionFollower::getCtrl)
       .def("run", &Control::VisionFollower::run);
 }
-

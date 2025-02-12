@@ -112,21 +112,36 @@ bool VisionFollower::run(const std::optional<TrackingData> tracking) {
     tracking_available =
         ((data.size_xy[0] > 0 && data.size_xy[1] > 0) || data.depth > 0);
     if (tracking_available) {
+      // Reset recorded times for both search and wait
       _recorded_search_time = 0.0;
+      _recorded_wait_time = 0.0;
       // Track the target
       trackTarget(data);
       return true;
     }
   }
   // Tracking not available
-  if ((_recorded_search_time < _config.target_search_timeout()) &&
-      _config.enable_search()) {
-    _search_command = findTarget();
-    return true;
-  } else {
-    _recorded_search_time = 0.0;
-    // Failed to find target
-    return false;
+  if (_config.enable_search()){
+    if (_recorded_search_time < _config.target_search_timeout()) {
+      _search_command = findTarget();
+      return true;
+    } else {
+      _recorded_search_time = 0.0;
+      // Failed to find target
+      return false;
+    }
+  }
+  else{
+    if (_recorded_wait_time < _config.target_wait_timeout()) {
+      LOG_DEBUG("Target lost, waiting to get tracked target again ...");
+      // Do nothing and wait
+      _recorded_wait_time += _config.control_time_step();
+      return true;
+    } else {
+      _recorded_wait_time = 0.0;
+      // Failed to get target after waiting
+      return false;
+    }
   }
 }
 
@@ -180,8 +195,6 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
     v =
         - error_y * _ctrl_limits.velXParams.maxVel + _config.beta() * dist_speed;
 
-    LOG_INFO("error_y: ", error_y, ", distance_error: ", distance_error,", distance tolerance: ", distance_tolerance, ". speed=", v);
-
     // Limit by the minimum allowed velocity to avoid sending meaningless low
     // commands to the robot
     omega = std::abs(omega) >= _config.min_vel() ? omega : 0.0;
@@ -223,12 +236,20 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
 }
 
 const Velocities VisionFollower::getCtrl() const {
-  if (_recorded_search_time <= 0.0) {
+  if (_recorded_search_time <= 0.0 && _recorded_wait_time <= 0.0) {
     return _out_vel;
-  } else {
+  }
+  // If search is on
+  else if (_recorded_search_time > 0.0) {
     Velocities _search(1);
     _search.set(0, _search_command[0], _search_command[1], _search_command[2]);
     return _search;
+  }
+  // If search not active -> wait till timeout
+  else{
+    // send 0.0 to wait
+    Velocities _wait(1);
+    return _wait;
   }
 }
 
