@@ -143,7 +143,7 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
   }
 
   double current_distance = tracking.depth > 0 ? tracking.depth : size;
-  double distance_error = current_distance - _config.target_distance();
+  double distance_error = _config.target_distance() - current_distance;
   double distance_tolerance = _config.tolerance() * _config.target_distance();
 
   double error_y = (2 * tracking.center_xy[1] / tracking.img_height - 1.0);
@@ -155,9 +155,10 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
   std::fill(_out_vel.omega.begin(), _out_vel.omega.end(), 0.0);
 
   double simulated_depth = current_distance;
+  double dist_speed, omega, v;
   for (size_t i = 0; i < _out_vel._length; ++i) {
     // If all errors are within limits -> break
-    if (distance_error < distance_tolerance &&
+    if (std::abs(distance_error) < distance_tolerance &&
         std::abs(error_y) < _config.tolerance() &&
         std::abs(error_x) < _config.tolerance()) {
       break;
@@ -165,19 +166,21 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
     if (_rotate_in_place && i % 2 != 0)
       continue;
 
-    double dist_speed = distance_error > distance_tolerance
+    dist_speed = distance_error > distance_tolerance
                             ? distance_error * _ctrl_limits.velXParams.maxVel
                             : 0.0;
 
     // X center error : (2.0 * tracking.center_xy[0] / tracking.img_width - 1.0)
     // in [-1, 1] Omega in [-alpha * omega_max, alpha * omega_max]
-    double omega =
+    omega =
         -_config.alpha() * error_x * _ctrl_limits.omegaParams.maxOmega;
 
     // Y center error : (2.0 * tracking.center_xy[1] / tracking.img_height
     // - 1.0) in [-1, 1] V in [-speed_max, speed_max]
-    double v =
-        -error_y * _ctrl_limits.velXParams.maxVel - _config.beta() * dist_speed;
+    v =
+        - error_y * _ctrl_limits.velXParams.maxVel + _config.beta() * dist_speed;
+
+    LOG_INFO("error_y: ", error_y, ", distance_error: ", distance_error,", distance tolerance: ", distance_tolerance, ". speed=", v);
 
     // Limit by the minimum allowed velocity to avoid sending meaningless low
     // commands to the robot
