@@ -1,13 +1,10 @@
-#include <pybind11/eigen.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <vector>
 
-#include "datatypes/control.h"
-#include "datatypes/path.h"
-#include "datatypes/trajectory.h"
 #include "controllers/vision_follower.h"
+#include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
 #include "utils/collision_check.h"
@@ -16,9 +13,9 @@ namespace py = pybind11;
 using namespace Kompass;
 
 std::string printControlCmd(const Control::Velocity &velocity_command) {
-  return "{" + std::to_string(velocity_command.vx) + ", " +
-         std::to_string(velocity_command.vy) + ", " +
-         std::to_string(velocity_command.omega) + "})";
+  return "{" + std::to_string(velocity_command.vx()) + ", " +
+         std::to_string(velocity_command.vy()) + ", " +
+         std::to_string(velocity_command.omega()) + "})";
 }
 
 // Types submodule
@@ -39,9 +36,11 @@ void bindings_types(py::module_ &m) {
       .def_readwrite("speed", &Path::State::speed);
 
   py::class_<Path::Point>(m_types, "Point")
-      .def(py::init<double, double>(), py::arg("x") = 0.0, py::arg("y") = 0.0)
-      .def_readwrite("x", &Path::Point::x)
-      .def_readwrite("y", &Path::Point::y);
+      .def(py::init<double, double>(), py::arg("x") = 0.0, py::arg("y") = 0.0,
+           py::arg("z") = 0.0)
+      .def_property("x", &Path::Point::x, &Path::Point::setX)
+      .def_property("y", &Path::Point::y, &Path::Point::setY)
+      .def_property("z", &Path::Point::z, &Path::Point::setZ);
 
   py::class_<Path::PathPosition>(m_types, "PathPosition")
       .def(py::init<>())
@@ -63,10 +62,12 @@ void bindings_types(py::module_ &m) {
       .def(py::init<double, double, double, double>(), py::arg("vx") = 0.0,
            py::arg("vy") = 0.0, py::arg("omega") = 0.0,
            py::arg("steer_ang") = 0.0)
-      .def_readwrite("vx", &Control::Velocity::vx)
-      .def_readwrite("vy", &Control::Velocity::vy)
-      .def_readwrite("omega", &Control::Velocity::omega)
-      .def_readwrite("steer_ang", &Control::Velocity::steer_ang)
+      .def_property("vx", &Control::Velocity::vx, &Control::Velocity::setVx)
+      .def_property("vy", &Control::Velocity::vy, &Control::Velocity::setVy)
+      .def_property("omega", &Control::Velocity::omega,
+                    &Control::Velocity::setOmega)
+      .def_property("steer_ang", &Control::Velocity::steer_ang,
+                    &Control::Velocity::setSteerAng)
       .def("__str__", &printControlCmd);
 
   py::class_<Control::Velocities>(m_types, "ControlCmdList")
@@ -89,13 +90,6 @@ void bindings_types(py::module_ &m) {
            py::arg("ranges"), py::arg("angles"))
       .def_readwrite("ranges", &Control::LaserScan::ranges)
       .def_readwrite("angles", &Control::LaserScan::angles);
-
-  py::class_<Control::Point3D>(m_types, "Point3D")
-      .def(py::init<double, double, double>(), py::arg("x") = 0.0,
-           py::arg("y") = 0.0, py::arg("z") = 0.0)
-      .def_readwrite("x", &Control::Point3D::x)
-      .def_readwrite("y", &Control::Point3D::y)
-      .def_readwrite("z", &Control::Point3D::z);
 
   // For collisions detection
   py::enum_<CollisionChecker::ShapeType>(m_types, "RobotGeometry")

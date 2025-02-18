@@ -71,15 +71,16 @@ void CostEvaluator::setPointScan(const LaserScan &scan,
   }
 }
 
-void CostEvaluator::setPointScan(const std::vector<Point3D> &cloud,
-                                  const Path::State &current_state) {
+void CostEvaluator::setPointScan(const std::vector<Path::Point> &cloud,
+                                 const Path::State &current_state) {
 
   Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
 
   for (auto &point : cloud) {
 
+    // TODO fix
     Eigen::Vector3f pose_trans =
-        transformPosition(Eigen::Vector3f(point.x, point.y, point.z),
+        transformPosition(Eigen::Vector3f(point.x(), point.y(), point.z()),
                           sensor_tf_body_ * body_tf_world_);
     obstaclePoints.push_back({pose_trans[0], pose_trans[1]});
   }
@@ -164,9 +165,9 @@ double CostEvaluator::pathCostFunc(const Trajectory &trajectory,
     // Get minimum distance to the reference
     for (size_t j = 0; j < reference_path.points.size(); ++j) {
       double dist = std::sqrt(
-          std::pow(reference_path.points[j].x - trajectory.path.points[i].x,
+          std::pow(reference_path.points[j].x() - trajectory.path.points[i].x(),
                    2) +
-          std::pow(reference_path.points[j].y - trajectory.path.points[i].y,
+          std::pow(reference_path.points[j].y() - trajectory.path.points[i].y(),
                    2));
       if (dist < distError) {
         distError = dist;
@@ -191,8 +192,8 @@ double CostEvaluator::goalCostFunc(const Trajectory &trajectory,
   Path::Point ref_end = reference_path.getEnd();
   Path::Point traj_end = trajectory.path.getEnd();
 
-  double dist = std::sqrt(std::pow(traj_end.x - ref_end.x, 2) +
-                          std::pow(traj_end.y - ref_end.y, 2)) /
+  double dist = std::sqrt(std::pow(traj_end.x() - ref_end.x(), 2) +
+                          std::pow(traj_end.y() - ref_end.y(), 2)) /
                 reference_path.totalPathLength();
   return dist;
 }
@@ -210,16 +211,16 @@ CostEvaluator::smoothnessCostFunc(const Trajectory &trajectory,
   double delta_vx, delta_vy, delta_omega;
   for (size_t i = 1; i < trajectory.velocity.size(); ++i) {
     if (accLimits[0] > 0) {
-      delta_vx = trajectory.velocity[i].vx - trajectory.velocity[i - 1].vx;
+      delta_vx = trajectory.velocity[i].vx() - trajectory.velocity[i - 1].vx();
       smoothness_cost += std::pow(delta_vx, 2) / accLimits[0];
     }
     if (accLimits[1] > 0) {
-      delta_vy = trajectory.velocity[i].vy - trajectory.velocity[i - 1].vy;
+      delta_vy = trajectory.velocity[i].vy() - trajectory.velocity[i - 1].vy();
       smoothness_cost += std::pow(delta_vy, 2) / accLimits[1];
     }
     if (accLimits[2] > 0) {
       delta_omega =
-          trajectory.velocity[i].omega - trajectory.velocity[i - 1].omega;
+          trajectory.velocity[i].omega() - trajectory.velocity[i - 1].omega();
       smoothness_cost += std::pow(delta_omega, 2) / accLimits[2];
     }
   }
@@ -233,19 +234,21 @@ double CostEvaluator::jerkCostFunc(const Trajectory &trajectory,
   double jerk_vx, jerk_vy, jerk_omega;
   for (size_t i = 2; i < trajectory.velocity.size(); ++i) {
     if (accLimits[0] > 0) {
-      jerk_vx = trajectory.velocity[i].vx - 2 * trajectory.velocity[i - 1].vx +
-                trajectory.velocity[i - 2].vx;
+      jerk_vx = trajectory.velocity[i].vx() -
+                2 * trajectory.velocity[i - 1].vx() +
+                trajectory.velocity[i - 2].vx();
       jerk_cost += std::pow(jerk_vx, 2) / accLimits[0];
     }
     if (accLimits[1] > 0) {
-      jerk_vy = trajectory.velocity[i].vy - 2 * trajectory.velocity[i - 1].vy +
-                trajectory.velocity[i - 2].vy;
+      jerk_vy = trajectory.velocity[i].vy() -
+                2 * trajectory.velocity[i - 1].vy() +
+                trajectory.velocity[i - 2].vy();
       jerk_cost += std::pow(jerk_vy, 2) / accLimits[1];
     }
     if (accLimits[2] > 0) {
-      jerk_omega = trajectory.velocity[i].omega -
-                   2 * trajectory.velocity[i - 1].omega +
-                   trajectory.velocity[i - 2].omega;
+      jerk_omega = trajectory.velocity[i].omega() -
+                   2 * trajectory.velocity[i - 1].omega() +
+                   trajectory.velocity[i - 2].omega();
       jerk_cost += std::pow(jerk_omega, 2) / accLimits[2];
     }
   }

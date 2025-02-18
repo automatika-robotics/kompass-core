@@ -6,9 +6,9 @@
 
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
+#include "utils/logger.h"
 #include "utils/threadpool.h"
 #include "utils/trajectory_sampler.h"
-#include "utils/logger.h"
 namespace Kompass {
 
 namespace Control {
@@ -26,7 +26,8 @@ TrajectorySampler::TrajectorySampler(
     int maxAngularSamples, const CollisionChecker::ShapeType robotShapeType,
     const std::vector<float> robotDimensions,
     const std::array<float, 3> &sensor_position_body,
-    const std::array<float, 4> &sensor_rotation_body, const double octreeRes, const int maxNumThreads) {
+    const std::array<float, 4> &sensor_rotation_body, const double octreeRes,
+    const int maxNumThreads) {
   // Setup the collision checker
   collChecker = new CollisionChecker(robotShapeType, robotDimensions,
                                      sensor_position_body, sensor_rotation_body,
@@ -91,8 +92,8 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
     const Velocity &vel, const Path::State &start_pose,
     std::vector<Trajectory> *admissible_velocity_trajectories) {
 
-  if (std::abs(vel.vx) < MIN_VEL and std::abs(vel.vy) < MIN_VEL and
-      std::abs(vel.omega) < MIN_VEL) {
+  if (std::abs(vel.vx()) < MIN_VEL and std::abs(vel.vy()) < MIN_VEL and
+      std::abs(vel.omega()) < MIN_VEL) {
     return;
   }
   Path::State simulated_pose = start_pose;
@@ -102,13 +103,13 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
   bool is_collision = false;
 
   for (double t = 0; t < max_time_; t += time_step_) {
-    simulated_pose.x +=
-        (vel.vx * cos(simulated_pose.yaw) - vel.vy * sin(simulated_pose.yaw)) *
-        time_step_;
-    simulated_pose.y +=
-        (vel.vx * sin(simulated_pose.yaw) + vel.vy * cos(simulated_pose.yaw)) *
-        time_step_;
-    simulated_pose.yaw += vel.omega * time_step_;
+    simulated_pose.x += (vel.vx() * cos(simulated_pose.yaw) -
+                         vel.vy() * sin(simulated_pose.yaw)) *
+                        time_step_;
+    simulated_pose.y += (vel.vx() * sin(simulated_pose.yaw) +
+                         vel.vy() * cos(simulated_pose.yaw)) *
+                        time_step_;
+    simulated_pose.yaw += vel.omega() * time_step_;
 
     // Update the position of the robot in the collision checker (updates the
     // robot collision object) No need to update the Octree (laserscan)
@@ -123,8 +124,8 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
     if (is_collision) {
       // LOG_DEBUG("Detected collision -> dropping sample at x: ",
       // simulated_pose.x,
-      //           ", y: ", simulated_pose.y, "with Vx: ", vel.vx,
-      //           ", Vy: ", vel.vy, ", Omega: ", vel.omega);
+      //           ", y: ", simulated_pose.y, "with Vx: ", vel.vx(),
+      //           ", Vy: ", vel.vy(), ", Omega: ", vel.omega());
       break;
     }
 
@@ -147,8 +148,8 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
     const Velocity &vel, const Path::State &start_pose,
     std::vector<Trajectory> *admissible_velocity_trajectories) {
 
-  if (std::abs(vel.vx) < MIN_VEL and std::abs(vel.vy) < MIN_VEL and
-      std::abs(vel.omega) < MIN_VEL) {
+  if (std::abs(vel.vx()) < MIN_VEL and std::abs(vel.vy()) < MIN_VEL and
+      std::abs(vel.omega()) < MIN_VEL) {
     return;
   }
   Path::State simulated_pose = start_pose;
@@ -161,17 +162,17 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
 
     // Alternate between linear and angular movement
     if (int(t / time_step_) % 2 == 0) {
-      simulated_pose.yaw += vel.omega * time_step_;
+      simulated_pose.yaw += vel.omega() * time_step_;
       simulated_velocities.push_back(
-          Velocity(0.0, 0.0, vel.omega, vel.steer_ang));
+          Velocity(0.0, 0.0, vel.omega(), vel.steer_ang()));
     } else {
-      simulated_pose.x += (vel.vx * cos(simulated_pose.yaw) -
-                           vel.vy * sin(simulated_pose.yaw)) *
+      simulated_pose.x += (vel.vx() * cos(simulated_pose.yaw) -
+                           vel.vy() * sin(simulated_pose.yaw)) *
                           time_step_;
-      simulated_pose.y += (vel.vx * sin(simulated_pose.yaw) +
-                           vel.vy * cos(simulated_pose.yaw)) *
+      simulated_pose.y += (vel.vx() * sin(simulated_pose.yaw) +
+                           vel.vy() * cos(simulated_pose.yaw)) *
                           time_step_;
-      simulated_velocities.push_back(Velocity(vel.vx, vel.vy, 0.0, 0.0));
+      simulated_velocities.push_back(Velocity(vel.vx(), vel.vy(), 0.0, 0.0));
     }
 
     // Update the position of the robot in the collision checker (updates the
@@ -275,7 +276,8 @@ std::vector<Trajectory> TrajectorySampler::generateTrajectoriesDiffDrive(
       }
     }
   }
-  LOG_INFO("Got admissible trajectories: ", admissible_velocity_trajectories.size());
+  LOG_INFO("Got admissible trajectories: ",
+           admissible_velocity_trajectories.size());
   return admissible_velocity_trajectories;
 }
 
@@ -395,7 +397,7 @@ TrajectorySampler::generateTrajectories(const Velocity &current_vel,
 std::vector<Trajectory>
 TrajectorySampler::generateTrajectories(const Velocity &current_vel,
                                         const Path::State &current_pose,
-                                        const std::vector<Point3D> &cloud) {
+                                        const std::vector<Path::Point> &cloud) {
   collChecker->updateState(current_pose);
   // Update the PointCloud values
   collChecker->updatePointCloud(cloud);
@@ -406,18 +408,18 @@ void TrajectorySampler::UpdateReachableVelocityRange(
     Control::Velocity currentVel) {
 
   max_vx_ = std::min(ctrlimits.velXParams.maxVel,
-                     currentVel.vx +
+                     currentVel.vx() +
                          ctrlimits.velXParams.maxAcceleration * max_time_);
   min_vx_ = std::max(-ctrlimits.velXParams.maxVel,
-                     currentVel.vx -
+                     currentVel.vx() -
                          ctrlimits.velXParams.maxDeceleration * max_time_);
 
   if (ctrType == ControlType::OMNI) {
     max_vy_ = std::min(ctrlimits.velYParams.maxVel,
-                       currentVel.vy +
+                       currentVel.vy() +
                            ctrlimits.velYParams.maxAcceleration * max_time_);
     min_vy_ = std::max(-ctrlimits.velYParams.maxVel,
-                       currentVel.vy -
+                       currentVel.vy() -
                            ctrlimits.velYParams.maxDeceleration * max_time_);
   } else {
     max_vy_ = 0.0;
@@ -431,10 +433,10 @@ void TrajectorySampler::UpdateReachableVelocityRange(
       std::max((max_vy_ - min_vy_) / lin_samples_max_, 0.001);
 
   max_omega_ = std::min(ctrlimits.omegaParams.maxOmega,
-                        currentVel.omega +
+                        currentVel.omega() +
                             ctrlimits.omegaParams.maxAcceleration * max_time_);
   min_omega_ = std::max(-ctrlimits.omegaParams.maxOmega,
-                        currentVel.omega -
+                        currentVel.omega() -
                             ctrlimits.omegaParams.maxDeceleration * max_time_);
 
   ang_sample_resolution_ =

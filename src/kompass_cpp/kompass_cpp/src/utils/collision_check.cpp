@@ -1,5 +1,4 @@
 #include "utils/collision_check.h"
-#include "datatypes/trajectory.h"
 #include "utils/logger.h"
 #include "utils/transformation.h"
 #include <Eigen/src/Core/Matrix.h>
@@ -61,7 +60,7 @@ CollisionChecker::~CollisionChecker() {
 }
 
 void CollisionChecker::resetOctreeResolution(const double resolution) {
-  if (resolution != octree_resolution_){
+  if (resolution != octree_resolution_) {
     octree_resolution_ = resolution;
     octTree = new octomap::OcTree(octree_resolution_);
   }
@@ -133,8 +132,7 @@ void CollisionChecker::updatePointCloud(
   convertPointCloudToOctomap(cloud);
 }
 
-void CollisionChecker::updatePointCloud(
-    const std::vector<Control::Point3D> &cloud) {
+void CollisionChecker::updatePointCloud(const std::vector<Path::Point> &cloud) {
   convertPointCloudToOctomap(cloud);
 }
 
@@ -158,7 +156,7 @@ void CollisionChecker::convertPointCloudToOctomap(
 }
 
 void CollisionChecker::convertPointCloudToOctomap(
-    const std::vector<Control::Point3D> &cloud) {
+    const std::vector<Path::Point> &cloud) {
 
   // Transform the sensor position to the world frame
   // sensor_tf_world_ = sensor_tf_body_ * body->tf;
@@ -169,7 +167,7 @@ void CollisionChecker::convertPointCloudToOctomap(
 
   octomap::Pointcloud octomapCloud;
   for (const auto &point : cloud) {
-    octomapCloud.push_back(point.x, point.y, point.z);
+    octomapCloud.push_back(point.x(), point.y(), point.z());
   }
 
   octTree->insertPointCloud(octomapCloud, octomap::point3d(0, 0, 0));
@@ -357,7 +355,7 @@ bool CollisionChecker::checkCollisions(const Path::State current_state) {
   m_collManager->registerObjects(OctreeBoxes);
   m_collManager->setup();
   m_collManager->collide(m_stateObjPtr, &collisionData,
-                       fcl::DefaultCollisionFunction);
+                         fcl::DefaultCollisionFunction);
 
   delete m_stateObjPtr;
   delete m_collManager;

@@ -17,7 +17,8 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
          const std::array<float, 3> &sensor_position_body,
          const std::array<float, 4> &sensor_rotation_body,
          const double octreeRes,
-         CostEvaluator::TrajectoryCostsWeights costWeights, const int maxNumThreads)
+         CostEvaluator::TrajectoryCostsWeights costWeights,
+         const int maxNumThreads)
     : Follower() {
   // Setup the trajectory sampler
   trajSampler = new TrajectorySampler(
@@ -45,7 +46,8 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
          const std::vector<float> robotDimensions,
          const std::array<float, 3> &sensor_position_body,
          const std::array<float, 4> &sensor_rotation_body,
-         CostEvaluator::TrajectoryCostsWeights costWeights, const int maxNumThreads)
+         CostEvaluator::TrajectoryCostsWeights costWeights,
+         const int maxNumThreads)
     : Follower() {
   // Setup the trajectory sampler
   trajSampler = new TrajectorySampler(
@@ -81,7 +83,8 @@ void DWA::reconfigure(ControlLimitsParams controlLimits,
                       const std::array<float, 3> &sensor_position_body,
                       const std::array<float, 4> &sensor_rotation_body,
                       const double octreeRes,
-                      CostEvaluator::TrajectoryCostsWeights costWeights, const int maxNumThreads) {
+                      CostEvaluator::TrajectoryCostsWeights costWeights,
+                      const int maxNumThreads) {
   delete trajSampler;
   trajSampler = new TrajectorySampler(
       controlLimits, controlType, timeStep, predictionHorizon, controlHorizon,
@@ -100,7 +103,8 @@ void DWA::reconfigure(TrajectorySampler::TrajectorySamplerParameters config,
                       const std::vector<float> robotDimensions,
                       const std::array<float, 3> &sensor_position_body,
                       const std::array<float, 4> &sensor_rotation_body,
-                      CostEvaluator::TrajectoryCostsWeights costWeights, const int maxNumThreads) {
+                      CostEvaluator::TrajectoryCostsWeights costWeights,
+                      const int maxNumThreads) {
   delete trajSampler;
   trajSampler = new TrajectorySampler(
       config, controlLimits, controlType, robotShapeType, robotDimensions,
@@ -111,7 +115,9 @@ void DWA::reconfigure(TrajectorySampler::TrajectorySamplerParameters config,
   this->maxNumThreads = maxNumThreads;
 }
 
-void DWA::resetOctreeResolution(const double octreeRes) { trajSampler->resetOctreeResolution(octreeRes);}
+void DWA::resetOctreeResolution(const double octreeRes) {
+  trajSampler->resetOctreeResolution(octreeRes);
+}
 
 void DWA::addCustomCost(
     double weight, CostEvaluator::CustomCostFunction custom_cost_function) {
@@ -258,7 +264,7 @@ TrajSearchResult DWA::computeVelocityCommandsSet(const Velocity &global_vel,
 
 TrajSearchResult
 DWA::computeVelocityCommandsSet(const Velocity &global_vel,
-                                const std::vector<Point3D> &cloud) {
+                                const std::vector<Path::Point> &cloud) {
 
   TrajSearchResult searchRes = findBestPath(global_vel, cloud);
   // Update latest velocity command

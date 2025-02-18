@@ -106,7 +106,7 @@ public:
   std::vector<Trajectory>
   generateTrajectories(const Velocity &current_vel,
                        const Path::State &current_pose,
-                       const std::vector<Point3D> &cloud);
+                       const std::vector<Path::Point> &cloud);
 
   /**
    * @brief Reset the resolution of the obstacles Octree

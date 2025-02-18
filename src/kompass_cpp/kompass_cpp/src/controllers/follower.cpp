@@ -71,7 +71,6 @@ void Follower::setCurrentPath(const Path::Path &path) {
 
   refPath->points = path.points;
 
-
   currentPath->points = refPath->points;
 
   currentPath->interpolate(maxDist, interpolationType);
@@ -105,8 +104,8 @@ bool Follower::isGoalReached() {
   const Path::Point goal_point = currentPath->getEnd();
   bool loosing_goal = false;
 
-  const double current_goal_distance =
-      std::hypot(currentState.x - goal_point.x, currentState.y - goal_point.y);
+  const double current_goal_distance = std::hypot(
+      currentState.x - goal_point.x(), currentState.y - goal_point.y());
 
   bool end_reached = current_goal_distance <= goal_dist_tolerance;
 
@@ -138,12 +137,12 @@ void Follower::setInterpolationType(Path::InterpolationType type) {
 
 const double Follower::calculateDistance(const Path::State &state,
                                          const Path::Point &point) const {
-  return std::hypot(state.x - point.x, state.y - point.y);
+  return std::hypot(state.x - point.x(), state.y - point.y());
 }
 
 const double Follower::calculateDistance(const Path::Point &point1,
                                          const Path::Point &point2) const {
-  return std::hypot(point1.x - point2.x, point1.y - point2.y);
+  return std::hypot(point1.x() - point2.x(), point1.y() - point2.y());
 }
 
 const double Follower::calculateDistance(const Path::State &state1,
@@ -193,15 +192,15 @@ size_t Follower::findClosestSegmentIndex(size_t left, size_t right) {
 Path::State Follower::projectPointOnSegment(const Path::Point &a,
                                             const Path::Point &b,
                                             double &segment_length) {
-  double ab_x = b.x - a.x;
-  double ab_y = b.y - a.y;
+  double ab_x = b.x() - a.x();
+  double ab_y = b.y() - a.y();
 
   double segment_heading = std::atan2(
       ab_y,
       ab_x); // + M_PI_2; // PI/2 is added to measure angle to x axis not y
   segment_length = std::sqrt(ab_x * ab_x + ab_y + ab_y);
 
-  return Path::State(a.x, a.y, segment_heading);
+  return Path::State(a.x(), a.y(), segment_heading);
 }
 
 Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
@@ -210,13 +209,13 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
       currentPath->segments[segment_index].points;
   double min_distance = std::numeric_limits<double>::max();
   Path::State closest_point;
-  double segment_position = 0.0;  // in [0, 1]
+  double segment_position = 0.0; // in [0, 1]
   size_t point_index = 0;
   // Get current segment start, end to calculate length and orientation
   Path::Point start = currentPath->segments[segment_index].getStart();
   Path::Point end = currentPath->segments[segment_index].getEnd();
 
-  double segment_heading = std::atan2(end.y - start.y, end.x - start.x);
+  double segment_heading = std::atan2(end.y() - start.y(), end.x() - start.x());
 
   for (size_t i = 0; i < segment_points.size(); ++i) {
 
@@ -225,9 +224,9 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 
     if (distance < min_distance) {
       min_distance = distance;
-      closest_point = {projected_point.x, projected_point.y, segment_heading};
-      segment_position =
-          static_cast<double>(i) / (segment_points.size() - 1 );
+      closest_point = {projected_point.x(), projected_point.y(),
+                       segment_heading};
+      segment_position = static_cast<double>(i) / (segment_points.size() - 1);
       point_index = i;
     }
   }
@@ -283,11 +282,12 @@ void Follower::determineTarget() {
 
   currentTrackedTarget_->movement = closestPosition->state;
   currentTrackedTarget_->lookahead = lookahead_distance;
-  currentTrackedTarget_->heading_error = Angle::normalizeTo0Pi(
-      currentTrackedTarget_->movement.yaw) - Angle::normalizeTo0Pi(currentState.yaw);
+  currentTrackedTarget_->heading_error =
+      Angle::normalizeTo0Pi(currentTrackedTarget_->movement.yaw) -
+      Angle::normalizeTo0Pi(currentState.yaw);
 
   currentTrackedTarget_->crosstrack_error = closestPosition->parallel_distance;
-  currentTrackedTarget_->reverse =  false;
+  currentTrackedTarget_->reverse = false;
   return;
 }
 
@@ -295,8 +295,8 @@ bool Follower::isForwardSegment(const Path::Path &segment1,
                                 const Path::Path &segment2) const {
 
   const double angle_between_points =
-      std::atan2(segment2.getStart().y - segment1.getStart().y,
-                 segment2.getStart().x - segment1.getStart().x);
+      std::atan2(segment2.getStart().y() - segment1.getStart().y(),
+                 segment2.getStart().x() - segment1.getStart().x());
 
   return std::abs(Angle::normalizeTo0Pi(segment2.getStartOrientation() -
                                         angle_between_points)) <=
@@ -306,16 +306,16 @@ bool Follower::isForwardSegment(const Path::Path &segment1,
 
 // Get the control commands
 double Follower::getLinearVelocityCmdX() const {
-  return latest_velocity_command_.vx;
+  return latest_velocity_command_.vx();
 }
 double Follower::getLinearVelocityCmdY() const {
-  return latest_velocity_command_.vy;
+  return latest_velocity_command_.vy();
 }
 double Follower::getAngularVelocityCmd() const {
-  return latest_velocity_command_.omega;
+  return latest_velocity_command_.omega();
 }
 double Follower::getSteeringAngleCmd() const {
-  return latest_velocity_command_.steer_ang;
+  return latest_velocity_command_.steer_ang();
 }
 const double Follower::getPathLength() const {
   return currentPath->totalPathLength();
