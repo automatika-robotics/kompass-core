@@ -73,6 +73,9 @@ void Follower::setCurrentPath(const Path::Path &path) {
 
   currentPath->points = refPath->points;
 
+  currentPath->setMaxLength(
+      this->config.getParameter<double>("max_path_length"));
+
   currentPath->interpolate(maxDist, interpolationType);
 
   // Segment path

@@ -2,6 +2,7 @@
 #include "controllers/follower.h"
 #include "datatypes/control.h"
 #include "datatypes/path.h"
+#include "utils/threadpool.h"
 #include <algorithm>
 #include <array>
 #include <cmath>

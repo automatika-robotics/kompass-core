@@ -15,6 +15,7 @@
 #pragma once
 
 #include "controllers/controller.h"
+#include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
 #include "follower.h"

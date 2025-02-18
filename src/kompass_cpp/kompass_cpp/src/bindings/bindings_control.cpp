@@ -2,13 +2,13 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include "controllers/dwa.h"
 #include "controllers/follower.h"
-#include "datatypes/control.h"
-#include "datatypes/trajectory.h"
-#include "controllers/vision_follower.h"
 #include "controllers/pid.h"
 #include "controllers/stanley.h"
-#include "controllers/dwa.h"
+#include "controllers/vision_follower.h"
+#include "datatypes/control.h"
+#include "datatypes/trajectory.h"
 
 namespace py = pybind11;
 using namespace Kompass;
@@ -210,7 +210,7 @@ void bindings_control(py::module_ &m) {
            py::return_value_policy::reference_internal)
       .def("compute_velocity_commands",
            py::overload_cast<const Control::Velocity &,
-                             const std::vector<Control::Point3D> &>(
+                             const std::vector<Path::Point> &>(
                &Control::DWA::computeVelocityCommandsSet),
            py::return_value_policy::reference_internal)
       .def("add_custom_cost", &Control::DWA::addCustomCost)

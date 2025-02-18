@@ -53,11 +53,10 @@ Controller::Result Stanley::computeVelocityCommand(double timeStep) {
 
   // Stanley control law
   double control_steering_angle =
-     - cross_track_gain *
+      -cross_track_gain *
           std::atan2(target.crosstrack_error,
                      std::max(std::abs(target_speed), min_velocity)) +
-          heading_gain * Angle::normalizeToMinusPiPlusPi(target.heading_error);
-
+      heading_gain * Angle::normalizeToMinusPiPlusPi(target.heading_error);
 
   current_segment_index_ = target.segment_index;
   current_position_in_segment_ = target.position_in_segment;
@@ -67,7 +66,7 @@ Controller::Result Stanley::computeVelocityCommand(double timeStep) {
   latest_velocity_command_ = computeCommand(
       latest_velocity_command_, target_speed, control_steering_angle, timeStep);
 
-  LOG_DEBUG("Commmand: {", latest_velocity_command_.vx(), ", ",
+  LOG_DEBUG("Command: {", latest_velocity_command_.vx(), ", ",
             latest_velocity_command_.omega(), "}\n");
 
   return {Result::Status::COMMAND_FOUND, latest_velocity_command_};
@@ -81,7 +80,7 @@ Control::Velocity Stanley::computeCommand(Control::Velocity current_velocity,
                                           double time_step) const {
 
   // Restrict the linear velocity command based on the limits
-  double linearCtrl =
+  float linearCtrl =
       restrictVelocityTolimits(current_velocity.vx(), linear_velocity,
                                ctrlimitsParams.velXParams.maxAcceleration,
                                ctrlimitsParams.velXParams.maxDeceleration,
@@ -99,10 +98,11 @@ Control::Velocity Stanley::computeCommand(Control::Velocity current_velocity,
                  robotWheelBase;
 
   // Restrict the angular velocity
-  velocity_command.setOmega(restrictVelocityTolimits(current_velocity.omega(), omega,
-                               ctrlimitsParams.omegaParams.maxAcceleration,
-                               ctrlimitsParams.omegaParams.maxDeceleration,
-                               ctrlimitsParams.omegaParams.maxOmega, time_step));
+  velocity_command.setOmega(restrictVelocityTolimits(
+      current_velocity.omega(), omega,
+      ctrlimitsParams.omegaParams.maxAcceleration,
+      ctrlimitsParams.omegaParams.maxDeceleration,
+      ctrlimitsParams.omegaParams.maxOmega, time_step));
 
   return velocity_command;
 }

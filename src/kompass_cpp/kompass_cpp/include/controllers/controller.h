@@ -3,7 +3,6 @@
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
-#include "utils/threadpool.h"
 
 namespace Kompass {
 namespace Control {
@@ -17,7 +16,12 @@ public:
    *
    */
   struct Result {
-    enum class Status { GOAL_REACHED, LOOSING_GOAL, COMMAND_FOUND, NO_COMMAND_POSSIBLE };
+    enum class Status {
+      GOAL_REACHED,
+      LOOSING_GOAL,
+      COMMAND_FOUND,
+      NO_COMMAND_POSSIBLE
+    };
 
     Status status;
     Control::Velocity velocity_command;

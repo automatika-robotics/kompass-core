@@ -27,31 +27,41 @@ public:
   // Nested class for follower parameters
   class FollowerParameters : public Controller::ControllerParameters {
   public:
-
     FollowerParameters() : Controller::ControllerParameters() {
-      addParameter("max_point_interpolation_distance",
-                   Parameter(0.01, 0.0001,
-                             1000.0)); // [m] distance used for path interpolation
+      addParameter(
+          "max_point_interpolation_distance",
+          Parameter(0.01, 0.0001,
+                    1000.0)); // [m] distance used for path interpolation
+      addParameter(
+          "max_path_length",
+          Parameter(10.0, 1.0,
+                    1e9)); // Maximum allowed length of the global path (meters)
+      // NOTE: Currently the maximum path length is a configuration parameter to
+      // limit the maximum number of interpolated path points. In future updates
+      // the path length limit should be removed and a partial interpolation
+      // should be implemented instead (i.e. save all reference points and
+      // interpolate smaller parts gradually).
       addParameter(
           "lookahead_distance",
           Parameter(1.0, 0.0,
                     1000.0)); // [m] Lookahead distance used to find the next
-                            // point to reach (normally be same as wheelbase)
+                              // point to reach (normally be same as wheelbase)
       addParameter(
           "goal_dist_tolerance",
           Parameter(0.1, 0.001, 1000.0)); // [m] Tolerance to consider the robot
-                                        // reached the goal point
+                                          // reached the goal point
       addParameter(
           "path_segment_length",
           Parameter(1.0, 0.001,
                     1000.0)); // [m] Length of one segment of the path to follow
       addParameter(
           "goal_orientation_tolerance",
-          Parameter(0.1, 0.001, 2 * M_PI)); // [rad] Tolerance to consider the robot
-                                       // reached the goal point
-      addParameter("loosing_goal_distance",
-                   Parameter(0.1, 0.001, 1000.0)); // [m] If driving past the goal
-                                                 // we stop after this distance
+          Parameter(0.1, 0.001, 2 * M_PI)); // [rad] Tolerance to consider the
+                                            // robot reached the goal point
+      addParameter(
+          "loosing_goal_distance",
+          Parameter(0.1, 0.001, 1000.0)); // [m] If driving past the goal
+                                          // we stop after this distance
     }
   };
 
@@ -96,7 +106,8 @@ public:
   bool isGoalReached();
 
   /**
-   * @brief Set the Interpolation type used for interpolating the follower's path
+   * @brief Set the Interpolation type used for interpolating the follower's
+   * path
    *
    * @param type
    */
@@ -239,7 +250,6 @@ protected:
   bool reached_yaw_{false};
 
 private:
-
   /**
    * @brief Finds the index of the closest segment on the path to the
    * currentState between two given segment indices

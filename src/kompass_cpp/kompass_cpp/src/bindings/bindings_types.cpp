@@ -36,8 +36,8 @@ void bindings_types(py::module_ &m) {
       .def_readwrite("speed", &Path::State::speed);
 
   py::class_<Path::Point>(m_types, "Point")
-      .def(py::init<double, double>(), py::arg("x") = 0.0, py::arg("y") = 0.0,
-           py::arg("z") = 0.0)
+      .def(py::init<float, float, float>(), py::arg("x") = 0.0,
+           py::arg("y") = 0.0, py::arg("z") = 0.0)
       .def_property("x", &Path::Point::x, &Path::Point::setX)
       .def_property("y", &Path::Point::y, &Path::Point::setY)
       .def_property("z", &Path::Point::z, &Path::Point::setZ);
@@ -59,7 +59,7 @@ void bindings_types(py::module_ &m) {
 
   // Velocity control command
   py::class_<Control::Velocity>(m_types, "ControlCmd")
-      .def(py::init<double, double, double, double>(), py::arg("vx") = 0.0,
+      .def(py::init<float, float, float, float>(), py::arg("vx") = 0.0,
            py::arg("vy") = 0.0, py::arg("omega") = 0.0,
            py::arg("steer_ang") = 0.0)
       .def_property("vx", &Control::Velocity::vx, &Control::Velocity::setVx)

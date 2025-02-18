@@ -9,7 +9,7 @@ namespace Kompass {
 
 namespace Control {
 /**
- * @brief Trajectory infomration: Path + Velocity
+ * @brief Trajectory information: Path + Velocity
  *
  */
 struct Trajectory {
@@ -28,34 +28,5 @@ struct TrajSearchResult {
   Trajectory trajectory;
 };
 
-/**
- * @brief Struct for LaserScan data
- *
- */
-struct LaserScan {
-  std::vector<double> ranges;
-  std::vector<double> angles;
-
-  LaserScan(std::vector<double> ranges, std::vector<double> angles)
-      : ranges(ranges), angles(angles) {}
-};
-
-// struct Point3D {
-//   double x;
-//   double y;
-//   double z;
-
-//   Point3D(double x = 0.0, double y = 0.0, double z = 0.0) : x(x), y(y), z(z)
-//   {}
-// };
-
-// struct PointCloud {
-//   std::vector<Point> points;
-//   double resolution;
-
-//   PointCloud(std::vector<Point> cloud_points, double res)
-//       : points(cloud_points), resolution(res) {}
-// };
-
-}; // namespace Control
+} // namespace Control
 } // namespace Kompass
