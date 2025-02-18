@@ -1,4 +1,5 @@
 # Kompass Core
+
 [![PyPI][pypi-badge]][pypi-url]
 [![MIT licensed][mit-badge]][mit-url]
 [![Python Version][python-badge]][python-url]
@@ -16,38 +17,29 @@ This package is developed to be used with [Kompass](https://github.com/automatik
 
 ## Installation
 
-### Install Dependencies
+### Install with GPU Support (Recommended)
 
-On Ubuntu versions >= 22.04, run:
+To install kompass-core with GPU support, on any Ubuntu (including Jetpack) based machine, you can simply run the following:
+
+- `curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/heads/main/build_dependencies/install_gpu.sh | bash`
+
+This script will install all relevant dependencies, including [AdaptiveCPP](https://github.com/AdaptiveCpp/AdaptiveCpp) and install the latest version of kompass-core from source. It is good practice to read the [script](https://github.com/automatika-robotics/kompass-core/blob/main/build_dependencies/install_gpu.sh) first.
+
+### Installing with pip
+
+On Ubuntu versions >= 22.04, install dependencies by running the following:
 
 - `sudo apt-get install libompl-dev libfcl-dev libpcl-dev`
 
-### Install with pip
-
-Wheels are available on Pypi for linux x86_64 and aarch64 architectures. Please note that the version available on Pypi does not support GPU acceleration yet.
+Then install kompass-core as follows:
 
 - `pip install kompass-core`
 
-### Install from Source
+Wheels are available on Pypi for linux x86_64 and aarch64 architectures. Please note that the version available on Pypi does not support GPU acceleration yet.
 
-To enabled GPU based highly parallilzed algorithms, it is recommended that you build kompass-core with [AdaptiveCPP](https://github.com/AdaptiveCpp/AdaptiveCpp) compiler. In order to do that, install AdaptiveCPP as follows:
-```shell
-git clone https://github.com/AdaptiveCpp/AdaptiveCpp
-cd AdaptiveCpp
-mkdir build && cd build
-cmake -DCMAKE_INSTALL_PREFIX=/your/desired/install/location ..
-make install
-```
+### Installation Contents
 
-For detailed installation instructions of AdaptiveCPP, check the [AdaptiveCPP](https://github.com/AdaptiveCpp/AdaptiveCpp) project.
-
-Then to install kompass-core, simply run the following:
-
-- `git clone https://github.com/automatika-robotics/kompass-core`
-- `cd kompass-core`
-- `pip install .`
-
-Installation with pip will install three Python package:
+The following three packages will become available once kompass-core is installed.
 
 - `kompass_core`: The main Python API containing all the wrappers and utilities for motion planning and control for navigation in 2D spaces.
 - `kompass_cpp`: Pybind11 python bindings for Kompass core C++ library containing the algorithms implementation for path tracking and motion control.
