@@ -86,7 +86,7 @@ select = ["B","C","E","F","W","B9"]
 max-complexity = 10
 
 [tool.bumpver]
-current_version = "0.4.1"
+current_version = "0.4.2"
 version_pattern = "MAJOR.MINOR.PATCH"
 commit_message = "(chore) Bump version {old_version} -> {new_version}"
 tag_message = "{new_version}"
