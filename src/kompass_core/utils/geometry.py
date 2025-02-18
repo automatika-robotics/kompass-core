@@ -1,5 +1,5 @@
 import math
-from typing import List, Union
+from typing import List, Union, Tuple
 
 import numpy as np
 import quaternion
@@ -352,7 +352,7 @@ def get_transform_polar_coordinates(
     angle: Union[float, np.ndarray],
     transf_vec: List[float],
     rotation_angle: float,
-) -> tuple[Union[float, np.ndarray], Union[float, np.ndarray]]:
+) -> Tuple[Union[float, np.ndarray], Union[float, np.ndarray]]:
     """
     Get radius transformation in polar coordinates
 

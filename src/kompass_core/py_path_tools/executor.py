@@ -2,7 +2,7 @@ import logging
 import math
 import os
 import xml.etree.ElementTree as ET
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from xml.dom import minidom
 
 from ..utils.common import BaseAttrs, base_validators
@@ -569,7 +569,7 @@ class PathExecutor:
             )
             return False
 
-    def reached_end(self, x: float, y: float, ori: float) -> tuple[bool, float, float]:
+    def reached_end(self, x: float, y: float, ori: float) -> Tuple[bool, float, float]:
         """
         Checks if the robot reached the end of the reference path and evaluate the tracking errors
 

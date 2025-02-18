@@ -1,6 +1,6 @@
 import logging
 import math
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from ..utils import geometry as GeometryUtils
 import numpy as np
@@ -136,7 +136,7 @@ class SplineInterpolatedPath:
         )
         return
 
-    def __call__(self, s: float) -> tuple[float, float]:
+    def __call__(self, s: float) -> Tuple[float, float]:
         """
         Returns the path coordinates corresponding to curvilinear distance s
 
@@ -147,7 +147,7 @@ class SplineInterpolatedPath:
         """
         return self.spline_x(s), self.spline_y(s)
 
-    def get_interpolated_pose(self, s: float) -> tuple[float, float, float]:
+    def get_interpolated_pose(self, s: float) -> Tuple[float, float, float]:
         """
         Returns the path pose corresponding to curvilinear distance s
 

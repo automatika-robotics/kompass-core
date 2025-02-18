@@ -76,14 +76,17 @@ public:
                    const std::array<float, 4> &sensor_rotation_body,
                    CostEvaluator::TrajectoryCostsWeights costWeights, const int maxNumThreads = 1);
 
-  /**
-   * @brief Adds a new custom cost to be used in the trajectory evaluation
-   *
-   * @param weight
-   * @param custom_cost_function
-   */
-  void addCustomCost(double weight,
-                     CostEvaluator::CustomCostFunction custom_cost_function);
+  void resetOctreeResolution(const double octreeRes);
+
+    /**
+      * @brief Adds a new custom cost to be used in the trajectory evaluation
+      *
+      * @param weight
+      * @param custom_cost_function
+      */
+    void addCustomCost(
+        double weight,
+        CostEvaluator::CustomCostFunction custom_cost_function);
 
   /**
    * @brief  Given the current position, orientation, and velocity of the robot,

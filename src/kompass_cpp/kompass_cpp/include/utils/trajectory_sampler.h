@@ -108,6 +108,13 @@ public:
                        const Path::State &current_pose,
                        const std::vector<Point3D> &cloud);
 
+  /**
+   * @brief Reset the resolution of the obstacles Octree
+   *
+   * @param resolution
+   */
+  void resetOctreeResolution(const double resolution);
+
 protected:
   // Protected member variables
   ControlType ctrType;

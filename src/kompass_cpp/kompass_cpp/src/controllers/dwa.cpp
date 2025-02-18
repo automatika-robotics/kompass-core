@@ -111,6 +111,8 @@ void DWA::reconfigure(TrajectorySampler::TrajectorySamplerParameters config,
   this->maxNumThreads = maxNumThreads;
 }
 
+void DWA::resetOctreeResolution(const double octreeRes) { trajSampler->resetOctreeResolution(octreeRes);}
+
 void DWA::addCustomCost(
     double weight, CostEvaluator::CustomCostFunction custom_cost_function) {
   trajCostEvaluator->addCustomCost(weight, custom_cost_function);

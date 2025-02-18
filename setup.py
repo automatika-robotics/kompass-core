@@ -110,9 +110,11 @@ def get_vcpkg_includes():
     """Get include dir for vcpkg"""
     if vcpkg_path:
         python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
-        headers_dir = next(
-            (s for s in os.listdir("/opt/_internal") if python_version in s), None
-        ) if os.path.exists("/opt/_internal") else None
+        headers_dir = (
+            next((s for s in os.listdir("/opt/_internal") if python_version in s), None)
+            if os.path.exists("/opt/_internal")
+            else None
+        )
         if not headers_dir:
             return [
                 f"{vcpkg_path}/installed/x64-linux/include",
@@ -168,11 +170,11 @@ if not eigen_include_dir:
 
 # for Kompass CPP
 kompass_cpp_dependency_includes = (
-    vcpkg_includes_dir + eigen_include_dir + pcl_include_dir
+    vcpkg_includes_dir
+    + list(set(eigen_include_dir) - set(vcpkg_includes_dir))
+    + pcl_include_dir
 )
-kompass_cpp_module_includes = [
-    "src/kompass_cpp/kompass_cpp/include"
-] + kompass_cpp_dependency_includes
+
 # try a static path when pkg_config does not return anything and not in CI
 kompass_cpp_module_includes = (
     [
@@ -183,15 +185,18 @@ kompass_cpp_module_includes = (
     if not kompass_cpp_dependency_includes
     else ["src/kompass_cpp/kompass_cpp/include"] + kompass_cpp_dependency_includes
 )
+# get all source files
 kompass_cpp_source_files = glob.glob(
     os.path.join("src/kompass_cpp/kompass_cpp/src/**", "*.cpp"), recursive=True
 )
+# if not building with acpp remove gpu code
 if not check_acpp():
     kompass_cpp_source_files = [
         f_name for f_name in kompass_cpp_source_files if not f_name.endswith("gpu.cpp")
     ]
     extra_args = []
 else:
+    # enable GPU based function bindings
     extra_args = ["-DGPU=1"]
 
 ext_modules = [

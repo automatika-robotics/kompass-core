@@ -48,5 +48,13 @@ struct Point3D {
   Point3D(double x = 0.0, double y = 0.0, double z = 0.0) : x(x), y(y), z(z) {}
 };
 
+struct PointCloud {
+  std::vector<Point3D> points;
+  double resolution;
+
+  PointCloud(std::vector<Point3D> cloud_points, double res)
+      : points(cloud_points), resolution(res) {}
+};
+
 }; // namespace Control
 } // namespace Kompass

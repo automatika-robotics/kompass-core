@@ -25,7 +25,9 @@ class PointCloudData(BaseAttrs):
         ]
 
     @classmethod
-    def numpy_to_kompass_cpp(cls, data: np.ndarray) -> List[Point3D]:
+    def numpy_to_kompass_cpp(
+        cls, data: np.ndarray, height: float = 0.05
+    ) -> List[Point3D]:
         """Convert to kompass_cpp PointCloud structure
 
         :return:
@@ -37,13 +39,13 @@ class PointCloudData(BaseAttrs):
             )
         if data.shape[1] == 3:
             return [
-                Point3D(x, y, 0.05)
+                Point3D(x, y, height)
                 for x, y, _ in data.reshape(
                     -1, 3
                 )  # Flatten the array and group values by 3
             ]
 
-        return [Point3D(x, y, 0.05) for x, y in data.reshape(-1, 2)]
+        return [Point3D(x, y, height) for x, y in data.reshape(-1, 2)]
 
     def add(self, x: float, y: float, z: float):
         """Adds new point to the PointCloud data

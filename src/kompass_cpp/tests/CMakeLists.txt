@@ -39,4 +39,3 @@ if(AdaptiveCpp_FOUND)
   add_sycl_to_target(TARGET mapper_test_gpu SOURCES mapper_test_gpu.cpp)
   add_test(mapper_tests mapper_test_gpu)
 endif()
-

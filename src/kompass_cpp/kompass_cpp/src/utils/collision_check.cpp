@@ -60,6 +60,13 @@ CollisionChecker::~CollisionChecker() {
   delete collManager;
 }
 
+void CollisionChecker::resetOctreeResolution(const double resolution) {
+  if (resolution != octree_resolution_){
+    octree_resolution_ = resolution;
+    octTree = new octomap::OcTree(octree_resolution_);
+  }
+}
+
 void CollisionChecker::generateBoxesFromOctomap(
     std::vector<fcl::CollisionObjectf *> &boxes, fcl::OcTreef &tree) {
 
@@ -352,7 +359,6 @@ bool CollisionChecker::checkCollisions(const Path::State current_state) {
   m_collManager->collide(m_stateObjPtr, &collisionData,
                        fcl::DefaultCollisionFunction);
 
-  // detele temp objects
   delete m_stateObjPtr;
   delete m_collManager;
 

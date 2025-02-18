@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Tuple
 
 import fcl
 from attrs import define, field
@@ -31,4 +31,4 @@ class FCLConfig(BaseAttrs):
         default=RobotGeometry.Type.BOX,
         converter=lambda value: RobotGeometry.Type.from_str(value),
     )
-    robot_geometry_params: tuple[float] = field(default=(1.0, 1.0, 1.0))
+    robot_geometry_params: Tuple[float] = field(default=(1.0, 1.0, 1.0))

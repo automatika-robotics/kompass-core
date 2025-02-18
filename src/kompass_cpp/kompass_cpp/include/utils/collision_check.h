@@ -8,7 +8,7 @@
 #include <vector>
 
 #include <fcl/broadphase/broadphase_dynamic_AABB_tree.h>
-#include <fcl/fcl.h>
+#include <fcl/narrowphase/collision_object.h>
 #include <fcl/geometry/octree/octree.h>
 #include <octomap/OcTree.h>
 #include <octomap/Pointcloud.h>
@@ -59,6 +59,13 @@ public:
    *
    */
   ~CollisionChecker();
+
+  /**
+   * @brief Reset the resolution of the obstacles Octree
+   *
+   * @param resolution
+   */
+  void resetOctreeResolution(const double resolution);
 
   /**
    * @brief Update the current state of the robot

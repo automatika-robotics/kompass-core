@@ -18,11 +18,13 @@ This package is developed to be used with [Kompass](https://github.com/automatik
 
 ### Install Dependencies
 
+On Ubuntu versions >= 22.04, run:
+
 - `sudo apt-get install libompl-dev libfcl-dev libpcl-dev`
 
 ### Install with pip
 
-Wheels are available on Pypi for linux x86_64 and aarch64 architectures.
+Wheels are available on Pypi for linux x86_64 and aarch64 architectures. Please note that the version available on Pypi does not support GPU acceleration yet.
 
 - `pip install kompass-core`
 
