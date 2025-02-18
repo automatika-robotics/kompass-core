@@ -5,15 +5,15 @@
 using namespace std;
 using namespace tk;
 
-namespace Path{
+namespace Path {
 
-Path::Path(const std::vector<Point> &points) : points(points){}
+Path::Path(const std::vector<Point> &points) : points(points) {}
 
 bool Path::endReached(State currentState, double minDist) {
-Point endPoint = points.back();
-double dist = sqrt(pow(endPoint.x - currentState.x, 2) +
-                    pow(endPoint.y - currentState.y, 2));
-return dist <= minDist;
+  Point endPoint = points.back();
+  double dist = sqrt(pow(endPoint.x() - currentState.x, 2) +
+                     pow(endPoint.y() - currentState.y, 2));
+  return dist <= minDist;
 }
 
 size_t Path::getMaxNumSegments() { return segments.size() - 1; }
@@ -26,8 +26,8 @@ double Path::getEndOrientation() const {
   const Point &p1 = points[points.size() - 2];
   const Point &p2 = points[points.size() - 1];
 
-  double dx = p2.x - p1.x;
-  double dy = p2.y - p1.y;
+  double dx = p2.x() - p1.x();
+  double dy = p2.y() - p1.y();
 
   // Compute the angle in radians
   double angle = std::atan2(dy, dx);
@@ -39,8 +39,8 @@ double Path::getStartOrientation() const {
   const Point &p1 = points[0];
   const Point &p2 = points[1];
 
-  double dx = p2.x - p1.x;
-  double dy = p2.y - p1.y;
+  double dx = p2.x() - p1.x();
+  double dy = p2.y() - p1.y();
 
   // Compute the angle in radians
   double angle = std::atan2(dy, dx);
@@ -59,8 +59,8 @@ double Path::getOrientation(const size_t index) const {
     p2 = points[index];
   }
 
-  double dx = p2.x - p1.x;
-  double dy = p2.y - p1.y;
+  double dx = p2.x() - p1.x();
+  double dy = p2.y() - p1.y();
 
   // Compute the angle in radians
   double angle = std::atan2(dy, dx);
@@ -69,8 +69,8 @@ double Path::getOrientation(const size_t index) const {
 }
 
 double Path::distance(const Point &p1, const Point &p2) {
-  return std::sqrt((p2.x - p1.x) * (p2.x - p1.x) +
-                   (p2.y - p1.y) * (p2.y - p1.y));
+  return std::sqrt((p2.x() - p1.x()) * (p2.x() - p1.x()) +
+                   (p2.y() - p1.y()) * (p2.y() - p1.y()));
 }
 
 double Path::minDist(const std::vector<Point> &others) const {
@@ -87,7 +87,7 @@ double Path::minDist(const std::vector<Point> &others) const {
   return minDist;
 }
 
-  // Function to compute the total path length
+// Function to compute the total path length
 double Path::totalPathLength() const {
 
   if (points.empty()) {
@@ -130,7 +130,7 @@ size_t Path::getNumberPointsInLength(double length) const {
 }
 
 void Path::interpolate(double max_interpolation_point_dist,
-                             InterpolationType type) {
+                       InterpolationType type) {
   if (points.size() < 2) {
     throw invalid_argument(
         "At least two points are required to perform interpolation.");
@@ -138,8 +138,8 @@ void Path::interpolate(double max_interpolation_point_dist,
 
   vector<double> x(points.size()), y(points.size());
   for (size_t i = 0; i < points.size(); ++i) {
-    x[i] = points[i].x;
-    y[i] = points[i].y;
+    x[i] = points[i].x();
+    y[i] = points[i].y();
   }
 
   points.clear();
@@ -154,16 +154,14 @@ void Path::interpolate(double max_interpolation_point_dist,
     double mid_y;
 
     // Spline interpolation requires sorted data (x points)
-    if (x[i+1] > x[i]){
-      mid_y =
-          y[i] + (mid_x - x[i]) * (y[i + 1] - y[i]) / (x[i + 1] - x[i]);
+    if (x[i + 1] > x[i]) {
+      mid_y = y[i] + (mid_x - x[i]) * (y[i + 1] - y[i]) / (x[i + 1] - x[i]);
       x_points = {x[i], mid_x, x[i + 1]};
       y_points = {y[i], mid_y, y[i + 1]};
-    }
-    else{
+    } else {
       mid_y =
           y[i + 1] + (mid_x - x[i + 1]) * (y[i + 1] - y[i]) / (x[i + 1] - x[i]);
-      x_points = {x[i + 1], mid_x,  x[i]};
+      x_points = {x[i + 1], mid_x, x[i]};
       y_points = {y[i + 1], mid_y, y[i]};
     }
 
@@ -178,7 +176,7 @@ void Path::interpolate(double max_interpolation_point_dist,
 
     double point_e = x[i];
     double y_e;
-    double dist = distance(x[i], x[i + 1]);
+    double dist = distance(points[-1], {x[i + 1], y[i + 1]});
     int j = 1;
 
     // Interpolate new points between i, i+1
@@ -187,7 +185,7 @@ void Path::interpolate(double max_interpolation_point_dist,
 
       y_e = _spline->operator()(point_e);
       points.push_back({point_e, y_e});
-      dist = distance(point_e, x[i + 1]);
+      dist = distance(points[-1], {x[i + 1], y[i + 1]});
       j++;
     }
   }
@@ -195,8 +193,8 @@ void Path::interpolate(double max_interpolation_point_dist,
   points.push_back({x.back(), y.back()});
 }
 
-  // Segment the path by a given segment path length [m]
-void  Path::segment(double pathSegmentLength) {
+// Segment the path by a given segment path length [m]
+void Path::segment(double pathSegmentLength) {
   segments.clear();
   double totalLength = totalPathLength();
   Path new_segment;
@@ -214,7 +212,7 @@ void  Path::segment(double pathSegmentLength) {
   }
 }
 
-  // Segment using a number of segments
+// Segment using a number of segments
 void Path::segmentBySegmentNumber(int numSegments) {
   segments.clear();
   if (numSegments <= 0 || points.empty()) {
@@ -241,7 +239,7 @@ void Path::segmentBySegmentNumber(int numSegments) {
   }
 }
 
-  // Segment using a segment points number
+// Segment using a segment points number
 void Path::segmentByPointsNumber(int segmentLength) {
   segments.clear();
   if (segmentLength <= 0 || points.empty()) {
@@ -258,4 +256,4 @@ void Path::segmentByPointsNumber(int segmentLength) {
     segments.push_back(new_segment);
   }
 }
-}
+} // namespace Path

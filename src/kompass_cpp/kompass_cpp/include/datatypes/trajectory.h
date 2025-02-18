@@ -40,21 +40,22 @@ struct LaserScan {
       : ranges(ranges), angles(angles) {}
 };
 
-struct Point3D {
-  double x;
-  double y;
-  double z;
+// struct Point3D {
+//   double x;
+//   double y;
+//   double z;
 
-  Point3D(double x = 0.0, double y = 0.0, double z = 0.0) : x(x), y(y), z(z) {}
-};
+//   Point3D(double x = 0.0, double y = 0.0, double z = 0.0) : x(x), y(y), z(z)
+//   {}
+// };
 
-struct PointCloud {
-  std::vector<Point3D> points;
-  double resolution;
+// struct PointCloud {
+//   std::vector<Point> points;
+//   double resolution;
 
-  PointCloud(std::vector<Point3D> cloud_points, double res)
-      : points(cloud_points), resolution(res) {}
-};
+//   PointCloud(std::vector<Point> cloud_points, double res)
+//       : points(cloud_points), resolution(res) {}
+// };
 
 }; // namespace Control
 } // namespace Kompass

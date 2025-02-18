@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Eigen/Dense>
 #include <cmath>
 #include <stdexcept>
 #include <vector>
@@ -11,17 +12,28 @@ namespace Control {
 // Enumeration for control modes
 enum class ControlType { ACKERMANN = 0, DIFFERENTIAL_DRIVE = 1, OMNI = 2};
 
-// Structure for Velocity control
-struct Velocity {
-  double vx; // Speed on x-asix (m/s)
-  double vy;
-  double omega; // angular velocity (rad/s)
-  double steer_ang;
+class Velocity : public Eigen::Vector4d {
+public:
+  // Default constructor
+  Velocity()
+      : Eigen::Vector4d(0.0, 0.0, 0.0, 0.0) {}
+  Velocity(double vx, double vy, double omega, double steer_ang = 0.0) : Eigen::Vector4d(vx, vy, omega, steer_ang) {}
 
-  Velocity(double velx = 0.0, double vely = 0.0, double velomega = 0.0,
-           double steerVal = 0.0)
-      : vx(velx), vy(vely), omega(velomega), steer_ang(steerVal) {}
+  Velocity(Eigen::Vector4d &ref) : Eigen::Vector4d(ref) {}
+
+  // Accessors
+  double vx() const { return (*this)(0); }
+  double vy() const { return (*this)(1); }
+  double omega() const { return (*this)(2); }
+  double steer_ang() const { return (*this)(3); }
+
+  // Setters
+  void setVx(double const value) { (*this)(0) = value; }
+  void setVy(double const value) { (*this)(1) = value; }
+  void setOmega(double const value) { (*this)(2) = value; }
+  void setSteerAng(double const value) { (*this)(3) = value; }
 };
+
 
 struct Velocities {
   std::vector<double> vx; // Speed on x-asix (m/s)

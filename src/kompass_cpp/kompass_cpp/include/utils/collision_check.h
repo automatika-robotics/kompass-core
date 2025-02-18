@@ -8,8 +8,8 @@
 #include <vector>
 
 #include <fcl/broadphase/broadphase_dynamic_AABB_tree.h>
-#include <fcl/narrowphase/collision_object.h>
 #include <fcl/geometry/octree/octree.h>
+#include <fcl/narrowphase/collision_object.h>
 #include <octomap/OcTree.h>
 #include <octomap/Pointcloud.h>
 #include <octomap/octomap.h>
@@ -17,7 +17,6 @@
 #include <pcl/point_types.h>
 
 #include "datatypes/path.h"
-#include "datatypes/trajectory.h"
 
 namespace Kompass {
 /**
@@ -96,7 +95,7 @@ public:
    *
    * @param cloud
    */
-  void updatePointCloud(const std::vector<Control::Point3D> &cloud);
+  void updatePointCloud(const std::vector<Path::Point> &cloud);
 
   /**
    * @brief Check collisions between the robot and the constructed OctTree
@@ -168,7 +167,7 @@ public:
    * @return true
    * @return false
    */
-  bool checkCollisions(const std::vector<Control::Point3D> &cloud);
+  bool checkCollisions(const std::vector<Path::Point> &cloud);
 
   /**
    * @brief Check collisions between the robot and given LaserScan data defined
@@ -196,7 +195,6 @@ public:
    */
   bool checkCollisions(const std::vector<double> &ranges,
                        const std::vector<double> &angles, double height = 0.1);
-
 
   /**
    * @brief Check collisions between the given robot state and existing
@@ -267,7 +265,7 @@ private:
    *
    * @param cloud
    */
-  void convertPointCloudToOctomap(const std::vector<Control::Point3D> &cloud);
+  void convertPointCloudToOctomap(const std::vector<Path::Point> &cloud);
 
   /**
    * @brief Helper method to convert LaserScan data to an OctoMap. LaserScan

@@ -1,24 +1,23 @@
-#include "test.h"
 #include "controllers/dwa.h"
 #include "datatypes/trajectory.h"
+#include "test.h"
 #include "utils/cost_evaluator.h"
 #define BOOST_TEST_MODULE KOMPASS TESTS
 #include <boost/test/included/unit_test.hpp>
 #include <cmath>
 #include <vector>
 
-
 using namespace Kompass;
 
 void applyControl(Path::State &robotState, const Control::Velocity control,
                   const double timeStep) {
-  double dx = (control.vx * std::cos(robotState.yaw) -
-               control.vy * std::sin(robotState.yaw)) *
+  double dx = (control.vx() * std::cos(robotState.yaw) -
+               control.vy() * std::sin(robotState.yaw)) *
               timeStep;
-  double dy = (control.vx * std::sin(robotState.yaw) +
-               control.vy * std::cos(robotState.yaw)) *
+  double dy = (control.vx() * std::sin(robotState.yaw) +
+               control.vy() * std::cos(robotState.yaw)) *
               timeStep;
-  double dyaw = control.omega * timeStep;
+  double dyaw = control.omega() * timeStep;
   robotState.x += dx;
   robotState.y += dy;
   robotState.yaw += dyaw;
@@ -76,7 +75,8 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   Control::DWA planner(controlLimits, controlType, timeStep, predictionHorizon,
                        controlHorizon, maxLinearSamples, maxAngularSamples,
                        robotShapeType, robotDimensions, sensor_position_body,
-                       sensor_rotation_body, octreeRes, costWeights, maxNumThreads);
+                       sensor_rotation_body, octreeRes, costWeights,
+                       maxNumThreads);
 
   LOG_INFO("Simulating one step of DWA planner");
 
@@ -180,8 +180,8 @@ BOOST_AUTO_TEST_CASE(test_FCL) {
 
   LOG_INFO("Testing collision between: \nRobot at {x: ", robotState.x,
            ", y: ", robotState.y, "}\n", "and Pointcloud");
-  std::vector<Control::Point3D> cloud;
-  cloud.push_back(Control::Point3D(2.8, 4.8, 0.0));
+  std::vector<Path::Point> cloud;
+  cloud.push_back(Path::Point(2.8, 4.8, 0.0));
   collChecker.updatePointCloud(cloud);
   bool res = collChecker.checkCollisions();
   float dist = collChecker.getMinDistance();

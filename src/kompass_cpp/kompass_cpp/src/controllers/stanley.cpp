@@ -67,8 +67,8 @@ Controller::Result Stanley::computeVelocityCommand(double timeStep) {
   latest_velocity_command_ = computeCommand(
       latest_velocity_command_, target_speed, control_steering_angle, timeStep);
 
-  LOG_DEBUG("Commmand: {", latest_velocity_command_.vx, ", ",
-            latest_velocity_command_.omega, "}\n");
+  LOG_DEBUG("Commmand: {", latest_velocity_command_.vx(), ", ",
+            latest_velocity_command_.omega(), "}\n");
 
   return {Result::Status::COMMAND_FOUND, latest_velocity_command_};
 }
@@ -82,7 +82,7 @@ Control::Velocity Stanley::computeCommand(Control::Velocity current_velocity,
 
   // Restrict the linear velocity command based on the limits
   double linearCtrl =
-      restrictVelocityTolimits(current_velocity.vx, linear_velocity,
+      restrictVelocityTolimits(current_velocity.vx(), linear_velocity,
                                ctrlimitsParams.velXParams.maxAcceleration,
                                ctrlimitsParams.velXParams.maxDeceleration,
                                ctrlimitsParams.velXParams.maxVel, time_step);
@@ -91,19 +91,18 @@ Control::Velocity Stanley::computeCommand(Control::Velocity current_velocity,
   double max_steering_angle_ = ctrlimitsParams.omegaParams.maxAngle;
 
   // Limit steering angle to +-max_steering_angle_:
-  velocity_command.steer_ang = std::min(
-      std::max(steering_angle, -max_steering_angle_), max_steering_angle_);
+  velocity_command.setSteerAng(std::min(
+      std::max(steering_angle, -max_steering_angle_), max_steering_angle_));
 
   // Compute angular velocity from steering angle:
-  double omega = std::tan(velocity_command.steer_ang) * std::abs(linearCtrl) /
+  double omega = std::tan(velocity_command.steer_ang()) * std::abs(linearCtrl) /
                  robotWheelBase;
 
   // Restrict the angular velocity
-  velocity_command.omega =
-      restrictVelocityTolimits(current_velocity.omega, omega,
+  velocity_command.setOmega(restrictVelocityTolimits(current_velocity.omega(), omega,
                                ctrlimitsParams.omegaParams.maxAcceleration,
                                ctrlimitsParams.omegaParams.maxDeceleration,
-                               ctrlimitsParams.omegaParams.maxOmega, time_step);
+                               ctrlimitsParams.omegaParams.maxOmega, time_step));
 
   return velocity_command;
 }

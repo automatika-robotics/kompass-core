@@ -2,7 +2,8 @@
  * *********************************************************
  *
  * @file: dwa.h
- * @brief: Contains the Dynamic window approach, based on the implementation by AI Winter
+ * @brief: Contains the Dynamic window approach, based on the implementation by
+ * AI Winter
  *
  * Copyright (c) 2024, AI Winter.
  * All rights reserved.
@@ -36,7 +37,8 @@ public:
       const std::vector<float> robotDimensions,
       const std::array<float, 3> &sensor_position_body,
       const std::array<float, 4> &sensor_rotation_body, const double octreeRes,
-      CostEvaluator::TrajectoryCostsWeights costWeights, const int maxNumThreads = 1);
+      CostEvaluator::TrajectoryCostsWeights costWeights,
+      const int maxNumThreads = 1);
 
   DWA(TrajectorySampler::TrajectorySamplerParameters config,
       ControlLimitsParams controlLimits, ControlType controlType,
@@ -44,7 +46,8 @@ public:
       const std::vector<float> robotDimensions,
       const std::array<float, 3> &sensor_position_body,
       const std::array<float, 4> &sensor_rotation_body,
-      CostEvaluator::TrajectoryCostsWeights costWeights, const int maxNumThreads = 1);
+      CostEvaluator::TrajectoryCostsWeights costWeights,
+      const int maxNumThreads = 1);
 
   // DWA(DWAConfig &cfg);
 
@@ -66,7 +69,8 @@ public:
                    const std::array<float, 3> &sensor_position_body,
                    const std::array<float, 4> &sensor_rotation_body,
                    const double octreeRes,
-                   CostEvaluator::TrajectoryCostsWeights costWeights, const int maxNumThreads = 1);
+                   CostEvaluator::TrajectoryCostsWeights costWeights,
+                   const int maxNumThreads = 1);
 
   void reconfigure(TrajectorySampler::TrajectorySamplerParameters config,
                    ControlLimitsParams controlLimits, ControlType controlType,
@@ -74,19 +78,19 @@ public:
                    const std::vector<float> robotDimensions,
                    const std::array<float, 3> &sensor_position_body,
                    const std::array<float, 4> &sensor_rotation_body,
-                   CostEvaluator::TrajectoryCostsWeights costWeights, const int maxNumThreads = 1);
+                   CostEvaluator::TrajectoryCostsWeights costWeights,
+                   const int maxNumThreads = 1);
 
   void resetOctreeResolution(const double octreeRes);
 
-    /**
-      * @brief Adds a new custom cost to be used in the trajectory evaluation
-      *
-      * @param weight
-      * @param custom_cost_function
-      */
-    void addCustomCost(
-        double weight,
-        CostEvaluator::CustomCostFunction custom_cost_function);
+  /**
+   * @brief Adds a new custom cost to be used in the trajectory evaluation
+   *
+   * @param weight
+   * @param custom_cost_function
+   */
+  void addCustomCost(double weight,
+                     CostEvaluator::CustomCostFunction custom_cost_function);
 
   /**
    * @brief  Given the current position, orientation, and velocity of the robot,
@@ -104,7 +108,7 @@ public:
                                               const LaserScan &scan);
   TrajSearchResult
   computeVelocityCommandsSet(const Velocity &global_vel,
-                             const std::vector<Point3D> &cloud);
+                             const std::vector<Path::Point> &cloud);
 
 private:
   TrajectorySampler *trajSampler;

@@ -13,13 +13,13 @@ using namespace Kompass;
 
 // Convert Point to JSON
 void to_json(json &j, const Path::Point &p) {
-  j = json{{"x", p.x}, {"y", p.y}};
+  j = json{{"x", p.x()}, {"y", p.y()}};
 }
 
 // Convert JSON to Point
 void from_json(const json &j, Path::Point &p) {
-  j.at("x").get_to(p.x);
-  j.at("y").get_to(p.y);
+  p.setX(j.at("x"));
+  p.setY(j.at("y"));
 }
 
 // Convert Path to JSON
@@ -27,7 +27,7 @@ void to_json(json &j, const Path::Path &p) {
   j["points"] = json::array(); // Initialize as a JSON array
   for (const auto &point : p.points) {
     j["points"].push_back(
-        json{{"x", point.x}, {"y", point.y}}); // Serialize each Point
+        json{{"x", point.x()}, {"y", point.y()}}); // Serialize each Point
   }
 }
 
@@ -36,26 +36,26 @@ void from_json(const json &j, Path::Path &p) {
   p.points.clear(); // Clear existing points
   for (const auto &item : j.at("points")) {
     Path::Point point;
-    item.at("x").get_to(point.x);
-    item.at("y").get_to(point.y);
+    point.setX(item.at("x"));
+    point.setY(item.at("y"));
     p.points.push_back(point); // Deserialize each Point
   }
 }
 
 // Convert Velocity to JSON
 void to_json(json &j, const Control::Velocity &v) {
-  j = json{{"vx", v.vx},
-           {"vy", v.vy},
-           {"omega", v.omega},
-           {"steer_ang", v.steer_ang}};
+  j = json{{"vx", v.vx()},
+           {"vy", v.vy()},
+           {"omega", v.omega()},
+           {"steer_ang", v.steer_ang()}};
 }
 
 // Convert JSON to Velocity
 void from_json(const json &j, Control::Velocity &v) {
-  j.at("vx").get_to(v.vx);
-  j.at("vy").get_to(v.vy);
-  j.at("omega").get_to(v.omega);
-  j.at("steer_ang").get_to(v.steer_ang);
+  v.setVx(j.at("vx"));
+  v.setVy(j.at("vy"));
+  v.setOmega(j.at("omega"));
+  v.setSteerAng(j.at("steer_ang"));
 }
 
 // Convert Trajectory to JSON

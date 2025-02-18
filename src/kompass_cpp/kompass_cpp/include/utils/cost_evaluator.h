@@ -90,7 +90,6 @@ public:
       std::tuple<const Trajectory, const Path::Path, const ControlType>,
       std::tuple<const Trajectory, const Path::Path, const double>,
       std::pair<const Trajectory, const std::vector<double>>,
-      std::pair<const Trajectory, const std::vector<Point3D>>,
       std::pair<const Trajectory, const std::array<double, 3>>>;
 
   /**
@@ -168,7 +167,7 @@ public:
 
   void setPointScan(const LaserScan &scan, const Path::State &curren_state);
 
-  void setPointScan(const std::vector<Point3D> &cloud,
+  void setPointScan(const std::vector<Path::Point> &cloud,
                     const Path::State &curren_state);
 
 protected:

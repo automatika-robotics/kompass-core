@@ -1,11 +1,11 @@
 #pragma once
 
+#include "utils/spline.h"
+#include <Eigen/Dense>
 #include <cmath>
 #include <cstddef>
 #include <math.h>
 #include <vector>
-#include "utils/spline.h"
-
 
 namespace Path {
 
@@ -23,19 +23,32 @@ struct State {
       : x(poseX), y(poseY), yaw(PoseYaw), speed(speedValue) {}
 };
 
-// Structure for a point in 2D space
-struct Point {
-  double x; // X coordinate
-  double y; // Y coordinate
+// TODO change to floats!!!
+// Point in 3D space
+class Point : public Eigen::Vector3d {
+public:
+  // Default constructor
+  Point() : Eigen::Vector3d(0.0, 0.0, 0.0) {}
+  Point(double x, double y, double z = 0.0) : Eigen::Vector3d(x, y, z) {}
 
-  Point(double xCoord = 0.0, double yCoord = 0.0) : x(xCoord), y(yCoord) {}
+  Point(Eigen::Vector3d &ref) : Eigen::Vector3d(ref) {}
+
+  // Accessors
+  double x() const { return (*this)(0); }
+  double y() const { return (*this)(1); }
+  double z() const { return (*this)(2); }
+
+  // Setters
+  void setX(double const value) { (*this)(0) = value; }
+  void setY(double const value) { (*this)(1) = value; }
+  void setZ(double const value) { (*this)(2) = value; }
 };
 
 // Structure for Path Control parameters
 struct Path {
   std::vector<Point> points;  // List of points defining the path
   std::vector<Path> segments; // List of path segments
-  tk::spline* _spline;
+  tk::spline *_spline;
 
   Path(const std::vector<Point> &points = {});
 
@@ -74,7 +87,6 @@ struct Path {
 
   // Segment using a segment points number
   void segmentByPointsNumber(int segmentLength);
-
 };
 
 struct PathPosition {
