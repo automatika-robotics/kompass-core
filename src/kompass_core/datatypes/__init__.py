@@ -12,7 +12,7 @@ from .path import (
     Range2D,
     Odom2D,
 )
-from .pointcloud import PointCloudData, Point3D
+from .pointcloud import PointCloudData, Point as Point3D
 from .pose import PoseData
 from .vision import TrackingData, ImageMetaData
 
