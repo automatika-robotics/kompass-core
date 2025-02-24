@@ -11,6 +11,7 @@ void bindings_types(py::module_ &);
 void bindings_config(py::module_ &);
 void bindings_control(py::module_ &);
 void bindings_mapping(py::module_ &);
+void bindings_utils(py::module_ &);
 
 using namespace Kompass;
 
@@ -21,6 +22,7 @@ PYBIND11_MODULE(kompass_cpp, m) {
   m.doc() = "Algorithms for robot path tracking and control";
 
   bindings_types(m);
+  bindings_utils(m);
   bindings_config(m);
   bindings_control(m);
   bindings_mapping(m);
