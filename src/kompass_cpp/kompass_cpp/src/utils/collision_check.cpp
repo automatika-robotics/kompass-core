@@ -122,6 +122,19 @@ void CollisionChecker::updateState(const Path::State current_state) {
   bodyObjPtr->computeAABB();
 }
 
+void CollisionChecker::updateState(const double x, const double y, const double yaw){
+
+  // Get the body tf matrix from euler angles / new position
+  Eigen::Matrix3f rotation =
+      Control::eulerToRotationMatrix(0.0, 0.0, yaw);
+
+  body->tf = Control::getTransformation(
+      rotation, Eigen::Vector3f(x, y, 0.0));
+
+  bodyObjPtr->setTransform(body->tf);
+  bodyObjPtr->computeAABB();
+}
+
 void CollisionChecker::updateScan(const std::vector<double> &ranges,
                                   const std::vector<double> &angles) {
   convertLaserScanToOctomap(ranges, angles, robotHeight_ / 2);

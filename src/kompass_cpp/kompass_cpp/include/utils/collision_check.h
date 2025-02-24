@@ -74,6 +74,15 @@ public:
   void updateState(const Path::State current_state);
 
   /**
+   * @brief Update the current state of the robot with 2D pose (x, y, yaw)
+   *
+   * @param x
+   * @param y
+   * @param yaw
+   */
+  void updateState(const double x, const double y, const double yaw);
+
+  /**
    * @brief Update the sensor input from laser scan data
    *
    * @param ranges
@@ -220,9 +229,9 @@ private:
 
   // Octree collision object pointers
   octomap::OcTree *octTree; // Octomap octree used to get data from laserscan or
-                            // pointcloud and convert it to an Octreee
+                            // pointcloud and convert it to an Octree
   fcl::OcTreef *tree =
-      nullptr; // FCL Octree updated after coverting the Octomap octree
+      nullptr; // FCL Octree updated after converting the Octomap octree
                // (required for creating the collision object)
   std::vector<fcl::CollisionObjectf *>
       OctreeBoxes; // Vector of Boxes collision objects used to check collisions
