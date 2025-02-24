@@ -1,9 +1,7 @@
-
 from typing import Optional, List
 from ..models import (
     Robot,
     RobotGeometry,
-    RobotState,
 )
 import numpy as np
 from ..datatypes import LaserScanData
@@ -11,6 +9,8 @@ from kompass_cpp.utils import CollisionChecker
 
 
 class EmergencyChecker:
+    """Emergency stop checker class using a minimum safety distance, a critical zone angle and 2D LaserScan data"""
+
     def __init__(
         self,
         robot: Robot,
@@ -18,7 +18,7 @@ class EmergencyChecker:
         emergency_angle: float,
         sensor_position_robot: Optional[List[float]] = None,
         sensor_rotation_robot: Optional[List[float]] = None,
-    ):
+    ) -> None:
         self._collision_checker = CollisionChecker(
             robot_shape=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
             robot_dimensions=robot.geometry_params,
@@ -31,7 +31,16 @@ class EmergencyChecker:
             "right_angle": (2 * np.pi) - (np.radians(emergency_angle) / 2),
         }
 
-    def run(self, *_, robot_state: RobotState, scan: LaserScanData, forward: bool = True):
+    def run(self, *_, scan: LaserScanData, forward: bool = True) -> bool:
+        """Runs emergency checking on new incoming laser scan data
+
+        :param scan: 2D Laserscan data (ranges/angles)
+        :type scan: LaserScanData
+        :param forward: If the robot is moving forward or not, defaults to True
+        :type forward: bool, optional
+        :return: If an obstacle is within the safety zone
+        :rtype: bool
+        """
         if forward:
             # Check in front
             ranges_to_check = scan.get_ranges(
@@ -52,7 +61,6 @@ class EmergencyChecker:
                 right_angle=self.__critical_zone["right_angle"] + np.pi,
                 left_angle=self.__critical_zone["left_angle"] + np.pi,
             )
-        self._collision_checker.update_state(robot_state.x, robot_state.y, robot_state.yaw)
         min_dist: float = self._collision_checker.get_min_distance_laserscan(
             ranges=ranges_to_check, angles=angles_to_check
         )
