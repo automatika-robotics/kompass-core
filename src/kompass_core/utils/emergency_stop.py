@@ -54,8 +54,8 @@ class EmergencyChecker:
         else:
             # Moving backwards -> Check behind
             ranges_to_check = scan.get_ranges(
-                right_angle=self.critical_zone["right_angle"] + np.pi,
-                left_angle=self.critical_zone["left_angle"] + np.pi,
+                right_angle=self.__critical_zone["right_angle"] + np.pi,
+                left_angle=self.__critical_zone["left_angle"] + np.pi,
             )
             angles_to_check = scan.get_angles(
                 right_angle=self.__critical_zone["right_angle"] + np.pi,
