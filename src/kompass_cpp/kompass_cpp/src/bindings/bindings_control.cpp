@@ -205,12 +205,12 @@ void bindings_control(py::module_ &m) {
            py::arg("cost_weights"), py::arg("max_num_threads") = 1)
 
       .def("compute_velocity_commands",
-           py::overload_cast<const Control::Velocity &,
+           py::overload_cast<const Control::Velocity2D &,
                              const Control::LaserScan &>(
                &Control::DWA::computeVelocityCommandsSet),
            py::return_value_policy::reference_internal)
       .def("compute_velocity_commands",
-           py::overload_cast<const Control::Velocity &,
+           py::overload_cast<const Control::Velocity2D &,
                              const std::vector<Path::Point> &>(
                &Control::DWA::computeVelocityCommandsSet),
            py::return_value_policy::reference_internal)

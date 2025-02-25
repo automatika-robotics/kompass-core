@@ -74,7 +74,7 @@ Controller::Result Stanley::computeVelocityCommand(double timeStep) {
 
 void Stanley::setWheelBase(double length) { robotWheelBase = length; }
 
-Control::Velocity Stanley::computeCommand(Control::Velocity current_velocity,
+Control::Velocity2D Stanley::computeCommand(Control::Velocity2D current_velocity,
                                           double linear_velocity,
                                           double steering_angle,
                                           double time_step) const {
@@ -86,7 +86,7 @@ Control::Velocity Stanley::computeCommand(Control::Velocity current_velocity,
                                ctrlimitsParams.velXParams.maxDeceleration,
                                ctrlimitsParams.velXParams.maxVel, time_step);
 
-  Control::Velocity velocity_command{linearCtrl, 0.0, 0.0, 0.0};
+  Control::Velocity2D velocity_command{linearCtrl, 0.0, 0.0, 0.0};
   double max_steering_angle_ = ctrlimitsParams.omegaParams.maxAngle;
 
   // Limit steering angle to +-max_steering_angle_:

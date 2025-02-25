@@ -43,7 +43,7 @@ void from_json(const json &j, Path::Path &p) {
 }
 
 // Convert Velocity to JSON
-void to_json(json &j, const Control::Velocity &v) {
+void to_json(json &j, const Control::Velocity2D &v) {
   j = json{{"vx", v.vx()},
            {"vy", v.vy()},
            {"omega", v.omega()},
@@ -51,7 +51,7 @@ void to_json(json &j, const Control::Velocity &v) {
 }
 
 // Convert JSON to Velocity
-void from_json(const json &j, Control::Velocity &v) {
+void from_json(const json &j, Control::Velocity2D &v) {
   v.setVx(j.at("vx"));
   v.setVy(j.at("vy"));
   v.setOmega(j.at("omega"));

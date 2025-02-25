@@ -86,7 +86,7 @@ protected:
    * @param time_step
    * @return Control::Velocity
    */
-  Control::Velocity computeCommand(Control::Velocity current_velocity,
+  Control::Velocity2D computeCommand(Control::Velocity2D current_velocity,
                                    double linear_velocity,
                                    double steering_angle,
                                    double time_step) const;

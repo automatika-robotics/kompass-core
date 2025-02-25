@@ -24,7 +24,7 @@ public:
     };
 
     Status status;
-    Control::Velocity velocity_command;
+    Control::Velocity2D velocity_command;
   };
 
   // Nested class for controller parameters
@@ -66,7 +66,7 @@ public:
   void setControlType(const Control::ControlType &controlType);
 
   // Update current vel
-  void setCurrentVelocity(const Control::Velocity &vel);
+  void setCurrentVelocity(const Control::Velocity2D &vel);
 
   // Update current position
   void setCurrentState(const Path::State &position);
@@ -78,7 +78,7 @@ public:
   Control::ControlType getControlType() const;
 
   // Get the current control
-  Control::Velocity getControl() const;
+  Control::Velocity2D getControl() const;
 
   // Compote the velocity command to respect given limits on acceleration and
   // deceleration
@@ -91,9 +91,9 @@ protected:
   // Protected member variables
   Control::ControlType ctrType;
   Control::ControlLimitsParams ctrlimitsParams;
-  Control::Velocity currentVel;
+  Control::Velocity2D currentVel;
   Path::State currentState;
-  Control::Velocity currentCtr;
+  Control::Velocity2D currentCtr;
   int maxNumThreads;
 
   ControllerParameters config;

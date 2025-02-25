@@ -246,7 +246,7 @@ protected:
   double goal_distance_{std::numeric_limits<double>::max()};
   double goal_orientation_{std::numeric_limits<double>::max()};
 
-  Control::Velocity latest_velocity_command_{0.0, 0.0, 0.0};
+  Control::Velocity2D latest_velocity_command_{0.0, 0.0, 0.0};
 
   bool reached_goal_{false};
   bool reached_yaw_{false};

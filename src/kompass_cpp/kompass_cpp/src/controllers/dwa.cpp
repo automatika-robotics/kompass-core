@@ -217,7 +217,7 @@ TrajSearchResult DWA::findBestSegment(const std::vector<Trajectory> &samples) {
 }
 
 template <typename T>
-TrajSearchResult DWA::findBestPath(const Velocity &global_vel,
+TrajSearchResult DWA::findBestPath(const Velocity2D &global_vel,
                                    const T &scan_points) {
   // Throw an error if the global path is not set
   if (!currentPath) {
@@ -238,7 +238,7 @@ TrajSearchResult DWA::findBestPath(const Velocity &global_vel,
 }
 
 template <typename T>
-Controller::Result DWA::computeVelocityCommand(const Velocity &global_vel,
+Controller::Result DWA::computeVelocityCommand(const Velocity2D &global_vel,
                                                const T &scan_points) {
   TrajSearchResult searchRes = findBestPath(global_vel, scan_points);
   Controller::Result finalResult;
@@ -253,7 +253,7 @@ Controller::Result DWA::computeVelocityCommand(const Velocity &global_vel,
   return finalResult;
 }
 
-TrajSearchResult DWA::computeVelocityCommandsSet(const Velocity &global_vel,
+TrajSearchResult DWA::computeVelocityCommandsSet(const Velocity2D &global_vel,
                                                  const LaserScan &scan) {
   TrajSearchResult searchRes = findBestPath(global_vel, scan);
   // Update latest velocity command
@@ -264,7 +264,7 @@ TrajSearchResult DWA::computeVelocityCommandsSet(const Velocity &global_vel,
 }
 
 TrajSearchResult
-DWA::computeVelocityCommandsSet(const Velocity &global_vel,
+DWA::computeVelocityCommandsSet(const Velocity2D &global_vel,
                                 const std::vector<Path::Point> &cloud) {
 
   TrajSearchResult searchRes = findBestPath(global_vel, cloud);

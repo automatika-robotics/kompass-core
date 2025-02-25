@@ -99,12 +99,12 @@ public:
    * @param scan          Sensor data (Laserscan)
    * @return std::vector<Trajectory>
    */
-  std::vector<Trajectory> generateTrajectories(const Velocity &current_vel,
+  std::vector<Trajectory> generateTrajectories(const Velocity2D &current_vel,
                                                const Path::State &current_pose,
                                                const LaserScan &scan);
 
   std::vector<Trajectory>
-  generateTrajectories(const Velocity &current_vel,
+  generateTrajectories(const Velocity2D &current_vel,
                        const Path::State &current_pose,
                        const std::vector<Path::Point> &cloud);
 
@@ -151,9 +151,9 @@ private:
    *
    * @param currentVel
    */
-  void UpdateReachableVelocityRange(Control::Velocity currentVel);
+  void UpdateReachableVelocityRange(Control::Velocity2D currentVel);
 
-  std::vector<Trajectory> getNewTrajectories(const Velocity &current_vel,
+  std::vector<Trajectory> getNewTrajectories(const Velocity2D &current_vel,
                                              const Path::State &current_pose);
 
   /**
@@ -166,11 +166,11 @@ private:
    * @param admissible_velocity_trajectories
    */
   void getAdmissibleTrajsFromVel(
-      const Velocity &vel, const Path::State &start_pose,
+      const Velocity2D &vel, const Path::State &start_pose,
       std::vector<Trajectory> *admissible_velocity_trajectories);
 
   void getAdmissibleTrajsFromVelDiffDrive(
-      const Velocity &vel, const Path::State &start_pose,
+      const Velocity2D &vel, const Path::State &start_pose,
       std::vector<Trajectory> *admissible_velocity_trajectories);
 
   /**
@@ -182,7 +182,7 @@ private:
    * @return std::vector<Trajectory>
    */
   std::vector<Trajectory>
-  generateTrajectoriesAckermann(const Velocity &current_vel,
+  generateTrajectoriesAckermann(const Velocity2D &current_vel,
                                 const Path::State &current_pose);
 
   /**
@@ -194,7 +194,7 @@ private:
    * @return std::vector<Trajectory>
    */
   std::vector<Trajectory>
-  generateTrajectoriesDiffDrive(const Velocity &current_vel,
+  generateTrajectoriesDiffDrive(const Velocity2D &current_vel,
                                 const Path::State &current_pose);
 
   /**
@@ -206,7 +206,7 @@ private:
    * @return std::vector<Trajectory>
    */
   std::vector<Trajectory>
-  generateTrajectoriesOmni(const Velocity &current_vel,
+  generateTrajectoriesOmni(const Velocity2D &current_vel,
                            const Path::State &current_pose);
 };
 }; // namespace Control

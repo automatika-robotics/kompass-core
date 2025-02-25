@@ -84,7 +84,7 @@ void testTrajSampler() {
         robotDimensions, sensor_position_body, sensor_rotation_body, octreeRes);
 
     // Robot initial velocity control
-    Control::Velocity robotControl;
+    Control::Velocity2D robotControl;
 
     LOG_INFO("TESTING ", Control::controlTypeToString(robot_types[j]));
 

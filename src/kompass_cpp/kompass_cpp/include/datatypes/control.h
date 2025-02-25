@@ -12,14 +12,14 @@ namespace Control {
 // Enumeration for control modes
 enum class ControlType { ACKERMANN = 0, DIFFERENTIAL_DRIVE = 1, OMNI = 2 };
 
-class Velocity : public Eigen::Vector4f {
+class Velocity2D : public Eigen::Vector4f {
 public:
   // Default constructor
-  Velocity() : Eigen::Vector4f(0.0, 0.0, 0.0, 0.0) {}
-  Velocity(float vx, float vy, float omega, float steer_ang = 0.0)
+  Velocity2D() : Eigen::Vector4f(0.0, 0.0, 0.0, 0.0) {}
+  Velocity2D(float vx, float vy, float omega, float steer_ang = 0.0)
       : Eigen::Vector4f(vx, vy, omega, steer_ang) {}
 
-  Velocity(Eigen::Vector4f &ref) : Eigen::Vector4f(ref) {}
+  Velocity2D(Eigen::Vector4f &ref) : Eigen::Vector4f(ref) {}
 
   // Accessors
   float vx() const { return (*this)(0); }

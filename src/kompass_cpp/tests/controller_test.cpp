@@ -9,7 +9,7 @@
 
 using namespace Kompass;
 
-void applyControl(Path::State &robotState, const Control::Velocity control,
+void applyControl(Path::State &robotState, const Control::Velocity2D control,
                   const double timeStep) {
   double dx = (control.vx() * std::cos(robotState.yaw) -
                control.vy() * std::sin(robotState.yaw)) *
@@ -65,7 +65,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   Path::State robotState(0.0, 0.0, 0.0, 0.0);
 
   // Robot initial velocity control
-  Control::Velocity robotControl;
+  Control::Velocity2D robotControl;
 
   // Robot laserscan value (empty)
   Control::LaserScan robotScan({1.0, 0.5, 10.0}, {0, 0.1, 0.2});
@@ -116,7 +116,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
                 BOLD(FGRN(", Vy: ")), KGRN, vy, RST, BOLD(FGRN(", Omega: ")),
                 KGRN, omega, RST, BOLD(FGRN("}")));
 
-      applyControl(robotState, Control::Velocity(vx, vy, omega), timeStep);
+      applyControl(robotState, Control::Velocity2D(vx, vy, omega), timeStep);
     } else {
       LOG_ERROR(BOLD(FRED("DWA Planner failed with robot at: {x: ")), KRED,
                 robotState.x, RST, BOLD(FRED(", y: ")), KRED, robotState.y, RST,

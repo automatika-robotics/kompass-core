@@ -12,7 +12,7 @@
 namespace py = pybind11;
 using namespace Kompass;
 
-std::string printControlCmd(const Control::Velocity &velocity_command) {
+std::string printControlCmd(const Control::Velocity2D &velocity_command) {
   return "{" + std::to_string(velocity_command.vx()) + ", " +
          std::to_string(velocity_command.vy()) + ", " +
          std::to_string(velocity_command.omega()) + "})";
@@ -58,16 +58,16 @@ void bindings_types(py::module_ &m) {
       .def_readwrite("points", &Path::Path::points);
 
   // Velocity control command
-  py::class_<Control::Velocity>(m_types, "ControlCmd")
+  py::class_<Control::Velocity2D>(m_types, "ControlCmd")
       .def(py::init<float, float, float, float>(), py::arg("vx") = 0.0,
            py::arg("vy") = 0.0, py::arg("omega") = 0.0,
            py::arg("steer_ang") = 0.0)
-      .def_property("vx", &Control::Velocity::vx, &Control::Velocity::setVx)
-      .def_property("vy", &Control::Velocity::vy, &Control::Velocity::setVy)
-      .def_property("omega", &Control::Velocity::omega,
-                    &Control::Velocity::setOmega)
-      .def_property("steer_ang", &Control::Velocity::steer_ang,
-                    &Control::Velocity::setSteerAng)
+      .def_property("vx", &Control::Velocity2D::vx, &Control::Velocity2D::setVx)
+      .def_property("vy", &Control::Velocity2D::vy, &Control::Velocity2D::setVy)
+      .def_property("omega", &Control::Velocity2D::omega,
+                    &Control::Velocity2D::setOmega)
+      .def_property("steer_ang", &Control::Velocity2D::steer_ang,
+                    &Control::Velocity2D::setSteerAng)
       .def("__str__", &printControlCmd);
 
   py::class_<Control::Velocities>(m_types, "ControlCmdList")

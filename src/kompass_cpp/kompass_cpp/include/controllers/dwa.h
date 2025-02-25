@@ -102,13 +102,13 @@ public:
    */
 
   template <typename T>
-  Controller::Result computeVelocityCommand(const Velocity &global_vel,
+  Controller::Result computeVelocityCommand(const Velocity2D &global_vel,
                                             const T &scan_points);
 
-  TrajSearchResult computeVelocityCommandsSet(const Velocity &global_vel,
+  TrajSearchResult computeVelocityCommandsSet(const Velocity2D &global_vel,
                                               const LaserScan &scan);
   TrajSearchResult
-  computeVelocityCommandsSet(const Velocity &global_vel,
+  computeVelocityCommandsSet(const Velocity2D &global_vel,
                              const std::vector<Path::Point> &cloud);
 
 private:
@@ -127,7 +127,7 @@ private:
    * legal to execute.
    */
   template <typename T>
-  TrajSearchResult findBestPath(const Velocity &global_vel,
+  TrajSearchResult findBestPath(const Velocity2D &global_vel,
                                 const T &scan_points);
 
   TrajSearchResult findBestSegment(const std::vector<Trajectory> &samples);
