@@ -167,6 +167,11 @@ class FollowerTemplate:
         :type global_path: Path
         """
         parsed_points = []
+        # If the path conatins less than 2 points -> set None path / clear old
+        if len(global_path.poses) < 2:
+            self.planner.clear_current_path()
+            return
+
         for point in global_path.poses:
             parsed_point = kompass_cpp.types.Point(
                 point.pose.position.x, point.pose.position.y
@@ -221,7 +226,9 @@ class FollowerTemplate:
 
     def interpolated_path(self) -> Optional[kompass_cpp.types.Path]:
         """Get path interpolation."""
-        return self.planner.get_current_path()
+        if self.path:
+            return self.planner.get_current_path()
+        return None
 
     def set_interpolation_type(self, interpolation_type: PathInterpolationType):
         """Set the follower path interpolation type

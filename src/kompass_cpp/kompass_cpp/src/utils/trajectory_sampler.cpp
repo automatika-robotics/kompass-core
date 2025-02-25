@@ -276,7 +276,7 @@ std::vector<Trajectory> TrajectorySampler::generateTrajectoriesDiffDrive(
       }
     }
   }
-  LOG_INFO("Got admissible trajectories: ",
+  LOG_DEBUG("Got admissible trajectories: ",
            admissible_velocity_trajectories.size());
   return admissible_velocity_trajectories;
 }

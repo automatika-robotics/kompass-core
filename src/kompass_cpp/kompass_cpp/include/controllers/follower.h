@@ -96,6 +96,8 @@ public:
    */
   void setCurrentPath(const Path::Path &path);
 
+  void clearCurrentPath();
+
   /**
    * @brief Checks if the currenState reached end of the path and returns a
    * boolean value

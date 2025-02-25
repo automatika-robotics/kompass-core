@@ -92,6 +92,7 @@ void bindings_control(py::module_ &m) {
       .def(py::init<Control::Follower::FollowerParameters>())
       .def("set_interpolation_type", &Control::Follower::setInterpolationType)
       .def("set_current_path", &Control::Follower::setCurrentPath)
+      .def("clear_current_path", &Control::Follower::clearCurrentPath)
       .def("is_goal_reached", &Control::Follower::isGoalReached)
       .def("get_vx_cmd", &Control::Follower::getLinearVelocityCmdX)
       .def("get_vy_cmd", &Control::Follower::getLinearVelocityCmdY)

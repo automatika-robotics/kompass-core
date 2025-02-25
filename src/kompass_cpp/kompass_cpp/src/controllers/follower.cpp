@@ -59,7 +59,22 @@ Follower::Target Follower::getTrackedTarget() const {
   return *currentTrackedTarget_;
 }
 
-const Path::Path Follower::getCurrentPath() const { return *currentPath; }
+const Path::Path Follower::getCurrentPath() const {
+  return *currentPath;
+}
+
+
+void Follower::clearCurrentPath(){
+  // Delete old reference and current path before setting new values
+  refPath = nullptr;
+  currentPath = nullptr;
+
+  reached_goal_ = true;
+  reached_yaw_ = true;
+  path_processing_ = false;
+
+  return;
+}
 
 void Follower::setCurrentPath(const Path::Path &path) {
   // Delete old reference and current path before setting new values
@@ -324,6 +339,9 @@ const double Follower::getPathLength() const {
   return currentPath->totalPathLength();
 }
 const bool Follower::hasPath() const {
+  if (!path_processing_){
+    return false;
+  }
   return currentPath->totalPathLength() > 0.0;
 }
 } // namespace Control
