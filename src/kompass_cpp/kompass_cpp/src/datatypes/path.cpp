@@ -74,8 +74,8 @@ float Path::getOrientation(const size_t index) const {
 }
 
 float Path::distance(const Point &p1, const Point &p2) {
-  return std::sqrt((p2.x() - p1.x()) * (p2.x() - p1.x()) +
-                   (p2.y() - p1.y()) * (p2.y() - p1.y()));
+  return std::sqrt(pow((p2.x() - p1.x()), 2) +
+                   pow((p2.y() - p1.y()), 2));
 }
 
 float Path::minDist(const std::vector<Point> &others) const {
