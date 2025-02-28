@@ -31,6 +31,15 @@ void to_json(json &j, const Path::Path &p) {
   }
 }
 
+// Convert TrajectoryPath to JSON
+void to_json(json &j, const Control::TrajectoryPath &p) {
+  j["points"] = json::array(); // Initialize as a JSON array
+  for (const auto &point : p) {
+    j["points"].push_back(
+        json{{"x", point.x()}, {"y", point.y()}}); // Serialize each Point
+  }
+}
+
 // Convert JSON to Path
 void from_json(const json &j, Path::Path &p) {
   p.points.clear(); // Clear existing points
@@ -59,7 +68,7 @@ void from_json(const json &j, Control::Velocity2D &v) {
 }
 
 // Convert Trajectory to JSON
-void to_json(json &j, const std::vector<Control::Trajectory> &samples) {
+void to_json(json &j, const Control::TrajectorySamples2D &samples) {
   j["paths"] = json::array(); // Initialize as a JSON array
   for (const auto &traj : samples) {
     json j_p;
@@ -69,7 +78,7 @@ void to_json(json &j, const std::vector<Control::Trajectory> &samples) {
 }
 
 // Convert Trajectory & Costs to JSON
-void to_json(json &j, const std::vector<Control::Trajectory> &samples,
+void to_json(json &j, const Control::TrajectorySamples2D &samples,
              const std::vector<double> &costs) {
   j["paths"] = json::array(); // Initialize as a JSON array
   int idx{0};
@@ -92,7 +101,7 @@ void from_json(const json &j, std::vector<Control::Trajectory> &samples) {
 
 // Save trajectories to a JSON file
 void saveTrajectoriesToJson(
-    const std::vector<Control::Trajectory> &trajectories,
+    const Control::TrajectorySamples2D &trajectories,
     const std::string &filename) {
   json j;
   to_json(j, trajectories);

@@ -75,8 +75,6 @@ struct Path {
 
   static float distance(const Point &p1, const Point &p2);
 
-  float minDist(const std::vector<Point> &others) const;
-
   // Function to compute the total path length
   float totalPathLength() const;
 

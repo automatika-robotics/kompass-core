@@ -97,13 +97,14 @@ public:
    * @param current_vel   Current Velocity of the robot
    * @param current_pose  Current Location of the robot
    * @param scan          Sensor data (Laserscan)
-   * @return std::vector<Trajectory>
+   * @return TrajectorySamples2D
    */
-  std::vector<Trajectory> generateTrajectories(const Velocity2D &current_vel,
+
+  TrajectorySamples2D generateTrajectories(const Velocity2D &current_vel,
                                                const Path::State &current_pose,
                                                const LaserScan &scan);
 
-  std::vector<Trajectory>
+  TrajectorySamples2D
   generateTrajectories(const Velocity2D &current_vel,
                        const Path::State &current_pose,
                        const std::vector<Path::Point> &cloud);
@@ -137,6 +138,8 @@ private:
   double min_vy_;
   double max_omega_;
   double min_omega_;
+  size_t numTrajectories_;
+  size_t numPointsPerTrajectory_;
 
   /**
    * @brief Helper method to update the class private parameters from config
@@ -153,7 +156,7 @@ private:
    */
   void UpdateReachableVelocityRange(Control::Velocity2D currentVel);
 
-  std::vector<Trajectory> getNewTrajectories(const Velocity2D &current_vel,
+  TrajectorySamples2D getNewTrajectories(const Velocity2D &current_vel,
                                              const Path::State &current_pose);
 
   /**
@@ -167,11 +170,11 @@ private:
    */
   void getAdmissibleTrajsFromVel(
       const Velocity2D &vel, const Path::State &start_pose,
-      std::vector<Trajectory> *admissible_velocity_trajectories);
+      TrajectorySamples2D *admissible_velocity_trajectories);
 
   void getAdmissibleTrajsFromVelDiffDrive(
       const Velocity2D &vel, const Path::State &start_pose,
-      std::vector<Trajectory> *admissible_velocity_trajectories);
+      TrajectorySamples2D *admissible_velocity_trajectories);
 
   /**
    * @brief Generate trajectory samples for an ACKERMANN motion model
@@ -181,7 +184,7 @@ private:
    * @param scan
    * @return std::vector<Trajectory>
    */
-  std::vector<Trajectory>
+ TrajectorySamples2D
   generateTrajectoriesAckermann(const Velocity2D &current_vel,
                                 const Path::State &current_pose);
 
@@ -193,7 +196,7 @@ private:
    * @param scan
    * @return std::vector<Trajectory>
    */
-  std::vector<Trajectory>
+ TrajectorySamples2D
   generateTrajectoriesDiffDrive(const Velocity2D &current_vel,
                                 const Path::State &current_pose);
 
@@ -205,7 +208,7 @@ private:
    * @param scan
    * @return std::vector<Trajectory>
    */
-  std::vector<Trajectory>
+ TrajectorySamples2D
   generateTrajectoriesOmni(const Velocity2D &current_vel,
                            const Path::State &current_pose);
 };

@@ -78,19 +78,6 @@ float Path::distance(const Point &p1, const Point &p2) {
                    pow((p2.y() - p1.y()), 2));
 }
 
-float Path::minDist(const std::vector<Point> &others) const {
-  float minDist{0.0}, dist{0.0};
-  for (auto point : points) {
-    minDist = std::numeric_limits<double>::max();
-    for (auto other_point : others) {
-      dist = distance(point, other_point);
-      if (dist < minDist) {
-        minDist = dist;
-      }
-    }
-  }
-  return minDist;
-}
 
 // Function to compute the total path length
 float Path::totalPathLength() const {

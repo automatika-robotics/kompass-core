@@ -2,6 +2,7 @@
 
 #include "control.h"
 #include "datatypes/path.h"
+#include "utils/logger.h"
 #include <cmath>
 #include <vector>
 
@@ -34,7 +35,7 @@ struct TrajectoryVelocities2D {
     vx = Eigen::VectorXf(velocities.size());
     vy = Eigen::VectorXf(velocities.size());
     omega = Eigen::VectorXf(velocities.size());
-    numPointsPerTrajectory_ = velocities.size();
+    numPointsPerTrajectory_ = velocities.size() + 1;
     for (size_t i = 0; i < velocities.size(); ++i) {
       vx(i) = velocities[i].vx();
       vy(i) = velocities[i].vy();
@@ -45,12 +46,13 @@ struct TrajectoryVelocities2D {
   // initialize from eigen vectors
   TrajectoryVelocities2D(const Eigen::VectorXf &vx_, const Eigen::VectorXf &vy_,
                          const Eigen::VectorXf &omega_)
-      : vx(vx_), vy(vy_), omega(omega_) {};
+      : vx(vx_), vy(vy_), omega(omega_),
+        numPointsPerTrajectory_(vx_.size() + 1) {};
 
   // add velocity to specified index in TrajectoryVelocities2D
   void add(size_t idx, const Velocity2D &velocity) {
 
-    if (idx >= numPointsPerTrajectory_) {
+    if (idx >= numPointsPerTrajectory_ - 1) {
       throw std::out_of_range("Vector index out of bounds");
     }
 
@@ -61,7 +63,7 @@ struct TrajectoryVelocities2D {
 
   // get point on index
   Velocity2D getIndex(size_t idx) const {
-    if (idx >= numPointsPerTrajectory_) {
+    if (idx >= numPointsPerTrajectory_ - 1) {
       throw std::out_of_range("Vector index out of bounds");
     }
     return Velocity2D(vx(idx), vy(idx), omega(idx));
@@ -70,9 +72,38 @@ struct TrajectoryVelocities2D {
   Velocity2D getFront() const { return Velocity2D(vx(0), vy(0), omega(0)); };
   // get the last element
   Velocity2D getEnd() const {
-    return Velocity2D(vx(numPointsPerTrajectory_), vy(numPointsPerTrajectory_),
-                      omega(numPointsPerTrajectory_));
+    return Velocity2D(vx(numPointsPerTrajectory_ - 2),
+                      vy(numPointsPerTrajectory_ - 2),
+                      omega(numPointsPerTrajectory_ - 2));
   };
+  struct Iterator {
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = Velocity2D;
+    using difference_type = std::ptrdiff_t;
+
+    Iterator(const TrajectoryVelocities2D &v, size_t idx)
+        : velocities(v), index(idx) {}
+
+    Velocity2D operator*() const {
+      return Velocity2D(velocities.vx(index), velocities.vy(index),
+                        velocities.omega(index));
+    }
+
+    Iterator &operator++() {
+      ++index;
+      return *this;
+    }
+
+    bool operator!=(const Iterator &other) const {
+      return index != other.index;
+    }
+
+  private:
+    const TrajectoryVelocities2D &velocities;
+    size_t index;
+  };
+  Iterator begin() const { return Iterator(*this, 0); }
+  Iterator end() const { return Iterator(*this, numPointsPerTrajectory_ - 1); }
 };
 
 // Data structure to store Trajectory Path
@@ -109,7 +140,7 @@ struct TrajectoryPath {
   // initialize from eigen vectors
   TrajectoryPath(const Eigen::VectorXf &x_, const Eigen::VectorXf &y_,
                  const Eigen::VectorXf &z_)
-      : x(x_), y(y_), z(z_) {};
+      : x(x_), y(y_), z(z_), numPointsPerTrajectory_(x.size()) {};
 
   // add point to specified index in path
   void add(size_t idx, const Path::Point &point) {
@@ -134,17 +165,20 @@ struct TrajectoryPath {
   // calculate minimum distance with a given vector of points
   float minDist2D(const std::vector<Path::Point> &others) const {
     size_t s = others.size();
-    // convert vector of points to Eigen vectors
-    Eigen::VectorXf results_x(s * numPointsPerTrajectory_);
-    Eigen::VectorXf results_y(s * numPointsPerTrajectory_);
+    if (s <= 0) {
+      return 0.0f;
+    }
+    float minDist = std::numeric_limits<float>::max();
+    float dist;
     for (size_t i = 0; i < s; ++i) {
-      for (size_t j = 0; j < numPointsPerTrajectory_; ++j){
-        results_x(i + j) = pow((others[i].x() - x(j)), 2);
-        results_y(i + j) = pow((others[i].x() - x(j)), 2);
+      for (size_t j = 0; j < numPointsPerTrajectory_; ++j) {
+        dist = pow((others[i].x() - x(j)), 2) + pow((others[i].y() - y(j)), 2);
+        if (dist < minDist) {
+          minDist = dist;
+        }
       }
     }
-    float minimum_dist = (results_x + results_y).minCoeff();
-    return sqrt(minimum_dist);
+    return sqrt(minDist);
   }
 
   // get point on index
@@ -158,9 +192,37 @@ struct TrajectoryPath {
   Path::Point getFront() const { return Path::Point(x(0), y(0), z(0)); };
   // get the last element
   Path::Point getEnd() const {
-    return Path::Point(x(numPointsPerTrajectory_), y(numPointsPerTrajectory_),
-                       z(numPointsPerTrajectory_));
+    return Path::Point(x(numPointsPerTrajectory_ - 1),
+                       y(numPointsPerTrajectory_ - 1),
+                       z(numPointsPerTrajectory_ - 1));
   };
+  struct Iterator {
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = Path::Point;
+    using difference_type = std::ptrdiff_t;
+
+    Iterator(const TrajectoryPath &p, size_t idx) : path(p), index(idx) {}
+
+    Path::Point operator*() const {
+      return Path::Point(path.x(index), path.y(index), path.z(index));
+    }
+
+    Iterator &operator++() {
+      ++index;
+      return *this;
+    }
+
+    bool operator!=(const Iterator &other) const {
+      return index != other.index;
+    }
+
+  private:
+    const TrajectoryPath &path;
+    size_t index;
+  };
+
+  Iterator begin() const { return Iterator(*this, 0); }
+  Iterator end() const { return Iterator(*this, numPointsPerTrajectory_); }
 };
 
 // A data structure to hold a single 2D trajectory (path and corresponding
@@ -181,15 +243,15 @@ struct Trajectory2D {
   };
 
   // initialize with paths and velocities
-  explicit Trajectory2D(const TrajectoryVelocities2D &velocities,
-                        const TrajectoryPath &path) {
-    if (velocities.numPointsPerTrajectory_ != path.numPointsPerTrajectory_) {
+  explicit Trajectory2D(const TrajectoryVelocities2D &velocities_,
+                        const TrajectoryPath &path_) {
+    if (velocities_.numPointsPerTrajectory_ != path_.numPointsPerTrajectory_) {
       throw std::invalid_argument("TrajectoryVelocities2D and TrajectoryPath "
                                   "must have the same numPointsPerTrajectory");
     }
-    this->velocities = velocities;
-    this->path = path;
-    numPointsPerTrajectory_ = velocities.numPointsPerTrajectory_;
+    this->velocities = velocities_;
+    this->path = path_;
+    numPointsPerTrajectory_ = velocities_.numPointsPerTrajectory_;
   };
 
   // initialize with path object and velocity vector
@@ -210,26 +272,26 @@ struct TrajectoryVelocitySamples2D {
   std::vector<Eigen::VectorXf> vx;    // Speed on x-axis (m/s)
   std::vector<Eigen::VectorXf> vy;    // Speed on y-axis (m/s)
   std::vector<Eigen::VectorXf> omega; // Angular velocity (rad/s)
-  size_t numTrajectories_, numPointsPerTrajectory_;
+  size_t maxNumTrajectories_, numPointsPerTrajectory_;
 
   // default constructor
   TrajectoryVelocitySamples2D() = default;
 
   // Constructor that pre-reserves capacity.
-  explicit TrajectoryVelocitySamples2D(size_t numTrajectories,
+  explicit TrajectoryVelocitySamples2D(size_t maxNumTrajectories,
                                        size_t numPointsPerTrajectory)
-      : numTrajectories_(numTrajectories),
+      : maxNumTrajectories_(maxNumTrajectories),
         numPointsPerTrajectory_(numPointsPerTrajectory) {
-    vx.reserve(numTrajectories);
-    vy.reserve(numTrajectories);
-    omega.reserve(numTrajectories);
+    vx.reserve(maxNumTrajectories);
+    vy.reserve(maxNumTrajectories);
+    omega.reserve(maxNumTrajectories);
   }
 
   // Add a new set of velocity values from a velocity vector.
   void push_back(const std::vector<Velocity2D> &velocities) {
-    if (velocities.size() != numPointsPerTrajectory_) {
+    if (velocities.size() != numPointsPerTrajectory_ - 1) {
       throw std::invalid_argument("Velocity vector must have size equivalent "
-                                  "to numPointsPerTrajectory");
+                                  "to numPointsPerTrajectory - 1");
     }
 
     Eigen::VectorXf vx_(velocities.size());
@@ -250,8 +312,8 @@ struct TrajectoryVelocitySamples2D {
     if (velocities.numPointsPerTrajectory_ != numPointsPerTrajectory_) {
       throw std::invalid_argument(
           "TrajectoryVelocities2D must have "
-          "numPointsPerTrajectory equivalent to "
-          "_numPointsPerTrajectory of TrajectoryVelocitySamples2D");
+          "numPointsPerTrajectory_ equivalent to "
+          "numPointsPerTrajectory_ of TrajectoryVelocitySamples2D");
     }
 
     vx.push_back(velocities.vx);
@@ -307,19 +369,19 @@ struct TrajectoryPathSamples {
   std::vector<Eigen::VectorXf> x;
   std::vector<Eigen::VectorXf> y;
   std::vector<Eigen::VectorXf> z;
-  size_t numTrajectories_, numPointsPerTrajectory_;
+  size_t maxNumTrajectories_, numPointsPerTrajectory_;
 
   // default constructor
   TrajectoryPathSamples() = default;
 
   // Constructor that pre-reserves capacity.
-  explicit TrajectoryPathSamples(size_t numTrajectories,
+  explicit TrajectoryPathSamples(size_t maxNumTrajectories,
                                  size_t numPointsPerTrajectory)
-      : numTrajectories_(numTrajectories),
+      : maxNumTrajectories_(maxNumTrajectories),
         numPointsPerTrajectory_(numPointsPerTrajectory) {
-    x.reserve(numTrajectories);
-    y.reserve(numTrajectories);
-    z.reserve(numTrajectories);
+    x.reserve(maxNumTrajectories);
+    y.reserve(maxNumTrajectories);
+    z.reserve(maxNumTrajectories);
   }
 
   // Add a new path from a Path struct.
@@ -401,44 +463,61 @@ struct TrajectoryPathSamples {
 struct TrajectorySamples2D {
   TrajectoryVelocitySamples2D velocities;
   TrajectoryPathSamples paths;
-  size_t numTrajectories_, numPointsPerTrajectory_;
+  size_t maxNumTrajectories_, numPointsPerTrajectory_;
 
   // default constructor
   TrajectorySamples2D() = default;
 
   // empty initialization
-  explicit TrajectorySamples2D(size_t numTrajectories,
+  explicit TrajectorySamples2D(size_t maxNumTrajectories,
                                size_t numPointsPerTrajectory)
-      : numTrajectories_(numTrajectories),
+      : maxNumTrajectories_(maxNumTrajectories),
         numPointsPerTrajectory_(numPointsPerTrajectory) {
     velocities =
-        TrajectoryVelocitySamples2D(numTrajectories, numPointsPerTrajectory);
-    paths = TrajectoryPathSamples(numTrajectories, numPointsPerTrajectory);
+        TrajectoryVelocitySamples2D(maxNumTrajectories, numPointsPerTrajectory);
+    paths = TrajectoryPathSamples(maxNumTrajectories, numPointsPerTrajectory);
   };
 
   // initialize with paths and velocities
-  explicit TrajectorySamples2D(TrajectoryVelocitySamples2D &velocities,
-                               TrajectoryPathSamples &paths) {
-    if (velocities.numTrajectories_ != paths.numTrajectories_) {
+  explicit TrajectorySamples2D(TrajectoryVelocitySamples2D &velocities_,
+                               TrajectoryPathSamples &paths_) {
+    if (velocities_.maxNumTrajectories_ != paths_.maxNumTrajectories_) {
       throw std::invalid_argument(
           "TrajectoryVelocitySamples2D and TrajectoryPathSamples "
           "must have the same numTrajectories");
     }
-    if (velocities.numPointsPerTrajectory_ != paths.numPointsPerTrajectory_) {
+    if (velocities_.numPointsPerTrajectory_ != paths_.numPointsPerTrajectory_) {
       throw std::invalid_argument(
           "TrajectoryVelocitySamples2D and TrajectoryPathSamples "
           "must have the same numPointsPerTrajectory");
     }
-    this->velocities = velocities;
-    this->paths = paths;
-    numTrajectories_ = velocities.numTrajectories_;
-    numPointsPerTrajectory_ = velocities.numPointsPerTrajectory_;
+    this->velocities = velocities_;
+    this->paths = paths_;
+    maxNumTrajectories_ = velocities_.maxNumTrajectories_;
+    numPointsPerTrajectory_ = velocities_.numPointsPerTrajectory_;
   };
+
+  // Copy constructor
+  TrajectorySamples2D(const TrajectorySamples2D &other)
+      : velocities(other.velocities), paths(other.paths),
+        maxNumTrajectories_(other.maxNumTrajectories_),
+        numPointsPerTrajectory_(other.numPointsPerTrajectory_) {}
 
   // Add a new path and velocity (can be structs or vectors).
   template <typename T1, typename T2> void push_back(T1 &velocities, T2 &path) {
     this->velocities.push_back(velocities);
     this->paths.push_back(path);
+  }
+
+  // return  a Trajectory2D struct based on given index of sample
+  Trajectory2D getIndex(size_t idx) const {
+    if (idx > velocities.vx.size()) {
+      throw std::out_of_range("Vector index out of bounds");
+    }
+    return Trajectory2D(
+        TrajectoryVelocities2D(velocities.vx[idx], velocities.vy[idx],
+                               velocities.omega[idx]),
+        TrajectoryPath(paths.x[idx], paths.y[idx], paths.z[idx]));
   }
 
   struct Iterator {

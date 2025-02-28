@@ -85,10 +85,10 @@ void testTrajSampler() {
 
     // Robot initial velocity control
     Control::Velocity2D robotControl;
+    Control::TrajectorySamples2D samples;
 
     LOG_INFO("TESTING ", Control::controlTypeToString(robot_types[j]));
 
-    std::vector<Control::Trajectory> samples;
     {
       Timer time;
       samples =

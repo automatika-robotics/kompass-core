@@ -41,11 +41,23 @@ TrajectorySampler::TrajectorySampler(
   control_time_ = controlHorizon;
   lin_samples_max_ = maxLinearSamples;
   ang_samples_max_ = maxAngularSamples;
+  numPointsPerTrajectory_ = max_time_ / time_step_;
 
   if (ctrType != ControlType::OMNI) {
     // Discard Vy limits to eliminate movement on Y axis
     ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
   }
+
+  // calculate number of trajectory samples
+  if (ctrType == ControlType::OMNI) {
+    numTrajectories_ =
+        (lin_samples_max_ * 2) + (lin_samples_max_ * ang_samples_max_ * 2);
+  } else if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
+    numTrajectories_ = lin_samples_max_ + lin_samples_max_ * ang_samples_max_;
+  } else {
+    numTrajectories_ = (lin_samples_max_ - 1) * ang_samples_max_;
+  };
+
   this->maxNumThreads = maxNumThreads;
 }
 
@@ -90,19 +102,21 @@ void TrajectorySampler::updateParams(TrajectorySamplerParameters config) {
 
 void TrajectorySampler::getAdmissibleTrajsFromVel(
     const Velocity2D &vel, const Path::State &start_pose,
-    std::vector<Trajectory> *admissible_velocity_trajectories) {
+    TrajectorySamples2D *admissible_velocity_trajectories) {
 
   if (std::abs(vel.vx()) < MIN_VEL and std::abs(vel.vy()) < MIN_VEL and
       std::abs(vel.omega()) < MIN_VEL) {
     return;
   }
   Path::State simulated_pose = start_pose;
-  std::vector<Velocity2D> simulated_velocities;
-  Path::Path path;
-  path.points.push_back(Path::Point(start_pose.x, start_pose.y));
+  TrajectoryVelocities2D simulated_velocities(numPointsPerTrajectory_);
+  TrajectoryPath path(numPointsPerTrajectory_);
+  int idx = 0;
+  path.add(idx, start_pose.x, start_pose.y);
   bool is_collision = false;
 
-  for (double t = 0; t < max_time_; t += time_step_) {
+  for (size_t i = 0; i < (numPointsPerTrajectory_ - 1); ++i) {
+
     simulated_pose.x += (vel.vx() * cos(simulated_pose.yaw) -
                          vel.vy() * sin(simulated_pose.yaw)) *
                         time_step_;
@@ -129,16 +143,17 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
       break;
     }
 
-    path.points.push_back(Path::Point(simulated_pose.x, simulated_pose.y));
-    simulated_velocities.push_back(vel);
+    simulated_velocities.add(idx, vel);
+    idx += 1;
+    path.add(idx, simulated_pose.x, simulated_pose.y);
   }
 
   if (!is_collision) {
     if (maxNumThreads > 1) {
       std::lock_guard<std::mutex> lock(s_trajMutex);
-      admissible_velocity_trajectories->push_back({simulated_velocities, path});
+      admissible_velocity_trajectories->push_back(simulated_velocities, path);
     } else {
-      admissible_velocity_trajectories->push_back({simulated_velocities, path});
+      admissible_velocity_trajectories->push_back(simulated_velocities, path);
     }
   }
   return;
@@ -146,25 +161,26 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
 
 void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
     const Velocity2D &vel, const Path::State &start_pose,
-    std::vector<Trajectory> *admissible_velocity_trajectories) {
+    TrajectorySamples2D *admissible_velocity_trajectories) {
 
   if (std::abs(vel.vx()) < MIN_VEL and std::abs(vel.vy()) < MIN_VEL and
       std::abs(vel.omega()) < MIN_VEL) {
     return;
   }
   Path::State simulated_pose = start_pose;
-  Path::Path path;
-  path.points.push_back(Path::Point(start_pose.x, start_pose.y));
+  TrajectoryVelocities2D simulated_velocities(numPointsPerTrajectory_);
+  TrajectoryPath path(numPointsPerTrajectory_);
+  int idx = 0;
+  Velocity2D temp_vel;
+  path.add(idx, start_pose.x, start_pose.y);
   bool is_collision = false;
-  std::vector<Velocity2D> simulated_velocities;
 
-  for (double t = 0; t < max_time_; t += time_step_) {
+  for (size_t i = 0; i < (numPointsPerTrajectory_ - 1); ++i) {
 
     // Alternate between linear and angular movement
-    if (int(t / time_step_) % 2 == 0) {
+    if (i % 2 == 0) {
       simulated_pose.yaw += vel.omega() * time_step_;
-      simulated_velocities.push_back(
-          Velocity2D(0.0, 0.0, vel.omega(), vel.steer_ang()));
+      temp_vel = Velocity2D(0.0, 0.0, vel.omega(), vel.steer_ang());
     } else {
       simulated_pose.x += (vel.vx() * cos(simulated_pose.yaw) -
                            vel.vy() * sin(simulated_pose.yaw)) *
@@ -172,7 +188,7 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
       simulated_pose.y += (vel.vx() * sin(simulated_pose.yaw) +
                            vel.vy() * cos(simulated_pose.yaw)) *
                           time_step_;
-      simulated_velocities.push_back(Velocity2D(vel.vx(), vel.vy(), 0.0, 0.0));
+      temp_vel = Velocity2D(vel.vx(), vel.vy(), 0.0, 0.0);
     }
 
     // Update the position of the robot in the collision checker (updates the
@@ -189,23 +205,25 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
       break;
     }
 
-    path.points.push_back(Path::Point(simulated_pose.x, simulated_pose.y));
+    simulated_velocities.add(idx, temp_vel);
+    idx += 1;
+    path.add(idx, simulated_pose.x, simulated_pose.y);
   }
 
   if (!is_collision) {
     if (maxNumThreads > 1) {
       std::lock_guard<std::mutex> lock(s_trajMutex);
-      admissible_velocity_trajectories->push_back({simulated_velocities, path});
+      admissible_velocity_trajectories->push_back(simulated_velocities, path);
     } else {
-      admissible_velocity_trajectories->push_back({simulated_velocities, path});
+      admissible_velocity_trajectories->push_back(simulated_velocities, path);
     }
   }
   return;
 }
 
-std::vector<Trajectory> TrajectorySampler::generateTrajectoriesAckermann(
+TrajectorySamples2D TrajectorySampler::generateTrajectoriesAckermann(
     const Velocity2D &current_vel, const Path::State &current_pose) {
-  std::vector<Trajectory> admissible_velocity_trajectories;
+  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories_, numPointsPerTrajectory_);
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
     // Implements generating smooth arc-like trajectories within the admissible
@@ -238,10 +256,10 @@ std::vector<Trajectory> TrajectorySampler::generateTrajectoriesAckermann(
   return admissible_velocity_trajectories;
 }
 
-std::vector<Trajectory> TrajectorySampler::generateTrajectoriesDiffDrive(
+TrajectorySamples2D TrajectorySampler::generateTrajectoriesDiffDrive(
     const Velocity2D &current_vel, const Path::State &current_pose) {
 
-  std::vector<Trajectory> admissible_velocity_trajectories;
+  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories_, numPointsPerTrajectory_);
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
 
@@ -277,14 +295,14 @@ std::vector<Trajectory> TrajectorySampler::generateTrajectoriesDiffDrive(
     }
   }
   LOG_DEBUG("Got admissible trajectories: ",
-           admissible_velocity_trajectories.size());
+            admissible_velocity_trajectories.velocities.vx.size());
   return admissible_velocity_trajectories;
 }
 
-std::vector<Trajectory>
+TrajectorySamples2D
 TrajectorySampler::generateTrajectoriesOmni(const Velocity2D &current_vel,
                                             const Path::State &current_pose) {
-  std::vector<Trajectory> admissible_velocity_trajectories;
+  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories_, numPointsPerTrajectory_);
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
     // Generate forward/backward trajectories
@@ -365,7 +383,7 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity2D &current_vel,
   return admissible_velocity_trajectories;
 }
 
-std::vector<Trajectory>
+TrajectorySamples2D
 TrajectorySampler::getNewTrajectories(const Velocity2D &current_vel,
                                       const Path::State &current_pose) {
   // Get the range of reachable velocities from the current velocity
@@ -379,11 +397,11 @@ TrajectorySampler::getNewTrajectories(const Velocity2D &current_vel,
   case ControlType::OMNI:
     return generateTrajectoriesOmni(current_vel, current_pose);
   default:
-    return std::vector<Trajectory>{};
+    throw std::invalid_argument("Invalid conrol type");
   }
 }
 
-std::vector<Trajectory>
+TrajectorySamples2D
 TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
                                         const Path::State &current_pose,
                                         const Control::LaserScan &scan) {
@@ -394,7 +412,7 @@ TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
   return getNewTrajectories(current_vel, current_pose);
 }
 
-std::vector<Trajectory>
+TrajectorySamples2D
 TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
                                         const Path::State &current_pose,
                                         const std::vector<Path::Point> &cloud) {
