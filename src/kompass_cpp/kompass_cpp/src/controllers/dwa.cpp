@@ -170,46 +170,21 @@ Path::Path DWA::findTrackedPathSegment() {
   return trackedPathSegment;
 }
 
-TrajSearchResult DWA::findBestSegment(const std::vector<Trajectory> &samples) {
+TrajSearchResult DWA::findBestSegment(const TrajectorySamples2D &samples) {
   double minCost = std::numeric_limits<double>::max();
-  Trajectory minCostTraj;
+  Trajectory2D minCostTraj(samples.numPointsPerTrajectory_);
   bool traj_found = false;
   Path::Path trackedRefPathSegment = findTrackedPathSegment();
 
-  if (maxNumThreads > 1) {
-    ThreadPool pool(maxNumThreads);
-    // Mutex for locking updates to minCost and minCostTraj
-    std::mutex mtx;
+  // Evaluate the samples and get the sample with the minimum cost
+  for (const auto &sample : samples) {
+    double traj_cost = trajCostEvaluator->getTrajectoryCost(
+        sample, *currentPath, trackedRefPathSegment, current_segment_index_);
 
-    for (const auto &sample : samples) {
-      pool.enqueue([this, &sample, &trackedRefPathSegment, &minCost,
-                    &minCostTraj, &traj_found, &mtx](void) {
-        double traj_cost = trajCostEvaluator->getTrajectoryCost(
-            sample, *currentPath, trackedRefPathSegment,
-            current_segment_index_);
-        // Lock to update the minimum cost and trajectory
-        {
-          std::lock_guard<std::mutex> lock(mtx);
-          if (traj_cost < minCost) {
-            minCost = traj_cost;
-            minCostTraj = sample;
-            traj_found = true;
-          }
-        }
-      });
-    }
-
-  } else {
-    // Evaluate the samples and get the sample with the minimum cost
-    for (const auto &sample : samples) {
-      double traj_cost = trajCostEvaluator->getTrajectoryCost(
-          sample, *currentPath, trackedRefPathSegment, current_segment_index_);
-
-      if (traj_cost < minCost) {
-        minCost = traj_cost;
-        minCostTraj = sample;
-        traj_found = true;
-      }
+    if (traj_cost < minCost) {
+      minCost = traj_cost;
+      minCostTraj = sample;
+      traj_found = true;
     }
   }
 
@@ -229,7 +204,7 @@ TrajSearchResult DWA::findBestPath(const Velocity2D &global_vel,
   determineTarget();
 
   // Generate set of valid trajectories in the DW
-  std::vector<Trajectory> samples_ =
+  TrajectorySamples2D samples_ =
       trajSampler->generateTrajectories(global_vel, currentState, scan_points);
 
   trajCostEvaluator->setPointScan(scan_points, currentState);
@@ -245,7 +220,7 @@ Controller::Result DWA::computeVelocityCommand(const Velocity2D &global_vel,
   if (searchRes.isTrajFound) {
     finalResult.status = Controller::Result::Status::COMMAND_FOUND;
     // Get the first command to be applied
-    finalResult.velocity_command = searchRes.trajectory.velocity.front();
+    finalResult.velocity_command = searchRes.trajectory.velocities.getFront();
     latest_velocity_command_ = finalResult.velocity_command;
   } else {
     finalResult.status = Controller::Result::Status::NO_COMMAND_POSSIBLE;
@@ -258,7 +233,7 @@ TrajSearchResult DWA::computeVelocityCommandsSet(const Velocity2D &global_vel,
   TrajSearchResult searchRes = findBestPath(global_vel, scan);
   // Update latest velocity command
   if (searchRes.isTrajFound) {
-    latest_velocity_command_ = searchRes.trajectory.velocity.front();
+    latest_velocity_command_ = searchRes.trajectory.velocities.getFront();
   }
   return searchRes;
 }
@@ -270,7 +245,7 @@ DWA::computeVelocityCommandsSet(const Velocity2D &global_vel,
   TrajSearchResult searchRes = findBestPath(global_vel, cloud);
   // Update latest velocity command
   if (searchRes.isTrajFound) {
-    latest_velocity_command_ = searchRes.trajectory.velocity.front();
+    latest_velocity_command_ = searchRes.trajectory.velocities.getFront();
   }
   return searchRes;
 }

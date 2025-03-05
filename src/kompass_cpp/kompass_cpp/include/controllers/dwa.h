@@ -130,7 +130,7 @@ private:
   TrajSearchResult findBestPath(const Velocity2D &global_vel,
                                 const T &scan_points);
 
-  TrajSearchResult findBestSegment(const std::vector<Trajectory> &samples);
+  TrajSearchResult findBestSegment(const TrajectorySamples2D &samples);
 
   Path::Path findTrackedPathSegment();
 };

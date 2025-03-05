@@ -73,23 +73,9 @@ public:
    */
   ~CostEvaluator();
 
-  /**
-   * @brief Trajectory cost functions input arguments options:
-   * The trajectory under evaluation,
-   * or the trajectory and a path which can be the reference path (global path)
-   * or a segment of it for example, or the trajectory and a state (which can be
-   * the state of another robot, object etc.), or the trajectory and a point, or
-   * the trajectory and a double (which can be time value, distance value,
-   * etc.),
-   */
   using CostFunctionArguments = std::variant<
       std::pair<const Trajectory, const Path::Path>,
-      std::pair<const Trajectory, const Path::State>,
-      std::pair<const Trajectory, const Path::Point>,
-      std::pair<const Trajectory, const double>,
-      std::tuple<const Trajectory, const Path::Path, const ControlType>,
-      std::tuple<const Trajectory, const Path::Path, const double>,
-      std::pair<const Trajectory, const std::vector<double>>,
+      std::pair<const Trajectory2D, const Path::Path>,
       std::pair<const Trajectory, const std::array<double, 3>>>;
 
   /**
@@ -97,48 +83,25 @@ public:
    *
    */
   using CostFunction = std::function<double(CostFunctionArguments)>;
-
   /**
    * @brief Function signature for any custom user defined cost function
    *
    */
   using CustomCostFunction =
-      std::function<double(const Trajectory &, const Path::Path &)>;
+      std::function<double(const Trajectory2D &, const Path::Path &)>;
 
   /**
-   * @brief TrajectoryCost is defined by a CostFunction to evaluate the cost and
-   * a weight assigned to that cost in the overall evaluation
+   * @brief CustomTrajectoryCost is defined by a CustomCostFunction to evaluate
+   * the cost and a weight assigned to that cost in the overall evaluation
    *
    */
-  struct TrajectoryCost {
+  struct CustomTrajectoryCost {
     double weight;
     CostFunction evaluator_;
 
-    TrajectoryCost(double weight, CostFunction evaluator)
+    CustomTrajectoryCost(double weight, CostFunction evaluator)
         : weight(weight), evaluator_(evaluator) {}
   };
-
-  /**
-   * @brief Get the Trajectory Cost by applying all the defined cost functions
-   *
-   * @param traj      The trajectory under evaluation
-   * @param reference_path        The reference path (global path)
-   * @param closest_segment_index     The segment of the closest segment from
-   * the global path
-   * @return double
-   */
-  double getTrajectoryCost(const Trajectory &traj,
-                           const Path::Path &reference_path,
-                           const Path::Path &tracked_segment,
-                           const size_t closest_segment_index);
-
-  /**
-   * @brief Adds a new custome cost to be used in the trajectory evaluation
-   *
-   * @param weight
-   * @param custom_cost_function
-   */
-  void addCustomCost(double weight, CustomCostFunction custom_cost_function);
 
   /**
    * @brief Helper function to wrap a trajectory cost function by parsing
@@ -164,7 +127,34 @@ public:
           args);
     };
   }
+  /**
+   * @brief Get the Trajectory Cost by applying all the defined cost functions
+   *
+   * @param traj      The trajectory under evaluation
+   * @param reference_path        The reference path (global path)
+   * @param closest_segment_index     The segment of the closest segment from
+   * the global path
+   * @return double
+   */
+  double getTrajectoryCost(const Trajectory2D &traj,
+                           const Path::Path &reference_path,
+                           const Path::Path &tracked_segment,
+                           const size_t closest_segment_index);
 
+  /**
+   * @brief Adds a new custome cost to be used in the trajectory evaluation
+   *
+   * @param weight
+   * @param custom_cost_function
+   */
+  void addCustomCost(double weight, CustomCostFunction custom_cost_function);
+
+  /**
+   * @brief Set the point scan with either lazerscan or vector of points
+   *
+   * @param scan / point cloud
+   * @param current_state
+   */
   void setPointScan(const LaserScan &scan, const Path::State &curren_state);
 
   void setPointScan(const std::vector<Path::Point> &cloud,
@@ -176,38 +166,11 @@ protected:
   ControlLimitsParams ctrlimits;
   CollisionChecker *collChecker;
 
-  // Built-in Costs
-  TrajectoryCost *referencePathDistCost = new TrajectoryCost(
-      1.0, costFunctionWrapper<decltype(pathCostFunc),
-                               std::tuple<const Trajectory, const Path::Path,
-                                          const ControlType>>(pathCostFunc));
-
-  TrajectoryCost *goalPointDistCost = new TrajectoryCost(
-      1.0, costFunctionWrapper<decltype(goalCostFunc),
-                               std::pair<const Trajectory, const Path::Path>>(
-               goalCostFunc));
-
-  TrajectoryCost *obstaclesDistCost = new TrajectoryCost(
-      1.0, costFunctionWrapper<decltype(obstaclesDistCostFunc),
-                               std::pair<const Trajectory, const Path::Path>>(
-               obstaclesDistCostFunc));
-
-  TrajectoryCost *smoothnessCost = new TrajectoryCost(
-      1.0, costFunctionWrapper<
-               decltype(smoothnessCostFunc),
-               std::pair<const Trajectory, const std::array<double, 3>>>(
-               smoothnessCostFunc));
-
-  TrajectoryCost *jerkCost = new TrajectoryCost(
-      1.0, costFunctionWrapper<
-               decltype(jerkCostFunc),
-               std::pair<const Trajectory, const std::array<double, 3>>>(
-               jerkCostFunc));
-
   // Vector of pointers to the trajectory costs
-  std::vector<TrajectoryCost *> customTrajCostsPtrs_;
+  std::vector<CustomTrajectoryCost *> customTrajCostsPtrs_;
 
 private:
+  TrajectoryCostsWeights costWeights;
   std::vector<Path::Point> obstaclePoints;
 
   Eigen::Isometry3f sensor_tf_body_ =
@@ -220,7 +183,7 @@ private:
    *
    * @param costsWeights
    */
-  void updateCostWeights(TrajectoryCostsWeights costsWeights);
+  void updateDefaultCostWeights(TrajectoryCostsWeights costsWeights);
 
   // Built-in functions for cost evaluation
   /**
@@ -230,9 +193,8 @@ private:
    * @param reference_path
    * @return double
    */
-  static double pathCostFunc(const Trajectory &trajectory,
-                             const Path::Path &reference_path,
-                             const ControlType controlType);
+  static double pathCostFunc(const Trajectory2D &trajectory,
+                             const Path::Path &reference_path);
 
   /**
    * @brief Trajectory cost based on the distance to the end (goal) of a given
@@ -242,11 +204,12 @@ private:
    * @param reference_path
    * @return double
    */
-  static double goalCostFunc(const Trajectory &trajectory,
+  static double goalCostFunc(const Trajectory2D &trajectory,
                              const Path::Path &reference_path);
 
-  static double obstaclesDistCostFunc(const Trajectory &trajectory,
-                                      const Path::Path &obstaclePoints);
+  static double
+  obstaclesDistCostFunc(const Trajectory2D &trajectory,
+                        const std::vector<Path::Point> &obstaclePoints);
 
   /**
    * @brief Trajectory cost based on the smoothness along the trajectory
@@ -256,7 +219,7 @@ private:
    * x-direction, max on y-direction, max angular acceleration]
    * @return double
    */
-  static double smoothnessCostFunc(const Trajectory &trajectory,
+  static double smoothnessCostFunc(const Trajectory2D &trajectory,
                                    const std::array<double, 3> accLimits);
 
   /**
@@ -267,7 +230,7 @@ private:
    * x-direction, max on y-direction, max angular acceleration]
    * @return double
    */
-  static double jerkCostFunc(const Trajectory &trajectory,
+  static double jerkCostFunc(const Trajectory2D &trajectory,
                              const std::array<double, 3> accLimits);
 };
 }; // namespace Control

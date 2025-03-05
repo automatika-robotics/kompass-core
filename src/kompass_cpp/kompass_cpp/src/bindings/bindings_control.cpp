@@ -172,7 +172,7 @@ void bindings_control(py::module_ &m) {
   // Custom cost function for DWA planner
   py::class_<Control::CostEvaluator::CustomCostFunction>(
       m_control, "TrajectoryCustomCostFunction")
-      .def(py::init<std::function<double(const Control::Trajectory &,
+      .def(py::init<std::function<double(const Control::Trajectory2D &,
                                          const Path::Path &)>>());
 
   py::class_<Control::DWA, Control::Follower, Control::Controller>(m_control,
