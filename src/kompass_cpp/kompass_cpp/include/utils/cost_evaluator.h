@@ -74,9 +74,8 @@ public:
   ~CostEvaluator();
 
   using CostFunctionArguments = std::variant<
-      std::pair<const Trajectory, const Path::Path>,
       std::pair<const Trajectory2D, const Path::Path>,
-      std::pair<const Trajectory, const std::array<double, 3>>>;
+      std::pair<const Trajectory2D, const std::array<double, 3>>>;
 
   /**
    * @brief Function signature for cost functions

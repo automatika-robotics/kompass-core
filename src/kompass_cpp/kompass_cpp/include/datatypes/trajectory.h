@@ -2,7 +2,6 @@
 
 #include "control.h"
 #include "datatypes/path.h"
-#include "utils/logger.h"
 #include <cmath>
 #include <vector>
 
@@ -557,15 +556,6 @@ struct TrajectorySamples2D {
   Iterator begin() const { return Iterator(velocities.begin(), paths.begin()); }
 
   Iterator end() const { return Iterator(velocities.end(), paths.end()); }
-};
-
-/**
- * @brief Trajectory information: Path + Velocity
- *
- */
-struct Trajectory {
-  std::vector<Velocity2D> velocity;
-  Path::Path path;
 };
 
 /**

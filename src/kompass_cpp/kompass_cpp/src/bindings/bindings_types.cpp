@@ -80,10 +80,10 @@ void bindings_types(py::module_ &m) {
       .def_readwrite("length", &Control::Velocities::_length,
                      "Length of the vectors");
 
-  py::class_<Control::Trajectory>(m_types, "Trajectory")
+  py::class_<Control::Trajectory2D>(m_types, "Trajectory")
       .def(py::init<>())
-      .def_readwrite("velocity", &Control::Trajectory::velocity)
-      .def_readwrite("path", &Control::Trajectory::path);
+      .def_readwrite("velocities", &Control::Trajectory2D::velocities)
+      .def_readwrite("path", &Control::Trajectory2D::path);
 
   py::class_<Control::LaserScan>(m_types, "LaserScan")
       .def(py::init<std::vector<double>, std::vector<double>>(),
