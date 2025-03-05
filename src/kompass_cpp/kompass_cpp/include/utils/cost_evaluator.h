@@ -73,15 +73,6 @@ public:
    */
   ~CostEvaluator();
 
-  using CostFunctionArguments = std::variant<
-      std::pair<const Trajectory2D, const Path::Path>,
-      std::pair<const Trajectory2D, const std::array<double, 3>>>;
-
-  /**
-   * @brief Function signature for cost functions
-   *
-   */
-  using CostFunction = std::function<double(CostFunctionArguments)>;
   /**
    * @brief Function signature for any custom user defined cost function
    *
@@ -96,36 +87,12 @@ public:
    */
   struct CustomTrajectoryCost {
     double weight;
-    CostFunction evaluator_;
+    CustomCostFunction evaluator_;
 
-    CustomTrajectoryCost(double weight, CostFunction evaluator)
+    CustomTrajectoryCost(double weight, CustomCostFunction evaluator)
         : weight(weight), evaluator_(evaluator) {}
   };
 
-  /**
-   * @brief Helper function to wrap a trajectory cost function by parsing
-   * CostFunctionArguments to the function
-   *
-   * @tparam Func
-   * @tparam Arg
-   * @param func
-   * @return CostFunction
-   */
-  template <typename Func, typename Arg>
-  CostFunction costFunctionWrapper(Func func) {
-    return [func](CostFunctionArguments args) -> double {
-      return std::visit(
-          [func](auto &&arg) -> double {
-            using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, Arg>) {
-              return std::apply(func, arg);
-            } else {
-              throw std::invalid_argument("Unexpected argument type");
-            }
-          },
-          args);
-    };
-  }
   /**
    * @brief Get the Trajectory Cost by applying all the defined cost functions
    *
@@ -206,6 +173,13 @@ private:
   static double goalCostFunc(const Trajectory2D &trajectory,
                              const Path::Path &reference_path);
 
+  /**
+   * @brief Trajectory cost based on the distance obstacles
+   *
+   * @param trajectory
+   * @param obstaclePoints
+   * @return double
+   */
   static double
   obstaclesDistCostFunc(const Trajectory2D &trajectory,
                         const std::vector<Path::Point> &obstaclePoints);

@@ -116,8 +116,7 @@ double CostEvaluator::getTrajectoryCost(const Trajectory2D &traj,
   // Evaluate custom cost functions
   for (const auto &custom_cost : customTrajCostsPtrs_) {
     // custom cost functions takes in the trajectory and the reference path
-    CostFunctionArguments args = std::make_pair(traj, reference_path);
-    total_cost += custom_cost->weight * custom_cost->evaluator_(args);
+    total_cost += custom_cost->weight * custom_cost->evaluator_(traj, reference_path);
   }
 
   return total_cost;
@@ -127,9 +126,7 @@ void CostEvaluator::addCustomCost(double weight,
                                   CustomCostFunction custom_cost_function) {
   CustomTrajectoryCost *newCost = new CustomTrajectoryCost(
       weight,
-      costFunctionWrapper<decltype(custom_cost_function),
-                          std::pair<const Trajectory2D, const Path::Path>>(
-          custom_cost_function));
+      custom_cost_function);
   customTrajCostsPtrs_.push_back(newCost);
 }
 
