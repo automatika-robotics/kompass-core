@@ -12,26 +12,29 @@ namespace Control {
 // Enumeration for control modes
 enum class ControlType { ACKERMANN = 0, DIFFERENTIAL_DRIVE = 1, OMNI = 2 };
 
-class Velocity2D : public Eigen::Vector4f {
+class Velocity2D {
 public:
   // Default constructor
-  Velocity2D() : Eigen::Vector4f(0.0, 0.0, 0.0, 0.0) {}
+  Velocity2D() = default;
   Velocity2D(float vx, float vy, float omega, float steer_ang = 0.0)
-      : Eigen::Vector4f(vx, vy, omega, steer_ang) {}
+      : velocity_(vx, vy, omega, steer_ang) {}
 
-  Velocity2D(Eigen::Vector4f &ref) : Eigen::Vector4f(ref) {}
+  Velocity2D(Eigen::Vector4f &ref) : velocity_(ref) {}
 
   // Accessors
-  float vx() const { return (*this)(0); }
-  float vy() const { return (*this)(1); }
-  float omega() const { return (*this)(2); }
-  float steer_ang() const { return (*this)(3); }
+  float vx() const { return velocity_(0); }
+  float vy() const { return velocity_(1); }
+  float omega() const { return velocity_(2); }
+  float steer_ang() const { return velocity_(3); }
 
   // Setters
-  void setVx(float const value) { (*this)(0) = value; }
-  void setVy(float const value) { (*this)(1) = value; }
-  void setOmega(float const value) { (*this)(2) = value; }
-  void setSteerAng(float const value) { (*this)(3) = value; }
+  void setVx(float const value) { velocity_(0) = value; }
+  void setVy(float const value) { velocity_(1) = value; }
+  void setOmega(float const value) { velocity_(2) = value; }
+  void setSteerAng(float const value) { velocity_(3) = value; }
+
+private:
+  Eigen::Vector4f velocity_{0.0, 0.0, 0.0, 0.0};
 };
 
 struct Velocities {

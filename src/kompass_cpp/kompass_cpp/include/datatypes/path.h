@@ -24,23 +24,25 @@ struct State {
 };
 
 // Point in 3D space
-class Point : public Eigen::Vector3f {
+class Point {
 public:
   // Default constructor
-  Point() : Eigen::Vector3f(0.0, 0.0, 0.0) {}
-  Point(float x, float y, float z = 0.0) : Eigen::Vector3f(x, y, z) {}
+  Point() = default;
+  Point(float x, float y, float z = 0.0) : point_(x, y, z) {}
 
-  Point(Eigen::Vector3f &ref) : Eigen::Vector3f(ref) {}
+  Point(Eigen::Vector3f &ref) : point_(ref) {}
 
   // Accessors
-  float x() const { return (*this)(0); }
-  float y() const { return (*this)(1); }
-  float z() const { return (*this)(2); }
+  float x() const { return point_(0); }
+  float y() const { return point_(1); }
+  float z() const { return point_(2); }
 
   // Setters
-  void setX(float const value) { (*this)(0) = value; }
-  void setY(float const value) { (*this)(1) = value; }
-  void setZ(float const value) { (*this)(2) = value; }
+  void setX(float const value) { point_(0) = value; }
+  void setY(float const value) { point_(1) = value; }
+  void setZ(float const value) { point_(2) = value; }
+private:
+  Eigen::Vector3f point_{0.0, 0.0, 0.0};
 };
 
 // Structure for Path Control parameters
