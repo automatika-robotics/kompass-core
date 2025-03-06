@@ -91,14 +91,6 @@ void to_json(json &j, const Control::TrajectorySamples2D &samples,
   }
 }
 
-// Convert JSON to Trajectory
-void from_json(const json &j, std::vector<Control::Trajectory> &samples) {
-  for (auto traj : samples) {
-    traj.path.points.clear();
-    from_json(j, traj.path);
-  }
-}
-
 // Save trajectories to a JSON file
 void saveTrajectoriesToJson(
     const Control::TrajectorySamples2D &trajectories,
