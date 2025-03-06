@@ -323,9 +323,9 @@ class DWA(FollowerTemplate):
     def logging_info(self) -> str:
         """logging_info."""
         if self._result.is_found:
-            return f"Controller found trajectory with cost: {self._result.cost}, Velocity command: {self._result.trajectory.velocities}"
+            return f"DWA Controller found trajectory with cost: {self._result.cost}"
         else:
-            return "Controller Failed"
+            return "DWA Controller Failed to find a valid trajectory"
 
     @property
     def control_till_horizon(
