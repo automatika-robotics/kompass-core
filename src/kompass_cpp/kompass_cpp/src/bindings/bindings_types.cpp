@@ -80,6 +80,18 @@ void bindings_types(py::module_ &m) {
       .def_readwrite("length", &Control::Velocities::_length,
                      "Length of the vectors");
 
+  py::class_<Control::TrajectoryPath>(m_types, "TrajectoryPath")
+      .def(py::init<>())
+      .def_readwrite("x", &Control::TrajectoryPath::x)
+      .def_readwrite("y", &Control::TrajectoryPath::y)
+      .def_readwrite("z", &Control::TrajectoryPath::z);
+
+  py::class_<Control::TrajectoryVelocities2D>(m_types, "TrajectoryVelocities2D")
+      .def(py::init<>())
+      .def_readwrite("vx", &Control::TrajectoryVelocities2D::vx)
+      .def_readwrite("vy", &Control::TrajectoryVelocities2D::vy)
+      .def_readwrite("omega", &Control::TrajectoryVelocities2D::omega);
+
   py::class_<Control::Trajectory2D>(m_types, "Trajectory")
       .def(py::init<>())
       .def_readwrite("velocities", &Control::Trajectory2D::velocities)
