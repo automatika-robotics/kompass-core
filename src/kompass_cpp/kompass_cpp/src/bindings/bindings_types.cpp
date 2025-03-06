@@ -1,7 +1,6 @@
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <vector>
 
 #include "controllers/vision_follower.h"
 #include "datatypes/control.h"
@@ -82,20 +81,20 @@ void bindings_types(py::module_ &m) {
 
   py::class_<Control::TrajectoryPath>(m_types, "TrajectoryPath")
       .def(py::init<>())
-      .def_readwrite("x", &Control::TrajectoryPath::x)
-      .def_readwrite("y", &Control::TrajectoryPath::y)
-      .def_readwrite("z", &Control::TrajectoryPath::z);
+      .def_readonly("x", &Control::TrajectoryPath::x, py::return_value_policy::reference_internal)
+      .def_readonly("y", &Control::TrajectoryPath::y, py::return_value_policy::reference_internal)
+      .def_readonly("z", &Control::TrajectoryPath::z, py::return_value_policy::reference_internal);
 
   py::class_<Control::TrajectoryVelocities2D>(m_types, "TrajectoryVelocities2D")
       .def(py::init<>())
-      .def_readwrite("vx", &Control::TrajectoryVelocities2D::vx)
-      .def_readwrite("vy", &Control::TrajectoryVelocities2D::vy)
-      .def_readwrite("omega", &Control::TrajectoryVelocities2D::omega);
+      .def_readonly("vx", &Control::TrajectoryVelocities2D::vx, py::return_value_policy::reference_internal)
+      .def_readonly("vy", &Control::TrajectoryVelocities2D::vy, py::return_value_policy::reference_internal)
+      .def_readonly("omega", &Control::TrajectoryVelocities2D::omega, py::return_value_policy::reference_internal);
 
   py::class_<Control::Trajectory2D>(m_types, "Trajectory")
       .def(py::init<>())
-      .def_readwrite("velocities", &Control::Trajectory2D::velocities)
-      .def_readwrite("path", &Control::Trajectory2D::path);
+      .def_readonly("velocities", &Control::Trajectory2D::velocities)
+      .def_readonly("path", &Control::Trajectory2D::path);
 
   py::class_<Control::LaserScan>(m_types, "LaserScan")
       .def(py::init<std::vector<double>, std::vector<double>>(),
