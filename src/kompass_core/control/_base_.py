@@ -167,7 +167,7 @@ class FollowerTemplate:
         :type global_path: Path
         """
         parsed_points = []
-        # If the path conatins less than 2 points -> set None path / clear old
+        # If the path contains less than 2 points -> set None path / clear old
         if len(global_path.poses) < 2:
             self.planner.clear_current_path()
             return

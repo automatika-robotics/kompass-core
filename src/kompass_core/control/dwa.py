@@ -229,6 +229,9 @@ class DWA(FollowerTemplate):
 
         # Init the following result
         self._result = kompass_cpp.control.SamplingControlResult()
+        self._end_of_ctrl_horizon: int = max(
+            int(self._config.control_horizon / self._config.control_time_step), 1
+        )
         logging.info("DWA PATH CONTROLLER IS READY")
 
     @property
@@ -320,23 +323,22 @@ class DWA(FollowerTemplate):
     def logging_info(self) -> str:
         """logging_info."""
         if self._result.is_found:
-            return f"Controller found trajectory with cost: {self._result.cost}, Velocity command: {self._result.trajectory.velocity[0]}"
+            return f"Controller found trajectory with cost: {self._result.cost}, Velocity command: {self._result.trajectory.velocities}"
         else:
             return "Controller Failed"
 
     @property
-    def control_till_horizon(self) -> Optional[List[kompass_cpp.types.ControlCmd]]:
+    def control_till_horizon(
+        self,
+    ) -> Optional[List[kompass_cpp.types.TrajectoryVelocities2D]]:
         """
         Getter of the planner control result until the control horizon
 
         :return: Velocity commands of the minimal cost path
-        :rtype: List[kompass_cpp.types.ControlCmd]
+        :rtype: List[kompass_cpp.types.TrajectoryVelocities2D]
         """
         if self._result.is_found:
-            end_of_ctrl_horizon: int = max(
-                int(self._config.control_horizon / self._config.control_time_step), 1
-            )
-            return self._result.trajectory.velocity[:end_of_ctrl_horizon]
+            return self._result.trajectory.velocities
         return None
 
     def optimal_path(self) -> Optional[kompass_cpp.types.Path]:
@@ -366,7 +368,7 @@ class DWA(FollowerTemplate):
         :rtype: List[float]
         """
         if self._result.is_found:
-            return [vel.vx for vel in self.control_till_horizon]
+            return self.control_till_horizon.vx[: self._end_of_ctrl_horizon]
         return [0.0]
 
     @property
@@ -378,7 +380,7 @@ class DWA(FollowerTemplate):
         :rtype: List[float]
         """
         if self._result.is_found:
-            return [vel.vy for vel in self.control_till_horizon]
+            return self.control_till_horizon.vy[:self._end_of_ctrl_horizon]
         return [0.0]
 
     @property
@@ -390,5 +392,5 @@ class DWA(FollowerTemplate):
         :rtype: List[float]
         """
         if self._result.is_found:
-            return [vel.omega for vel in self.control_till_horizon]
+            return self.control_till_horizon.omega[: self._end_of_ctrl_horizon]
         return [0.0]
