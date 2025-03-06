@@ -341,7 +341,7 @@ class DWA(FollowerTemplate):
             return self._result.trajectory.velocities
         return None
 
-    def optimal_path(self) -> Optional[kompass_cpp.types.Path]:
+    def optimal_path(self) -> Optional[kompass_cpp.types.TrajectoryPath]:
         """Get optimal (local) plan."""
         if not self._result.is_found:
             return None
@@ -360,7 +360,7 @@ class DWA(FollowerTemplate):
         return None
 
     @property
-    def linear_x_control(self) -> List[float]:
+    def linear_x_control(self) -> np.ndarray:
         """
         Getter of the last linear forward velocity control computed by the controller
 
@@ -372,7 +372,7 @@ class DWA(FollowerTemplate):
         return [0.0]
 
     @property
-    def linear_y_control(self) -> List[float]:
+    def linear_y_control(self) -> np.ndarray:
         """
         Getter the last linear velocity lateral control computed by the controller
 
@@ -384,7 +384,7 @@ class DWA(FollowerTemplate):
         return [0.0]
 
     @property
-    def angular_control(self) -> List[float]:
+    def angular_control(self) -> np.ndarray:
         """
         Getter of the last angular velocity control computed by the controller
 
