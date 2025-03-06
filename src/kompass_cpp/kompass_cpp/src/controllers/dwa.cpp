@@ -169,27 +169,6 @@ Path::Path DWA::findTrackedPathSegment() {
   return trackedPathSegment;
 }
 
-TrajSearchResult DWA::findBestSegment(const TrajectorySamples2D &samples) {
-  double minCost = std::numeric_limits<double>::max();
-  Trajectory2D minCostTraj(samples.numPointsPerTrajectory_);
-  bool traj_found = false;
-  Path::Path trackedRefPathSegment = findTrackedPathSegment();
-
-  // Evaluate the samples and get the sample with the minimum cost
-  for (const auto &sample : samples) {
-    double traj_cost = trajCostEvaluator->getTrajectoryCost(
-        sample, *currentPath, trackedRefPathSegment, current_segment_index_);
-
-    if (traj_cost < minCost) {
-      minCost = traj_cost;
-      minCostTraj = sample;
-      traj_found = true;
-    }
-  }
-
-  return {traj_found, minCost, minCostTraj};
-}
-
 template <typename T>
 TrajSearchResult DWA::findBestPath(const Velocity2D &global_vel,
                                    const T &scan_points) {
@@ -208,7 +187,11 @@ TrajSearchResult DWA::findBestPath(const Velocity2D &global_vel,
 
   trajCostEvaluator->setPointScan(scan_points, currentState);
 
-  return findBestSegment(samples_);
+  Path::Path trackedRefPathSegment = findTrackedPathSegment();
+
+  // Evaluate the samples and get the sample with the minimum cost
+  return trajCostEvaluator->getMinTrajectoryCost(
+      samples_, *currentPath, trackedRefPathSegment, current_segment_index_);
 }
 
 template <typename T>

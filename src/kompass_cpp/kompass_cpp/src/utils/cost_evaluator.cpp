@@ -72,61 +72,73 @@ void CostEvaluator::setPointScan(const std::vector<Path::Point> &cloud,
   }
 }
 
-double CostEvaluator::getTrajectoryCost(const Trajectory2D &traj,
-                                        const Path::Path &reference_path,
-                                        const Path::Path &tracked_segment,
-                                        const size_t closest_segment_index) {
+TrajSearchResult CostEvaluator::getMinTrajectoryCost(
+    const TrajectorySamples2D &trajs, const Path::Path &reference_path,
+    const Path::Path &tracked_segment, const size_t closest_segment_index) {
   double weight;
-  double total_cost = 0.0;
+  double total_cost;
+  double minCost = std::numeric_limits<double>::max();
+  Trajectory2D minCostTraj(trajs.numPointsPerTrajectory_);
+  bool traj_found = false;
 
-  if (reference_path.totalPathLength() > 0.0) {
+  for (const auto &traj : trajs) {
+    total_cost = 0.0;
+    if (reference_path.totalPathLength() > 0.0) {
+      if ((weight = costWeights.getParameter<double>("goal_distance_weight") >
+                    0.0)) {
+        double goalCost = goalCostFunc(traj, reference_path);
+        total_cost += weight * goalCost;
+      }
+      if ((weight = costWeights.getParameter<double>(
+                        "reference_path_distance_weight") > 0.0)) {
+        double refPathCost = pathCostFunc(traj, reference_path);
+        total_cost += weight * refPathCost;
+      }
+    }
+
+    if (obstaclePoints.size() > 0 and
+        (weight = costWeights.getParameter<double>(
+             "obstacles_distance_weight")) > 0.0) {
+
+      double objCost = obstaclesDistCostFunc(traj, obstaclePoints);
+      total_cost += weight * objCost;
+    }
+
+    std::array<double, 3> accLimits{ctrlimits.velXParams.maxAcceleration,
+                                    ctrlimits.velYParams.maxAcceleration,
+                                    ctrlimits.omegaParams.maxAcceleration};
+
     if ((weight =
-             costWeights.getParameter<double>("goal_distance_weight") > 0.0)) {
-      double goalCost = goalCostFunc(traj, reference_path);
-      total_cost += weight * goalCost;
+             costWeights.getParameter<double>("smoothness_weight") > 0.0)) {
+      double smoothCost = smoothnessCostFunc(traj, accLimits);
+      total_cost += weight * smoothCost;
     }
-    if ((weight = costWeights.getParameter<double>(
-                      "reference_path_distance_weight") > 0.0)) {
-      double refPathCost = pathCostFunc(traj, reference_path);
-      total_cost += weight * refPathCost;
+
+    if ((weight = costWeights.getParameter<double>("jerk_weight") > 0.0)) {
+      double jerCost = jerkCostFunc(traj, accLimits);
+      total_cost += weight * jerCost;
+    }
+
+    // Evaluate custom cost functions
+    for (const auto &custom_cost : customTrajCostsPtrs_) {
+      // custom cost functions takes in the trajectory and the reference path
+      total_cost +=
+          custom_cost->weight * custom_cost->evaluator_(traj, reference_path);
+    }
+
+    if (total_cost < minCost) {
+      minCost = total_cost;
+      minCostTraj = traj;
+      traj_found = true;
     }
   }
-
-  if (obstaclePoints.size() > 0 and (weight = costWeights.getParameter<double>(
-                                         "obstacles_distance_weight")) > 0.0) {
-
-    double objCost = obstaclesDistCostFunc(traj, obstaclePoints);
-    total_cost += weight * objCost;
-  }
-
-  std::array<double, 3> accLimits{ctrlimits.velXParams.maxAcceleration,
-                                  ctrlimits.velYParams.maxAcceleration,
-                                  ctrlimits.omegaParams.maxAcceleration};
-
-  if ((weight = costWeights.getParameter<double>("smoothness_weight") > 0.0)) {
-    double smoothCost = smoothnessCostFunc(traj, accLimits);
-    total_cost += weight * smoothCost;
-  }
-
-  if ((weight = costWeights.getParameter<double>("jerk_weight") > 0.0)) {
-    double jerCost = jerkCostFunc(traj, accLimits);
-    total_cost += weight * jerCost;
-  }
-
-  // Evaluate custom cost functions
-  for (const auto &custom_cost : customTrajCostsPtrs_) {
-    // custom cost functions takes in the trajectory and the reference path
-    total_cost += custom_cost->weight * custom_cost->evaluator_(traj, reference_path);
-  }
-
-  return total_cost;
+  return {traj_found, minCost, minCostTraj};
 }
 
 void CostEvaluator::addCustomCost(double weight,
                                   CustomCostFunction custom_cost_function) {
-  CustomTrajectoryCost *newCost = new CustomTrajectoryCost(
-      weight,
-      custom_cost_function);
+  CustomTrajectoryCost *newCost =
+      new CustomTrajectoryCost(weight, custom_cost_function);
   customTrajCostsPtrs_.push_back(newCost);
 }
 

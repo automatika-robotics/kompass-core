@@ -102,7 +102,7 @@ public:
    * the global path
    * @return double
    */
-  double getTrajectoryCost(const Trajectory2D &traj,
+  TrajSearchResult getMinTrajectoryCost(const TrajectorySamples2D &trajs,
                            const Path::Path &reference_path,
                            const Path::Path &tracked_segment,
                            const size_t closest_segment_index);
