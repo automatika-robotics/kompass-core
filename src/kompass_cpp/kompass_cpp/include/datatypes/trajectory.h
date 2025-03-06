@@ -11,9 +11,9 @@ namespace Control {
 
 // Data structure to store 2D velocities of a single trajectory
 struct TrajectoryVelocities2D {
-  Eigen::VectorXf vx;
-  Eigen::VectorXf vy;
-  Eigen::VectorXf omega;
+  Eigen::VectorXd vx;
+  Eigen::VectorXd vy;
+  Eigen::VectorXd omega;
   size_t numPointsPerTrajectory_;
 
   // default constructor
@@ -24,16 +24,16 @@ struct TrajectoryVelocities2D {
       : numPointsPerTrajectory_(numPointsPerTrajectory) {
     // velocities start from one points after the starting point on the
     // trajectory
-    vx = Eigen::VectorXf(numPointsPerTrajectory - 1);
-    vy = Eigen::VectorXf(numPointsPerTrajectory - 1);
-    omega = Eigen::VectorXf(numPointsPerTrajectory - 1);
+    vx = Eigen::VectorXd(numPointsPerTrajectory - 1);
+    vy = Eigen::VectorXd(numPointsPerTrajectory - 1);
+    omega = Eigen::VectorXd(numPointsPerTrajectory - 1);
   };
 
   // initialize from a vector of velocities
   explicit TrajectoryVelocities2D(const std::vector<Velocity2D> &velocities) {
-    vx = Eigen::VectorXf(velocities.size());
-    vy = Eigen::VectorXf(velocities.size());
-    omega = Eigen::VectorXf(velocities.size());
+    vx = Eigen::VectorXd(velocities.size());
+    vy = Eigen::VectorXd(velocities.size());
+    omega = Eigen::VectorXd(velocities.size());
     numPointsPerTrajectory_ = velocities.size() + 1;
     for (size_t i = 0; i < velocities.size(); ++i) {
       vx(i) = velocities[i].vx();
@@ -43,8 +43,8 @@ struct TrajectoryVelocities2D {
   };
 
   // initialize from eigen vectors
-  TrajectoryVelocities2D(const Eigen::VectorXf &vx_, const Eigen::VectorXf &vy_,
-                         const Eigen::VectorXf &omega_)
+  TrajectoryVelocities2D(const Eigen::VectorXd &vx_, const Eigen::VectorXd &vy_,
+                         const Eigen::VectorXd &omega_)
       : vx(vx_), vy(vy_), omega(omega_),
         numPointsPerTrajectory_(vx_.size() + 1) {};
 
@@ -107,9 +107,9 @@ struct TrajectoryVelocities2D {
 
 // Data structure to store Trajectory Path
 struct TrajectoryPath {
-  Eigen::VectorXf x;
-  Eigen::VectorXf y;
-  Eigen::VectorXf z;
+  Eigen::VectorXd x;
+  Eigen::VectorXd y;
+  Eigen::VectorXd z;
   size_t numPointsPerTrajectory_;
 
   // default constructor
@@ -118,16 +118,16 @@ struct TrajectoryPath {
   // empty initialization
   explicit TrajectoryPath(size_t numPointsPerTrajectory)
       : numPointsPerTrajectory_(numPointsPerTrajectory) {
-    x = Eigen::VectorXf(numPointsPerTrajectory);
-    y = Eigen::VectorXf(numPointsPerTrajectory);
-    z = Eigen::VectorXf(numPointsPerTrajectory);
+    x = Eigen::VectorXd(numPointsPerTrajectory);
+    y = Eigen::VectorXd(numPointsPerTrajectory);
+    z = Eigen::VectorXd(numPointsPerTrajectory);
   };
 
   // initialize from a  Path
   explicit TrajectoryPath(const Path::Path &path) {
-    x = Eigen::VectorXf(path.points.size());
-    y = Eigen::VectorXf(path.points.size());
-    z = Eigen::VectorXf(path.points.size());
+    x = Eigen::VectorXd(path.points.size());
+    y = Eigen::VectorXd(path.points.size());
+    z = Eigen::VectorXd(path.points.size());
     numPointsPerTrajectory_ = path.points.size();
     for (size_t i = 0; i < path.points.size(); ++i) {
       x(i) = path.points[i].x();
@@ -137,8 +137,8 @@ struct TrajectoryPath {
   };
 
   // initialize from eigen vectors
-  TrajectoryPath(const Eigen::VectorXf &x_, const Eigen::VectorXf &y_,
-                 const Eigen::VectorXf &z_)
+  TrajectoryPath(const Eigen::VectorXd &x_, const Eigen::VectorXd &y_,
+                 const Eigen::VectorXd &z_)
       : x(x_), y(y_), z(z_), numPointsPerTrajectory_(x.size()) {};
 
   // add point to specified index in path
@@ -152,7 +152,7 @@ struct TrajectoryPath {
   };
 
   // add point using values
-  void add(size_t idx, const float x, const float y, const float z = 0) {
+  void add(size_t idx, const double x, const double y, const double z = 0) {
     if (idx >= numPointsPerTrajectory_) {
       throw std::out_of_range("Vector index out of bounds");
     }
@@ -167,7 +167,7 @@ struct TrajectoryPath {
     if (s <= 0) {
       return 0.0f;
     }
-    float minDist = std::numeric_limits<float>::max();
+    float minDist = std::numeric_limits<double>::max();
     float dist;
     for (size_t i = 0; i < s; ++i) {
       for (size_t j = 0; j < numPointsPerTrajectory_; ++j) {
@@ -268,9 +268,9 @@ struct Trajectory2D {
 
 // Data structure to store velocities per trajectory for a set of trajectories
 struct TrajectoryVelocitySamples2D {
-  std::vector<Eigen::VectorXf> vx;    // Speed on x-axis (m/s)
-  std::vector<Eigen::VectorXf> vy;    // Speed on y-axis (m/s)
-  std::vector<Eigen::VectorXf> omega; // Angular velocity (rad/s)
+  std::vector<Eigen::VectorXd> vx;    // Speed on x-axis (m/s)
+  std::vector<Eigen::VectorXd> vy;    // Speed on y-axis (m/s)
+  std::vector<Eigen::VectorXd> omega; // Angular velocity (rad/s)
   size_t maxNumTrajectories_, numPointsPerTrajectory_;
 
   // default constructor
@@ -293,9 +293,9 @@ struct TrajectoryVelocitySamples2D {
                                   "to numPointsPerTrajectory - 1");
     }
 
-    Eigen::VectorXf vx_(velocities.size());
-    Eigen::VectorXf vy_(velocities.size());
-    Eigen::VectorXf omega_(velocities.size());
+    Eigen::VectorXd vx_(velocities.size());
+    Eigen::VectorXd vy_(velocities.size());
+    Eigen::VectorXd omega_(velocities.size());
     for (size_t i = 0; i < numPointsPerTrajectory_; ++i) {
       vx_(i) = velocities[i].vx();
       vy_(i) = velocities[i].vy();
@@ -324,9 +324,9 @@ struct TrajectoryVelocitySamples2D {
     using value_type = TrajectoryVelocities2D;
     using difference_type = std::ptrdiff_t;
 
-    Iterator(std::vector<Eigen::VectorXf>::const_iterator vxIt,
-             std::vector<Eigen::VectorXf>::const_iterator vyIt,
-             std::vector<Eigen::VectorXf>::const_iterator omegaIt)
+    Iterator(std::vector<Eigen::VectorXd>::const_iterator vxIt,
+             std::vector<Eigen::VectorXd>::const_iterator vyIt,
+             std::vector<Eigen::VectorXd>::const_iterator omegaIt)
         : vxIt(vxIt), vyIt(vyIt), omegaIt(omegaIt) {}
 
     value_type operator*() const {
@@ -354,7 +354,7 @@ struct TrajectoryVelocitySamples2D {
     bool operator!=(const Iterator &other) const { return !(*this == other); }
 
   private:
-    std::vector<Eigen::VectorXf>::const_iterator vxIt, vyIt, omegaIt;
+    std::vector<Eigen::VectorXd>::const_iterator vxIt, vyIt, omegaIt;
   };
 
   Iterator begin() const {
@@ -365,9 +365,9 @@ struct TrajectoryVelocitySamples2D {
 
 // Data structure to store path per trajectory for a set of trajectories
 struct TrajectoryPathSamples {
-  std::vector<Eigen::VectorXf> x;
-  std::vector<Eigen::VectorXf> y;
-  std::vector<Eigen::VectorXf> z;
+  std::vector<Eigen::VectorXd> x;
+  std::vector<Eigen::VectorXd> y;
+  std::vector<Eigen::VectorXd> z;
   size_t maxNumTrajectories_, numPointsPerTrajectory_;
 
   // default constructor
@@ -391,9 +391,9 @@ struct TrajectoryPathSamples {
           "to numPointsPerTrajectory of TrajectoryPathSamples");
     }
 
-    Eigen::VectorXf x_(path.points.size());
-    Eigen::VectorXf y_(path.points.size());
-    Eigen::VectorXf z_(path.points.size());
+    Eigen::VectorXd x_(path.points.size());
+    Eigen::VectorXd y_(path.points.size());
+    Eigen::VectorXd z_(path.points.size());
     for (size_t i = 0; i < numPointsPerTrajectory_; ++i) {
       x_(i) = path.points[i].x();
       y_(i) = path.points[i].y();
@@ -422,9 +422,9 @@ struct TrajectoryPathSamples {
     using value_type = TrajectoryPath;
     using difference_type = std::ptrdiff_t;
 
-    Iterator(std::vector<Eigen::VectorXf>::const_iterator xIt,
-             std::vector<Eigen::VectorXf>::const_iterator yIt,
-             std::vector<Eigen::VectorXf>::const_iterator zIt)
+    Iterator(std::vector<Eigen::VectorXd>::const_iterator xIt,
+             std::vector<Eigen::VectorXd>::const_iterator yIt,
+             std::vector<Eigen::VectorXd>::const_iterator zIt)
         : xIt(xIt), yIt(yIt), zIt(zIt) {}
 
     value_type operator*() const { return TrajectoryPath(*xIt, *yIt, *zIt); }
@@ -449,7 +449,7 @@ struct TrajectoryPathSamples {
     bool operator!=(const Iterator &other) const { return !(*this == other); }
 
   private:
-    std::vector<Eigen::VectorXf>::const_iterator xIt, yIt, zIt;
+    std::vector<Eigen::VectorXd>::const_iterator xIt, yIt, zIt;
   };
 
   Iterator begin() const {

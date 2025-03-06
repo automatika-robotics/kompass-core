@@ -16,25 +16,25 @@ class Velocity2D {
 public:
   // Default constructor
   Velocity2D() = default;
-  Velocity2D(float vx, float vy, float omega, float steer_ang = 0.0)
+  Velocity2D(double vx, double vy, double omega, double steer_ang = 0.0)
       : velocity_(vx, vy, omega, steer_ang) {}
 
-  Velocity2D(Eigen::Vector4f &ref) : velocity_(ref) {}
+  Velocity2D(Eigen::Vector4d &ref) : velocity_(ref) {}
 
   // Accessors
-  float vx() const { return velocity_(0); }
-  float vy() const { return velocity_(1); }
-  float omega() const { return velocity_(2); }
-  float steer_ang() const { return velocity_(3); }
+  double vx() const { return velocity_(0); }
+  double vy() const { return velocity_(1); }
+  double omega() const { return velocity_(2); }
+  double steer_ang() const { return velocity_(3); }
 
   // Setters
-  void setVx(float const value) { velocity_(0) = value; }
-  void setVy(float const value) { velocity_(1) = value; }
-  void setOmega(float const value) { velocity_(2) = value; }
-  void setSteerAng(float const value) { velocity_(3) = value; }
+  void setVx(double const value) { velocity_(0) = value; }
+  void setVy(double const value) { velocity_(1) = value; }
+  void setOmega(double const value) { velocity_(2) = value; }
+  void setSteerAng(double const value) { velocity_(3) = value; }
 
 private:
-  Eigen::Vector4f velocity_{0.0, 0.0, 0.0, 0.0};
+  Eigen::Vector4d velocity_{0.0, 0.0, 0.0, 0.0};
 };
 
 struct Velocities {
