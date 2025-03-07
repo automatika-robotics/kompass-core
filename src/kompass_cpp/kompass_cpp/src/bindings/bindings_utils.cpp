@@ -33,9 +33,7 @@ void bindings_utils(py::module_ &m) {
            py::arg("resolution"))
       .def("update_state", py::overload_cast<double, double, double>(
                                &CollisionChecker::updateState))
-      .def("get_min_distance_laserscan",
-           py::overload_cast<const std::vector<double> &,
-                             const std::vector<double> &, double>(
-               &CollisionChecker::getMinDistance),
-           py::arg("ranges"), py::arg("angles"), py::arg("height") = 0.01);
+      .def("check_critical_zone", &CollisionChecker::checkCriticalZone,
+           py::arg("ranges"), py::arg("angles"), py::arg("forward"),
+           py::arg("critical_angle"), py::arg("critical_distance"));
 }

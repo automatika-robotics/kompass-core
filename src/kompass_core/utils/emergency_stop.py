@@ -26,10 +26,7 @@ class EmergencyChecker:
             sensor_rotation_body=sensor_rotation_robot or [0.0, 0.0, 0.0, 1.0],
         )
         self.__min_dist = emergency_distance
-        self.__critical_zone = {
-            "left_angle": np.radians(emergency_angle) / 2,
-            "right_angle": (2 * np.pi) - (np.radians(emergency_angle) / 2),
-        }
+        self.__critical_angle = emergency_angle
 
     def run(self, *_, scan: LaserScanData, forward: bool = True) -> bool:
         """Runs emergency checking on new incoming laser scan data
@@ -41,27 +38,10 @@ class EmergencyChecker:
         :return: If an obstacle is within the safety zone
         :rtype: bool
         """
-        if forward:
-            # Check in front
-            ranges_to_check = scan.get_ranges(
-                right_angle=self.__critical_zone["right_angle"],
-                left_angle=self.__critical_zone["left_angle"],
-            )
-            angles_to_check = scan.get_angles(
-                right_angle=self.__critical_zone["right_angle"],
-                left_angle=self.__critical_zone["left_angle"],
-            )
-        else:
-            # Moving backwards -> Check behind
-            ranges_to_check = scan.get_ranges(
-                right_angle=self.__critical_zone["right_angle"] + np.pi,
-                left_angle=self.__critical_zone["left_angle"] + np.pi,
-            )
-            angles_to_check = scan.get_angles(
-                right_angle=self.__critical_zone["right_angle"] + np.pi,
-                left_angle=self.__critical_zone["left_angle"] + np.pi,
-            )
-        min_dist: float = self._collision_checker.get_min_distance_laserscan(
-            ranges=ranges_to_check, angles=angles_to_check
+        return self._collision_checker.check_critical_zone(
+            ranges=scan.ranges,
+            angles=scan.angles,
+            forward=forward,
+            critical_angle=self.__critical_angle,
+            critical_distance=self.__min_dist,
         )
-        return min_dist <= self.__min_dist
