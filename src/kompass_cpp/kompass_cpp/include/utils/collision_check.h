@@ -215,13 +215,18 @@ public:
    */
   bool checkCollisions(const Path::State current_state);
 
+  bool checkCriticalZone(const std::vector<double> &ranges,
+                         const std::vector<double> &angles, const bool forward,
+                         const float critical_angle,
+                         const float critical_distance);
+
 private:
   // Collision Manager
   fcl::DynamicAABBTreeCollisionManagerf *collManager;
 
   // Robot body geometry object
   std::shared_ptr<Body> body;
-  double robotHeight_{1.0};
+  double robotHeight_{1.0}, robotRadius_;
   std::shared_ptr<fcl::CollisionGeometryf> bodyGeometry;
 
   // Robot body collision object pointer

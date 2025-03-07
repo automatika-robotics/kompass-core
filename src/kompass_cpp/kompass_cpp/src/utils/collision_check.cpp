@@ -1,8 +1,10 @@
 #include "utils/collision_check.h"
+#include "utils/angles.h"
 #include "utils/logger.h"
 #include "utils/transformation.h"
 #include <Eigen/src/Core/Matrix.h>
 #include <algorithm>
+#include <cmath>
 #include <fcl/broadphase/default_broadphase_callbacks.h>
 #include <fcl/common/types.h>
 #include <fcl/narrowphase/collision_object.h>
@@ -34,10 +36,14 @@ CollisionChecker::CollisionChecker(
     bodyGeometry = std::make_shared<fcl::Cylinderf>(body->dimensions.at(0),
                                                     body->dimensions.at(1));
     robotHeight_ = body->dimensions.at(1);
+    robotRadius_ = body->dimensions.at(0);
   } else if (body->shapeType == ShapeType::BOX) {
     bodyGeometry = std::make_shared<fcl::Boxf>(
         body->dimensions.at(0), body->dimensions.at(1), body->dimensions.at(2));
     robotHeight_ = body->dimensions.at(2);
+    robotRadius_ = std::sqrt(pow(body->dimensions.at(0), 2) +
+                             pow(body->dimensions.at(1), 2)) /
+                   2;
   } else {
     throw std::invalid_argument("Invalid robot geometry type");
   }
@@ -122,14 +128,13 @@ void CollisionChecker::updateState(const Path::State current_state) {
   bodyObjPtr->computeAABB();
 }
 
-void CollisionChecker::updateState(const double x, const double y, const double yaw){
+void CollisionChecker::updateState(const double x, const double y,
+                                   const double yaw) {
 
   // Get the body tf matrix from euler angles / new position
-  Eigen::Matrix3f rotation =
-      Control::eulerToRotationMatrix(0.0, 0.0, yaw);
+  Eigen::Matrix3f rotation = Control::eulerToRotationMatrix(0.0, 0.0, yaw);
 
-  body->tf = Control::getTransformation(
-      rotation, Eigen::Vector3f(x, y, 0.0));
+  body->tf = Control::getTransformation(rotation, Eigen::Vector3f(x, y, 0.0));
 
   bodyObjPtr->setTransform(body->tf);
   bodyObjPtr->computeAABB();
@@ -374,6 +379,50 @@ bool CollisionChecker::checkCollisions(const Path::State current_state) {
   delete m_collManager;
 
   return collisionData.result.isCollision();
+}
+
+bool CollisionChecker::checkCriticalZone(const std::vector<double> &ranges,
+                                         const std::vector<double> &angles,
+                                         const bool forward,
+                                         const float critical_angle,
+                                         const float critical_distance) {
+  if (angles.size() != ranges.size()) {
+    LOG_ERROR("Angles and ranges vectors must have the same size!");
+    return false;
+  }
+  float angle_rad = critical_angle * 180.0 / M_PI;
+  float angle_right = (2 * M_PI) - (angle_rad / 2);
+  float angle_left = angle_rad / 2;
+  std::vector<float> normalized_angle(angles.size());
+  if (!forward) {
+    angle_right += M_PI;
+    angle_left += M_PI;
+  }
+  // Make sure all angle are normalized to [0, 2PI]
+  angle_right = Angle::normalizeTo0Pi(angle_right);
+  angle_left = Angle::normalizeTo0Pi(angle_left);
+  for (int i = 0; i < angles.size(); i++) {
+    normalized_angle[i] = Angle::normalizeTo0Pi(angles[i]);
+  }
+
+  bool is_in_zone;
+
+  for (size_t i = 0; i < normalized_angle.size(); ++i) {
+    // check if angle[i] is within the critical zone
+    if (angle_right > angle_left) {
+      is_in_zone = (normalized_angle[i] <= angle_left) ||
+                   (normalized_angle[i] >= angle_right);
+    } else {
+      is_in_zone = (normalized_angle[i] <= angle_left) &&
+                   (normalized_angle[i] >= angle_right);
+    }
+
+    // If the angle is in the zone, check the corresponding range value
+    if (is_in_zone && ranges[i] - robotRadius_ <= critical_distance) {
+      return true;
+    }
+  }
+  return false;
 }
 
 } // namespace Kompass
