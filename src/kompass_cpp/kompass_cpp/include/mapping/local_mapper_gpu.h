@@ -5,10 +5,6 @@
 #include <Eigen/Dense>
 #include <sycl/sycl.hpp>
 
-#ifndef GPU
-#define GPU 1
-#endif // !GPU
-
 namespace Kompass {
 namespace Mapping {
 
