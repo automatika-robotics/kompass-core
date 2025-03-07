@@ -48,5 +48,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC fcl ${PCL_LIBRARIES})
 
 # add sycl
 if(AdaptiveCpp_FOUND)
+target_compile_definitions(${PROJECT_NAME} PRIVATE GPU=1)
 add_sycl_to_target(TARGET ${PROJECT_NAME} SOURCES ${SOURCES})
 endif()
