@@ -1,12 +1,14 @@
-#ifndef GPU
+#ifdef GPU
 #include "utils/cost_evaluator.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
+#include "utils/logger.h"
 #include <Eigen/src/Core/Matrix.h>
 #include <Eigen/src/Geometry/Transform.h>
 #include <cstddef>
 #include <cstdlib>
 #include <vector>
+#include <sycl/sycl.hpp>
 
 namespace Kompass {
 
@@ -16,6 +18,29 @@ namespace Control {
                 int maxAngularSamples){
 
   this->costWeights = costsWeights;
+
+  // calculate number of points per trajectory
+  numPointsPerTrajectory_ = timeHorizon / timeStep;
+
+  // calculate max number of trajectory samples
+  if (ctrType == ControlType::OMNI) {
+    numTrajectories_ =
+        (maxLinearSamples * 2) + (maxLinearSamples * maxAngularSamples * 2);
+  } else if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
+    numTrajectories_ = maxLinearSamples + maxLinearSamples * maxAngularSamples;
+  } else {
+    numTrajectories_ = (maxLinearSamples - 1) * maxAngularSamples;
+  };
+
+  m_q = sycl::queue{sycl::default_selector_v,
+                    sycl::property::queue::in_order{}};
+  auto dev = m_q.get_device();
+  LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
+  m_devicePtrPathsX = sycl::malloc_device<double>(5, m_q);
+  m_devicePtrPathsY = sycl::malloc_device<double>(5, m_q);
+  m_devicePtrVelocitiesVx = sycl::malloc_device<double>(5, m_q);
+  m_devicePtrVelocitiesVy = sycl::malloc_device<double>(5, m_q);
+  m_devicePtrVelocitiesOmega = sycl::malloc_device<double>(5, m_q);
 }
 
 CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
@@ -24,10 +49,34 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
                 ControlType controlType, double timeStep,
                 double timeHorizon, int maxLinearSamples,
                 int maxAngularSamples) {
+
   sensor_tf_body_ =
       getTransformation(Eigen::Quaternionf(sensor_rotation_body.data()),
                         Eigen::Vector3f(sensor_position_body.data()));
   this->costWeights = costsWeights;
+
+  // calculate number of points per trajectory
+  numPointsPerTrajectory_ = timeHorizon / timeStep;
+
+  // calculate max number of trajectory samples
+  if (ctrType == ControlType::OMNI) {
+    numTrajectories_ =
+        (maxLinearSamples * 2) + (maxLinearSamples * maxAngularSamples * 2);
+  } else if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
+    numTrajectories_ = maxLinearSamples + maxLinearSamples * maxAngularSamples;
+  } else {
+    numTrajectories_ = (maxLinearSamples - 1) * maxAngularSamples;
+  };
+
+  m_q = sycl::queue{sycl::default_selector_v,
+                    sycl::property::queue::in_order{}};
+  auto dev = m_q.get_device();
+  LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
+  m_devicePtrPathsX = sycl::malloc_device<double>(numTrajectories_ * numPointsPerTrajectory_, m_q);
+  m_devicePtrPathsY = sycl::malloc_device<double>(numTrajectories_ * numPointsPerTrajectory_, m_q);
+  m_devicePtrVelocitiesVx = sycl::malloc_device<double>(numTrajectories_ * numPointsPerTrajectory_, m_q);
+  m_devicePtrVelocitiesVy = sycl::malloc_device<double>(numTrajectories_ * numPointsPerTrajectory_, m_q);
+  m_devicePtrVelocitiesOmega = sycl::malloc_device<double>(numTrajectories_ * numPointsPerTrajectory_, m_q);
 }
 
 CostEvaluator::~CostEvaluator() {
@@ -37,6 +86,23 @@ CostEvaluator::~CostEvaluator() {
       delete ptr;
     }
     customTrajCostsPtrs_.clear();
+
+    // unallocate device memory
+    if (m_devicePtrPathsX) {
+      sycl::free(m_devicePtrPathsX, m_q);
+    }
+    if (m_devicePtrPathsY) {
+      sycl::free(m_devicePtrPathsY, m_q);
+    }
+    if (m_devicePtrVelocitiesVx) {
+      sycl::free(m_devicePtrVelocitiesVx, m_q);
+    }
+    if (m_devicePtrVelocitiesVy) {
+      sycl::free(m_devicePtrVelocitiesVy, m_q);
+    }
+    if (m_devicePtrVelocitiesOmega) {
+      sycl::free(m_devicePtrVelocitiesOmega, m_q);
+    }
   };
 
 TrajSearchResult CostEvaluator::getMinTrajectoryCost(
@@ -202,5 +268,5 @@ double CostEvaluator::jerkCostFunc(const Trajectory2D &trajectory,
 }
 
 }; // namespace Control
-} // namespace Kompass
-#endif // GPU
+}
+#endif // !GPU

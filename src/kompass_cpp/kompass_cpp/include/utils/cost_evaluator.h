@@ -5,11 +5,13 @@
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
+#include "utils/transformation.h"
 #include <array>
 #include <cmath>
-#include <utility>
-#include <variant>
 #include <vector>
+#ifdef GPU
+#include <sycl/sycl.hpp>
+#endif //! GPU
 
 namespace Kompass {
 
@@ -48,24 +50,24 @@ public:
   };
 
   /**
-   * @brief Construct a new Trajectory Sampler object
+   * @brief Construct a new Cost evaluator object
    *
-   * @param controlLimits
+   * @param costWeights
    * @param controlType
    * @param timeStep
    * @param timeHorizon
-   * @param linearSampleStep
-   * @param angularSampleStep
-   * @param robotShapeType
-   * @param robotDimensions
-   * @param sensorPositionWRTbody
-   * @param octreeRes
+   * @param maxLinearSample
+   * @param maxAngularSample
    */
-  CostEvaluator(TrajectoryCostsWeights costWeights);
-
-  CostEvaluator(TrajectoryCostsWeights costWeights,
+  CostEvaluator(TrajectoryCostsWeights costsWeights, ControlType controlType,
+                double timeStep, double timeHorizon, int maxLinearSamples,
+                int maxAngularSamples);
+  CostEvaluator(TrajectoryCostsWeights costsWeights,
                 const std::array<float, 3> &sensor_position_body,
-                const std::array<float, 4> &sensor_rotation_body);
+                const std::array<float, 4> &sensor_rotation_body,
+                ControlType controlType, double timeStep,
+                double timeHorizon, int maxLinearSamples,
+                int maxAngularSamples);
 
   /**
    * @brief Destroy the Trajectory Sampler object
@@ -103,9 +105,9 @@ public:
    * @return double
    */
   TrajSearchResult getMinTrajectoryCost(const TrajectorySamples2D &trajs,
-                           const Path::Path &reference_path,
-                           const Path::Path &tracked_segment,
-                           const size_t closest_segment_index);
+                                        const Path::Path &reference_path,
+                                        const Path::Path &tracked_segment,
+                                        const size_t closest_segment_index);
 
   /**
    * @brief Adds a new custome cost to be used in the trajectory evaluation
@@ -113,7 +115,11 @@ public:
    * @param weight
    * @param custom_cost_function
    */
-  void addCustomCost(double weight, CustomCostFunction custom_cost_function);
+  void addCustomCost(double weight, CustomCostFunction custom_cost_function) {
+    CustomTrajectoryCost *newCost =
+        new CustomTrajectoryCost(weight, custom_cost_function);
+    customTrajCostsPtrs_.push_back(newCost);
+  };
 
   /**
    * @brief Set the point scan with either lazerscan or vector of points
@@ -121,10 +127,45 @@ public:
    * @param scan / point cloud
    * @param current_state
    */
-  void setPointScan(const LaserScan &scan, const Path::State &curren_state);
+  void setPointScan(const LaserScan &scan, const Path::State &current_state) {
+    obstaclePoints.clear();
+    Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
+
+    for (size_t i = 0; i < scan.ranges.size(); i++) {
+      // Convert polar to Cartesian (assuming scan data in the XY plane)
+      double point_x = scan.ranges[i] * std::cos(scan.angles[i]);
+      double point_y = scan.ranges[i] * std::sin(scan.angles[i]);
+
+      Eigen::Vector3f pose_trans =
+          transformPosition(Eigen::Vector3f(point_x, point_y, 0.0),
+                            sensor_tf_body_ * body_tf_world_);
+      obstaclePoints.push_back({pose_trans[0], pose_trans[1]});
+    }
+  };
 
   void setPointScan(const std::vector<Path::Point> &cloud,
-                    const Path::State &curren_state);
+                    const Path::State &current_state) {
+    obstaclePoints.clear();
+    Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
+
+    for (auto &point : cloud) {
+      // TODO: fix
+      Eigen::Vector3f pose_trans =
+          transformPosition(Eigen::Vector3f(point.x(), point.y(), point.z()),
+                            sensor_tf_body_ * body_tf_world_);
+      obstaclePoints.push_back({pose_trans[0], pose_trans[1]});
+    }
+  };
+
+  /**
+   * @brief Helper method to update the weights of the trajectory costs from
+   * config
+   *
+   * @param costsWeights
+   */
+  void updateDefaultCostWeights(TrajectoryCostsWeights costsWeights) {
+    this->costWeights = costsWeights;
+  };
 
 protected:
   // Protected member variables
@@ -143,13 +184,16 @@ private:
       Eigen::Isometry3f::Identity(); // Sensor transformation with
                                      // respect to the robot
 
-  /**
-   * @brief Helper method to update the weights of the trajectory costs from
-   * config
-   *
-   * @param costsWeights
-   */
-  void updateDefaultCostWeights(TrajectoryCostsWeights costsWeights);
+#ifdef GPU
+  int numTrajectories_;
+  int numPointsPerTrajectory_;
+  double *m_devicePtrPathsX;
+  double *m_devicePtrPathsY;
+  double *m_devicePtrVelocitiesVx;
+  double *m_devicePtrVelocitiesVy;
+  double *m_devicePtrVelocitiesOmega;
+  sycl::queue m_q;
+#endif //! GPU
 
   // Built-in functions for cost evaluation
   /**
