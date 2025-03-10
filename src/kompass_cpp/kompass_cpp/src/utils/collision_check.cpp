@@ -421,7 +421,7 @@ bool CollisionChecker::checkCriticalZone(std::vector<double> &ranges,
     return false;
   }
   polarConvertLaserScanToBody(ranges, angles);
-  float angle_rad = critical_angle * 180.0 / M_PI;
+  float angle_rad = critical_angle * M_PI / 180.0;
   float angle_right = (2 * M_PI) - (angle_rad / 2);
   float angle_left = angle_rad / 2;
   if (!forward) {
