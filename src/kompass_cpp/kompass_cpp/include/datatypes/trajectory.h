@@ -9,6 +9,25 @@ namespace Kompass {
 
 namespace Control {
 
+// calculate number of trajectory samples based on ctrl type
+inline size_t getNumTrajectories(ControlType ctrType, int maxLinearSamples,
+                                 int maxAngularSamples) {
+
+  if (ctrType == ControlType::OMNI) {
+    return (maxLinearSamples * 2) + (maxLinearSamples * maxAngularSamples * 2);
+  } else if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
+    return maxLinearSamples + maxLinearSamples * maxAngularSamples;
+  } else {
+    return maxLinearSamples * maxAngularSamples;
+  };
+}
+
+// calculate number of points per trajectory based on time step and horizon
+inline size_t getNumPointsPerTrajectory(double timeStep,
+                                        double predictionHorizon) {
+  return predictionHorizon / timeStep;
+}
+
 typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
     MatrixXdR;
 

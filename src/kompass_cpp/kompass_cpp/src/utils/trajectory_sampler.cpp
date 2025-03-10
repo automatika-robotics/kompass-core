@@ -41,22 +41,14 @@ TrajectorySampler::TrajectorySampler(
   control_time_ = controlHorizon;
   lin_samples_max_ = maxLinearSamples;
   ang_samples_max_ = maxAngularSamples;
-  numPointsPerTrajectory_ = max_time_ / time_step_;
+  numPointsPerTrajectory_ = getNumPointsPerTrajectory(time_step_, max_time_);
 
   if (ctrType != ControlType::OMNI) {
     // Discard Vy limits to eliminate movement on Y axis
     ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
   }
 
-  // calculate number of trajectory samples
-  if (ctrType == ControlType::OMNI) {
-    numTrajectories_ =
-        (lin_samples_max_ * 2) + (lin_samples_max_ * ang_samples_max_ * 2);
-  } else if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
-    numTrajectories_ = lin_samples_max_ + lin_samples_max_ * ang_samples_max_;
-  } else {
-    numTrajectories_ = lin_samples_max_ * ang_samples_max_;
-  };
+  numTrajectories_ = getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
 
   this->maxNumThreads = maxNumThreads;
 }
@@ -79,22 +71,14 @@ TrajectorySampler::TrajectorySampler(
 
   updateParams(config);
 
-  numPointsPerTrajectory_ = max_time_ / time_step_;
+  numPointsPerTrajectory_ = getNumPointsPerTrajectory(time_step_, max_time_);
 
   if (ctrType != ControlType::OMNI) {
     // Discard Vy limits to eliminate movement on Y axis
     ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
   }
 
-  // calculate number of trajectory samples
-  if (ctrType == ControlType::OMNI) {
-    numTrajectories_ =
-        (lin_samples_max_ * 2) + (lin_samples_max_ * ang_samples_max_ * 2);
-  } else if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
-    numTrajectories_ = lin_samples_max_ + lin_samples_max_ * ang_samples_max_;
-  } else {
-    numTrajectories_ = lin_samples_max_ * ang_samples_max_;
-  };
+  numTrajectories_ = getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
 
   this->maxNumThreads = maxNumThreads;
 }

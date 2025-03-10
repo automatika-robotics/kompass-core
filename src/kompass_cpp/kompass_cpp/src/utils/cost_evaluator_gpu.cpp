@@ -19,28 +19,18 @@ namespace Control {
 
   this->costWeights = costsWeights;
 
-  // calculate number of points per trajectory
-  numPointsPerTrajectory_ = timeHorizon / timeStep;
-
-  // calculate max number of trajectory samples
-  if (ctrType == ControlType::OMNI) {
-    numTrajectories_ =
-        (maxLinearSamples * 2) + (maxLinearSamples * maxAngularSamples * 2);
-  } else if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
-    numTrajectories_ = maxLinearSamples + maxLinearSamples * maxAngularSamples;
-  } else {
-    numTrajectories_ = (maxLinearSamples - 1) * maxAngularSamples;
-  };
+  numPointsPerTrajectory_ = getNumPointsPerTrajectory(timeStep, timeHorizon);
+  numTrajectories_ = getNumTrajectories(ctrType, maxLinearSamples, maxAngularSamples);
 
   m_q = sycl::queue{sycl::default_selector_v,
                     sycl::property::queue::in_order{}};
   auto dev = m_q.get_device();
   LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
-  m_devicePtrPathsX = sycl::malloc_device<double>(5, m_q);
-  m_devicePtrPathsY = sycl::malloc_device<double>(5, m_q);
-  m_devicePtrVelocitiesVx = sycl::malloc_device<double>(5, m_q);
-  m_devicePtrVelocitiesVy = sycl::malloc_device<double>(5, m_q);
-  m_devicePtrVelocitiesOmega = sycl::malloc_device<double>(5, m_q);
+  m_devicePtrPathsX = sycl::malloc_device<double>(numTrajectories_ * numPointsPerTrajectory_, m_q);
+  m_devicePtrPathsY = sycl::malloc_device<double>(numTrajectories_ * numPointsPerTrajectory_, m_q);
+  m_devicePtrVelocitiesVx = sycl::malloc_device<double>(numTrajectories_ * numPointsPerTrajectory_, m_q);
+  m_devicePtrVelocitiesVy = sycl::malloc_device<double>(numTrajectories_ * numPointsPerTrajectory_, m_q);
+  m_devicePtrVelocitiesOmega = sycl::malloc_device<double>(numTrajectories_ * numPointsPerTrajectory_, m_q);
 }
 
 CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
@@ -55,18 +45,8 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
                         Eigen::Vector3f(sensor_position_body.data()));
   this->costWeights = costsWeights;
 
-  // calculate number of points per trajectory
-  numPointsPerTrajectory_ = timeHorizon / timeStep;
-
-  // calculate max number of trajectory samples
-  if (ctrType == ControlType::OMNI) {
-    numTrajectories_ =
-        (maxLinearSamples * 2) + (maxLinearSamples * maxAngularSamples * 2);
-  } else if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
-    numTrajectories_ = maxLinearSamples + maxLinearSamples * maxAngularSamples;
-  } else {
-    numTrajectories_ = (maxLinearSamples - 1) * maxAngularSamples;
-  };
+  numPointsPerTrajectory_ = getNumPointsPerTrajectory(timeStep, timeHorizon);
+  numTrajectories_ = getNumTrajectories(ctrType, maxLinearSamples, maxAngularSamples);
 
   m_q = sycl::queue{sycl::default_selector_v,
                     sycl::property::queue::in_order{}};

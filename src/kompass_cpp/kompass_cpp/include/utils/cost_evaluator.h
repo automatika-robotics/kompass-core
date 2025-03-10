@@ -185,8 +185,8 @@ private:
                                      // respect to the robot
 
 #ifdef GPU
-  int numTrajectories_;
-  int numPointsPerTrajectory_;
+  size_t numTrajectories_;
+  size_t numPointsPerTrajectory_;
   double *m_devicePtrPathsX;
   double *m_devicePtrPathsY;
   double *m_devicePtrVelocitiesVx;
