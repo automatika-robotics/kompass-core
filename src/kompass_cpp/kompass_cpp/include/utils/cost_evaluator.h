@@ -65,9 +65,8 @@ public:
   CostEvaluator(TrajectoryCostsWeights costsWeights,
                 const std::array<float, 3> &sensor_position_body,
                 const std::array<float, 4> &sensor_rotation_body,
-                ControlType controlType, double timeStep,
-                double timeHorizon, int maxLinearSamples,
-                int maxAngularSamples);
+                ControlType controlType, double timeStep, double timeHorizon,
+                int maxLinearSamples, int maxAngularSamples);
 
   /**
    * @brief Destroy the Trajectory Sampler object

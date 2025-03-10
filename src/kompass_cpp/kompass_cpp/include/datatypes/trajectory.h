@@ -337,6 +337,8 @@ struct TrajectoryVelocitySamples2D {
     omega.row(velocitiesIndex_) = velocities.omega;
   }
 
+  size_t size() const { return velocitiesIndex_ + 1; }
+
   // Iterator class to loop over rows and return Velocity struct.
   class Iterator {
   public:
@@ -376,8 +378,8 @@ struct TrajectoryVelocitySamples2D {
 
   Iterator begin() const { return Iterator(*this, 0); }
   Iterator end() const {
-    return Iterator(*this, velocitiesIndex_ + 1);
-  } // to ensure last value is captured
+    return Iterator(*this, this->size());
+  }
 };
 
 // Data structure to store path per trajectory for a set of trajectories
@@ -430,6 +432,8 @@ struct TrajectoryPathSamples {
     z.row(pathIndex_) = path.z;
   }
 
+  size_t size() const { return pathIndex_ + 1; }
+
   class Iterator {
     using iterator_category = std::forward_iterator_tag;
     using value_type = TrajectoryPath;
@@ -471,8 +475,8 @@ struct TrajectoryPathSamples {
 
   Iterator begin() const { return Iterator(*this, 0); }
   Iterator end() const {
-    return Iterator(*this, pathIndex_ + 1);
-  } // to ensure last value is captured
+    return Iterator(*this, this->size());
+  }
 };
 
 // Data structure to store multiple 2D trajectory samples
@@ -535,6 +539,8 @@ struct TrajectorySamples2D {
                                velocities.omega.row(idx)),
         TrajectoryPath(paths.x.row(idx), paths.y.row(idx), paths.z.row(idx)));
   }
+
+  size_t size() const { return velocities.size(); }
 
   struct Iterator {
     using iterator_category = std::forward_iterator_tag;
