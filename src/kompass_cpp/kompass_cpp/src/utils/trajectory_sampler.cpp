@@ -55,7 +55,7 @@ TrajectorySampler::TrajectorySampler(
   } else if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
     numTrajectories_ = lin_samples_max_ + lin_samples_max_ * ang_samples_max_;
   } else {
-    numTrajectories_ = (lin_samples_max_ - 1) * ang_samples_max_;
+    numTrajectories_ = lin_samples_max_ * ang_samples_max_;
   };
 
   this->maxNumThreads = maxNumThreads;
@@ -79,10 +79,23 @@ TrajectorySampler::TrajectorySampler(
 
   updateParams(config);
 
+  numPointsPerTrajectory_ = max_time_ / time_step_;
+
   if (ctrType != ControlType::OMNI) {
     // Discard Vy limits to eliminate movement on Y axis
     ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
   }
+
+  // calculate number of trajectory samples
+  if (ctrType == ControlType::OMNI) {
+    numTrajectories_ =
+        (lin_samples_max_ * 2) + (lin_samples_max_ * ang_samples_max_ * 2);
+  } else if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
+    numTrajectories_ = lin_samples_max_ + lin_samples_max_ * ang_samples_max_;
+  } else {
+    numTrajectories_ = lin_samples_max_ * ang_samples_max_;
+  };
+
   this->maxNumThreads = maxNumThreads;
 }
 
@@ -253,6 +266,8 @@ TrajectorySamples2D TrajectorySampler::generateTrajectoriesAckermann(
       }
     }
   }
+  LOG_DEBUG("Got admissible trajectories: ",
+            admissible_velocity_trajectories.velocities.velocitiesIndex_ + 1);
   return admissible_velocity_trajectories;
 }
 
@@ -295,7 +310,7 @@ TrajectorySamples2D TrajectorySampler::generateTrajectoriesDiffDrive(
     }
   }
   LOG_DEBUG("Got admissible trajectories: ",
-            admissible_velocity_trajectories.velocities.vx.size());
+            admissible_velocity_trajectories.velocities.velocitiesIndex_ + 1);
   return admissible_velocity_trajectories;
 }
 
@@ -446,9 +461,9 @@ void TrajectorySampler::UpdateReachableVelocityRange(
 
   // Step cannot be zero -> creates infinite loop
   lin_sample_x_resolution_ =
-      std::max((max_vx_ - min_vx_) / lin_samples_max_, 0.001);
+      std::max((max_vx_ - min_vx_) / (lin_samples_max_ - 1), 0.001);
   lin_sample_y_resolution_ =
-      std::max((max_vy_ - min_vy_) / lin_samples_max_, 0.001);
+      std::max((max_vy_ - min_vy_) / (lin_samples_max_ - 1), 0.001);
 
   max_omega_ = std::min(ctrlimits.omegaParams.maxOmega,
                         currentVel.omega() +
@@ -458,7 +473,7 @@ void TrajectorySampler::UpdateReachableVelocityRange(
                             ctrlimits.omegaParams.maxDeceleration * max_time_);
 
   ang_sample_resolution_ =
-      std::max((max_omega_ - min_omega_) / ang_samples_max_, 0.001);
+      std::max((max_omega_ - min_omega_) / (ang_samples_max_ - 1), 0.001);
 }
 
 }; // namespace Control

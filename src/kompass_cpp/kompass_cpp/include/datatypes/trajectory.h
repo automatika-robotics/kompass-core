@@ -9,6 +9,9 @@ namespace Kompass {
 
 namespace Control {
 
+typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+    MatrixXdR;
+
 // Data structure to store 2D velocities of a single trajectory
 struct TrajectoryVelocities2D {
   Eigen::VectorXd vx;
@@ -268,10 +271,11 @@ struct Trajectory2D {
 
 // Data structure to store velocities per trajectory for a set of trajectories
 struct TrajectoryVelocitySamples2D {
-  std::vector<Eigen::VectorXd> vx;    // Speed on x-axis (m/s)
-  std::vector<Eigen::VectorXd> vy;    // Speed on y-axis (m/s)
-  std::vector<Eigen::VectorXd> omega; // Angular velocity (rad/s)
+  MatrixXdR vx;    // Speed on x-axis (m/s)
+  MatrixXdR vy;    // Speed on y-axis (m/s)
+  MatrixXdR omega; // Angular velocity (rad/s)
   size_t maxNumTrajectories_, numPointsPerTrajectory_;
+  size_t velocitiesIndex_; // keep track of actual trajectories added
 
   // default constructor
   TrajectoryVelocitySamples2D() = default;
@@ -280,95 +284,90 @@ struct TrajectoryVelocitySamples2D {
   explicit TrajectoryVelocitySamples2D(size_t maxNumTrajectories,
                                        size_t numPointsPerTrajectory)
       : maxNumTrajectories_(maxNumTrajectories),
-        numPointsPerTrajectory_(numPointsPerTrajectory) {
-    vx.reserve(maxNumTrajectories);
-    vy.reserve(maxNumTrajectories);
-    omega.reserve(maxNumTrajectories);
-  }
+        numPointsPerTrajectory_(numPointsPerTrajectory), velocitiesIndex_(-1),
+        vx(MatrixXdR(maxNumTrajectories, numPointsPerTrajectory - 1)),
+        vy(MatrixXdR(maxNumTrajectories, numPointsPerTrajectory - 1)),
+        omega(MatrixXdR(maxNumTrajectories, numPointsPerTrajectory - 1)) {}
 
   // Add a new set of velocity values from a velocity vector.
   void push_back(const std::vector<Velocity2D> &velocities) {
     if (velocities.size() != numPointsPerTrajectory_ - 1) {
       throw std::invalid_argument("Velocity vector must have size equivalent "
-                                  "to numPointsPerTrajectory - 1");
+                                  "to numPointsPerTrajectory");
     }
 
-    Eigen::VectorXd vx_(velocities.size());
-    Eigen::VectorXd vy_(velocities.size());
-    Eigen::VectorXd omega_(velocities.size());
-    for (size_t i = 0; i < numPointsPerTrajectory_; ++i) {
-      vx_(i) = velocities[i].vx();
-      vy_(i) = velocities[i].vy();
-      omega_(i) = velocities[i].omega();
+    velocitiesIndex_++;
+    for (size_t i = 0; i < numPointsPerTrajectory_ - 1; ++i) {
+      vx(velocitiesIndex_, i) = velocities[i].vx();
+      vy(velocitiesIndex_, i) = velocities[i].vy();
+      omega(velocitiesIndex_, i) = velocities[i].omega();
     }
-    vx.push_back(vx_);
-    vy.push_back(vy_);
-    omega.push_back(omega_);
   }
 
   // Add a new set of velocity values from a TrajectoryVelocities2D struct
   void push_back(const TrajectoryVelocities2D &velocities) {
     if (velocities.numPointsPerTrajectory_ != numPointsPerTrajectory_) {
-      throw std::invalid_argument(
-          "TrajectoryVelocities2D must have "
-          "numPointsPerTrajectory_ equivalent to "
-          "numPointsPerTrajectory_ of TrajectoryVelocitySamples2D");
+      throw std::invalid_argument("TrajectoryVelocities2D must have "
+                                  "numPointsPerTrajectory equivalent to "
+                                  "numPointsPerTrajectory");
     }
 
-    vx.push_back(velocities.vx);
-    vy.push_back(velocities.vy);
-    omega.push_back(velocities.omega);
+    velocitiesIndex_++;
+    vx.row(velocitiesIndex_) = velocities.vx;
+    vy.row(velocitiesIndex_) = velocities.vy;
+    omega.row(velocitiesIndex_) = velocities.omega;
   }
-  struct Iterator {
-    using iterator_category = std::forward_iterator_tag;
-    using value_type = TrajectoryVelocities2D;
-    using difference_type = std::ptrdiff_t;
 
-    Iterator(std::vector<Eigen::VectorXd>::const_iterator vxIt,
-             std::vector<Eigen::VectorXd>::const_iterator vyIt,
-             std::vector<Eigen::VectorXd>::const_iterator omegaIt)
-        : vxIt(vxIt), vyIt(vyIt), omegaIt(omegaIt) {}
+  // Iterator class to loop over rows and return Velocity struct.
+  class Iterator {
+  public:
+    Iterator(const TrajectoryVelocitySamples2D &velocities, size_t index)
+        : velocities_(velocities), index_(index) {}
 
-    value_type operator*() const {
-      return TrajectoryVelocities2D(*vxIt, *vyIt, *omegaIt);
+    TrajectoryVelocities2D operator*() const {
+      return TrajectoryVelocities2D(velocities_.vx.row(index_),
+                                    velocities_.vy.row(index_),
+                                    velocities_.omega.row(index_));
     }
 
+    // Prefix increment
     Iterator &operator++() {
-      ++vxIt;
-      ++vyIt;
-      ++omegaIt;
+      ++index_;
       return *this;
     }
 
+    // Postfix increment
     Iterator operator++(int) {
-      Iterator tmp = *this;
+      Iterator tmp(*this);
       ++(*this);
       return tmp;
     }
 
-    bool operator==(const Iterator &other) const {
-      return vxIt == other.vxIt && vyIt == other.vyIt &&
-             omegaIt == other.omegaIt;
+    // Comparison operators
+    bool operator!=(const Iterator &other) const {
+      return index_ != other.index_;
     }
 
-    bool operator!=(const Iterator &other) const { return !(*this == other); }
+    bool operator==(const Iterator &other) const { return !(*this != other); }
 
   private:
-    std::vector<Eigen::VectorXd>::const_iterator vxIt, vyIt, omegaIt;
+    const TrajectoryVelocitySamples2D &velocities_;
+    size_t index_;
   };
 
-  Iterator begin() const {
-    return Iterator(vx.cbegin(), vy.cbegin(), omega.cbegin());
-  }
-  Iterator end() const { return Iterator(vx.cend(), vy.cend(), omega.cend()); }
+  Iterator begin() const { return Iterator(*this, 0); }
+  Iterator end() const {
+    return Iterator(*this, velocitiesIndex_ + 1);
+  } // to ensure last value is captured
 };
 
 // Data structure to store path per trajectory for a set of trajectories
 struct TrajectoryPathSamples {
-  std::vector<Eigen::VectorXd> x;
-  std::vector<Eigen::VectorXd> y;
-  std::vector<Eigen::VectorXd> z;
+  MatrixXdR x;
+  MatrixXdR y;
+  MatrixXdR z;
   size_t maxNumTrajectories_, numPointsPerTrajectory_;
+  size_t pathIndex_;
 
   // default constructor
   TrajectoryPathSamples() = default;
@@ -377,31 +376,25 @@ struct TrajectoryPathSamples {
   explicit TrajectoryPathSamples(size_t maxNumTrajectories,
                                  size_t numPointsPerTrajectory)
       : maxNumTrajectories_(maxNumTrajectories),
-        numPointsPerTrajectory_(numPointsPerTrajectory) {
-    x.reserve(maxNumTrajectories);
-    y.reserve(maxNumTrajectories);
-    z.reserve(maxNumTrajectories);
-  }
+        numPointsPerTrajectory_(numPointsPerTrajectory), pathIndex_(-1),
+        x(MatrixXdR(maxNumTrajectories, numPointsPerTrajectory)),
+        y(MatrixXdR(maxNumTrajectories, numPointsPerTrajectory)),
+        z(MatrixXdR(maxNumTrajectories, numPointsPerTrajectory)) {}
 
   // Add a new path from a Path struct.
   void push_back(const Path::Path &path) {
     if (path.points.size() != numPointsPerTrajectory_) {
       throw std::invalid_argument(
           "Path points vector must have size equivalent "
-          "to numPointsPerTrajectory of TrajectoryPathSamples");
+          "to numPointsPerTrajectory");
     }
 
-    Eigen::VectorXd x_(path.points.size());
-    Eigen::VectorXd y_(path.points.size());
-    Eigen::VectorXd z_(path.points.size());
+    pathIndex_++;
     for (size_t i = 0; i < numPointsPerTrajectory_; ++i) {
-      x_(i) = path.points[i].x();
-      y_(i) = path.points[i].y();
-      z_(i) = path.points[i].z();
+      x(pathIndex_, i) = path.points[i].x();
+      y(pathIndex_, i) = path.points[i].y();
+      z(pathIndex_, i) = path.points[i].z();
     }
-    x.push_back(x_);
-    y.push_back(y_);
-    z.push_back(z_);
   }
 
   // Add a new path from a TrajectoryPath struct.
@@ -412,50 +405,55 @@ struct TrajectoryPathSamples {
           "numPointsPerTrajectory");
     }
 
-    x.push_back(path.x);
-    y.push_back(path.y);
-    z.push_back(path.z);
+    pathIndex_++;
+    x.row(pathIndex_) = path.x;
+    y.row(pathIndex_) = path.y;
+    z.row(pathIndex_) = path.z;
   }
 
-  struct Iterator {
+  class Iterator {
     using iterator_category = std::forward_iterator_tag;
     using value_type = TrajectoryPath;
     using difference_type = std::ptrdiff_t;
 
-    Iterator(std::vector<Eigen::VectorXd>::const_iterator xIt,
-             std::vector<Eigen::VectorXd>::const_iterator yIt,
-             std::vector<Eigen::VectorXd>::const_iterator zIt)
-        : xIt(xIt), yIt(yIt), zIt(zIt) {}
+  public:
+    Iterator(const TrajectoryPathSamples &paths, size_t index)
+        : paths_(paths), index_(index) {}
 
-    value_type operator*() const { return TrajectoryPath(*xIt, *yIt, *zIt); }
+    TrajectoryPath operator*() const {
+      return TrajectoryPath(paths_.x.row(index_), paths_.y.row(index_),
+                            paths_.z.row(index_));
+    }
 
+    // Prefix increment
     Iterator &operator++() {
-      ++xIt;
-      ++yIt;
-      ++zIt;
+      ++index_;
       return *this;
     }
 
+    // Postfix increment
     Iterator operator++(int) {
-      Iterator tmp = *this;
+      Iterator tmp(*this);
       ++(*this);
       return tmp;
     }
 
-    bool operator==(const Iterator &other) const {
-      return xIt == other.xIt && yIt == other.yIt && zIt == other.zIt;
+    // Comparison operators
+    bool operator!=(const Iterator &other) const {
+      return index_ != other.index_;
     }
 
-    bool operator!=(const Iterator &other) const { return !(*this == other); }
+    bool operator==(const Iterator &other) const { return !(*this != other); }
 
   private:
-    std::vector<Eigen::VectorXd>::const_iterator xIt, yIt, zIt;
+    const TrajectoryPathSamples &paths_;
+    size_t index_;
   };
 
-  Iterator begin() const {
-    return Iterator(x.cbegin(), y.cbegin(), z.cbegin());
-  }
-  Iterator end() const { return Iterator(x.cend(), y.cend(), z.cend()); }
+  Iterator begin() const { return Iterator(*this, 0); }
+  Iterator end() const {
+    return Iterator(*this, pathIndex_ + 1);
+  } // to ensure last value is captured
 };
 
 // Data structure to store multiple 2D trajectory samples
@@ -514,9 +512,9 @@ struct TrajectorySamples2D {
       throw std::out_of_range("Vector index out of bounds");
     }
     return Trajectory2D(
-        TrajectoryVelocities2D(velocities.vx[idx], velocities.vy[idx],
-                               velocities.omega[idx]),
-        TrajectoryPath(paths.x[idx], paths.y[idx], paths.z[idx]));
+        TrajectoryVelocities2D(velocities.vx.row(idx), velocities.vy.row(idx),
+                               velocities.omega.row(idx)),
+        TrajectoryPath(paths.x.row(idx), paths.y.row(idx), paths.z.row(idx)));
   }
 
   struct Iterator {
