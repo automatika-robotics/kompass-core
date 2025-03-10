@@ -177,8 +177,9 @@ void CollisionChecker::convertPointCloudToOctomap(
     const std::vector<Path::Point> &cloud) {
 
   // Transform the sensor position to the world frame
-  // sensor_tf_world_ = sensor_tf_body_ * body->tf;
-  sensor_tf_world_ = Eigen::Isometry3f::Identity();
+  // NOTE: Transformation will be applied to the points when generating the
+  // collision boxes
+  sensor_tf_world_ = sensor_tf_body_ * body->tf;
 
   // Clear old data
   octTree->clear();
@@ -198,6 +199,8 @@ void CollisionChecker::convertLaserScanToOctomap(
     double height) {
 
   // Transform the sensor position to the world frame
+  // NOTE: Transformation will be applied to the points when generating the
+  // collision boxes
   sensor_tf_world_ = sensor_tf_body_ * body->tf;
 
   // Clear old data
@@ -207,11 +210,12 @@ void CollisionChecker::convertLaserScanToOctomap(
   float height_in_sensor = height - sensor_tf_body_.translation()[2];
 
   octomap::Pointcloud octomapCloud;
+  float x, y, z, angle;
   for (size_t i = 0; i < ranges.size(); ++i) {
-    float angle = angle_min + i * angle_increment;
-    float x = ranges[i] * cos(angle);
-    float y = ranges[i] * sin(angle);
-    float z = height_in_sensor;
+    angle = angle_min + i * angle_increment;
+    x = ranges[i] * cos(angle);
+    y = ranges[i] * sin(angle);
+    z = height_in_sensor;
 
     octomapCloud.push_back(x, y, z);
   }
@@ -226,6 +230,7 @@ void CollisionChecker::convertLaserScanToOctomap(
     double height) {
 
   // Transform the sensor position to the world frame
+  // NOTE: Transformation will be applied to the points when generating the collision boxes
   sensor_tf_world_ = sensor_tf_body_ * body->tf;
 
   // Clear old data
@@ -235,10 +240,11 @@ void CollisionChecker::convertLaserScanToOctomap(
   float height_in_sensor = height - sensor_tf_body_.translation()[2];
 
   octomap::Pointcloud octomapCloud;
+  float x, y, z;
   for (size_t i = 0; i < ranges.size(); ++i) {
-    float x = ranges[i] * cos(angles[i]);
-    float y = ranges[i] * sin(angles[i]);
-    float z = height_in_sensor;
+    x = ranges[i] * cos(angles[i]);
+    y = ranges[i] * sin(angles[i]);
+    z = height_in_sensor;
     octomapCloud.push_back(x, y, z);
   }
   octTree->insertPointCloud(octomapCloud, octomap::point3d(0, 0, 0));
@@ -381,8 +387,32 @@ bool CollisionChecker::checkCollisions(const Path::State current_state) {
   return collisionData.result.isCollision();
 }
 
-bool CollisionChecker::checkCriticalZone(const std::vector<double> &ranges,
-                                         const std::vector<double> &angles,
+void CollisionChecker::polarConvertLaserScanToBody(
+    std::vector<double> &ranges, std::vector<double> &angles) {
+  if (angles.size() != ranges.size()) {
+    LOG_ERROR("Angles and ranges vectors must have the same size!");
+    return;
+  }
+
+  Eigen::Vector3f cartesianPoint;
+  float x, y;
+
+  for (size_t i = 0; i < angles.size(); i++) {
+    x = ranges[i] * std::cos(angles[i]);
+    y = ranges[i] * std::sin(angles[i]);
+    cartesianPoint = {x, y, 0.0f};
+    // Apply TF
+    cartesianPoint = sensor_tf_body_ * cartesianPoint;
+
+    // convert back to polar
+    angles[i] = Angle::normalizeTo0Pi(
+        std::atan2(cartesianPoint.y(), cartesianPoint.x()));
+    ranges[i] = cartesianPoint.norm();
+  }
+}
+
+bool CollisionChecker::checkCriticalZone(std::vector<double> &ranges,
+                                         std::vector<double> &angles,
                                          const bool forward,
                                          const float critical_angle,
                                          const float critical_distance) {
@@ -390,10 +420,10 @@ bool CollisionChecker::checkCriticalZone(const std::vector<double> &ranges,
     LOG_ERROR("Angles and ranges vectors must have the same size!");
     return false;
   }
+  polarConvertLaserScanToBody(ranges, angles);
   float angle_rad = critical_angle * 180.0 / M_PI;
   float angle_right = (2 * M_PI) - (angle_rad / 2);
   float angle_left = angle_rad / 2;
-  std::vector<float> normalized_angle(angles.size());
   if (!forward) {
     angle_right += M_PI;
     angle_left += M_PI;
@@ -401,20 +431,15 @@ bool CollisionChecker::checkCriticalZone(const std::vector<double> &ranges,
   // Make sure all angle are normalized to [0, 2PI]
   angle_right = Angle::normalizeTo0Pi(angle_right);
   angle_left = Angle::normalizeTo0Pi(angle_left);
-  for (int i = 0; i < angles.size(); i++) {
-    normalized_angle[i] = Angle::normalizeTo0Pi(angles[i]);
-  }
 
   bool is_in_zone;
 
-  for (size_t i = 0; i < normalized_angle.size(); ++i) {
+  for (size_t i = 0; i < angles.size(); ++i) {
     // check if angle[i] is within the critical zone
     if (angle_right > angle_left) {
-      is_in_zone = (normalized_angle[i] <= angle_left) ||
-                   (normalized_angle[i] >= angle_right);
+      is_in_zone = (angles[i] <= angle_left) || (angles[i] >= angle_right);
     } else {
-      is_in_zone = (normalized_angle[i] <= angle_left) &&
-                   (normalized_angle[i] >= angle_right);
+      is_in_zone = (angles[i] <= angle_left) && (angles[i] >= angle_right);
     }
 
     // If the angle is in the zone, check the corresponding range value
