@@ -215,8 +215,8 @@ public:
    */
   bool checkCollisions(const Path::State current_state);
 
-  bool checkCriticalZone(std::vector<double> &ranges,
-                         std::vector<double> &angles, const bool forward,
+  bool checkCriticalZone(const std::vector<double> &ranges,
+                         const std::vector<double> &angles, const bool forward,
                          const float critical_angle,
                          const float critical_distance);
 
@@ -308,6 +308,6 @@ private:
                                  double height = 0.1);
 
   void polarConvertLaserScanToBody(std::vector<double> &ranges,
-                                 std::vector<double> &angles);
+                                   std::vector<double> &angles);
 };
 } // namespace Kompass
