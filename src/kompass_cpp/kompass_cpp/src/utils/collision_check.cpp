@@ -208,7 +208,7 @@ void CollisionChecker::convertLaserScanToOctomap(
   octomapCloud_.clear();
 
   // Transform height to sensor frame
-  float height_in_sensor = height - sensor_tf_body_.translation()[2];
+  float height_in_sensor = -sensor_tf_body_.translation()[2] / 2;
 
   for (size_t i = 0; i < ranges.size(); ++i) {
     angle = angle_min + i * angle_increment;
@@ -229,7 +229,8 @@ void CollisionChecker::convertLaserScanToOctomap(
     double height) {
 
   // Transform the sensor position to the world frame
-  // NOTE: Transformation will be applied to the points when generating the collision boxes
+  // NOTE: Transformation will be applied to the points when generating the
+  // collision boxes
   sensor_tf_world_ = sensor_tf_body_ * body->tf;
 
   // Clear old data
@@ -237,7 +238,7 @@ void CollisionChecker::convertLaserScanToOctomap(
   octomapCloud_.clear();
 
   // Transform height to sensor frame
-  float height_in_sensor = height - sensor_tf_body_.translation()[2];
+  float height_in_sensor = -sensor_tf_body_.translation()[2] / 2;
 
   for (size_t i = 0; i < ranges.size(); ++i) {
     float x = ranges[i] * cos(angles[i]);
@@ -409,8 +410,8 @@ void CollisionChecker::polarConvertLaserScanToBody(
   }
 }
 
-bool CollisionChecker::checkCriticalZone(std::vector<double> &ranges,
-                                         std::vector<double> &angles,
+bool CollisionChecker::checkCriticalZone(const std::vector<double> &ranges,
+                                         const std::vector<double> &angles,
                                          const bool forward,
                                          const float critical_angle,
                                          const float critical_distance) {
@@ -418,31 +419,44 @@ bool CollisionChecker::checkCriticalZone(std::vector<double> &ranges,
     LOG_ERROR("Angles and ranges vectors must have the same size!");
     return false;
   }
-  polarConvertLaserScanToBody(ranges, angles);
+  // polarConvertLaserScanToBody(ranges, angles);
   float angle_rad = critical_angle * M_PI / 180.0;
-  float angle_right = (2 * M_PI) - (angle_rad / 2);
-  float angle_left = angle_rad / 2;
+  float angle_right = angle_rad / 2;
+  float angle_left = (2 * M_PI) - (angle_rad / 2);
   if (!forward) {
-    angle_right += M_PI;
-    angle_left += M_PI;
+    angle_right = Angle::normalizeTo0Pi(M_PI + angle_right);
+    angle_left = Angle::normalizeTo0Pi(M_PI + angle_left);
   }
-  // Make sure all angle are normalized to [0, 2PI]
-  angle_right = Angle::normalizeTo0Pi(angle_right);
-  angle_left = Angle::normalizeTo0Pi(angle_left);
 
-  bool is_in_zone;
+  Eigen::Vector3f cartesianPoint;
+  float x, y, theta;
 
-  for (size_t i = 0; i < angles.size(); ++i) {
-    // check if angle[i] is within the critical zone
-    if (angle_right > angle_left) {
-      is_in_zone = (angles[i] <= angle_left) || (angles[i] >= angle_right);
+  for (size_t i = 0; i < angles.size(); i++) {
+    x = ranges[i] * std::cos(angles[i]);
+    y = ranges[i] * std::sin(angles[i]);
+    cartesianPoint = {x, y, 0.0f};
+    // Apply TF
+    cartesianPoint = sensor_tf_body_ * cartesianPoint;
+
+    // check if within the zone
+    theta = Angle::normalizeTo0Pi(
+        std::atan2(cartesianPoint.y(), cartesianPoint.x()));
+
+    if (forward) {
+      if ((theta <= std::max(angle_left, angle_right) ||
+           theta >= std::min(angle_left, angle_right)) &&
+          ranges[i] - robotRadius_ <= critical_distance) {
+        // point within the zone and range is low
+        return true;
+      }
+
     } else {
-      is_in_zone = (angles[i] <= angle_left) && (angles[i] >= angle_right);
-    }
-
-    // If the angle is in the zone, check the corresponding range value
-    if (is_in_zone && ranges[i] - robotRadius_ <= critical_distance) {
-      return true;
+      if ((theta >= std::min(angle_left, angle_right) &&
+           theta <= std::max(angle_left, angle_right)) &&
+          ranges[i] - robotRadius_ <= critical_distance) {
+        // point within the zone and range is low
+        return true;
+      }
     }
   }
   return false;
