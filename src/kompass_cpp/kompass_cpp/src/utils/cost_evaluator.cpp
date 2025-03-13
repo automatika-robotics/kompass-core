@@ -11,33 +11,42 @@
 namespace Kompass {
 
 namespace Control {
-  CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights, ControlType controlType,
-                double timeStep, double timeHorizon, int maxLinearSamples,
-                int maxAngularSamples){
+CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
+                             ControlType controlType,
+                             ControlLimitsParams ctrLimits, double timeStep,
+                             double timeHorizon, size_t maxLinearSamples,
+                             size_t maxAngularSamples, size_t maxPathLength) {
 
   this->costWeights = costsWeights;
+  accLimits_ = {ctrLimits.velXParams.maxAcceleration,
+               ctrLimits.velYParams.maxAcceleration,
+               ctrLimits.omegaParams.maxAcceleration};
 }
 
 CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
-                const std::array<float, 3> &sensor_position_body,
-                const std::array<float, 4> &sensor_rotation_body,
-                ControlType controlType, double timeStep,
-                double timeHorizon, int maxLinearSamples,
-                int maxAngularSamples) {
+                             const std::array<float, 3> &sensor_position_body,
+                             const std::array<float, 4> &sensor_rotation_body,
+                             ControlType controlType,
+                             ControlLimitsParams ctrLimits, double timeStep,
+                             double timeHorizon, size_t maxLinearSamples,
+                             size_t maxAngularSamples, size_t maxPathLength) {
   sensor_tf_body_ =
       getTransformation(Eigen::Quaternionf(sensor_rotation_body.data()),
                         Eigen::Vector3f(sensor_position_body.data()));
   this->costWeights = costsWeights;
+  accLimits_ = {ctrLimits.velXParams.maxAcceleration,
+               ctrLimits.velYParams.maxAcceleration,
+               ctrLimits.omegaParams.maxAcceleration};
 }
 
 CostEvaluator::~CostEvaluator() {
 
-    // delete and clear custom cost pointers
-    for (auto ptr : customTrajCostsPtrs_) {
-      delete ptr;
-    }
-    customTrajCostsPtrs_.clear();
-  };
+  // delete and clear custom cost pointers
+  for (auto ptr : customTrajCostsPtrs_) {
+    delete ptr;
+  }
+  customTrajCostsPtrs_.clear();
+};
 
 TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     const TrajectorySamples2D &trajs, const Path::Path &reference_path,
@@ -71,18 +80,14 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
       total_cost += weight * objCost;
     }
 
-    std::array<double, 3> accLimits{ctrlimits.velXParams.maxAcceleration,
-                                    ctrlimits.velYParams.maxAcceleration,
-                                    ctrlimits.omegaParams.maxAcceleration};
-
     if ((weight =
              costWeights.getParameter<double>("smoothness_weight") > 0.0)) {
-      double smoothCost = smoothnessCostFunc(traj, accLimits);
+      double smoothCost = smoothnessCostFunc(traj);
       total_cost += weight * smoothCost;
     }
 
     if ((weight = costWeights.getParameter<double>("jerk_weight") > 0.0)) {
-      double jerCost = jerkCostFunc(traj, accLimits);
+      double jerCost = jerkCostFunc(traj);
       total_cost += weight * jerCost;
     }
 
@@ -101,7 +106,6 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
   }
   return {traj_found, minCost, minCostTraj};
 }
-
 
 double CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
                                    const Path::Path &reference_path) {
@@ -151,51 +155,49 @@ double CostEvaluator::obstaclesDistCostFunc(
 
 // Compute the cost of trajectory based on smoothness in velocity commands
 double
-CostEvaluator::smoothnessCostFunc(const Trajectory2D &trajectory,
-                                  const std::array<double, 3> accLimits) {
+CostEvaluator::smoothnessCostFunc(const Trajectory2D &trajectory) {
   double smoothness_cost = 0.0;
   double delta_vx, delta_vy, delta_omega;
   for (size_t i = 1; i < trajectory.velocities.vx.size(); ++i) {
-    if (accLimits[0] > 0) {
+    if (accLimits_[0] > 0) {
       delta_vx = trajectory.velocities.vx[i] - trajectory.velocities.vx[i - 1];
-      smoothness_cost += std::pow(delta_vx, 2) / accLimits[0];
+      smoothness_cost += std::pow(delta_vx, 2) / accLimits_[0];
     }
-    if (accLimits[1] > 0) {
+    if (accLimits_[1] > 0) {
       delta_vy = trajectory.velocities.vy[i] - trajectory.velocities.vy[i - 1];
-      smoothness_cost += std::pow(delta_vy, 2) / accLimits[1];
+      smoothness_cost += std::pow(delta_vy, 2) / accLimits_[1];
     }
-    if (accLimits[2] > 0) {
+    if (accLimits_[2] > 0) {
       delta_omega =
           trajectory.velocities.omega[i] - trajectory.velocities.omega[i - 1];
-      smoothness_cost += std::pow(delta_omega, 2) / accLimits[2];
+      smoothness_cost += std::pow(delta_omega, 2) / accLimits_[2];
     }
   }
   return smoothness_cost / (3 * trajectory.velocities.vx.size());
 }
 
 // Compute the cost of trajectory based on jerk in velocity commands
-double CostEvaluator::jerkCostFunc(const Trajectory2D &trajectory,
-                                   const std::array<double, 3> accLimits) {
+double CostEvaluator::jerkCostFunc(const Trajectory2D &trajectory) {
   double jerk_cost = 0.0;
   double jerk_vx, jerk_vy, jerk_omega;
   for (size_t i = 2; i < trajectory.velocities.vx.size(); ++i) {
-    if (accLimits[0] > 0) {
+    if (accLimits_[0] > 0) {
       jerk_vx = trajectory.velocities.vx[i] -
                 2 * trajectory.velocities.vx[i - 1] +
                 trajectory.velocities.vx[i - 2];
-      jerk_cost += std::pow(jerk_vx, 2) / accLimits[0];
+      jerk_cost += std::pow(jerk_vx, 2) / accLimits_[0];
     }
-    if (accLimits[1] > 0) {
+    if (accLimits_[1] > 0) {
       jerk_vy = trajectory.velocities.vy[i] -
                 2 * trajectory.velocities.vy[i - 1] +
                 trajectory.velocities.vy[i - 2];
-      jerk_cost += std::pow(jerk_vy, 2) / accLimits[1];
+      jerk_cost += std::pow(jerk_vy, 2) / accLimits_[1];
     }
-    if (accLimits[2] > 0) {
+    if (accLimits_[2] > 0) {
       jerk_omega = trajectory.velocities.omega[i] -
                    2 * trajectory.velocities.omega[i - 1] +
                    trajectory.velocities.omega[i - 2];
-      jerk_cost += std::pow(jerk_omega, 2) / accLimits[2];
+      jerk_cost += std::pow(jerk_omega, 2) / accLimits_[2];
     }
   }
   return jerk_cost / (3 * trajectory.velocities.vx.size());

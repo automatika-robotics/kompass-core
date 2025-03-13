@@ -60,13 +60,15 @@ public:
    * @param maxAngularSample
    */
   CostEvaluator(TrajectoryCostsWeights costsWeights, ControlType controlType,
-                double timeStep, double timeHorizon, int maxLinearSamples,
-                int maxAngularSamples);
+                ControlLimitsParams ctrLimits, double timeStep,
+                double timeHorizon, size_t maxLinearSamples,
+                size_t maxAngularSamples, size_t maxPathLength);
   CostEvaluator(TrajectoryCostsWeights costsWeights,
                 const std::array<float, 3> &sensor_position_body,
                 const std::array<float, 4> &sensor_rotation_body,
-                ControlType controlType, double timeStep, double timeHorizon,
-                int maxLinearSamples, int maxAngularSamples);
+                ControlType controlType, ControlLimitsParams ctrLimits,
+                double timeStep, double timeHorizon, size_t maxLinearSamples,
+                size_t maxAngularSamples, size_t maxPathLength);
 
   /**
    * @brief Destroy the Trajectory Sampler object
@@ -169,8 +171,8 @@ public:
 protected:
   // Protected member variables
   ControlType ctrType;
-  ControlLimitsParams ctrlimits;
   CollisionChecker *collChecker;
+  std::array<double, 3> accLimits_;
 
   // Vector of pointers to the trajectory costs
   std::vector<CustomTrajectoryCost *> customTrajCostsPtrs_;
@@ -191,9 +193,64 @@ private:
   double *m_devicePtrVelocitiesVx;
   double *m_devicePtrVelocitiesVy;
   double *m_devicePtrVelocitiesOmega;
+  double *m_devicePtrReferencePath;
+  double *m_devicePtrCosts;
   sycl::queue m_q;
-#endif //! GPU
+  // Built-in functions for cost evaluation
+  /**
+   * @brief Trajectory cost based on the distance to a given reference path
+   *
+   * @param trajectories
+   * @param reference_path
+   * @return double
+   */
+  void pathCostFunc(const size_t trajs_size, const Path::Path &reference_path,
+                    const double cost_weight);
 
+  /**
+   * @brief Trajectory cost based on the distance to the end (goal) of a given
+   * reference path
+   *
+   * @param trajectories
+   * @param reference_path
+   * @return double
+   */
+  void goalCostFuncconst(const size_t trajs_size,
+                         const Path::Path &reference_path,
+                         const double cost_weight);
+
+  /**
+   * @brief Trajectory cost based on the distance obstacles
+   *
+   * @param trajectories
+   * @param obstaclePoints
+   * @return double
+   */
+  void obstaclesDistCostFunc(const size_t trajs_size,
+                             const std::vector<Path::Point> &obstaclePoints,
+                             const double cost_weight);
+
+  /**
+   * @brief Trajectory cost based on the smoothness along the trajectory
+   *
+   * @param trajectories
+   * @param accLimits     Robot acceleration limits [max acceleration on
+   * x-direction, max on y-direction, max angular acceleration]
+   * @return double
+   */
+  void smoothnessCostFunc(const size_t trajs_size, const double cost_weight);
+
+  /**
+   * @brief Trajectory cost based on the jerk along the trajectory
+   *
+   * @param trajectories
+   * @param accLimits     Robot acceleration limits [max acceleration on
+   * x-direction, max on y-direction, max angular acceleration]
+   * @return double
+   */
+  void jerkCostFunc(const size_t trajs_size, const double cost_weight);
+
+#else
   // Built-in functions for cost evaluation
   /**
    * @brief Trajectory cost based on the distance to a given reference path
@@ -202,8 +259,8 @@ private:
    * @param reference_path
    * @return double
    */
-  static double pathCostFunc(const Trajectory2D &trajectory,
-                             const Path::Path &reference_path);
+  double pathCostFunc(const Trajectory2D &trajectory,
+                      const Path::Path &reference_path);
 
   /**
    * @brief Trajectory cost based on the distance to the end (goal) of a given
@@ -213,8 +270,8 @@ private:
    * @param reference_path
    * @return double
    */
-  static double goalCostFunc(const Trajectory2D &trajectory,
-                             const Path::Path &reference_path);
+  double goalCostFunc(const Trajectory2D &trajectory,
+                      const Path::Path &reference_path);
 
   /**
    * @brief Trajectory cost based on the distance obstacles
@@ -223,9 +280,8 @@ private:
    * @param obstaclePoints
    * @return double
    */
-  static double
-  obstaclesDistCostFunc(const Trajectory2D &trajectory,
-                        const std::vector<Path::Point> &obstaclePoints);
+  double obstaclesDistCostFunc(const Trajectory2D &trajectory,
+                               const std::vector<Path::Point> &obstaclePoints);
 
   /**
    * @brief Trajectory cost based on the smoothness along the trajectory
@@ -235,8 +291,7 @@ private:
    * x-direction, max on y-direction, max angular acceleration]
    * @return double
    */
-  static double smoothnessCostFunc(const Trajectory2D &trajectory,
-                                   const std::array<double, 3> accLimits);
+  double smoothnessCostFunc(const Trajectory2D &trajectory);
 
   /**
    * @brief Trajectory cost based on the jerk along the trajectory
@@ -246,8 +301,8 @@ private:
    * x-direction, max on y-direction, max angular acceleration]
    * @return double
    */
-  static double jerkCostFunc(const Trajectory2D &trajectory,
-                             const std::array<double, 3> accLimits);
+  double jerkCostFunc(const Trajectory2D &trajectory);
+#endif //! GPU
 };
 }; // namespace Control
 } // namespace Kompass

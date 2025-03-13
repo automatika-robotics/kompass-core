@@ -145,8 +145,8 @@ struct TestConfig {
         robotShapeType(CollisionChecker::ShapeType::BOX),
         robotDimensions{0.3, 0.3, 1.0}, sensor_position_body{0.0, 0.0, 0.5},
         sensor_rotation_body{0, 0, 0, 1}, costWeights(),
-        costEval(costWeights, controlType, timeStep, predictionHorizon,
-                 maxLinearSamples, maxAngularSamples) {
+        costEval(costWeights, controlType, controlLimits, timeStep, predictionHorizon,
+                 maxLinearSamples, maxAngularSamples, max_path_length) {
     reference_path.setMaxLength(max_path_length);
     reference_path.interpolate(max_interpolation_point_dist,
                                Path::InterpolationType::LINEAR);

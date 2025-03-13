@@ -26,9 +26,14 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
       maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
       sensor_position_body, sensor_rotation_body, octreeRes, maxNumThreads);
 
-  trajCostEvaluator = new CostEvaluator(
-      costWeights, sensor_position_body, sensor_rotation_body, controlType,
-      timeStep, predictionHorizon, maxLinearSamples, maxAngularSamples);
+  size_t maxPathLength =
+      this->config.getParameter<double>("max_path_length") /
+      config.getParameter<double>("max_point_interpolation_distance");
+
+  trajCostEvaluator =
+      new CostEvaluator(costWeights, sensor_position_body, sensor_rotation_body,
+                        controlType, controlLimits, timeStep, predictionHorizon,
+                        maxLinearSamples, maxAngularSamples, maxPathLength);
 
   // Update the max forward distance the robot can make
   if (controlType == ControlType::OMNI) {
@@ -59,11 +64,14 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
   double predictionHorizon = config.getParameter<double>("prediction_horizon");
   int maxLinearSamples = config.getParameter<int>("max_linear_samples");
   int maxAngularSamples = config.getParameter<int>("max_angular_samples");
+  size_t maxPathLength =
+      this->config.getParameter<double>("max_path_length") /
+      config.getParameter<double>("max_point_interpolation_distance");
 
-  trajCostEvaluator = new CostEvaluator(
-      costWeights, sensor_position_body, sensor_rotation_body, controlType,
-      timeStep, predictionHorizon, maxLinearSamples, maxAngularSamples);
-
+  trajCostEvaluator =
+      new CostEvaluator(costWeights, sensor_position_body, sensor_rotation_body,
+                        controlType, controlLimits, timeStep, predictionHorizon,
+                        maxLinearSamples, maxAngularSamples, maxPathLength);
 
   // Update the max forward distance the robot can make
   double timeHorizon = config.getParameter<double>("control_horizon");
@@ -100,9 +108,13 @@ void DWA::reconfigure(ControlLimitsParams controlLimits,
       sensor_position_body, sensor_rotation_body, octreeRes, maxNumThreads);
 
   delete trajCostEvaluator;
-  trajCostEvaluator = new CostEvaluator(
-      costWeights, sensor_position_body, sensor_rotation_body, controlType,
-      timeStep, predictionHorizon, maxLinearSamples, maxAngularSamples);
+  size_t maxPathLength =
+      this->config.getParameter<double>("max_path_length") /
+      config.getParameter<double>("max_point_interpolation_distance");
+  trajCostEvaluator =
+      new CostEvaluator(costWeights, sensor_position_body, sensor_rotation_body,
+                        controlType, controlLimits, timeStep, predictionHorizon,
+                        maxLinearSamples, maxAngularSamples, maxPathLength);
   this->maxNumThreads = maxNumThreads;
 }
 
@@ -126,9 +138,13 @@ void DWA::reconfigure(TrajectorySampler::TrajectorySamplerParameters config,
   int maxLinearSamples = config.getParameter<int>("max_linear_samples");
   int maxAngularSamples = config.getParameter<int>("max_angular_samples");
 
-  trajCostEvaluator = new CostEvaluator(
-      costWeights, sensor_position_body, sensor_rotation_body, controlType,
-      timeStep, predictionHorizon, maxLinearSamples, maxAngularSamples);
+  size_t maxPathLength =
+      this->config.getParameter<double>("max_path_length") /
+      config.getParameter<double>("max_point_interpolation_distance");
+  trajCostEvaluator =
+      new CostEvaluator(costWeights, sensor_position_body, sensor_rotation_body,
+                        controlType, controlLimits, timeStep, predictionHorizon,
+                        maxLinearSamples, maxAngularSamples, maxPathLength);
   this->maxNumThreads = maxNumThreads;
 }
 
