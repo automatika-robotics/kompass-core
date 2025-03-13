@@ -8,10 +8,9 @@
 
 namespace Kompass {
 
-namespace Control {
-
 // Helper function to convert Euler angles to rotation matrix
-inline Eigen::Matrix3f eulerToRotationMatrix(float roll, float pitch, float yaw) {
+inline Eigen::Matrix3f eulerToRotationMatrix(float roll, float pitch,
+                                             float yaw) {
   // Implementation of conversion from Euler angles to a 3x3 rotation matrix
   Eigen::AngleAxisf rotZ(yaw, Eigen::Vector3f::UnitZ());
   Eigen::AngleAxisf rotY(pitch, Eigen::Vector3f::UnitY());
@@ -65,7 +64,6 @@ transformPosition(const Eigen::Vector3f &object_pose_in_frame_src,
   return transform_src_to_goal * object_pose_in_frame_src;
 }
 
-
 inline Eigen::Vector3f
 transformPosition(const Eigen::Vector3f &object_pose_in_frame_src,
                   const Eigen::Isometry3f &transform_src_to_goal) {
@@ -106,5 +104,4 @@ transformPose(const Eigen::Isometry3f &object_pose_in_frame_src,
   return transform_src_to_goal * object_pose_in_frame_src;
 }
 
-} // namespace Control
 } // namespace Kompass

@@ -29,6 +29,11 @@ add_executable(mapper_test mapper_test.cpp)
 target_link_libraries(mapper_test PRIVATE ${PROJECT_NAME} Boost::unit_test_framework)
 add_test(mapper_tests mapper_test)
 
+# Collision Checker tests
+add_executable(collisions_test collisions_test.cpp)
+target_link_libraries(collisions_test PRIVATE ${PROJECT_NAME} Boost::unit_test_framework)
+add_test(collisions_tests collisions_test)
+
 # find sycl
 find_package(AdaptiveCpp)
 
@@ -38,4 +43,11 @@ if(AdaptiveCpp_FOUND)
   target_link_libraries(mapper_test_gpu PRIVATE ${PROJECT_NAME} Boost::unit_test_framework)
   add_sycl_to_target(TARGET mapper_test_gpu SOURCES mapper_test_gpu.cpp)
   add_test(mapper_tests mapper_test_gpu)
+
+  # Collision Checker GPU tests
+  add_executable(collisions_test_gpu collisions_test_gpu.cpp)
+  target_link_libraries(collisions_test_gpu PRIVATE ${PROJECT_NAME} Boost::unit_test_framework)
+  add_sycl_to_target(TARGET collisions_test_gpu SOURCES collisions_test_gpu.cpp)
+  add_test(collisions_tests collisions_test_gpu)
+
 endif()
