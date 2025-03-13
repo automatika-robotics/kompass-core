@@ -24,6 +24,11 @@ add_executable(trajectory_sampler_test trajectory_sampler_test.cpp)
 target_link_libraries(trajectory_sampler_test PRIVATE ${PROJECT_NAME} nlohmann_json::nlohmann_json)
 add_test(trajectory_sampler_tests trajectory_sampler_test)
 
+# Cost evaluator tests
+add_executable(cost_evaluator_test cost_evaluator_test.cpp)
+target_link_libraries(cost_evaluator_test PRIVATE ${PROJECT_NAME} nlohmann_json::nlohmann_json)
+add_test(cost_evaluator_tests cost_evaluator_test)
+
 # Mapper tests
 add_executable(mapper_test mapper_test.cpp)
 target_link_libraries(mapper_test PRIVATE ${PROJECT_NAME} Boost::unit_test_framework)
