@@ -52,9 +52,9 @@ CollisionChecker::CollisionChecker(
   bodyObjPtr = new fcl::CollisionObjectf(bodyGeometry);
 
   // Init the sensor position w.r.t body
-  sensor_tf_body_ = Control::getTransformation(
-      Eigen::Quaternionf(sensor_rotation_body.data()),
-      Eigen::Vector3f(sensor_position_body.data()));
+  sensor_tf_body_ =
+      getTransformation(Eigen::Quaternionf(sensor_rotation_body.data()),
+                        Eigen::Vector3f(sensor_position_body.data()));
 
   sensor_tf_world_ = sensor_tf_body_;
 }
@@ -118,10 +118,9 @@ void CollisionChecker::updateOctreePtr() {
 void CollisionChecker::updateState(const Path::State current_state) {
 
   // Get the body tf matrix from euler angles / new position
-  Eigen::Matrix3f rotation =
-      Control::eulerToRotationMatrix(0.0, 0.0, current_state.yaw);
+  Eigen::Matrix3f rotation = eulerToRotationMatrix(0.0, 0.0, current_state.yaw);
 
-  body->tf = Control::getTransformation(
+  body->tf = getTransformation(
       rotation, Eigen::Vector3f(current_state.x, current_state.y, 0.0));
 
   bodyObjPtr->setTransform(body->tf);
@@ -132,9 +131,9 @@ void CollisionChecker::updateState(const double x, const double y,
                                    const double yaw) {
 
   // Get the body tf matrix from euler angles / new position
-  Eigen::Matrix3f rotation = Control::eulerToRotationMatrix(0.0, 0.0, yaw);
+  Eigen::Matrix3f rotation = eulerToRotationMatrix(0.0, 0.0, yaw);
 
-  body->tf = Control::getTransformation(rotation, Eigen::Vector3f(x, y, 0.0));
+  body->tf = getTransformation(rotation, Eigen::Vector3f(x, y, 0.0));
 
   bodyObjPtr->setTransform(body->tf);
   bodyObjPtr->computeAABB();
@@ -365,10 +364,9 @@ bool CollisionChecker::checkCollisions() { return checkCollisionsOctree(); }
 bool CollisionChecker::checkCollisions(const Path::State current_state) {
   auto m_stateObjPtr = new fcl::CollisionObjectf(bodyGeometry);
   // Get the body tf matrix from euler angles / new position
-  Eigen::Matrix3f rotation =
-      Control::eulerToRotationMatrix(0.0, 0.0, current_state.yaw);
+  Eigen::Matrix3f rotation = eulerToRotationMatrix(0.0, 0.0, current_state.yaw);
 
-  m_stateObjPtr->setTransform(Control::getTransformation(
+  m_stateObjPtr->setTransform(getTransformation(
       rotation, Eigen::Vector3f(current_state.x, current_state.y, 0.0)));
   m_stateObjPtr->computeAABB();
 
@@ -386,82 +384,6 @@ bool CollisionChecker::checkCollisions(const Path::State current_state) {
   delete m_collManager;
 
   return collisionData.result.isCollision();
-}
-
-void CollisionChecker::polarConvertLaserScanToBody(
-    std::vector<double> &ranges, std::vector<double> &angles) {
-  if (angles.size() != ranges.size()) {
-    LOG_ERROR("Angles and ranges vectors must have the same size!");
-    return;
-  }
-
-  Eigen::Vector3f cartesianPoint;
-  float x, y;
-
-  for (size_t i = 0; i < angles.size(); i++) {
-    x = ranges[i] * std::cos(angles[i]);
-    y = ranges[i] * std::sin(angles[i]);
-    cartesianPoint = {x, y, 0.0f};
-    // Apply TF
-    cartesianPoint = sensor_tf_body_ * cartesianPoint;
-
-    // convert back to polar
-    angles[i] = Angle::normalizeTo0Pi(
-        std::atan2(cartesianPoint.y(), cartesianPoint.x()));
-    ranges[i] = cartesianPoint.norm();
-  }
-}
-
-bool CollisionChecker::checkCriticalZone(const std::vector<double> &ranges,
-                                         const std::vector<double> &angles,
-                                         const bool forward,
-                                         const float critical_angle,
-                                         const float critical_distance) {
-  if (angles.size() != ranges.size()) {
-    LOG_ERROR("Angles and ranges vectors must have the same size!");
-    return false;
-  }
-  // polarConvertLaserScanToBody(ranges, angles);
-  float angle_rad = critical_angle * M_PI / 180.0;
-  float angle_right = angle_rad / 2;
-  float angle_left = (2 * M_PI) - (angle_rad / 2);
-  if (!forward) {
-    angle_right = Angle::normalizeTo0Pi(M_PI + angle_right);
-    angle_left = Angle::normalizeTo0Pi(M_PI + angle_left);
-  }
-
-  Eigen::Vector3f cartesianPoint;
-  float x, y, theta;
-
-  for (size_t i = 0; i < angles.size(); i++) {
-    x = ranges[i] * std::cos(angles[i]);
-    y = ranges[i] * std::sin(angles[i]);
-    cartesianPoint = {x, y, 0.0f};
-    // Apply TF
-    cartesianPoint = sensor_tf_body_ * cartesianPoint;
-
-    // check if within the zone
-    theta = Angle::normalizeTo0Pi(
-        std::atan2(cartesianPoint.y(), cartesianPoint.x()));
-
-    if (forward) {
-      if ((theta <= std::max(angle_left, angle_right) ||
-           theta >= std::min(angle_left, angle_right)) &&
-          ranges[i] - robotRadius_ <= critical_distance) {
-        // point within the zone and range is low
-        return true;
-      }
-
-    } else {
-      if ((theta >= std::min(angle_left, angle_right) &&
-           theta <= std::max(angle_left, angle_right)) &&
-          ranges[i] - robotRadius_ <= critical_distance) {
-        // point within the zone and range is low
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 } // namespace Kompass

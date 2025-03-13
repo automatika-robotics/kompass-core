@@ -215,10 +215,14 @@ public:
    */
   bool checkCollisions(const Path::State current_state);
 
-  bool checkCriticalZone(const std::vector<double> &ranges,
-                         const std::vector<double> &angles, const bool forward,
-                         const float critical_angle,
-                         const float critical_distance);
+protected:
+  double robotHeight_{1.0}, robotRadius_;
+  // sensor tf with respect to the world
+  Eigen::Isometry3f sensor_tf_world_ = Eigen::Isometry3f::Identity();
+
+  Eigen::Isometry3f sensor_tf_body_ =
+      Eigen::Isometry3f::Identity(); // Sensor transformation with
+                                     // respect to the robot
 
 private:
   // Collision Manager
@@ -226,7 +230,6 @@ private:
 
   // Robot body geometry object
   std::shared_ptr<Body> body;
-  double robotHeight_{1.0}, robotRadius_;
   std::shared_ptr<fcl::CollisionGeometryf> bodyGeometry;
 
   // Robot body collision object pointer
@@ -243,13 +246,6 @@ private:
                    // with an octTree
 
   double octree_resolution_{0.01};
-
-  // sensor tf with respect to the world
-  Eigen::Isometry3f sensor_tf_world_ = Eigen::Isometry3f::Identity();
-
-  Eigen::Isometry3f sensor_tf_body_ =
-      Eigen::Isometry3f::Identity(); // Sensor transformation with
-                                     // respect to the robot
 
   /**
    * @brief Updates the Octree collision object pointer
@@ -306,8 +302,5 @@ private:
   void convertLaserScanToOctomap(const std::vector<double> &ranges,
                                  const std::vector<double> &angles,
                                  double height = 0.1);
-
-  void polarConvertLaserScanToBody(std::vector<double> &ranges,
-                                   std::vector<double> &angles);
 };
 } // namespace Kompass
