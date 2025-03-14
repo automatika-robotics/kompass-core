@@ -1,4 +1,4 @@
-#include "utils/collision_check.h"
+#include "utils/critical_zone_check.h"
 #include <array>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
@@ -8,32 +8,25 @@
 namespace py = pybind11;
 using namespace Kompass;
 
+#if GPU
+void bindings_utils_gpu(py::module_ &);
+#endif
+
 // Utils submodule
 void bindings_utils(py::module_ &m) {
   auto m_utils = m.def_submodule("utils", "KOMPASS CPP utilities module");
 
-  py::class_<CollisionChecker>(m_utils, "CollisionChecker")
+  py::class_<CriticalZoneChecker>(m_utils, "CriticalZoneChecker")
       .def(py::init<CollisionChecker::ShapeType, const std::vector<float> &,
                     const std::array<float, 3> &, const std::array<float, 4> &,
-                    double>(),
-           R"pbdoc(
-                Construct a new Collision Checker object
-
-                Args:
-                    robot_shape_type: Type of the robot shape geometry
-                    robot_dimensions: Corresponding geometry dimensions
-                    sensor_position_body: Position of the sensor w.r.t the robot body - Considered constant
-                    sensor_rotation_body: Rotation of the sensor w.r.t the robot body - Considered constant
-                    octree_resolution: Resolution of the constructed OctTree
-            )pbdoc",
+                    float, float>(),
            py::arg("robot_shape"), py::arg("robot_dimensions"),
            py::arg("sensor_position_body"), py::arg("sensor_rotation_body"),
-           py::arg("octree_resolution") = 0.1)
-      .def("reset_octree_resolution", &CollisionChecker::resetOctreeResolution,
-           py::arg("resolution"))
-      .def("update_state", py::overload_cast<double, double, double>(
-                               &CollisionChecker::updateState));
-  //  .def("check_critical_zone", &CollisionChecker::checkCriticalZone,
-  //       py::arg("ranges"), py::arg("angles"), py::arg("forward"),
-  //       py::arg("critical_angle"), py::arg("critical_distance"));
+           py::arg("critical_angle"), py::arg("critical_distance"))
+      .def("check", &CriticalZoneChecker::check, py::arg("ranges"),
+           py::arg("angles"), py::arg("forward"));
+
+#if GPU
+  bindings_utils_gpu(m_utils);
+#endif
 }
