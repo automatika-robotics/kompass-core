@@ -1,9 +1,9 @@
+#include "mapping/local_mapper_gpu.h"
+#include "utils/critical_zone_check_gpu.h"
 #include <pybind11/eigen.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-
-#include "mapping/local_mapper_gpu.h"
 
 namespace py = pybind11;
 using namespace Kompass;
@@ -20,4 +20,19 @@ void bindings_mapping_gpu(py::module_ &m) {
       .def("scan_to_grid", &Mapping::LocalMapperGPU::scanToGrid,
            "Convert laser scan data to occupancy grid", py::arg("angles"),
            py::arg("ranges"), py::return_value_policy::reference_internal);
+}
+
+// Utils bindings submodule
+void bindings_utils_gpu(py::module_ &m) {
+
+  py::class_<CriticalZoneCheckerGPU>(m, "CriticalZoneCheckerGPU")
+      .def(py::init<CollisionChecker::ShapeType, const std::vector<float> &,
+                    const std::array<float, 3> &, const std::array<float, 4> &,
+                    float, float, int>(),
+           py::arg("robot_shape"), py::arg("robot_dimensions"),
+           py::arg("sensor_position_body"), py::arg("sensor_rotation_body"),
+           py::arg("critical_angle"), py::arg("critical_distance"),
+           py::arg("scan_size"))
+      .def("check", &CriticalZoneChecker::check, py::arg("ranges"),
+           py::arg("angles"), py::arg("forward"));
 }
