@@ -40,6 +40,9 @@ CriticalZoneChecker::CriticalZoneChecker(
   angle_right_backward_ = Angle::normalizeTo0Pi(M_PI + angle_right_forward_);
   angle_left_backward_ = Angle::normalizeTo0Pi(M_PI + angle_left_forward_);
 
+  LOG_INFO("angles forward  ", angle_right_forward_, ", ", angle_left_forward_);
+  LOG_INFO("angles backward  ", angle_right_backward_, ", ", angle_left_backward_);
+
   // Set critical distance
   critical_distance_ = critical_distance;
 }
@@ -53,7 +56,7 @@ bool CriticalZoneChecker::check(const std::vector<double> &ranges,
   }
 
   Eigen::Vector3f cartesianPoint;
-  float x, y, theta;
+  float x, y, theta, converted_range;
   bool result = false;
 
   for (size_t i = 0; i < angles.size(); ++i) {
@@ -66,20 +69,24 @@ bool CriticalZoneChecker::check(const std::vector<double> &ranges,
     // check if within the zone
     theta = Angle::normalizeTo0Pi(
         std::atan2(cartesianPoint.y(), cartesianPoint.x()));
+    converted_range = std::sqrt(std::pow(cartesianPoint.y(), 2) + std::pow(cartesianPoint.x(), 2));
+
 
     if (forward) {
-      if ((theta <= std::max(angle_left_forward_, angle_right_forward_) ||
-           theta >= std::min(angle_left_forward_, angle_right_forward_)) &&
-          ranges[i] - robotRadius_ <= critical_distance_) {
+      if ((theta >= std::max(angle_left_forward_, angle_right_forward_) ||
+           theta <= std::min(angle_left_forward_, angle_right_forward_)) &&
+          converted_range - robotRadius_ <= critical_distance_) {
         // point within the zone and range is low
+        LOG_INFO("True at theta, , converted, angle and range ", theta, ",", converted_range, ",", angles[i], ", ", ranges[i]);
         result = true;
       }
 
     } else {
       if ((theta >= std::min(angle_left_backward_, angle_right_backward_) &&
            theta <= std::max(angle_left_backward_, angle_right_backward_)) &&
-          ranges[i] - robotRadius_ <= critical_distance_) {
+          converted_range - robotRadius_ <= critical_distance_) {
         // point within the zone and range is low
+        LOG_INFO("True at angle and range ", theta, ",", converted_range, ",", angles[i], ", ", ranges[i]);
         result = true;
       }
     }
