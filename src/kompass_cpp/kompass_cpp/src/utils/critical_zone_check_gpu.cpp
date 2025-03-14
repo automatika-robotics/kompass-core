@@ -60,6 +60,7 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
         }
 
         double theta = sycl::atan2(transformed_point[1], transformed_point[0]);
+        double converted_range = sycl::length(transformed_point);
         // Normalize the angle to [0, 2*pi]
         theta = sycl::fmod(theta, 2 * M_PI);
         if (theta < 0) {
@@ -72,16 +73,16 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
         }
 
         if (isForward) {
-          if ((theta <= sycl::max(angle_left_forward, angle_right_forward) ||
-               theta >= sycl::min(angle_left_forward, angle_right_forward)) &&
-              range - robot_radius <= criticalDistance) {
+          if ((theta >= sycl::max(angle_left_forward, angle_right_forward) ||
+               theta <= sycl::min(angle_left_forward, angle_right_forward)) &&
+              converted_range - robot_radius <= criticalDistance) {
             // point within the zone and range is low
             devicePtrOutput[local_id] = true;
           }
         } else {
           if ((theta >= sycl::min(angle_left_backward, angle_right_backward) &&
                theta <= sycl::max(angle_left_backward, angle_right_backward)) &&
-              range - robot_radius <= criticalDistance) {
+              converted_range - robot_radius <= criticalDistance) {
             // point within the zone and range is low
             devicePtrOutput[local_id] = true;
           }

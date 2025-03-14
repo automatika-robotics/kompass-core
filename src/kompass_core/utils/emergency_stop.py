@@ -1,5 +1,6 @@
 from typing import Optional, List
 from logging import Logger
+import logging
 from ..models import (
     Robot,
     RobotGeometry,
@@ -36,6 +37,7 @@ class EmergencyChecker:
         if not use_gpu:
             from kompass_cpp.utils import CriticalZoneChecker
             self.__CriticalZoneCheckerClass = CriticalZoneChecker
+            logging.info(f"Got transform {sensor_position_robot} and {sensor_rotation_robot}")
             self._critical_zone_checker = self.__CriticalZoneCheckerClass(
                 robot_shape=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
                 robot_dimensions=robot.geometry_params,
@@ -63,7 +65,7 @@ class EmergencyChecker:
                 sensor_rotation_body=self.__sensor_rotation_robot or [0.0, 0.0, 0.0, 1.0],
                 critical_angle=self.__emergency_angle,
                 critical_distance=self.__emergency_distance,
-                scan_size=scan.angles.size()
+                scan_size=len(scan.angles)
             )
         return self._critical_zone_checker.check(
             ranges=scan.ranges,
