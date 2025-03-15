@@ -195,6 +195,7 @@ private:
   double *m_devicePtrVelocitiesOmega;
   double *m_devicePtrReferencePath;
   double *m_devicePtrCosts;
+  LowestCost *m_minCost;
   sycl::queue m_q;
   // Built-in functions for cost evaluation
   /**

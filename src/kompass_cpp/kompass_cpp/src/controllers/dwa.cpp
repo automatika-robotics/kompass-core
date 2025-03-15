@@ -218,6 +218,10 @@ TrajSearchResult DWA::findBestPath(const Velocity2D &global_vel,
   TrajectorySamples2D samples_ =
       trajSampler->generateTrajectories(global_vel, currentState, scan_points);
 
+  if (samples_.size() == 0) {
+    return TrajSearchResult();
+  }
+
   trajCostEvaluator->setPointScan(scan_points, currentState);
 
   Path::Path trackedRefPathSegment = findTrackedPathSegment();
