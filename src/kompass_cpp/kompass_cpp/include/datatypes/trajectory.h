@@ -377,9 +377,7 @@ struct TrajectoryVelocitySamples2D {
   };
 
   Iterator begin() const { return Iterator(*this, 0); }
-  Iterator end() const {
-    return Iterator(*this, this->size());
-  }
+  Iterator end() const { return Iterator(*this, this->size()); }
 };
 
 // Data structure to store path per trajectory for a set of trajectories
@@ -474,9 +472,7 @@ struct TrajectoryPathSamples {
   };
 
   Iterator begin() const { return Iterator(*this, 0); }
-  Iterator end() const {
-    return Iterator(*this, this->size());
-  }
+  Iterator end() const { return Iterator(*this, this->size()); }
 };
 
 // Data structure to store multiple 2D trajectory samples
@@ -584,14 +580,40 @@ struct TrajectorySamples2D {
 /**
  * @brief Trajectory control result (Local planners result), contains a
  * boolean indicating if the trajectory is found, the resulting trajectory and
- * its const
+ * its associated cost
  *
  */
 struct TrajSearchResult {
-  bool isTrajFound;
-  double trajCost;
   Trajectory2D trajectory;
+  bool isTrajFound = false;
+  double trajCost;
 };
+
+// Lowest cost and its associated index for the trajectory sample
+struct LowestCost {
+  double cost;
+  size_t sampleIndex;
+
+  // Constructor
+  LowestCost(double v = std::numeric_limits<double>::max(), size_t i = 0)
+      : cost(v), sampleIndex(i) {}
+
+  // Combine operation for the reduction
+  void combine(const LowestCost &other) {
+    if (other.cost < cost ||
+        (other.cost == cost && other.sampleIndex < sampleIndex)) {
+      cost = other.cost;
+      sampleIndex = other.sampleIndex;
+    }
+  }
+};
+
+// Define how to combine two LowestCost objects
+inline LowestCost operator+(const LowestCost &a, const LowestCost &b) {
+  LowestCost result = a;
+  result.combine(b);
+  return result;
+}
 
 } // namespace Control
 } // namespace Kompass

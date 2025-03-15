@@ -99,12 +99,12 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     }
 
     if (total_cost < minCost) {
-      minCost = total_cost;
       minCostTraj = traj;
       traj_found = true;
+      minCost = total_cost;
     }
   }
-  return {traj_found, minCost, minCostTraj};
+  return {minCostTraj, traj_found, minCostTraj};
 }
 
 double CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
