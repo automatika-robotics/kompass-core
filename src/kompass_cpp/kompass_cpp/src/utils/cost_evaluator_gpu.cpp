@@ -46,7 +46,7 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
   if (costWeights.getParameter<double>("reference_path_distance_weight") >
       0.0) {
     m_devicePtrReferencePath = sycl::malloc_device<double>(maxPathLength, m_q);
-    m_minCost = sycl::malloc_shared<TrajSearchResult>(1, m_q);
+    m_minCost = sycl::malloc_shared<LowestCost>(1, m_q);
   };
 }
 
@@ -90,7 +90,7 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
       0.0) {
     m_devicePtrReferencePath = sycl::malloc_device<double>(maxPathLength, m_q);
   };
-  m_minCost = sycl::malloc_shared<TrajSearchResult>(1, m_q);
+  m_minCost = sycl::malloc_shared<LowestCost>(1, m_q);
 }
 
 CostEvaluator::~CostEvaluator() {
