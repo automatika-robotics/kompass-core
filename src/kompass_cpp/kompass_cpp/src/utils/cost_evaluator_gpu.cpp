@@ -217,6 +217,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
   } catch (const sycl::exception &e) {
     LOG_ERROR("Exception caught: ", e.what());
   }
+  return TrajSearchResult();
 }
 
 /*std::vector<double>*/
@@ -294,7 +295,7 @@ void CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
     size_t velocitiesSize = numPointsPerTrajectory_ - 1;
     sycl::vec<double, 3> accLimits = {accLimits_[0], accLimits_[1],
                                       accLimits_[2]};
-    sycl::accessor<int, 1, sycl::access::mode::read_write,
+    sycl::accessor<double, 1, sycl::access::mode::read_write,
                    sycl::access::target::local>
         trajCost(sycl::range<1>(velocitiesSize), h);
     auto global_size = sycl::range<1>(trajs_size * velocitiesSize);
@@ -337,7 +338,7 @@ void CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
             }
 
             // Each work-item performs an atomic update for its trajectory
-            sycl::atomic_ref<int, sycl::memory_order::relaxed,
+            sycl::atomic_ref<double, sycl::memory_order::relaxed,
                              sycl::memory_scope::work_group,
                              sycl::access::address_space::local_space>
                 atomicLocal(trajCost[traj]);
@@ -387,7 +388,7 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size, const double weight) {
     size_t velocitiesSize = numPointsPerTrajectory_ - 1;
     sycl::vec<double, 3> accLimits = {accLimits_[0], accLimits_[1],
                                       accLimits_[2]};
-    sycl::accessor<int, 1, sycl::access::mode::read_write,
+    sycl::accessor<double, 1, sycl::access::mode::read_write,
                    sycl::access::target::local>
         trajCost(sycl::range<1>(velocitiesSize), h);
     auto global_size = sycl::range<1>(trajs_size * velocitiesSize);
@@ -435,7 +436,7 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size, const double weight) {
             }
 
             // Each work-item performs an atomic update for its trajectory
-            sycl::atomic_ref<int, sycl::memory_order::relaxed,
+            sycl::atomic_ref<double, sycl::memory_order::relaxed,
                              sycl::memory_scope::work_group,
                              sycl::access::address_space::local_space>
                 atomicLocal(trajCost[traj]);
