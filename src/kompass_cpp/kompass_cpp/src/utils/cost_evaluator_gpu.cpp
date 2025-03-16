@@ -321,13 +321,15 @@ void CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
             double cost_contrib = 0.0;
             // Get the velocity samples for the current trajectory
             if (accLimits[0] > 0) {
-              double delta_vx = velocitiesVx[traj * velocitiesSize + vel_item] -
-                                velocitiesVx[traj * velocitiesSize + (vel_item - 1)];
+              double delta_vx =
+                  velocitiesVx[traj * velocitiesSize + vel_item] -
+                  velocitiesVx[traj * velocitiesSize + (vel_item - 1)];
               cost_contrib += (delta_vx * delta_vx) / accLimits[0];
             }
             if (accLimits[1] > 0) {
-              double delta_vy = velocitiesVy[traj * velocitiesSize + vel_item] -
-                                velocitiesVy[traj * velocitiesSize + (vel_item - 1)];
+              double delta_vy =
+                  velocitiesVy[traj * velocitiesSize + vel_item] -
+                  velocitiesVy[traj * velocitiesSize + (vel_item - 1)];
               cost_contrib += (delta_vy * delta_vy) / accLimits[1];
             }
             if (accLimits[2] > 0) {
@@ -344,7 +346,7 @@ void CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
                 atomicLocal(trajCost[traj]);
 
             // atomically add cost_contrib to trajectory cost
-            atomicLocal.fetch_add(1);
+            atomicLocal.fetch_add(cost_contrib);
 
             // Synchronize again so that all atomic updates are finished before
             // further processing
@@ -362,7 +364,7 @@ void CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
                                sycl::memory_scope::device,
                                sycl::access::address_space::global_space>
                   atomic_cost(costs[traj]);
-              atomic_cost.fetch_add(cost_contrib);
+              atomic_cost.fetch_add(trajCost[traj]);
             }
           }
         });
@@ -442,7 +444,7 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size, const double weight) {
                 atomicLocal(trajCost[traj]);
 
             // atomically add cost_contrib to trajectory cost
-            atomicLocal.fetch_add(1);
+            atomicLocal.fetch_add(cost_contrib);
 
             // Synchronize again so that all atomic updates are finished before
             // further processing
@@ -454,13 +456,13 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size, const double weight) {
               trajCost[traj] =
                   costWeight * (trajCost[traj] / (3.0 * velocitiesSize));
 
-              // Atomically add the computed contribution to the global cost for
-              // this trajectory
+              // Atomically add the computed trajectory cost to the global cost
+              // for this trajectory
               sycl::atomic_ref<double, sycl::memory_order::relaxed,
                                sycl::memory_scope::device,
                                sycl::access::address_space::global_space>
                   atomic_cost(costs[traj]);
-              atomic_cost.fetch_add(cost_contrib);
+              atomic_cost.fetch_add(trajCost[traj]);
             }
           }
         });
