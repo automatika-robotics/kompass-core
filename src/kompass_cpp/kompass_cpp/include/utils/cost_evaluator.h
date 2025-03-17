@@ -193,7 +193,8 @@ private:
   double *m_devicePtrVelocitiesVx;
   double *m_devicePtrVelocitiesVy;
   double *m_devicePtrVelocitiesOmega;
-  double *m_devicePtrReferencePath;
+  float *m_devicePtrReferencePathX;
+  float *m_devicePtrReferencePathY;
   double *m_devicePtrCosts;
   LowestCost *m_minCost;
   sycl::queue m_q;
@@ -205,7 +206,7 @@ private:
    * @param reference_path
    * @return double
    */
-  void pathCostFunc(const size_t trajs_size, const Path::Path &reference_path,
+  void pathCostFunc(const size_t trajs_size, const size_t ref_path_size,
                     const double cost_weight);
 
   /**
@@ -216,9 +217,8 @@ private:
    * @param reference_path
    * @return double
    */
-  void goalCostFuncconst(const size_t trajs_size,
-                         const Path::Path &reference_path,
-                         const double cost_weight);
+  void goalCostFunc(const size_t trajs_size, const size_t ref_path_size,
+                    const double path_length, const double cost_weight);
 
   /**
    * @brief Trajectory cost based on the distance obstacles
