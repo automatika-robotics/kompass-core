@@ -24,32 +24,19 @@ struct State {
 };
 
 // Point in 3D space
-class Point {
-public:
-  // Default constructor
-  Point() = default;
-  Point(float x, float y, float z = 0.0) : point_(x, y, z) {}
-
-  Point(Eigen::Vector3f &ref) : point_(ref) {}
-
-  // Accessors
-  float x() const { return point_(0); }
-  float y() const { return point_(1); }
-  float z() const { return point_(2); }
-
-  // Setters
-  void setX(float const value) { point_(0) = value; }
-  void setY(float const value) { point_(1) = value; }
-  void setZ(float const value) { point_(2) = value; }
-private:
-  Eigen::Vector3f point_{0.0, 0.0, 0.0};
-};
+typedef Eigen::Vector3f Point;
 
 // Structure for Path Control parameters
 struct Path {
   std::vector<Point> points;  // List of points defining the path
   std::vector<Path> segments; // List of path segments
   tk::spline *_spline;
+  // get all x values from points
+  std::vector<float> getX() const;
+  // get all y values from points
+  std::vector<float> getY() const;
+  // get all z values from points
+  std::vector<float> getZ() const;
   // Max interpolation distance and total path distance are updated from user
   // config
   double _max_interpolation_dist{0.0}, _max_path_length{10.0};

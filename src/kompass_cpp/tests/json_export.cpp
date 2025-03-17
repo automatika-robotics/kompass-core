@@ -18,8 +18,8 @@ void to_json(json &j, const Path::Point &p) {
 
 // Convert JSON to Point
 void from_json(const json &j, Path::Point &p) {
-  p.setX(j.at("x"));
-  p.setY(j.at("y"));
+  p.x() = j.at("x");
+  p.y() = j.at("y");
 }
 
 // Convert Path to JSON
@@ -45,8 +45,8 @@ void from_json(const json &j, Path::Path &p) {
   p.points.clear(); // Clear existing points
   for (const auto &item : j.at("points")) {
     Path::Point point;
-    point.setX(item.at("x"));
-    point.setY(item.at("y"));
+    point.x() = item.at("x");
+    point.y() = item.at("y");
     p.points.push_back(point); // Deserialize each Point
   }
 }

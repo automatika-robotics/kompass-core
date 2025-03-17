@@ -10,6 +10,30 @@ namespace Path {
 
 Path::Path(const std::vector<Point> &points) : points(points) {}
 
+std::vector<float> Path::getX() const {
+
+  std::vector<float> x;
+  for (const auto point : points) {
+    x.emplace_back(point.x());
+  }
+  return x;
+}
+
+std::vector<float> Path::getY() const{
+  std::vector<float> y;
+  for (const auto point : points) {
+    y.emplace_back(point.y());
+  }
+  return y;
+}
+
+std::vector<float> Path::getZ() const {
+  std::vector<float> z;
+  for (const auto point : points) {
+    z.emplace_back(point.z());
+  }
+  return z;
+}
 void Path::setMaxLength(double max_length) {
   this->_max_path_length = max_length;
 }
@@ -74,10 +98,8 @@ float Path::getOrientation(const size_t index) const {
 }
 
 float Path::distance(const Point &p1, const Point &p2) {
-  return std::sqrt(pow((p2.x() - p1.x()), 2) +
-                   pow((p2.y() - p1.y()), 2));
+  return std::sqrt(pow((p2.x() - p1.x()), 2) + pow((p2.y() - p1.y()), 2));
 }
-
 
 // Function to compute the total path length
 float Path::totalPathLength() const {
