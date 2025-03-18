@@ -171,7 +171,6 @@ public:
 protected:
   // Protected member variables
   ControlType ctrType;
-  CollisionChecker *collChecker;
   std::array<double, 3> accLimits_;
 
   // Vector of pointers to the trajectory costs
