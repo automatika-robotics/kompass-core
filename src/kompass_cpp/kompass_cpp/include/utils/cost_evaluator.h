@@ -199,7 +199,8 @@ private:
   double *m_devicePtrTempCosts;
   LowestCost *m_minCost;
   sycl::queue m_q;
-  void initializeGPUMemory(TrajectoryCostsWeights costWeights, size_t maxPathLength);
+  void initializeGPUMemory(TrajectoryCostsWeights costWeights,
+                           size_t maxPathLength);
   /**
    * @brief Trajectory cost based on the distance to a given reference path
    *

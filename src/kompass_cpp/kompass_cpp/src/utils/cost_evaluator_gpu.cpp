@@ -60,6 +60,8 @@ void CostEvaluator::initializeGPUMemory(TrajectoryCostsWeights costWeights,
       sycl::queue{sycl::default_selector_v, sycl::property::queue::in_order{}};
   auto dev = m_q.get_device();
   LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
+
+  // Data memory allocation
   m_devicePtrPathsX = sycl::malloc_device<double>(
       numTrajectories_ * numPointsPerTrajectory_, m_q);
   m_devicePtrPathsY = sycl::malloc_device<double>(
@@ -71,6 +73,8 @@ void CostEvaluator::initializeGPUMemory(TrajectoryCostsWeights costWeights,
   m_devicePtrVelocitiesOmega = sycl::malloc_device<double>(
       numTrajectories_ * numPointsPerTrajectory_ - 1, m_q);
   m_devicePtrCosts = sycl::malloc_device<double>(numTrajectories_, m_q);
+
+  // Cost specific memory allocation
   if (costWeights.getParameter<double>("reference_path_distance_weight") >
           0.0 ||
       costWeights.getParameter<double>("goal_distance_weight") > 0.0) {
@@ -81,6 +85,8 @@ void CostEvaluator::initializeGPUMemory(TrajectoryCostsWeights costWeights,
       customTrajCostsPtrs_.size() > 0) {
     m_devicePtrTempCosts = sycl::malloc_shared<double>(numTrajectories_, m_q);
   }
+
+  // Result struct memory allocation
   m_minCost = sycl::malloc_shared<LowestCost>(1, m_q);
 }
 
@@ -198,7 +204,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
         m_devicePtrTempCosts[idx] = total_cost;
         idx += 1;
 
-        // Adds temp costs to global costs
+        // Add temp cost to global costs
         // Command scope
         m_q.submit([&](sycl::handler &h) {
           auto tempCosts = m_devicePtrTempCosts;
@@ -209,7 +215,6 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
         }).wait();
       }
     }
-
 
     // Perform reduction to find the minimum value and its index
     // Command scope
@@ -435,7 +440,7 @@ void CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
           // sample)
           if (vel_item >= 1 && vel_item < velocitiesSize) {
             double cost_contrib = 0.0;
-            // Get the velocity samples for the current trajectory
+            // Get the cost contribution for each point
             if (accLimits[0] > 0) {
               double delta_vx =
                   velocitiesVx[traj * velocitiesSize + vel_item] -
@@ -532,7 +537,7 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size,
           // sample)
           if (vel_point >= 2 && vel_point < velocitiesSize) {
             double cost_contrib = 0.0;
-            // Get the velocity samples for the current trajectory.
+            // Get the cost contribution for each point
             if (accLimits[0] > 0) {
               double delta_vx =
                   velocitiesVx[traj * velocitiesSize + vel_point] -
@@ -587,6 +592,7 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size,
   });
 }
 
+// Calculate obstacle distance cost per trajectory (CPU)
 double CostEvaluator::obstaclesDistCostFunc(
     const Trajectory2D &trajectory,
     const std::vector<Path::Point> &obstaclePoints) {
