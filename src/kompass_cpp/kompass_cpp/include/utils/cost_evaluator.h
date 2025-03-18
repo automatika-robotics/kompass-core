@@ -196,9 +196,10 @@ private:
   float *m_devicePtrReferencePathX;
   float *m_devicePtrReferencePathY;
   double *m_devicePtrCosts;
+  double *m_devicePtrTempCosts;
   LowestCost *m_minCost;
   sycl::queue m_q;
-  // Built-in functions for cost evaluation
+  void initializeGPUMemory(TrajectoryCostsWeights costWeights, size_t maxPathLength);
   /**
    * @brief Trajectory cost based on the distance to a given reference path
    *
@@ -221,17 +222,6 @@ private:
                     const double path_length, const double cost_weight);
 
   /**
-   * @brief Trajectory cost based on the distance obstacles
-   *
-   * @param trajectories
-   * @param obstaclePoints
-   * @return double
-   */
-  void obstaclesDistCostFunc(const size_t trajs_size,
-                             const std::vector<Path::Point> &obstaclePoints,
-                             const double cost_weight);
-
-  /**
    * @brief Trajectory cost based on the smoothness along the trajectory
    *
    * @param trajectories
@@ -251,6 +241,15 @@ private:
    */
   void jerkCostFunc(const size_t trajs_size, const double cost_weight);
 
+  /**
+   * @brief Trajectory cost based on the distance obstacles
+   *
+   * @param trajectory
+   * @param obstaclePoints
+   * @return double
+   */
+  double obstaclesDistCostFunc(const Trajectory2D &trajectory,
+                               const std::vector<Path::Point> &obstaclePoints);
 #else
   // Built-in functions for cost evaluation
   /**

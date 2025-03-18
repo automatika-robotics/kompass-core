@@ -28,28 +28,7 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
   accLimits_ = {ctrLimits.velXParams.maxAcceleration,
                 ctrLimits.velYParams.maxAcceleration,
                 ctrLimits.omegaParams.maxAcceleration};
-  m_q =
-      sycl::queue{sycl::default_selector_v, sycl::property::queue::in_order{}};
-  auto dev = m_q.get_device();
-  LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
-  m_devicePtrPathsX = sycl::malloc_device<double>(
-      numTrajectories_ * numPointsPerTrajectory_, m_q);
-  m_devicePtrPathsY = sycl::malloc_device<double>(
-      numTrajectories_ * numPointsPerTrajectory_, m_q);
-  m_devicePtrVelocitiesVx = sycl::malloc_device<double>(
-      numTrajectories_ * numPointsPerTrajectory_ - 1, m_q);
-  m_devicePtrVelocitiesVy = sycl::malloc_device<double>(
-      numTrajectories_ * numPointsPerTrajectory_ - 1, m_q);
-  m_devicePtrVelocitiesOmega = sycl::malloc_device<double>(
-      numTrajectories_ * numPointsPerTrajectory_ - 1, m_q);
-  m_devicePtrCosts = sycl::malloc_device<double>(numTrajectories_, m_q);
-  if (costWeights.getParameter<double>("reference_path_distance_weight") >
-          0.0 ||
-      costsWeights.getParameter<double>("goal_distance_weight")) {
-    m_devicePtrReferencePathX = sycl::malloc_device<float>(maxPathLength, m_q);
-    m_devicePtrReferencePathY = sycl::malloc_device<float>(maxPathLength, m_q);
-  };
-  m_minCost = sycl::malloc_shared<LowestCost>(1, m_q);
+  initializeGPUMemory(costsWeights, maxPathLength);
 }
 
 CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
@@ -72,7 +51,11 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
   numPointsPerTrajectory_ = getNumPointsPerTrajectory(timeStep, timeHorizon);
   numTrajectories_ =
       getNumTrajectories(ctrType, maxLinearSamples, maxAngularSamples);
+  initializeGPUMemory(costsWeights, maxPathLength);
+}
 
+void CostEvaluator::initializeGPUMemory(TrajectoryCostsWeights costWeights,
+                                        size_t maxPathLength) {
   m_q =
       sycl::queue{sycl::default_selector_v, sycl::property::queue::in_order{}};
   auto dev = m_q.get_device();
@@ -90,10 +73,14 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
   m_devicePtrCosts = sycl::malloc_device<double>(numTrajectories_, m_q);
   if (costWeights.getParameter<double>("reference_path_distance_weight") >
           0.0 ||
-      costsWeights.getParameter<double>("goal_distance_weight")) {
+      costWeights.getParameter<double>("goal_distance_weight") > 0.0) {
     m_devicePtrReferencePathX = sycl::malloc_device<float>(maxPathLength, m_q);
     m_devicePtrReferencePathY = sycl::malloc_device<float>(maxPathLength, m_q);
   };
+  if (costWeights.getParameter<double>("obstacles_distance_weight") > 0.0 ||
+      customTrajCostsPtrs_.size() > 0) {
+    m_devicePtrTempCosts = sycl::malloc_shared<double>(numTrajectories_, m_q);
+  }
   m_minCost = sycl::malloc_shared<LowestCost>(1, m_q);
 }
 
@@ -126,10 +113,14 @@ CostEvaluator::~CostEvaluator() {
   }
   if (costWeights.getParameter<double>("reference_path_distance_weight") >
           0.0 ||
-      costWeights.getParameter<double>("goal_distance_weight")) {
+      costWeights.getParameter<double>("goal_distance_weight") > 0.0) {
     sycl::free(m_devicePtrReferencePathX, m_q);
     sycl::free(m_devicePtrReferencePathY, m_q);
   };
+  if (costWeights.getParameter<double>("obstacles_distance_weight") > 0.0 ||
+      customTrajCostsPtrs_.size() > 0) {
+    sycl::free(m_devicePtrTempCosts, m_q);
+  }
   if (m_minCost) {
     sycl::free(m_minCost, m_q);
   }
@@ -159,7 +150,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
 
     if ((costWeights.getParameter<double>("reference_path_distance_weight") >
              0.0 ||
-         costWeights.getParameter<double>("goal_distance_weight")) &&
+         costWeights.getParameter<double>("goal_distance_weight") > 0.0) &&
         (ref_path_length = reference_path.totalPathLength() > 0.0)) {
       m_q.memcpy(m_devicePtrReferencePathX, reference_path.getX().data(),
                  sizeof(float) * reference_path.points.size());
@@ -175,22 +166,6 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
         pathCostFunc(trajs.size(), reference_path.points.size(), weight);
       }
     }
-    /*  if (obstaclePoints.size() > 0 and*/
-    /*      (weight = costWeights.getParameter<double>(*/
-    /*           "obstacles_distance_weight")) > 0.0) {*/
-    /**/
-    /*    double objCost = obstaclesDistCostFunc(traj, obstaclePoints);*/
-    /*    total_cost += weight * objCost;*/
-    /*  }*/
-    /**/
-    /*  for (const auto &custom_cost : customTrajCostsPtrs_) {*/
-    /*    // custom cost functions takes in the trajectory and the reference
-     * path*/
-    /*    total_cost +=*/
-    /*        custom_cost->weight * custom_cost->evaluator_(traj,
-     * reference_path);*/
-    /*  }*/
-
     if ((weight =
              costWeights.getParameter<double>("smoothness_weight") > 0.0)) {
       smoothnessCostFunc(trajs.size(), weight);
@@ -200,6 +175,42 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     }
 
     m_q.wait_and_throw();
+
+    // calculate costs on the CPU
+    if (((weight = costWeights.getParameter<double>(
+              "obstacles_distance_weight")) > 0.0) ||
+        customTrajCostsPtrs_.size() > 0) {
+
+      m_q.fill(m_devicePtrTempCosts, 0.0, trajs.size());
+      double total_cost;
+      size_t idx;
+      for (const auto traj : trajs) {
+        if (weight > 0.0 && obstaclePoints.size() > 0) {
+          total_cost += weight * obstaclesDistCostFunc(traj, obstaclePoints);
+        }
+        for (const auto &custom_cost : customTrajCostsPtrs_) {
+          // custom cost functions takes in the trajectory and the reference
+          // path
+          total_cost += custom_cost->weight *
+                        custom_cost->evaluator_(traj, reference_path);
+        }
+        // add cost to the shared temp cost array
+        m_devicePtrTempCosts[idx] = total_cost;
+        idx += 1;
+
+        // Adds temp costs to global costs
+        // Command scope
+        m_q.submit([&](sycl::handler &h) {
+          auto tempCosts = m_devicePtrTempCosts;
+          auto costs = m_devicePtrCosts;
+          // Kernel scope
+          m_q.parallel_for(sycl::range<1>(trajs.size()),
+                           [=](sycl::id<1> id) { costs[idx] += tempCosts[idx]; });
+        }).wait();
+      }
+    }
+
+
     // Perform reduction to find the minimum value and its index
     // Command scope
     m_q.submit([&](sycl::handler &h) {
@@ -211,9 +222,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
                      [=](sycl::id<1> idx, auto &minVal) {
                        minVal.combine(LowestCost(costs[idx], idx));
                      });
-    });
-
-    m_q.wait_and_throw();
+    }).wait();
 
     return {trajs.getIndex(m_minCost->sampleIndex), true, m_minCost->cost};
   } catch (const sycl::exception &e) {
@@ -380,12 +389,6 @@ void CostEvaluator::goalCostFunc(const size_t trajs_size,
     });
   });
 }
-
-/*double CostEvaluator::obstaclesDistCostFunc(*/
-/*    const Trajectory2D &trajectory,*/
-/*    const std::vector<Path::Point> &obstaclePoints) {*/
-/*    return trajectory.path.minDist2D(obstaclePoints);*/
-/*}*/
 
 // Compute the cost of trajectory based on smoothness in velocity commands
 void CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
@@ -584,6 +587,11 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size,
   });
 }
 
+double CostEvaluator::obstaclesDistCostFunc(
+    const Trajectory2D &trajectory,
+    const std::vector<Path::Point> &obstaclePoints) {
+  return trajectory.path.minDist2D(obstaclePoints);
+}
 }; // namespace Control
 } // namespace Kompass
 #endif // !GPU
