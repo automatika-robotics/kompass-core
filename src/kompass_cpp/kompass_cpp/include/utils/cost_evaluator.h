@@ -140,7 +140,7 @@ public:
       Eigen::Vector3f pose_trans =
           transformPosition(Eigen::Vector3f(point_x, point_y, 0.0),
                             sensor_tf_body_ * body_tf_world_);
-      obstaclePoints.push_back({pose_trans[0], pose_trans[1]});
+      obstaclePoints.push_back({pose_trans[0], pose_trans[1], 0.0});
     }
   };
 
@@ -154,7 +154,7 @@ public:
       Eigen::Vector3f pose_trans =
           transformPosition(Eigen::Vector3f(point.x(), point.y(), point.z()),
                             sensor_tf_body_ * body_tf_world_);
-      obstaclePoints.push_back({pose_trans[0], pose_trans[1]});
+      obstaclePoints.push_back({pose_trans[0], pose_trans[1], 0.0});
     }
   };
 
@@ -164,7 +164,7 @@ public:
    *
    * @param costsWeights
    */
-  void updateDefaultCostWeights(TrajectoryCostsWeights costsWeights) {
+  void updateCostWeights(TrajectoryCostsWeights costsWeights) {
     this->costWeights = costsWeights;
   };
 

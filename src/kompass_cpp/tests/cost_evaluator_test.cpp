@@ -22,17 +22,19 @@ TrajectorySamples2D generate_ref_path_test_samples(double predictionHorizon,
   TrajectoryVelocities2D sample1_vel(number_of_points),
       sample2_vel(number_of_points), sample3_vel(number_of_points);
 
-  for (size_t i; i < number_of_points; ++i) {
+  for (size_t i = 0; i < number_of_points; ++i) {
     // sample 1 along the x-axis
-    sample1.add(i, Path::Point(timeStep * vel_1 * i, 0.0));
+    sample1.add(i, Path::Point(timeStep * vel_1 * i, 0.0, 0.0));
     // sample 2: positive ang
-    sample2.add(
-        i, Path::Point(timeStep * vel_2 * i * std::cos(ang * timeStep * i),
-                       timeStep * vel_2 * i * std::sin(ang * timeStep * i)));
+    sample2.add(i,
+                Path::Point(timeStep * vel_2 * i * std::cos(ang * timeStep * i),
+                            timeStep * vel_2 * i * std::sin(ang * timeStep * i),
+                            0.0));
     // sample 3: negative ang
     sample3.add(
-        i, Path::Point(timeStep * vel_2 * i * std::cos(-ang * timeStep * i),
-                       timeStep * vel_2 * i * std::sin(-ang * timeStep * i)));
+        i,
+        Path::Point(timeStep * vel_2 * i * std::cos(-ang * timeStep * i),
+                    timeStep * vel_2 * i * std::sin(-ang * timeStep * i), 0.0));
     if (i < number_of_points - 1) {
       sample1_vel.add(i, Velocity2D(vel_1, 0.0, 0.0));
       sample2_vel.add(i, Velocity2D(vel_2, 0.0, ang));
@@ -59,23 +61,24 @@ TrajectorySamples2D generate_smoothness_test_samples(double predictionHorizon,
 
   for (size_t i = 0; i < number_of_points; ++i) {
     // Sample 1: Constant velocity v_1 and constant angular velocity ang1
-    sample1.add(
-        i, Path::Point(timeStep * v_1 * i * std::cos(ang1 * timeStep * i),
-                       timeStep * v_1 * i * std::sin(ang1 * timeStep * i)));
+    sample1.add(i,
+                Path::Point(timeStep * v_1 * i * std::cos(ang1 * timeStep * i),
+                            timeStep * v_1 * i * std::sin(ang1 * timeStep * i),
+                            0.0));
 
     // Sample 2: Fluctuations in linear velocity
     double fluctuation_v2 =
         v_1 + 0.1 * std::sin(2 * M_PI * i / number_of_points);
     double x2 = timeStep * fluctuation_v2 * i;
     double y2 = 0.0;
-    sample2.add(i, Path::Point(x2, y2));
+    sample2.add(i, Path::Point(x2, y2, 0.0));
 
     // Sample 3: Fluctuations in angular velocity
     double fluctuation_ang3 =
         ang1 + 0.1 * std::cos(2 * M_PI * i / number_of_points);
     double x3 = timeStep * v_1 * i * std::cos(fluctuation_ang3 * timeStep * i);
     double y3 = timeStep * v_1 * i * std::sin(fluctuation_ang3 * timeStep * i);
-    sample3.add(i, Path::Point(x3, y3));
+    sample3.add(i, Path::Point(x3, y3, 0.0));
 
     if (i < number_of_points - 1) {
       sample1_vel.add(i, Velocity2D(v_1, 0.0, ang1));
@@ -133,8 +136,8 @@ struct TestConfig {
   CostEvaluator costEval;
 
   TestConfig()
-      : points{Path::Point(0.0, 0.0), Path::Point(1.0, 0.0),
-               Path::Point(2.0, 0.0)},
+      : points{Path::Point(0.0, 0.0, 0.0), Path::Point(1.0, 0.0, 0.0),
+               Path::Point(2.0, 0.0, 0.0)},
         reference_path(points), max_path_length(10.0),
         max_interpolation_point_dist(0.01), current_segment_index(0),
         timeStep(0.1), predictionHorizon(1.0), controlHorizon(0.4),
@@ -145,8 +148,9 @@ struct TestConfig {
         robotShapeType(CollisionChecker::ShapeType::BOX),
         robotDimensions{0.3, 0.3, 1.0}, sensor_position_body{0.0, 0.0, 0.5},
         sensor_rotation_body{0, 0, 0, 1}, costWeights(),
-        costEval(costWeights, controlType, controlLimits, timeStep, predictionHorizon,
-                 maxLinearSamples, maxAngularSamples, max_path_length) {
+        costEval(costWeights, controlType, controlLimits, timeStep,
+                 predictionHorizon, maxLinearSamples, maxAngularSamples,
+                 max_path_length) {
     reference_path.setMaxLength(max_path_length);
     reference_path.interpolate(max_interpolation_point_dist,
                                Path::InterpolationType::LINEAR);
@@ -172,6 +176,7 @@ Trajectory2D run_test(CostEvaluator costEval, Path::Path reference_path,
   costWeights.setParameter("goal_distance_weight", goal_distance_weight);
   costWeights.setParameter("smoothness_weight", smoothness_weight);
   costWeights.setParameter("jerk_weight", jerk_weight);
+  costEval.updateCostWeights(costWeights);
 
   // // Robot laserscan value (empty)
   // LaserScan robotScan({10.0, 10.0, 10.0}, {0, 0.1, 0.2});
@@ -185,8 +190,10 @@ Trajectory2D run_test(CostEvaluator costEval, Path::Path reference_path,
 
   if (result.isTrajFound) {
     LOG_INFO("Cost Evaluator Returned a Minimum Cost Path");
+  } else {
+    throw std::logic_error(
+        "Did not find any valid trajectory, this should not happen.");
   }
-
   return result.trajectory;
 }
 

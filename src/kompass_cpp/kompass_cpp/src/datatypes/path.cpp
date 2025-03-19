@@ -19,7 +19,7 @@ std::vector<float> Path::getX() const {
   return x;
 }
 
-std::vector<float> Path::getY() const{
+std::vector<float> Path::getY() const {
   std::vector<float> y;
   for (const auto point : points) {
     y.emplace_back(point.y());
@@ -59,7 +59,7 @@ float Path::getEndOrientation() const {
   float dy = p2.y() - p1.y();
 
   // Compute the angle in radians
-  float angle = std::atan2(dy, dx);
+  float angle = atan2(dy, dx);
 
   return angle;
 }
@@ -72,7 +72,7 @@ float Path::getStartOrientation() const {
   float dy = p2.y() - p1.y();
 
   // Compute the angle in radians
-  float angle = std::atan2(dy, dx);
+  float angle = atan2(dy, dx);
 
   return angle;
 }
@@ -92,13 +92,13 @@ float Path::getOrientation(const size_t index) const {
   float dy = p2.y() - p1.y();
 
   // Compute the angle in radians
-  float angle = std::atan2(dy, dx);
+  float angle = atan2(dy, dx);
 
   return angle;
 }
 
 float Path::distance(const Point &p1, const Point &p2) {
-  return std::sqrt(pow((p2.x() - p1.x()), 2) + pow((p2.y() - p1.y()), 2));
+  return sqrt(pow((p2.x() - p1.x()), 2) + pow((p2.y() - p1.y()), 2));
 }
 
 // Function to compute the total path length
@@ -123,7 +123,7 @@ Point Path::getPointAtLength(const double length) const {
     float twoPointDist = distance(points[0], points[1]);
     for (size_t i = 1; i < points.size(); ++i) {
       accumLength += distance(points[i - 1], points[i]);
-      if (std::abs(accumLength - totalLength) < twoPointDist) {
+      if (abs(accumLength - totalLength) < twoPointDist) {
         return points[i - 1];
       }
     }
@@ -155,18 +155,14 @@ void Path::interpolate(double max_interpolation_point_dist,
         "At least two points are required to perform interpolation.");
   }
 
-  vector<float> x(points.size()), y(points.size());
-  for (size_t i = 0; i < points.size(); ++i) {
-    x[i] = points[i].x();
-    y[i] = points[i].y();
-  }
+  std::vector<float> x = getX();
+  std::vector<float> y = getY();
 
-  points.clear();
   float dist, x_e, y_e;
 
   for (size_t i = 0; i < x.size() - 1; ++i) {
     // Add the first point
-    points.emplace_back(x[i], y[i]);
+    points.emplace_back(x[i], y[i], 0.0);
     std::vector<double> x_points, y_points;
 
     // Add mid point to send 3 points for spline interpolation
@@ -195,7 +191,7 @@ void Path::interpolate(double max_interpolation_point_dist,
     }
 
     x_e = x[i];
-    dist = distance({x[i], y[i]}, {x[i + 1], y[i + 1]});
+    dist = distance({x[i], y[i], 0.0}, {x[i + 1], y[i + 1], 0.0});
     int j = 1;
 
     // Interpolate new points between i, i+1
@@ -203,12 +199,13 @@ void Path::interpolate(double max_interpolation_point_dist,
       x_e = x[i] + j * (x[i + 1] - x[i]) * max_interpolation_point_dist;
 
       y_e = _spline->operator()(x_e);
-      points.emplace_back(x_e, y_e);
-      dist = distance({x_e, y_e}, {x[i + 1], y[i + 1]});
+      points.emplace_back(x_e, y_e, 0.0);
+      dist = distance({x_e, y_e, 0.0}, {x[i + 1], y[i + 1], 0.0});
       j++;
     }
     if (points.size() > this->max_size) {
-      float remaining_len = distance({x[i + 1], y[i + 1]}, {x[-1], y[-1]});
+      float remaining_len =
+          distance({x[i + 1], y[i + 1], 0.0}, {x[-1], y[-1], 0.0});
       LOG_WARNING("Cannot interpolate more than ", this->max_size,
                   " path points -> "
                   "Discarding all future points of length ",
@@ -218,7 +215,7 @@ void Path::interpolate(double max_interpolation_point_dist,
   }
   if (points.size() < this->max_size) {
     // Add last point
-    points.emplace_back(x.back(), y.back());
+    points.emplace_back(x.back(), y.back(), 0.0);
   }
 }
 
@@ -235,7 +232,7 @@ void Path::segment(double pathSegmentLength) {
     new_segment = Path(points);
     segments.push_back(new_segment);
   } else {
-    int segmentsNumber = std::max(totalLength / pathSegmentLength, 1.0);
+    int segmentsNumber = max(totalLength / pathSegmentLength, 1.0);
     if (segmentsNumber == 1) {
       new_segment = Path(points);
       new_segment.max_size = this->max_segment_size;
