@@ -53,9 +53,6 @@ void LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
             double angle = devicePtrAngles[group_id];
 
             // calculate end point in the first thread of the block
-            item.barrier(
-                sycl::access::fence_space::local_space); // barrier within the
-                                                         // group
             if (local_id == 0) {
               sycl::vec<float, 2> toPointLocal;
               toPointLocal[0] =
