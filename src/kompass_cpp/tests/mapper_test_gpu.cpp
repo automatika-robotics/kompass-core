@@ -27,7 +27,7 @@ struct GridMapConfig {
   double limit;
   std::vector<double> filtered_ranges;
 
-  Mapping::LocalMapper gpu_local_mapper;
+  Mapping::LocalMapperGPU gpu_local_mapper;
 
   // Constructor to initialize the struct
   GridMapConfig()
