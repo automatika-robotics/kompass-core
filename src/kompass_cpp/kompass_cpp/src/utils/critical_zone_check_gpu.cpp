@@ -13,7 +13,7 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
   bool result;
   try {
 
-    m_q.fill(m_devicePtrOutput, false, m_scanSize);
+    m_q.fill(m_devicePtrOutput, false, m_scan_in_zone);
 
     m_q.memcpy(m_devicePtrAngles, angles.data(), sizeof(double) * m_scanSize);
     m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(double) * m_scanSize);
@@ -35,59 +35,39 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
       auto devicePtrAngles = m_devicePtrAngles;
       auto devicePtrOutput = m_devicePtrOutput;
       auto criticalDistance = critical_distance_;
-      auto isForward = forward;
-      auto angle_right_forward = angle_right_forward_;
-      auto angle_left_forward = angle_left_forward_;
-      auto angle_right_backward = angle_right_backward_;
-      auto angle_left_backward = angle_left_backward_;
+      std::vector<size_t> *critical_indices;
+      if (forward) {
+        critical_indices = &indicies_forward_;
+      } else {
+        critical_indices = &indicies_backward_;
+      }
 
-      sycl::range<1> global_size(m_scanSize); // number of laser rays
+      sycl::range<1> global_size(
+          critical_indices->size()); // number of laser rays within the zone
 
       // kernel scope
-      h.parallel_for<class checkCriticalZoneKernel>(global_size, [=](sycl::id<1>
-                                                                         idx) {
-        const int local_id = idx[0];
-        double range = devicePtrRanges[local_id];
-        double angle = devicePtrAngles[local_id];
+      h.parallel_for<class checkCriticalZoneKernel>(
+          global_size, [=](sycl::id<1> idx) {
+            const int index = idx[0];
+            const size_t local_id = critical_indices->at(index);
+            double range = devicePtrRanges[local_id];
+            double angle = devicePtrAngles[local_id];
 
-        sycl::vec<float, 4> point{range * sycl::cos(angle),
-                                  range * sycl::sin(angle), 0.0, 1.0};
-        sycl::vec<float, 2> transformed_point{0.0, 0.0};
+            sycl::vec<float, 4> point{range * sycl::cos(angle),
+                                      range * sycl::sin(angle), 0.0, 1.0};
+            sycl::vec<float, 2> transformed_point{0.0, 0.0};
 
-        for (size_t i = 0; i < 4; ++i) {
-          transformed_point[0] += x_transform[i] * point[i];
-          transformed_point[1] += y_transform[i] * point[i];
-        }
+            for (size_t i = 0; i < 4; ++i) {
+              transformed_point[0] += x_transform[i] * point[i];
+              transformed_point[1] += y_transform[i] * point[i];
+            }
 
-        double theta = sycl::atan2(transformed_point[1], transformed_point[0]);
-        double converted_range = sycl::length(transformed_point);
-        // Normalize the angle to [0, 2*pi]
-        theta = sycl::fmod(theta, 2 * M_PI);
-        if (theta < 0) {
-          theta += 2 * M_PI;
-        }
-        // If angle is greater than pi, subtract from 2*pi to get the
-        // range [0, pi]
-        if (theta > 2 * M_PI) {
-          theta = 2 * M_PI - theta;
-        }
-
-        if (isForward) {
-          if ((theta >= sycl::max(angle_left_forward, angle_right_forward) ||
-               theta <= sycl::min(angle_left_forward, angle_right_forward)) &&
-              converted_range - robot_radius <= criticalDistance) {
-            // point within the zone and range is low
-            devicePtrOutput[local_id] = true;
-          }
-        } else {
-          if ((theta >= sycl::min(angle_left_backward, angle_right_backward) &&
-               theta <= sycl::max(angle_left_backward, angle_right_backward)) &&
-              converted_range - robot_radius <= criticalDistance) {
-            // point within the zone and range is low
-            devicePtrOutput[local_id] = true;
-          }
-        }
-      });
+            double converted_range = sycl::length(transformed_point);
+            if (converted_range - robot_radius <= criticalDistance) {
+              // point within the zone and range is low
+              devicePtrOutput[index] = true;
+            }
+          });
     });
 
     *m_result = 0;
@@ -97,7 +77,7 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
       auto reduction = sycl::reduction(m_result, sycl::logical_or<bool>());
       auto devicePtrOutput = m_devicePtrOutput;
       h.parallel_for(
-          sycl::range<1>(m_scanSize), reduction,
+          sycl::range<1>(m_scan_in_zone), reduction,
           [=](sycl::id<1> idx, auto &r) { r.combine(devicePtrOutput[idx]); });
     });
 

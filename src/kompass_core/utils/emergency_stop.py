@@ -22,30 +22,11 @@ class EmergencyChecker:
     ) -> None:
         self.__emergency_distance = emergency_distance
         self.__emergency_angle = emergency_angle
-        self.__sensor_position_robot = sensor_position_robot
-        self.__sensor_rotation_robot = sensor_rotation_robot
-        self.__robot = robot
-        if use_gpu:
-            try:
-                from kompass_cpp.utils import CriticalZoneCheckerGPU
-                self.__CriticalZoneCheckerClass: type = CriticalZoneCheckerGPU
-                # Checker will be initialized on the first incoming laserscan data to get the scan size
-                self._critical_zone_checker = None
-            except (ImportError, ModuleNotFoundError):
-                Logger(name="EmergencyChecker").error("GPU use is enabled but GPU implementation is found -> Using CPU implementation")
-                use_gpu = False
-        if not use_gpu:
-            from kompass_cpp.utils import CriticalZoneChecker
-            self.__CriticalZoneCheckerClass = CriticalZoneChecker
-            logging.info(f"Got transform {sensor_position_robot} and {sensor_rotation_robot}")
-            self._critical_zone_checker = self.__CriticalZoneCheckerClass(
-                robot_shape=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
-                robot_dimensions=robot.geometry_params,
-                sensor_position_body=sensor_position_robot or [0.0, 0.0, 0.0],
-                sensor_rotation_body=sensor_rotation_robot or [0.0, 0.0, 0.0, 1.0],
-                critical_angle=emergency_angle,
-                critical_distance=emergency_distance,
-            )
+        self.__sensor_position_robot = sensor_position_robot or [0.0, 0.0, 0.0]
+        self.__sensor_rotation_robot = sensor_rotation_robot or [0.0, 0.0, 0.0, 1.0]
+        self.__robot_shape = RobotGeometry.Type.to_kompass_cpp_lib(self.__robot.geometry_type)
+        self.__robot_dimensions = robot.geometry_params
+        self.__use_gpu = use_gpu
 
     def run(self, *_, scan: LaserScanData, forward: bool = True) -> bool:
         """Runs emergency checking on new incoming laser scan data
@@ -57,15 +38,51 @@ class EmergencyChecker:
         :return: If an obstacle is within the safety zone
         :rtype: bool
         """
-        if not self._critical_zone_checker:
-            self._critical_zone_checker = self.__CriticalZoneCheckerClass(
-                robot_shape=RobotGeometry.Type.to_kompass_cpp_lib(self.__robot.geometry_type),
-                robot_dimensions=self.__robot.geometry_params,
+        if self.__use_gpu:
+            try:
+                from kompass_cpp.utils import CriticalZoneCheckerGPU
+                self._critical_zone_checker = CriticalZoneCheckerGPU(
+                    robot_shape=self.__robot_shape,
+                    robot_dimensions=self.__robot_dimensions,
+                    sensor_position_body=self.__sensor_position_robot
+                    or [0.0, 0.0, 0.0],
+                    sensor_rotation_body=self.__sensor_rotation_robot
+                    or [0.0, 0.0, 0.0, 1.0],
+                    critical_angle=self.__emergency_angle,
+                    critical_distance=self.__emergency_distance,
+                    scan_size=len(scan.angles),
+                )
+                # Checker will be initialized on the first incoming laserscan data to get the scan size
+                self._critical_zone_checker = None
+            except (ImportError, ModuleNotFoundError):
+                Logger(name="EmergencyChecker").error(
+                    "GPU use is enabled but GPU implementation is found -> Using CPU implementation"
+                )
+                use_gpu = False
+        if not use_gpu:
+            from kompass_cpp.utils import CriticalZoneChecker
+
+            self._critical_zone_checker = CriticalZoneChecker(
+                robot_shape=self.__robot_shape,
+                robot_dimensions=self.__robot_dimensions,
                 sensor_position_body=self.__sensor_position_robot or [0.0, 0.0, 0.0],
-                sensor_rotation_body=self.__sensor_rotation_robot or [0.0, 0.0, 0.0, 1.0],
+                sensor_rotation_body=self.__sensor_rotation_robot
+                or [0.0, 0.0, 0.0, 1.0],
                 critical_angle=self.__emergency_angle,
                 critical_distance=self.__emergency_distance,
-                scan_size=len(scan.angles)
+            )
+        if not self._critical_zone_checker:
+            self._critical_zone_checker = self.__CriticalZoneCheckerClass(
+                robot_shape=RobotGeometry.Type.to_kompass_cpp_lib(
+                    self.__robot.geometry_type
+                ),
+                robot_dimensions=self.__robot.geometry_params,
+                sensor_position_body=self.__sensor_position_robot or [0.0, 0.0, 0.0],
+                sensor_rotation_body=self.__sensor_rotation_robot
+                or [0.0, 0.0, 0.0, 1.0],
+                critical_angle=self.__emergency_angle,
+                critical_distance=self.__emergency_distance,
+                scan_angles=scan.angles,
             )
         return self._critical_zone_checker.check(
             ranges=scan.ranges,
