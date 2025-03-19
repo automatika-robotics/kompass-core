@@ -19,8 +19,8 @@ void LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
     // command scope
     m_q.submit([&](sycl::handler &h) {
       // local copies of class members to be used inside the kernel
-      const int rows = m_gridHeight;
-      const int cols = m_gridWidth;
+      const size_t rows = m_gridHeight;
+      const size_t cols = m_gridWidth;
       const float resolution = m_resolution;
       const float laserscanOrientation = m_laserscanOrientation;
 

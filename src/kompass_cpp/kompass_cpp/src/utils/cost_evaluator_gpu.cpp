@@ -358,7 +358,7 @@ void CostEvaluator::pathCostFunc(const size_t trajs_size,
             }
           }
         });
-  });
+  }).wait();
 }
 
 // Compute the cost of trajectory based on distance to the goal point
