@@ -19,8 +19,8 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
 
   this->costWeights = costsWeights;
   accLimits_ = {ctrLimits.velXParams.maxAcceleration,
-               ctrLimits.velYParams.maxAcceleration,
-               ctrLimits.omegaParams.maxAcceleration};
+                ctrLimits.velYParams.maxAcceleration,
+                ctrLimits.omegaParams.maxAcceleration};
 }
 
 CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
@@ -35,8 +35,8 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
                         Eigen::Vector3f(sensor_position_body.data()));
   this->costWeights = costsWeights;
   accLimits_ = {ctrLimits.velXParams.maxAcceleration,
-               ctrLimits.velYParams.maxAcceleration,
-               ctrLimits.omegaParams.maxAcceleration};
+                ctrLimits.velYParams.maxAcceleration,
+                ctrLimits.omegaParams.maxAcceleration};
 }
 
 CostEvaluator::~CostEvaluator() {
@@ -60,13 +60,13 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
   for (const auto &traj : trajs) {
     total_cost = 0.0;
     if (reference_path.totalPathLength() > 0.0) {
-      if ((weight = costWeights.getParameter<double>("goal_distance_weight") >
-                    0.0)) {
+      if ((weight = costWeights.getParameter<double>("goal_distance_weight")) >
+          0.0) {
         double goalCost = goalCostFunc(traj, reference_path);
         total_cost += weight * goalCost;
       }
       if ((weight = costWeights.getParameter<double>(
-                        "reference_path_distance_weight") > 0.0)) {
+               "reference_path_distance_weight")) > 0.0) {
         double refPathCost = pathCostFunc(traj, reference_path);
         total_cost += weight * refPathCost;
       }
@@ -80,13 +80,13 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
       total_cost += weight * objCost;
     }
 
-    if ((weight =
-             costWeights.getParameter<double>("smoothness_weight") > 0.0)) {
+    if ((weight = costWeights.getParameter<double>("smoothness_weight")) >
+        0.0) {
       double smoothCost = smoothnessCostFunc(traj);
       total_cost += weight * smoothCost;
     }
 
-    if ((weight = costWeights.getParameter<double>("jerk_weight") > 0.0)) {
+    if ((weight = costWeights.getParameter<double>("jerk_weight")) > 0.0) {
       double jerCost = jerkCostFunc(traj);
       total_cost += weight * jerCost;
     }
@@ -154,8 +154,7 @@ double CostEvaluator::obstaclesDistCostFunc(
 }
 
 // Compute the cost of trajectory based on smoothness in velocity commands
-double
-CostEvaluator::smoothnessCostFunc(const Trajectory2D &trajectory) {
+double CostEvaluator::smoothnessCostFunc(const Trajectory2D &trajectory) {
   double smoothness_cost = 0.0;
   double delta_vx, delta_vy, delta_omega;
   for (size_t i = 1; i < trajectory.velocities.vx.size(); ++i) {

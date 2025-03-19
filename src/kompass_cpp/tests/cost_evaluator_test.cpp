@@ -158,8 +158,8 @@ struct TestConfig {
   }
 };
 
-Trajectory2D run_test(CostEvaluator costEval, Path::Path reference_path,
-                      TrajectorySamples2D samples,
+Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
+                      TrajectorySamples2D &samples,
                       const size_t current_segment_index,
                       const double reference_path_distance_weight,
                       const double goal_distance_weight,
@@ -202,7 +202,7 @@ BOOST_FIXTURE_TEST_SUITE(s, TestConfig)
 BOOST_AUTO_TEST_CASE(test_ref_path_cost) {
   // Create timer
   Timer time;
-  LOG_INFO("Running Goal Cost Test");
+  LOG_INFO("Running Reference Path Cost Test");
   // Generate test trajectory samples
   TrajectorySamples2D samples =
       generate_ref_path_test_samples(predictionHorizon, timeStep);
@@ -224,7 +224,7 @@ BOOST_AUTO_TEST_CASE(test_ref_path_cost) {
 BOOST_AUTO_TEST_CASE(test_goal_cost) {
   // Create timer
   Timer time;
-  LOG_INFO("Running Reference Path Cost Test");
+  LOG_INFO("Running Goal Cost Test");
   // Generate test trajectory samples
   TrajectorySamples2D samples =
       generate_ref_path_test_samples(predictionHorizon, timeStep);
