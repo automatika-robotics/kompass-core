@@ -9,6 +9,7 @@ import pytest
 
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
+import kompass_cpp
 from kompass_cpp.types import PathInterpolationType, Path as PathCpp
 
 from kompass_core.datatypes.laserscan import LaserScanData
@@ -394,6 +395,67 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
     assert reached_end is True
 
 
+def test_dwa_debug():
+    global global_path, my_robot, robot_ctr_limits, control_time_step
+
+    cost_weights = TrajectoryCostsWeights(
+        reference_path_distance_weight=3.0,
+        goal_distance_weight=1.0,
+        smoothness_weight=0.0,
+        jerk_weight=0.0,
+        obstacles_distance_weight=1.0,
+    )
+    config = DWAConfig(
+        max_linear_samples=4,
+        max_angular_samples=4,
+        octree_resolution=0.1,
+        costs_weights=cost_weights,
+        prediction_horizon=2.0,
+        control_horizon=0.2,
+        control_time_step=control_time_step,
+        max_num_threads=10,
+    )
+
+    dwa = DWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
+
+    dwa.set_path(global_path)
+
+    my_robot.state.x = -0.51731912
+    my_robot.state.y = 0.0
+    my_robot.state.yaw = 0.0
+
+    laser_scan = LaserScanData()
+    laser_scan.angles = np.array([0.0, 1.1])
+    laser_scan.ranges = np.array([0.4, 0.3])
+    dwa.planner.set_current_state(
+        my_robot.state.x, my_robot.state.y, my_robot.state.yaw, my_robot.state.speed
+    )
+
+    dwa.planner.set_resolution(0.1)
+
+    current_velocity = kompass_cpp.types.ControlCmd(
+        vx=my_robot.state.vx, vy=my_robot.state.vy, omega=my_robot.state.omega
+    )
+
+    sensor_data = kompass_cpp.types.LaserScan(
+        ranges=laser_scan.ranges, angles=laser_scan.angles
+    )
+
+    dwa.planner.debug_velocity_search(current_velocity, sensor_data)
+    trajectory_paths = dwa.planner.get_debugging_samples()
+    plt.figure()
+    for path in trajectory_paths:
+        plt.plot(
+            path.x, path.y
+        )
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.title("Trajectory Samples")
+    plt.grid(True)
+    plt.legend()
+    plt.savefig(f"{control_resources}/trajectory_samples_debug.png")
+
+
 @pytest.fixture(autouse=True)
 def run_before_and_after_tests():
     """Fixture to execute asserts before and after a test is run"""
@@ -414,7 +476,7 @@ def run_before_and_after_tests():
     robot_ctr_limits = RobotCtrlLimits(
         vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
         omega_limits=AngularCtrlLimits(
-            max_vel=10.0, max_acc=30.0, max_decel=20.0, max_steer=np.pi
+            max_vel=3.0, max_acc=5.0, max_decel=10.0, max_steer=np.pi
         ),
     )
 

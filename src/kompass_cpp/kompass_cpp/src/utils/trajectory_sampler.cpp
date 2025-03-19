@@ -85,12 +85,17 @@ TrajectorySampler::TrajectorySampler(
       getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
 
   this->maxNumThreads = maxNumThreads;
+  this->drop_samples_ = config.getParameter<bool>("drop_samples");
 }
 
 TrajectorySampler::~TrajectorySampler() { delete collChecker; }
 
 void TrajectorySampler::resetOctreeResolution(const double resolution) {
   collChecker->resetOctreeResolution(resolution);
+}
+
+void TrajectorySampler::setSampleDroppingMode(const bool drop_samples) {
+  this->drop_samples_ = drop_samples;
 }
 
 void TrajectorySampler::updateParams(TrajectorySamplerParameters config) {
@@ -116,6 +121,8 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
   int idx = 0;
   path.add(idx, start_pose.x, start_pose.y);
   bool is_collision = false;
+  size_t last_free_index{numPointsPerTrajectory_ - 1};
+  Path::State last_free_point;
 
   for (size_t i = 0; i < (numPointsPerTrajectory - 1); ++i) {
 
@@ -142,12 +149,22 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
       // simulated_pose.x,
       //           ", y: ", simulated_pose.y, "with Vx: ", vel.vx(),
       //           ", Vy: ", vel.vy(), ", Omega: ", vel.omega());
+      last_free_index = i - 1;
       break;
     }
 
-    simulated_velocities.add(idx, vel);
-    idx += 1;
-    path.add(idx, simulated_pose.x, simulated_pose.y);
+    simulated_velocities.add(i, vel);
+    path.add(i + 1, simulated_pose.x, simulated_pose.y);
+  }
+
+  if (!drop_samples_ && path.x.size() > 0) {
+    for (size_t j = last_free_index; j < (numPointsPerTrajectory_ - 1); ++j) {
+      // Add zero vel
+      simulated_velocities.add(j, Velocity2D());
+      // Robot stays at the last simulated point
+      path.add(j + 1, last_free_point.x, last_free_point.y);
+    }
+    is_collision = false;
   }
 
   if (!is_collision) {
@@ -176,6 +193,8 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
   Velocity2D temp_vel;
   path.add(idx, start_pose.x, start_pose.y);
   bool is_collision = false;
+  size_t last_free_index{numPointsPerTrajectory_ - 1};
+  Path::State last_free_point;
 
   for (size_t i = 0; i < (numPointsPerTrajectory - 1); ++i) {
 
@@ -204,12 +223,23 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
     }
 
     if (is_collision) {
+      last_free_index = i - 1;
       break;
     }
 
     simulated_velocities.add(idx, temp_vel);
     idx += 1;
     path.add(idx, simulated_pose.x, simulated_pose.y);
+  }
+
+  if (!drop_samples_ && path.x.size() > 0) {
+    for (size_t j = last_free_index; j < (numPointsPerTrajectory_ - 1); ++j) {
+      // Add zero vel
+      simulated_velocities.add(j, Velocity2D());
+      // Robot stays at the last simulated point
+      path.add(j + 1, last_free_point.x, last_free_point.y);
+    }
+    is_collision = false;
   }
 
   if (!is_collision) {
@@ -404,7 +434,7 @@ TrajectorySampler::getNewTrajectories(const Velocity2D &current_vel,
   case ControlType::OMNI:
     return generateTrajectoriesOmni(current_vel, current_pose);
   default:
-    throw std::invalid_argument("Invalid conrol type");
+    throw std::invalid_argument("Invalid control type");
   }
 }
 

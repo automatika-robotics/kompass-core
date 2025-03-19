@@ -48,6 +48,12 @@ public:
                    Parameter(0.1, 0.0, 1000.0,
                              "Resolution of the built-in Octree map used for "
                              "collision checkings [m]"));
+      addParameter(
+          "drop_samples",
+          Parameter(true,
+                    "Drops the samples with collisions. If false, the sampler "
+                    "conserves the first part of the sample (before the "
+                    "collision) without dropping the whole sample"));
     }
   };
 
@@ -88,6 +94,8 @@ public:
    *
    */
   ~TrajectorySampler();
+
+  void setSampleDroppingMode(const bool drop_samples);
 
   /**
    * @brief Generates a set of trajectory samples based on a dynamic window of
@@ -141,6 +149,9 @@ private:
   double min_vy_;
   double max_omega_;
   double min_omega_;
+  size_t numTrajectories_;
+  size_t numPointsPerTrajectory_;
+  bool drop_samples_{true};
 
   /**
    * @brief Helper method to update the class private parameters from config

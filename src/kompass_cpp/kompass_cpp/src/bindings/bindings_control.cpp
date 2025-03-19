@@ -215,6 +215,19 @@ void bindings_control(py::module_ &m) {
                &Control::DWA::computeVelocityCommandsSet),
            py::return_value_policy::reference_internal)
       .def("add_custom_cost", &Control::DWA::addCustomCost)
+      .def("get_debugging_samples", &Control::DWA::getDebuggingSamples)
+      .def("debug_velocity_search",
+           // Overload for std::vector<Path::Point>
+           py::overload_cast<const Control::Velocity2D &,
+                             const std::vector<Path::Point> &>(
+               &Control::DWA::debugVelocitySearch<std::vector<Path::Point>>),
+           py::call_guard<py::gil_scoped_release>())
+      .def("debug_velocity_search",
+           // Overload for LaserScan
+           py::overload_cast<const Control::Velocity2D &,
+                             const Control::LaserScan &>(
+               &Control::DWA::debugVelocitySearch<Control::LaserScan>),
+           py::call_guard<py::gil_scoped_release>())
       .def("set_resolution", &Control::DWA::resetOctreeResolution);
 
   // Vision Follower
