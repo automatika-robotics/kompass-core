@@ -48,7 +48,8 @@ TrajectorySampler::TrajectorySampler(
     ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
   }
 
-  numTrajectories_ = getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
+  numTrajectories_ =
+      getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
 
   this->maxNumThreads = maxNumThreads;
 }
@@ -78,15 +79,21 @@ TrajectorySampler::TrajectorySampler(
     ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
   }
 
-  numTrajectories_ = getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
+  numTrajectories_ =
+      getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
 
   this->maxNumThreads = maxNumThreads;
+  this->drop_samples_ = config.getParameter<bool>("drop_samples");
 }
 
 TrajectorySampler::~TrajectorySampler() { delete collChecker; }
 
 void TrajectorySampler::resetOctreeResolution(const double resolution) {
   collChecker->resetOctreeResolution(resolution);
+}
+
+void TrajectorySampler::setSampleDroppingMode(const bool drop_samples) {
+  this->drop_samples_ = drop_samples;
 }
 
 void TrajectorySampler::updateParams(TrajectorySamplerParameters config) {
@@ -108,12 +115,13 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
   Path::State simulated_pose = start_pose;
   TrajectoryVelocities2D simulated_velocities(numPointsPerTrajectory_);
   TrajectoryPath path(numPointsPerTrajectory_);
-  int idx = 0;
-  path.add(idx, start_pose.x, start_pose.y);
+  path.add(0, start_pose.x, start_pose.y);
   bool is_collision = false;
+  size_t last_free_index{numPointsPerTrajectory_ - 1};
+  Path::State last_free_point;
 
   for (size_t i = 0; i < (numPointsPerTrajectory_ - 1); ++i) {
-
+    last_free_point = simulated_pose;
     simulated_pose.x += (vel.vx() * cos(simulated_pose.yaw) -
                          vel.vy() * sin(simulated_pose.yaw)) *
                         time_step_;
@@ -137,12 +145,22 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
       // simulated_pose.x,
       //           ", y: ", simulated_pose.y, "with Vx: ", vel.vx(),
       //           ", Vy: ", vel.vy(), ", Omega: ", vel.omega());
+      last_free_index = i - 1;
       break;
     }
 
-    simulated_velocities.add(idx, vel);
-    idx += 1;
-    path.add(idx, simulated_pose.x, simulated_pose.y);
+    simulated_velocities.add(i, vel);
+    path.add(i + 1, simulated_pose.x, simulated_pose.y);
+  }
+
+  if (!drop_samples_ && path.x.size() > 0) {
+    for (size_t j = last_free_index; j < (numPointsPerTrajectory_ - 1); ++j) {
+      // Add zero vel
+      simulated_velocities.add(j, Velocity2D());
+      // Robot stays at the last simulated point
+      path.add(j + 1, last_free_point.x, last_free_point.y);
+    }
+    is_collision = false;
   }
 
   if (!is_collision) {
@@ -171,9 +189,11 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
   Velocity2D temp_vel;
   path.add(idx, start_pose.x, start_pose.y);
   bool is_collision = false;
+  size_t last_free_index{numPointsPerTrajectory_ - 1};
+  Path::State last_free_point;
 
   for (size_t i = 0; i < (numPointsPerTrajectory_ - 1); ++i) {
-
+    last_free_point = simulated_pose;
     // Alternate between linear and angular movement
     if (i % 2 == 0) {
       simulated_pose.yaw += vel.omega() * time_step_;
@@ -199,12 +219,23 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
     }
 
     if (is_collision) {
+      last_free_index = i - 1;
       break;
     }
 
     simulated_velocities.add(idx, temp_vel);
     idx += 1;
     path.add(idx, simulated_pose.x, simulated_pose.y);
+  }
+
+  if (!drop_samples_ && path.x.size() > 0) {
+    for (size_t j = last_free_index; j < (numPointsPerTrajectory_ - 1); ++j) {
+      // Add zero vel
+      simulated_velocities.add(j, Velocity2D());
+      // Robot stays at the last simulated point
+      path.add(j + 1, last_free_point.x, last_free_point.y);
+    }
+    is_collision = false;
   }
 
   if (!is_collision) {
@@ -220,7 +251,8 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
 
 TrajectorySamples2D TrajectorySampler::generateTrajectoriesAckermann(
     const Velocity2D &current_vel, const Path::State &current_pose) {
-  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories_, numPointsPerTrajectory_);
+  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories_,
+                                                       numPointsPerTrajectory_);
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
     // Implements generating smooth arc-like trajectories within the admissible
@@ -258,7 +290,8 @@ TrajectorySamples2D TrajectorySampler::generateTrajectoriesAckermann(
 TrajectorySamples2D TrajectorySampler::generateTrajectoriesDiffDrive(
     const Velocity2D &current_vel, const Path::State &current_pose) {
 
-  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories_, numPointsPerTrajectory_);
+  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories_,
+                                                       numPointsPerTrajectory_);
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
 
@@ -301,7 +334,8 @@ TrajectorySamples2D TrajectorySampler::generateTrajectoriesDiffDrive(
 TrajectorySamples2D
 TrajectorySampler::generateTrajectoriesOmni(const Velocity2D &current_vel,
                                             const Path::State &current_pose) {
-  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories_, numPointsPerTrajectory_);
+  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories_,
+                                                       numPointsPerTrajectory_);
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
     // Generate forward/backward trajectories
@@ -396,7 +430,7 @@ TrajectorySampler::getNewTrajectories(const Velocity2D &current_vel,
   case ControlType::OMNI:
     return generateTrajectoriesOmni(current_vel, current_pose);
   default:
-    throw std::invalid_argument("Invalid conrol type");
+    throw std::invalid_argument("Invalid control type");
   }
 }
 

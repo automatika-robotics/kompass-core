@@ -111,20 +111,26 @@ public:
   computeVelocityCommandsSet(const Velocity2D &global_vel,
                              const std::vector<Path::Point> &cloud);
 
+  TrajectoryPathSamples getDebuggingSamples() const;
+
+  template <typename T>
+  void debugVelocitySearch(const Velocity2D &global_vel, const T &scan_points);
+
 private:
   TrajectorySampler *trajSampler;
   CostEvaluator *trajCostEvaluator;
   double max_forward_distance_ = 0.0;
   int maxNumThreads;
+  TrajectoryPathSamples *debuggingSamples_ = nullptr;
 
   /**
-   * @brief Given the current position and velocity of the robot, find the best
-   * trajectory to execute
+   * @brief Given the current position and velocity of the robot, find the
+   * best trajectory to execute
    * @param global_pose The current position of the robot
    * @param global_vel The current velocity of the robot
    * @param drive_velocities The velocities to send to the robot base
-   * @return The highest scoring trajectory. A cost >= 0 means the trajectory is
-   * legal to execute.
+   * @return The highest scoring trajectory. A cost >= 0 means the
+   * trajectory is legal to execute.
    */
   template <typename T>
   TrajSearchResult findBestPath(const Velocity2D &global_vel,

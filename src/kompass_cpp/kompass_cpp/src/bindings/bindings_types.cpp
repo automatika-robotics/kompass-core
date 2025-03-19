@@ -1,7 +1,7 @@
+#include <pybind11/eigen.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <pybind11/eigen.h>
 
 #include "controllers/vision_follower.h"
 #include "datatypes/control.h"
@@ -82,15 +82,29 @@ void bindings_types(py::module_ &m) {
 
   py::class_<Control::TrajectoryPath>(m_types, "TrajectoryPath")
       .def(py::init<>())
-      .def_readonly("x", &Control::TrajectoryPath::x, py::return_value_policy::reference_internal)
-      .def_readonly("y", &Control::TrajectoryPath::y, py::return_value_policy::reference_internal)
-      .def_readonly("z", &Control::TrajectoryPath::z, py::return_value_policy::reference_internal);
+      .def_readonly("x", &Control::TrajectoryPath::x,
+                    py::return_value_policy::reference_internal)
+      .def_readonly("y", &Control::TrajectoryPath::y,
+                    py::return_value_policy::reference_internal)
+      .def_readonly("z", &Control::TrajectoryPath::z,
+                    py::return_value_policy::reference_internal);
 
   py::class_<Control::TrajectoryVelocities2D>(m_types, "TrajectoryVelocities2D")
       .def(py::init<>())
-      .def_readonly("vx", &Control::TrajectoryVelocities2D::vx, py::return_value_policy::reference_internal)
-      .def_readonly("vy", &Control::TrajectoryVelocities2D::vy, py::return_value_policy::reference_internal)
-      .def_readonly("omega", &Control::TrajectoryVelocities2D::omega, py::return_value_policy::reference_internal);
+      .def_readonly("vx", &Control::TrajectoryVelocities2D::vx,
+                    py::return_value_policy::reference_internal)
+      .def_readonly("vy", &Control::TrajectoryVelocities2D::vy,
+                    py::return_value_policy::reference_internal)
+      .def_readonly("omega", &Control::TrajectoryVelocities2D::omega,
+                    py::return_value_policy::reference_internal);
+
+  // Now expose TrajectoryPathSamples
+  py::class_<Control::TrajectoryPathSamples>(m, "TrajectoryPathSamples")
+      .def(py::init<size_t, size_t>())
+      .def("size", &Control::TrajectoryPathSamples::size)
+      .def("__iter__", [](const Control::TrajectoryPathSamples &self) {
+        return py::make_iterator(self.begin(), self.end());
+      });
 
   py::class_<Control::Trajectory2D>(m_types, "Trajectory")
       .def(py::init<>())

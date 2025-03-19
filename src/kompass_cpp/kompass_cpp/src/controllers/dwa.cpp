@@ -2,10 +2,12 @@
 #include "controllers/follower.h"
 #include "datatypes/control.h"
 #include "datatypes/path.h"
+#include "datatypes/trajectory.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <stdexcept>
 
 namespace Kompass {
 namespace Control {
@@ -64,7 +66,6 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
       costWeights, sensor_position_body, sensor_rotation_body, controlType,
       timeStep, predictionHorizon, maxLinearSamples, maxAngularSamples);
 
-
   // Update the max forward distance the robot can make
   double timeHorizon = config.getParameter<double>("control_horizon");
   if (controlType == ControlType::OMNI) {
@@ -80,6 +81,7 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
 DWA::~DWA() {
   delete trajSampler;
   delete trajCostEvaluator;
+  delete debuggingSamples_;
 }
 
 void DWA::reconfigure(ControlLimitsParams controlLimits,
@@ -202,6 +204,11 @@ TrajSearchResult DWA::findBestPath(const Velocity2D &global_vel,
   TrajectorySamples2D samples_ =
       trajSampler->generateTrajectories(global_vel, currentState, scan_points);
 
+  if (samples_.size() == 0) {
+    // RUN DEBUG TO GET ALL SAMPLES
+    debugVelocitySearch(global_vel, scan_points);
+  }
+
   trajCostEvaluator->setPointScan(scan_points, currentState);
 
   Path::Path trackedRefPathSegment = findTrackedPathSegment();
@@ -247,6 +254,34 @@ DWA::computeVelocityCommandsSet(const Velocity2D &global_vel,
     latest_velocity_command_ = searchRes.trajectory.velocities.getFront();
   }
   return searchRes;
+}
+
+template <typename T>
+void DWA::debugVelocitySearch(const Velocity2D &global_vel,
+                              const T &scan_points) {
+  // Throw an error if the global path is not set
+  if (!currentPath) {
+    throw std::invalid_argument(
+        "Pointer to global path is NULL. Cannot use DWA local planner without "
+        "setting a global path");
+  }
+  // find closest segment to use in cost computation
+  determineTarget();
+
+  // Set trajectory sampler to maintain all samples for debugging mode
+  trajSampler->setSampleDroppingMode(false);
+
+  // Generate set of valid trajectories
+  TrajectorySamples2D samples_ =
+      trajSampler->generateTrajectories(global_vel, currentState, scan_points);
+  debuggingSamples_ = new TrajectoryPathSamples(samples_.paths);
+}
+
+TrajectoryPathSamples DWA::getDebuggingSamples() const {
+  if (debuggingSamples_ == nullptr) {
+    throw std::invalid_argument("No debugging samples are available");
+  }
+  return *debuggingSamples_;
 }
 
 }; // namespace Control

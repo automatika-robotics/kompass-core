@@ -48,6 +48,12 @@ public:
                    Parameter(0.1, 0.0, 1000.0,
                              "Resolution of the built-in Octree map used for "
                              "collision checkings [m]"));
+      addParameter(
+          "drop_samples",
+          Parameter(true,
+                    "Drops the samples with collisions. If false, the sampler "
+                    "conserves the first part of the sample (before the "
+                    "collision) without dropping the whole sample"));
     }
   };
 
@@ -89,6 +95,8 @@ public:
    */
   ~TrajectorySampler();
 
+  void setSampleDroppingMode(const bool drop_samples);
+
   /**
    * @brief Generates a set of trajectory samples based on a dynamic window of
    * valid acceleration actions. The generator returns valid trajectories only,
@@ -101,8 +109,8 @@ public:
    */
 
   TrajectorySamples2D generateTrajectories(const Velocity2D &current_vel,
-                                               const Path::State &current_pose,
-                                               const LaserScan &scan);
+                                           const Path::State &current_pose,
+                                           const LaserScan &scan);
 
   TrajectorySamples2D
   generateTrajectories(const Velocity2D &current_vel,
@@ -140,6 +148,7 @@ private:
   double min_omega_;
   size_t numTrajectories_;
   size_t numPointsPerTrajectory_;
+  bool drop_samples_{true};
 
   /**
    * @brief Helper method to update the class private parameters from config
@@ -157,7 +166,7 @@ private:
   void UpdateReachableVelocityRange(Control::Velocity2D currentVel);
 
   TrajectorySamples2D getNewTrajectories(const Velocity2D &current_vel,
-                                             const Path::State &current_pose);
+                                         const Path::State &current_pose);
 
   /**
    * @brief Get the admissible constant velocity trajectories from a starting
@@ -184,7 +193,7 @@ private:
    * @param scan
    * @return std::vector<Trajectory>
    */
- TrajectorySamples2D
+  TrajectorySamples2D
   generateTrajectoriesAckermann(const Velocity2D &current_vel,
                                 const Path::State &current_pose);
 
@@ -196,7 +205,7 @@ private:
    * @param scan
    * @return std::vector<Trajectory>
    */
- TrajectorySamples2D
+  TrajectorySamples2D
   generateTrajectoriesDiffDrive(const Velocity2D &current_vel,
                                 const Path::State &current_pose);
 
@@ -208,9 +217,8 @@ private:
    * @param scan
    * @return std::vector<Trajectory>
    */
- TrajectorySamples2D
-  generateTrajectoriesOmni(const Velocity2D &current_vel,
-                           const Path::State &current_pose);
+  TrajectorySamples2D generateTrajectoriesOmni(const Velocity2D &current_vel,
+                                               const Path::State &current_pose);
 };
 }; // namespace Control
 } // namespace Kompass
