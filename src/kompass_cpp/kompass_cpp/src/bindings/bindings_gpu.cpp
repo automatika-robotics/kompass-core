@@ -28,11 +28,11 @@ void bindings_utils_gpu(py::module_ &m) {
   py::class_<CriticalZoneCheckerGPU>(m, "CriticalZoneCheckerGPU")
       .def(py::init<CollisionChecker::ShapeType, const std::vector<float> &,
                     const std::array<float, 3> &, const std::array<float, 4> &,
-                    float, float, int>(),
+                    float, float, const std::vector<double> &>(),
            py::arg("robot_shape"), py::arg("robot_dimensions"),
            py::arg("sensor_position_body"), py::arg("sensor_rotation_body"),
            py::arg("critical_angle"), py::arg("critical_distance"),
-           py::arg("scan_size"))
+           py::arg("scan_angles"))
       .def("check", &CriticalZoneChecker::check, py::arg("ranges"),
            py::arg("angles"), py::arg("forward"));
 }

@@ -41,10 +41,38 @@ CriticalZoneChecker::CriticalZoneChecker(
   angle_left_backward_ = Angle::normalizeTo0Pi(M_PI + angle_left_forward_);
 
   LOG_INFO("angles forward  ", angle_right_forward_, ", ", angle_left_forward_);
-  LOG_INFO("angles backward  ", angle_right_backward_, ", ", angle_left_backward_);
+  LOG_INFO("angles backward  ", angle_right_backward_, ", ",
+           angle_left_backward_);
 
   // Set critical distance
   critical_distance_ = critical_distance;
+}
+
+void CriticalZoneChecker::preset(const std::vector<double> &angles) {
+  Eigen::Vector3f cartesianPoint;
+  float x, y, theta, converted_range;
+
+  for (size_t i = 0; i < angles.size(); ++i) {
+    x = std::cos(angles[i]);
+    y = std::sin(angles[i]);
+    cartesianPoint = {x, y, 0.0f};
+    // Apply TF
+    cartesianPoint = sensor_tf_body_ * cartesianPoint;
+
+    // check if within the zone
+    theta = Angle::normalizeTo0Pi(
+        std::atan2(cartesianPoint.y(), cartesianPoint.x()));
+
+    if (theta >= std::max(angle_left_forward_, angle_right_forward_) ||
+        theta <= std::min(angle_left_forward_, angle_right_forward_)) {
+      indicies_forward_.push_back(i);
+    }
+    if (theta >= std::min(angle_left_backward_, angle_right_backward_) &&
+        theta <= std::max(angle_left_backward_, angle_right_backward_)) {
+      indicies_backward_.push_back(i);
+    }
+  }
+  preset_ = true;
 }
 
 bool CriticalZoneChecker::check(const std::vector<double> &ranges,
@@ -54,44 +82,41 @@ bool CriticalZoneChecker::check(const std::vector<double> &ranges,
     LOG_ERROR("Angles and ranges vectors must have the same size!");
     return false;
   }
-
-  Eigen::Vector3f cartesianPoint;
-  float x, y, theta, converted_range;
-  bool result = false;
-
-  for (size_t i = 0; i < angles.size(); ++i) {
-    x = ranges[i] * std::cos(angles[i]);
-    y = ranges[i] * std::sin(angles[i]);
-    cartesianPoint = {x, y, 0.0f};
-    // Apply TF
-    cartesianPoint = sensor_tf_body_ * cartesianPoint;
-
-    // check if within the zone
-    theta = Angle::normalizeTo0Pi(
-        std::atan2(cartesianPoint.y(), cartesianPoint.x()));
-    converted_range = std::sqrt(std::pow(cartesianPoint.y(), 2) + std::pow(cartesianPoint.x(), 2));
-
-
+  if (!preset_) {
+    preset(angles);
+    return check(ranges, angles, forward);
+  } else {
+    std::vector<size_t> *indicies;
+    float x, y, converted_range;
+    Eigen::Vector3f cartesianPoint;
     if (forward) {
-      if ((theta >= std::max(angle_left_forward_, angle_right_forward_) ||
-           theta <= std::min(angle_left_forward_, angle_right_forward_)) &&
-          converted_range - robotRadius_ <= critical_distance_) {
-        // point within the zone and range is low
-        LOG_INFO("True at theta, , converted, angle and range ", theta, ",", converted_range, ",", angles[i], ", ", ranges[i]);
-        result = true;
-      }
-
+      indicies = &indicies_forward_;
     } else {
-      if ((theta >= std::min(angle_left_backward_, angle_right_backward_) &&
-           theta <= std::max(angle_left_backward_, angle_right_backward_)) &&
-          converted_range - robotRadius_ <= critical_distance_) {
-        // point within the zone and range is low
-        LOG_INFO("True at angle and range ", theta, ",", converted_range, ",", angles[i], ", ", ranges[i]);
-        result = true;
+      indicies = &indicies_backward_;
+    }
+    // If sensor data has been preset then use the indicies directly
+    for (size_t index : *indicies) {
+      if (index < ranges.size()) {
+        x = ranges[index] * std::cos(angles[index]);
+        y = ranges[index] * std::sin(angles[index]);
+        cartesianPoint = {x, y, 0.0f};
+        // Apply TF
+        cartesianPoint = sensor_tf_body_ * cartesianPoint;
+
+        // check if within the zone
+        converted_range = std::sqrt(std::pow(cartesianPoint.y(), 2) +
+                                    std::pow(cartesianPoint.x(), 2));
+
+        if (converted_range - robotRadius_ <= critical_distance_) {
+          return true;
+        }
+      } else {
+        preset_ = false;
+        return check(ranges, angles, forward);
       }
     }
+    return false;
   }
-  return result;
 }
 
 void CriticalZoneChecker::polarConvertLaserScanToBody(

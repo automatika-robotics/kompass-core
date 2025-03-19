@@ -32,6 +32,8 @@ public:
    */
   ~CriticalZoneChecker() = default;
 
+  void preset(const std::vector<double> &angles);
+
   bool check(const std::vector<double> &ranges,
              const std::vector<double> &angles, const bool forward);
 
@@ -39,6 +41,8 @@ protected:
   double robotHeight_{1.0}, robotRadius_;
   float angle_right_forward_, angle_left_forward_, angle_right_backward_,
       angle_left_backward_;
+  std::vector<size_t> indicies_forward_, indicies_backward_;
+  bool preset_{false};
   float critical_distance_;
 
   Eigen::Isometry3f sensor_tf_body_ =

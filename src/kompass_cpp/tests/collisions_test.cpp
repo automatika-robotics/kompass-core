@@ -1,5 +1,6 @@
 #include "test.h"
 #define BOOST_TEST_MODULE KOMPASS TESTS
+#include "utils/angles.h"
 #include "utils/collision_check.h"
 #include "utils/critical_zone_check.h"
 #include "utils/logger.h"
@@ -8,6 +9,49 @@
 #include <vector>
 
 using namespace Kompass;
+
+void initLaserscan(size_t N, double initRange, std::vector<double> &ranges,
+                   std::vector<double> &angles) {
+  angles.resize(N);
+  ranges.resize(N);
+  for (size_t i = 0; i < N; ++i) {
+    angles[i] = 2.0 * M_PI * static_cast<double>(i) / N;
+    ranges[i] = initRange;
+  }
+}
+
+size_t findClosestIndex_(double angle, std::vector<double> &angles) {
+  // Normalize the angle to be within [0, 2*pi)
+  angle = Angle::normalizeTo0Pi(angle);
+
+  double minDiff = 2.0 * M_PI;
+  size_t closestIndex = 0;
+
+  for (size_t i = 0; i < angles.size(); ++i) {
+    double diff = std::abs(angles[i] - angle);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestIndex = i;
+    }
+  }
+
+  return closestIndex;
+}
+
+void setLaserscanAtAngle(double angle, double rangeValue,
+                         std::vector<double> &ranges,
+                         std::vector<double> &angles) {
+  // Find the closest index to the given angle
+
+  size_t index = findClosestIndex_(angle, angles);
+
+  if (index < ranges.size()) {
+    ranges[index] = rangeValue;
+  } else {
+    LOG_ERROR("Angle Index is out of bounds, got  ", index, "and size is ",
+              ranges.size());
+  }
+}
 
 BOOST_AUTO_TEST_CASE(test_FCL) {
   // Create timer
@@ -26,7 +70,7 @@ BOOST_AUTO_TEST_CASE(test_FCL) {
   Path::State robotState(0.0, 0.0, 0.0, 0.0);
 
   // Robot laserscan value (empty)
-  std::vector<double> scan_angles{0, 0.1, 0.2};
+  std::vector<double> scan_angles{0.0, 0.1, 0.2};
   std::vector<double> scan_ranges{1.0, 1.0, 1.0};
 
   CollisionChecker collChecker(robotShapeType, robotDimensions,
@@ -83,10 +127,12 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
   const std::array<float, 4> sensor_rotation_body{0, 0, 0.99, 0.0};
 
   // Robot laserscan value
-  std::vector<double> scan_angles{0, 0.1, 0.2};
-  std::vector<double> scan_ranges{1.0, 1.0, 1.0};
+  std::vector<double> scan_angles;
+  std::vector<double> scan_ranges;
+  initLaserscan(360, 10.0, scan_ranges, scan_angles);
+
   bool forward_motion = true;
-  float critical_angle = 120.0, critical_distance = 0.2;
+  float critical_angle = 120.0, critical_distance = 0.3;
 
   CriticalZoneChecker zoneChecker(robotShapeType, robotDimensions,
                                   sensor_position_body, sensor_rotation_body,
@@ -94,16 +140,20 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
 
   LOG_INFO("Testing Emergency Stop with CPU");
 
+  // Set small ranges behind the robot
+  setLaserscanAtAngle(0.0, 0.2, scan_ranges, scan_angles);
+  setLaserscanAtAngle(0.1, 0.2, scan_ranges, scan_angles);
+  setLaserscanAtAngle(-0.1, 0.2, scan_ranges, scan_angles);
   bool result = zoneChecker.check(scan_ranges, scan_angles, forward_motion);
   BOOST_TEST(!result, "Angles are behind and robot is moving forward -> "
-                      "Critical zone result should be FALSE, returned"
+                      "Critical zone result should be FALSE, returned "
                           << result);
   if (!result) {
     LOG_INFO("Test1 PASSED: Angles are behind and robot is moving forward");
   }
 
-  scan_angles = {M_PI, M_PI + 0.2, M_PI - 0.2};
-  scan_ranges = {1.0, 1.0, 1.0};
+  // Set small ranges behind the robot
+  initLaserscan(360, 10.0, scan_ranges, scan_angles);
   result = zoneChecker.check(scan_ranges, scan_angles, forward_motion);
   BOOST_TEST(!result, "Angles are in front and far and robot is moving forward "
                       "-> Critical zone result should be FALSE, returned "
@@ -112,7 +162,10 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
     LOG_INFO("Test2 PASSED: Angles are in front and robot is moving forward");
   }
 
-  scan_ranges = {0.5, 0.3, 0.6};
+  // Set small ranges in front of the robot
+  setLaserscanAtAngle(M_PI, 0.2, scan_ranges, scan_angles);
+  setLaserscanAtAngle(M_PI + 0.1, 0.2, scan_ranges, scan_angles);
+  setLaserscanAtAngle(M_PI - 0.1, 0.2, scan_ranges, scan_angles);
   result = zoneChecker.check(scan_ranges, scan_angles, forward_motion);
   BOOST_TEST(result, "Angles are in front and close and robot is moving "
                      "forward -> Critical zone result should be TRUE, returned "
@@ -133,7 +186,10 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
              "moving backward");
   }
 
-  scan_angles = {0.0, 0.2, -0.2};
+  // Set small ranges behind the robot
+  setLaserscanAtAngle(0.0, 0.2, scan_ranges, scan_angles);
+  setLaserscanAtAngle(0.1, 0.2, scan_ranges, scan_angles);
+  setLaserscanAtAngle(-0.1, 0.2, scan_ranges, scan_angles);
   result = zoneChecker.check(scan_ranges, scan_angles, forward_motion);
   BOOST_TEST(result,
              "Angles are in back and close and robot is moving "
