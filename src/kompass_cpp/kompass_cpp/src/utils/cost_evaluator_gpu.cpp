@@ -165,7 +165,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     size_t trajs_size = trajs.size();
     std::vector<sycl::event> events;
 
-    m_q.fill(m_devicePtrCosts, 0.0, trajs.size()).wait();
+    m_q.fill(m_devicePtrCosts, 0.0, trajs_size);
 
     m_q.memcpy(m_devicePtrPathsX, trajs.paths.x.data(),
                sizeof(float) * trajs_size * numPointsPerTrajectory_);
@@ -244,8 +244,9 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
            auto tempCosts = m_devicePtrTempCosts;
            auto costs = m_devicePtrCosts;
            // Kernel scope
-           h.parallel_for(sycl::range<1>(trajs.size()),
-                          [=](sycl::id<1> id) { costs[id] += tempCosts[id]; });
+           h.parallel_for<class customCostAdditionKernel>(
+               sycl::range<1>(trajs.size()),
+               [=](sycl::id<1> id) { costs[id] += tempCosts[id]; });
          })
           .wait();
     }
@@ -258,10 +259,11 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
          auto minCost = m_minCost;
          auto reduction = sycl::reduction(minCost, sycl::plus<LowestCost>());
          // Kernel scope
-         h.parallel_for(sycl::range<1>(trajs.size()), reduction,
-                        [=](sycl::id<1> idx, auto &minVal) {
-                          minVal.combine(LowestCost(costs[idx], idx));
-                        });
+         h.parallel_for<class minimumCostReduction>(
+             sycl::range<1>(trajs.size()), reduction,
+             [=](sycl::id<1> idx, auto &minVal) {
+               minVal.combine(LowestCost(costs[idx], idx));
+             });
        })
         .wait();
 
@@ -303,7 +305,7 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
     auto global_size = sycl::range<2>(trajs_size * pathSize, 1);
     auto workgroup_size = sycl::range<2>(pathSize, refPathSize);
     // Kernel scope
-    h.parallel_for(
+    h.parallel_for<class refPathCostKernel>(
         sycl::nd_range<2>(global_size, workgroup_size),
         [=](sycl::nd_item<2> item) {
           const size_t traj = item.get_group().get_group_id()[0];
@@ -357,31 +359,29 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
             // Synchronize again so that all atomic updates are finished
             // before further processing
             item.barrier(sycl::access::fence_space::local_space);
+          }
+          // normalize the trajectory cost and add end point distance to it
+          if (ref_path_index == refPathSize - 1 && path_index == pathSize - 1) {
 
-            // normalize the trajectory cost and add end point distance to it
-            if (ref_path_index == refPathSize - 1 &&
-                path_index == pathSize - 1) {
+            sycl::vec<float, 2> last_path_point = {
+                X[traj * pathSize + path_index],
+                Y[traj * pathSize + path_index]};
+            sycl::vec<float, 2> last_ref_point = {ref_X[ref_path_index],
+                                                  ref_Y[ref_path_index]};
 
-              sycl::vec<float, 2> last_path_point = {
-                  X[traj * pathSize + path_index],
-                  Y[traj * pathSize + path_index]};
-              sycl::vec<float, 2> last_ref_point = {ref_X[ref_path_index],
-                                                    ref_Y[ref_path_index]};
+            // get distance between two last points
+            float end_point_distance =
+                sycl::distance(last_path_point, last_ref_point);
+            trajCost[traj] =
+                costWeight * (trajCost[traj] / pathSize + end_point_distance);
 
-              // get distance between two last points
-              float end_point_distance =
-                  sycl::distance(last_path_point, last_ref_point);
-              trajCost[traj] =
-                  costWeight * (trajCost[traj] / pathSize + end_point_distance);
-
-              // Atomically add the computed contribution to the global cost
-              // for this trajectory
-              sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                               sycl::memory_scope::device,
-                               sycl::access::address_space::global_space>
-                  atomic_cost(costs[traj]);
-              atomic_cost.fetch_add(trajCost[traj]);
-            }
+            // Atomically add the computed contribution to the global cost
+            // for this trajectory
+            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                atomic_cost(costs[traj]);
+            atomic_cost.fetch_add(trajCost[traj]);
           }
         });
   });
@@ -411,23 +411,24 @@ sycl::event CostEvaluator::goalCostFunc(const size_t trajs_size,
     // Last point of reference path
     sycl::vec<float, 2> lastRefPoint = {last_ref_point.x(), last_ref_point.y()};
     // Kernel scope
-    h.parallel_for(sycl::range<1>(global_size), [=](sycl::id<1> id) {
-      // get last point of the trajectory path
-      sycl::vec<float, 2> last_path_point = {X[id * pathSize + pathSize - 1],
-                                             Y[id * pathSize + pathSize - 1]};
+    h.parallel_for<class goalCostKernel>(
+        sycl::range<1>(global_size), [=](sycl::id<1> id) {
+          // get last point of the trajectory path
+          sycl::vec<float, 2> last_path_point = {
+              X[id * pathSize + pathSize - 1], Y[id * pathSize + pathSize - 1]};
 
-      // end point distance normalized by path length
-      float distance =
-          sycl::distance(last_path_point, lastRefPoint) / pathLength;
+          // end point distance normalized by path length
+          float distance =
+              sycl::distance(last_path_point, lastRefPoint) / pathLength;
 
-      // Atomically add the computed contribution to the global cost
-      // for this trajectory
-      sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                       sycl::memory_scope::device,
-                       sycl::access::address_space::global_space>
-          atomic_cost(costs[id]);
-      atomic_cost.fetch_add(costWeight * distance);
-    });
+          // Atomically add the computed contribution to the global cost
+          // for this trajectory
+          sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                           sycl::memory_scope::device,
+                           sycl::access::address_space::global_space>
+              atomic_cost(costs[id]);
+          atomic_cost.fetch_add(costWeight * distance);
+        });
   });
 }
 
@@ -456,7 +457,7 @@ sycl::event CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
     sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
     auto global_size = sycl::range<1>(trajs_size * velocitiesSize);
     auto workgroup_size = sycl::range<1>(velocitiesSize);
-    h.parallel_for(
+    h.parallel_for<class smoothnessCostKernel>(
         sycl::nd_range<1>(global_size, workgroup_size),
         [=](sycl::nd_item<1> item) {
           const size_t traj = item.get_group().get_group_id();
@@ -552,7 +553,7 @@ sycl::event CostEvaluator::jerkCostFunc(const size_t trajs_size,
     sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
     auto global_size = sycl::range<1>(trajs_size * velocitiesSize);
     auto workgroup_size = sycl::range<1>(velocitiesSize);
-    h.parallel_for(
+    h.parallel_for<class jerkCostKernel>(
         sycl::nd_range<1>(global_size, workgroup_size),
         [=](sycl::nd_item<1> item) {
           const size_t traj = item.get_group().get_group_id();
