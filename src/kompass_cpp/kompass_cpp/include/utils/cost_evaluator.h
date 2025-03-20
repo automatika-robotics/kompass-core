@@ -62,13 +62,13 @@ public:
   CostEvaluator(TrajectoryCostsWeights costsWeights, ControlType controlType,
                 ControlLimitsParams ctrLimits, double timeStep,
                 double timeHorizon, size_t maxLinearSamples,
-                size_t maxAngularSamples, size_t maxPathLength);
+                size_t maxAngularSamples, size_t maxRefPathSize);
   CostEvaluator(TrajectoryCostsWeights costsWeights,
                 const std::array<float, 3> &sensor_position_body,
                 const std::array<float, 4> &sensor_rotation_body,
                 ControlType controlType, ControlLimitsParams ctrLimits,
                 double timeStep, double timeHorizon, size_t maxLinearSamples,
-                size_t maxAngularSamples, size_t maxPathLength);
+                size_t maxAngularSamples, size_t maxRefPathSize);
 
   /**
    * @brief Destroy the Trajectory Sampler object
@@ -164,9 +164,7 @@ public:
    *
    * @param costsWeights
    */
-  void updateCostWeights(TrajectoryCostsWeights costsWeights) {
-    this->costWeights = costsWeights;
-  };
+  void updateCostWeights(TrajectoryCostsWeights costsWeights);
 
 protected:
   // Protected member variables
@@ -187,6 +185,7 @@ private:
 #ifdef GPU
   size_t numTrajectories_;
   size_t numPointsPerTrajectory_;
+  size_t maxRefPathSize_;
   float *m_devicePtrPathsX;
   float *m_devicePtrPathsY;
   float *m_devicePtrVelocitiesVx;
@@ -198,7 +197,7 @@ private:
   float *m_devicePtrTempCosts;
   LowestCost *m_minCost;
   sycl::queue m_q;
-  void initializeGPUMemory(size_t maxPathLength);
+  void initializeGPUMemory();
   /**
    * @brief Trajectory cost based on the distance to a given reference path
    *

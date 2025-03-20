@@ -39,6 +39,10 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
                 static_cast<float>(ctrLimits.omegaParams.maxAcceleration)};
 }
 
+void CostEvaluator::updateCostWeights(TrajectoryCostsWeights costsWeights) {
+  this->costWeights = costsWeights;
+}
+
 CostEvaluator::~CostEvaluator() {
 
   // delete and clear custom cost pointers
@@ -108,7 +112,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
 }
 
 float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
-                                   const Path::Path &reference_path) {
+                                  const Path::Path &reference_path) {
   float total_cost = 0.0;
 
   float distError, dist;
@@ -140,7 +144,7 @@ float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
 
 // Compute the cost of a trajectory based on distance to a given reference path
 float CostEvaluator::goalCostFunc(const Trajectory2D &trajectory,
-                                   const Path::Path &reference_path) {
+                                  const Path::Path &reference_path) {
   // end point distance
   return Path::Path::distance(trajectory.path.getEnd(),
                               reference_path.getEnd()) /
