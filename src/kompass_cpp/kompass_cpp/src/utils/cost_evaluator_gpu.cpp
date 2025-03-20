@@ -59,6 +59,11 @@ void CostEvaluator::initializeGPUMemory(size_t maxPathLength) {
       sycl::queue{sycl::default_selector_v, sycl::property::queue::in_order{}};
   auto dev = m_q.get_device();
   LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
+  if (dev.has(sycl::aspect::atomic64)) {
+        LOG_INFO("Device supports 64-bit atomic operations.\n");
+    } else {
+        LOG_INFO("Device does NOT support 64-bit atomic operations.\n");
+    }
 
   // Data memory allocation
   m_devicePtrPathsX = sycl::malloc_device<double>(
@@ -271,9 +276,10 @@ void CostEvaluator::pathCostFunc(const size_t trajs_size,
     auto ref_X = m_devicePtrReferencePathX;
     auto ref_Y = m_devicePtrReferencePathY;
     auto costs = m_devicePtrCosts;
-    double costWeight = cost_weight;
-    size_t pathSize = numPointsPerTrajectory_;
-    size_t refPathSize = ref_path_size;
+    const double costWeight = cost_weight;
+    const size_t trajsSize = trajs_size;
+    const size_t pathSize = numPointsPerTrajectory_;
+    const size_t refPathSize = ref_path_size;
     // local memory for storing lowest per point cost
     sycl::local_accessor<double, 1> pointCost(sycl::range<1>(pathSize), h);
     // local memory for storing per trajectory average cost
@@ -288,15 +294,16 @@ void CostEvaluator::pathCostFunc(const size_t trajs_size,
           const size_t path_index = item.get_local_id()[0];
           const size_t ref_path_index = item.get_local_id()[1];
 
-          // Initialize local memory once per work-group in the first thread
+        // Initialize local memory once per work-group in the first thread
           if (path_index == 0 && ref_path_index == 0) {
             for (size_t i = 0; i < pathSize; ++i) {
               pointCost[i] = 0;
             }
-            for (size_t i = 0; i < trajs_size; ++i) {
+            for (size_t i = 0; i < trajsSize; ++i) {
               trajCost[i] = 0;
             }
           }
+
           // Synchronize to make sure initialization is complete
           item.barrier(sycl::access::fence_space::local_space);
 
@@ -305,7 +312,7 @@ void CostEvaluator::pathCostFunc(const size_t trajs_size,
           sycl::vec<double, 2> ref_point = {ref_X[ref_path_index],
                                             ref_Y[ref_path_index]};
 
-          auto distance = sycl::distance(point, ref_point);
+          double distance = sycl::distance(point, ref_point);
 
           // Each work-item performs an atomic update for its path point
           sycl::atomic_ref<double, sycl::memory_order::relaxed,
@@ -378,9 +385,9 @@ void CostEvaluator::goalCostFunc(const size_t trajs_size,
        auto X = m_devicePtrPathsX;
        auto Y = m_devicePtrPathsY;
        auto costs = m_devicePtrCosts;
-       double costWeight = cost_weight;
-       size_t pathSize = numPointsPerTrajectory_;
-       double pathLength = path_length;
+       const double costWeight = cost_weight;
+       const size_t pathSize = numPointsPerTrajectory_;
+       const double pathLength = path_length;
        auto global_size = sycl::range<1>(trajs_size);
        // Last point of reference path
        sycl::vec<float, 2> lastRefPoint = {last_ref_point.x(),
@@ -425,9 +432,10 @@ void CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
        auto velocitiesVy = m_devicePtrVelocitiesVy;
        auto velocitiesOmega = m_devicePtrVelocitiesOmega;
        auto costs = m_devicePtrCosts;
-       double costWeight = cost_weight;
-       size_t velocitiesSize = numPointsPerTrajectory_ - 1;
-       sycl::vec<double, 3> accLimits = {accLimits_[0], accLimits_[1],
+       const double costWeight = cost_weight;
+       const size_t trajsSize = trajs_size;
+       const size_t velocitiesSize = numPointsPerTrajectory_ - 1;
+       const sycl::vec<double, 3> accLimits = {accLimits_[0], accLimits_[1],
                                          accLimits_[2]};
        sycl::local_accessor<double, 1> trajCost(sycl::range<1>(trajs_size), h);
        auto global_size = sycl::range<1>(trajs_size * velocitiesSize);
@@ -440,7 +448,7 @@ void CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
 
              // Initialize local memory once per work-group in the first thread
              if (vel_item == 0) {
-               for (size_t i = 0; i < trajs_size; ++i) {
+               for (size_t i = 0; i < trajsSize; ++i) {
                  trajCost[i] = 0;
                }
              }
@@ -521,9 +529,10 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size,
        auto velocitiesVy = m_devicePtrVelocitiesVy;
        auto velocitiesOmega = m_devicePtrVelocitiesOmega;
        auto costs = m_devicePtrCosts;
-       double costWeight = cost_weight;
-       size_t velocitiesSize = numPointsPerTrajectory_ - 1;
-       sycl::vec<double, 3> accLimits = {accLimits_[0], accLimits_[1],
+       const double costWeight = cost_weight;
+       const size_t trajsSize = trajs_size;
+       const size_t velocitiesSize = numPointsPerTrajectory_ - 1;
+       const sycl::vec<double, 3> accLimits = {accLimits_[0], accLimits_[1],
                                          accLimits_[2]};
        sycl::local_accessor<double, 1> trajCost(sycl::range<1>(trajs_size), h);
        auto global_size = sycl::range<1>(trajs_size * velocitiesSize);
@@ -536,7 +545,7 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size,
 
              // Initialize local memory once per work-group in the first thread
              if (vel_point == 0) {
-               for (size_t i = 0; i < trajs_size; ++i) {
+               for (size_t i = 0; i < trajsSize; ++i) {
                  trajCost[i] = 0;
                }
              }
