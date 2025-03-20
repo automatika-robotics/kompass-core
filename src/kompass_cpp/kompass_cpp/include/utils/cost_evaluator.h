@@ -1,6 +1,5 @@
 #pragma once
 
-#include "collision_check.h"
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
@@ -204,7 +203,7 @@ private:
    * @param trajectories
    * @param reference_path
    */
-  void pathCostFunc(const size_t trajs_size, const size_t ref_path_size,
+  sycl::event pathCostFunc(const size_t trajs_size, const size_t ref_path_size,
                     const double cost_weight);
 
   /**
@@ -214,7 +213,7 @@ private:
    * @param trajectories
    * @param reference_path
    */
-  void goalCostFunc(const size_t trajs_size, const Path::Point &last_ref_point,
+  sycl::event goalCostFunc(const size_t trajs_size, const Path::Point &last_ref_point,
                     const float path_length, const double cost_weight);
 
   /**
@@ -224,7 +223,7 @@ private:
    * @param accLimits     Robot acceleration limits [max acceleration on
    * x-direction, max on y-direction, max angular acceleration]
    */
-  void smoothnessCostFunc(const size_t trajs_size, const double cost_weight);
+  sycl::event smoothnessCostFunc(const size_t trajs_size, const double cost_weight);
 
   /**
    * @brief Trajectory cost based on the jerk along the trajectory
@@ -233,7 +232,7 @@ private:
    * @param accLimits     Robot acceleration limits [max acceleration on
    * x-direction, max on y-direction, max angular acceleration]
    */
-  void jerkCostFunc(const size_t trajs_size, const double cost_weight);
+  sycl::event jerkCostFunc(const size_t trajs_size, const double cost_weight);
 
   /**
    * @brief Trajectory cost based on the distance obstacles
