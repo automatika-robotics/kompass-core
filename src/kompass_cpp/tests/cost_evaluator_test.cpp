@@ -150,7 +150,7 @@ struct TestConfig {
         sensor_rotation_body{0, 0, 0, 1}, costWeights(),
         costEval(costWeights, controlType, controlLimits, timeStep,
                  predictionHorizon, maxLinearSamples, maxAngularSamples,
-                 max_path_length) {
+                 max_path_length / max_interpolation_point_dist) {
     reference_path.setMaxLength(max_path_length);
     reference_path.interpolate(max_interpolation_point_dist,
                                Path::InterpolationType::LINEAR);
@@ -199,27 +199,27 @@ Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
 
 BOOST_FIXTURE_TEST_SUITE(s, TestConfig)
 
-/*BOOST_AUTO_TEST_CASE(test_ref_path_cost) {*/
-/*  // Create timer*/
-/*  Timer time;*/
-/*  LOG_INFO("Running Reference Path Cost Test");*/
-/*  // Generate test trajectory samples*/
-/*  TrajectorySamples2D samples =*/
-/*      generate_ref_path_test_samples(predictionHorizon, timeStep);*/
-/**/
-/*  Trajectory2D minimum_cost_traj =*/
-/*      run_test(costEval, reference_path, samples, current_segment_index, 1.0,*/
-/*               0.0, 0.0, 0.0, 0.0);*/
-/*  // In the generated samples the first sample contains the minimum cost path*/
-/*  Trajectory2D sample = samples.getIndex(0);*/
-/*  bool check = check_sample_equal_result(sample.path, minimum_cost_traj.path);*/
-/*  BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "*/
-/*                    "equal to the correct minimum! "*/
-/*                        << minimum_cost_traj.path.x);*/
-/*  if (check) {*/
-/*    LOG_INFO("Test Passed!");*/
-/*  }*/
-/*}*/
+BOOST_AUTO_TEST_CASE(test_ref_path_cost) {
+  // Create timer
+  Timer time;
+  LOG_INFO("Running Reference Path Cost Test");
+  // Generate test trajectory samples
+  TrajectorySamples2D samples =
+      generate_ref_path_test_samples(predictionHorizon, timeStep);
+
+  Trajectory2D minimum_cost_traj =
+      run_test(costEval, reference_path, samples, current_segment_index, 1.0,
+               0.0, 0.0, 0.0, 0.0);
+  // In the generated samples the first sample contains the minimum cost path
+  Trajectory2D sample = samples.getIndex(0);
+  bool check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
+  BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
+                    "equal to the correct minimum! "
+                        << minimum_cost_traj.path.x);
+  if (check) {
+    LOG_INFO("Test Passed!");
+  }
+}
 
 BOOST_AUTO_TEST_CASE(test_goal_cost) {
   // Create timer
