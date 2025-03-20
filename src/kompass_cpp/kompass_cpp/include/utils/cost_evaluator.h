@@ -81,7 +81,7 @@ public:
    *
    */
   using CustomCostFunction =
-      std::function<double(const Trajectory2D &, const Path::Path &)>;
+      std::function<float(const Trajectory2D &, const Path::Path &)>;
 
   /**
    * @brief CustomTrajectoryCost is defined by a CustomCostFunction to evaluate
@@ -103,7 +103,7 @@ public:
    * @param reference_path        The reference path (global path)
    * @param closest_segment_index     The segment of the closest segment from
    * the global path
-   * @return double
+   * @return TrajSearchResult
    */
   TrajSearchResult getMinTrajectoryCost(const TrajectorySamples2D &trajs,
                                         const Path::Path &reference_path,
@@ -171,7 +171,7 @@ public:
 protected:
   // Protected member variables
   ControlType ctrType;
-  std::array<double, 3> accLimits_;
+  std::array<float, 3> accLimits_;
 
   // Vector of pointers to the trajectory costs
   std::vector<CustomTrajectoryCost *> customTrajCostsPtrs_;
@@ -187,15 +187,15 @@ private:
 #ifdef GPU
   size_t numTrajectories_;
   size_t numPointsPerTrajectory_;
-  double *m_devicePtrPathsX;
-  double *m_devicePtrPathsY;
-  double *m_devicePtrVelocitiesVx;
-  double *m_devicePtrVelocitiesVy;
-  double *m_devicePtrVelocitiesOmega;
+  float *m_devicePtrPathsX;
+  float *m_devicePtrPathsY;
+  float *m_devicePtrVelocitiesVx;
+  float *m_devicePtrVelocitiesVy;
+  float *m_devicePtrVelocitiesOmega;
   float *m_devicePtrReferencePathX;
   float *m_devicePtrReferencePathY;
-  double *m_devicePtrCosts;
-  double *m_devicePtrTempCosts;
+  float *m_devicePtrCosts;
+  float *m_devicePtrTempCosts;
   LowestCost *m_minCost;
   sycl::queue m_q;
   void initializeGPUMemory(size_t maxPathLength);
@@ -204,7 +204,6 @@ private:
    *
    * @param trajectories
    * @param reference_path
-   * @return double
    */
   void pathCostFunc(const size_t trajs_size, const size_t ref_path_size,
                     const double cost_weight);
@@ -215,10 +214,9 @@ private:
    *
    * @param trajectories
    * @param reference_path
-   * @return double
    */
   void goalCostFunc(const size_t trajs_size, const Path::Point &last_ref_point,
-                    const double path_length, const double cost_weight);
+                    const float path_length, const double cost_weight);
 
   /**
    * @brief Trajectory cost based on the smoothness along the trajectory
@@ -226,7 +224,6 @@ private:
    * @param trajectories
    * @param accLimits     Robot acceleration limits [max acceleration on
    * x-direction, max on y-direction, max angular acceleration]
-   * @return double
    */
   void smoothnessCostFunc(const size_t trajs_size, const double cost_weight);
 
@@ -236,7 +233,6 @@ private:
    * @param trajectories
    * @param accLimits     Robot acceleration limits [max acceleration on
    * x-direction, max on y-direction, max angular acceleration]
-   * @return double
    */
   void jerkCostFunc(const size_t trajs_size, const double cost_weight);
 
@@ -245,9 +241,9 @@ private:
    *
    * @param trajectory
    * @param obstaclePoints
-   * @return double
+   * @return float
    */
-  double obstaclesDistCostFunc(const Trajectory2D &trajectory,
+  float obstaclesDistCostFunc(const Trajectory2D &trajectory,
                                const std::vector<Path::Point> &obstaclePoints);
 #else
   // Built-in functions for cost evaluation
@@ -256,9 +252,9 @@ private:
    *
    * @param trajectory
    * @param reference_path
-   * @return double
+   * @return float
    */
-  double pathCostFunc(const Trajectory2D &trajectory,
+  float pathCostFunc(const Trajectory2D &trajectory,
                       const Path::Path &reference_path);
 
   /**
@@ -267,9 +263,9 @@ private:
    *
    * @param trajectory
    * @param reference_path
-   * @return double
+   * @return float
    */
-  double goalCostFunc(const Trajectory2D &trajectory,
+  float goalCostFunc(const Trajectory2D &trajectory,
                       const Path::Path &reference_path);
 
   /**
@@ -277,9 +273,9 @@ private:
    *
    * @param trajectory
    * @param obstaclePoints
-   * @return double
+   * @return float
    */
-  double obstaclesDistCostFunc(const Trajectory2D &trajectory,
+  float obstaclesDistCostFunc(const Trajectory2D &trajectory,
                                const std::vector<Path::Point> &obstaclePoints);
 
   /**
@@ -288,9 +284,9 @@ private:
    * @param trajectory
    * @param accLimits     Robot acceleration limits [max acceleration on
    * x-direction, max on y-direction, max angular acceleration]
-   * @return double
+   * @return float
    */
-  double smoothnessCostFunc(const Trajectory2D &trajectory);
+  float smoothnessCostFunc(const Trajectory2D &trajectory);
 
   /**
    * @brief Trajectory cost based on the jerk along the trajectory
@@ -298,9 +294,9 @@ private:
    * @param trajectory
    * @param accLimits     Robot acceleration limits [max acceleration on
    * x-direction, max on y-direction, max angular acceleration]
-   * @return double
+   * @return float
    */
-  double jerkCostFunc(const Trajectory2D &trajectory);
+  float jerkCostFunc(const Trajectory2D &trajectory);
 #endif //! GPU
 };
 }; // namespace Control

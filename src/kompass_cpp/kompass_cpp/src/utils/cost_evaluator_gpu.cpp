@@ -25,9 +25,9 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
   numTrajectories_ =
       getNumTrajectories(ctrType, maxLinearSamples, maxAngularSamples);
 
-  accLimits_ = {ctrLimits.velXParams.maxAcceleration,
-                ctrLimits.velYParams.maxAcceleration,
-                ctrLimits.omegaParams.maxAcceleration};
+  accLimits_ = {static_cast<float>(ctrLimits.velXParams.maxAcceleration),
+                static_cast<float>(ctrLimits.velYParams.maxAcceleration),
+                static_cast<float>(ctrLimits.omegaParams.maxAcceleration)};
   initializeGPUMemory(maxPathLength);
 }
 
@@ -44,9 +44,9 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
                         Eigen::Vector3f(sensor_position_body.data()));
   this->costWeights = costsWeights;
 
-  accLimits_ = {ctrLimits.velXParams.maxAcceleration,
-                ctrLimits.velYParams.maxAcceleration,
-                ctrLimits.omegaParams.maxAcceleration};
+  accLimits_ = {static_cast<float>(ctrLimits.velXParams.maxAcceleration),
+                static_cast<float>(ctrLimits.velYParams.maxAcceleration),
+                static_cast<float>(ctrLimits.omegaParams.maxAcceleration)};
 
   numPointsPerTrajectory_ = getNumPointsPerTrajectory(timeStep, timeHorizon);
   numTrajectories_ =
@@ -66,17 +66,17 @@ void CostEvaluator::initializeGPUMemory(size_t maxPathLength) {
     }
 
   // Data memory allocation
-  m_devicePtrPathsX = sycl::malloc_device<double>(
+  m_devicePtrPathsX = sycl::malloc_device<float>(
       numTrajectories_ * numPointsPerTrajectory_, m_q);
-  m_devicePtrPathsY = sycl::malloc_device<double>(
+  m_devicePtrPathsY = sycl::malloc_device<float>(
       numTrajectories_ * numPointsPerTrajectory_, m_q);
-  m_devicePtrVelocitiesVx = sycl::malloc_device<double>(
+  m_devicePtrVelocitiesVx = sycl::malloc_device<float>(
       numTrajectories_ * numPointsPerTrajectory_ - 1, m_q);
-  m_devicePtrVelocitiesVy = sycl::malloc_device<double>(
+  m_devicePtrVelocitiesVy = sycl::malloc_device<float>(
       numTrajectories_ * numPointsPerTrajectory_ - 1, m_q);
-  m_devicePtrVelocitiesOmega = sycl::malloc_device<double>(
+  m_devicePtrVelocitiesOmega = sycl::malloc_device<float>(
       numTrajectories_ * numPointsPerTrajectory_ - 1, m_q);
-  m_devicePtrCosts = sycl::malloc_device<double>(numTrajectories_, m_q);
+  m_devicePtrCosts = sycl::malloc_device<float>(numTrajectories_, m_q);
 
   // Cost specific memory allocation
   if (costWeights.getParameter<double>("reference_path_distance_weight") >
@@ -87,7 +87,7 @@ void CostEvaluator::initializeGPUMemory(size_t maxPathLength) {
   };
   if (costWeights.getParameter<double>("obstacles_distance_weight") > 0.0 ||
       customTrajCostsPtrs_.size() > 0) {
-    m_devicePtrTempCosts = sycl::malloc_shared<double>(numTrajectories_, m_q);
+    m_devicePtrTempCosts = sycl::malloc_shared<float>(numTrajectories_, m_q);
   }
 
   // Result struct memory allocation
@@ -150,20 +150,21 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
 
   try {
     double weight;
-    double ref_path_length;
+    float ref_path_length;
+    size_t trajs_size = trajs.size();
 
-    m_q.fill(m_devicePtrCosts, 0.0, trajs.size());
+    m_q.fill(m_devicePtrCosts, 0.0, trajs.size()).wait();
 
     m_q.memcpy(m_devicePtrPathsX, trajs.paths.x.data(),
-               sizeof(double) * numTrajectories_ * numPointsPerTrajectory_);
+               sizeof(float) * trajs_size * numPointsPerTrajectory_);
     m_q.memcpy(m_devicePtrPathsY, trajs.paths.y.data(),
-               sizeof(double) * numTrajectories_ * numPointsPerTrajectory_);
+               sizeof(float) * trajs_size * numPointsPerTrajectory_);
     m_q.memcpy(m_devicePtrVelocitiesVx, trajs.velocities.vx.data(),
-               sizeof(double) * numTrajectories_ * numPointsPerTrajectory_ - 1);
+               sizeof(float) * trajs_size * numPointsPerTrajectory_ - 1);
     m_q.memcpy(m_devicePtrVelocitiesVy, trajs.velocities.vy.data(),
-               sizeof(double) * numTrajectories_ * numPointsPerTrajectory_ - 1);
+               sizeof(float) * trajs_size * numPointsPerTrajectory_ - 1);
     m_q.memcpy(m_devicePtrVelocitiesOmega, trajs.velocities.omega.data(),
-               sizeof(double) * numTrajectories_ * numPointsPerTrajectory_ - 1);
+               sizeof(float) * trajs_size * numPointsPerTrajectory_ - 1);
     *m_minCost = LowestCost();
 
     // wait for all data to be transferred
@@ -175,7 +176,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
         (ref_path_length = reference_path.totalPathLength()) > 0.0) {
       if ((weight = costWeights.getParameter<double>("goal_distance_weight")) >
           0.0) {
-        goalCostFunc(trajs.size(), reference_path.getEnd(), ref_path_length,
+        goalCostFunc(trajs_size, reference_path.getEnd(), ref_path_length,
                      weight);
       }
       if ((weight = costWeights.getParameter<double>(
@@ -186,15 +187,15 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
         m_q.memcpy(m_devicePtrReferencePathY, reference_path.getY().data(),
                    sizeof(float) * reference_path.points.size())
             .wait();
-        pathCostFunc(trajs.size(), reference_path.points.size(), weight);
+        pathCostFunc(trajs_size, reference_path.points.size(), weight);
       }
     }
     if ((weight =
              costWeights.getParameter<double>("smoothness_weight")) > 0.0) {
-      smoothnessCostFunc(trajs.size(), weight);
+      smoothnessCostFunc(trajs_size, weight);
     }
     if ((weight = costWeights.getParameter<double>("jerk_weight")) > 0.0) {
-      jerkCostFunc(trajs.size(), weight);
+      jerkCostFunc(trajs_size, weight);
     }
 
     // wait for all costs to be calculated
@@ -206,7 +207,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
         customTrajCostsPtrs_.size() > 0) {
 
       m_q.fill(m_devicePtrTempCosts, 0.0, trajs.size());
-      double total_cost;
+      float total_cost;
       size_t idx = 0;
       for (const auto traj : trajs) {
         if (weight > 0.0 && obstaclePoints.size() > 0) {
@@ -276,14 +277,14 @@ void CostEvaluator::pathCostFunc(const size_t trajs_size,
     auto ref_X = m_devicePtrReferencePathX;
     auto ref_Y = m_devicePtrReferencePathY;
     auto costs = m_devicePtrCosts;
-    const double costWeight = cost_weight;
+    const float costWeight = cost_weight;
     const size_t trajsSize = trajs_size;
     const size_t pathSize = numPointsPerTrajectory_;
     const size_t refPathSize = ref_path_size;
     // local memory for storing lowest per point cost
-    sycl::local_accessor<double, 1> pointCost(sycl::range<1>(pathSize), h);
+    sycl::local_accessor<float, 1> pointCost(sycl::range<1>(pathSize), h);
     // local memory for storing per trajectory average cost
-    sycl::local_accessor<double, 1> trajCost(sycl::range<1>(trajs_size), h);
+    sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
     auto global_size = sycl::range<2>(trajs_size * pathSize, 1);
     auto workgroup_size = sycl::range<2>(pathSize, refPathSize);
     // Kernel scope
@@ -307,15 +308,15 @@ void CostEvaluator::pathCostFunc(const size_t trajs_size,
           // Synchronize to make sure initialization is complete
           item.barrier(sycl::access::fence_space::local_space);
 
-          sycl::vec<double, 2> point = {X[traj * pathSize + path_index],
+          sycl::vec<float, 2> point = {X[traj * pathSize + path_index],
                                         Y[traj * pathSize + path_index]};
-          sycl::vec<double, 2> ref_point = {ref_X[ref_path_index],
+          sycl::vec<float, 2> ref_point = {ref_X[ref_path_index],
                                             ref_Y[ref_path_index]};
 
-          double distance = sycl::distance(point, ref_point);
+          float distance = sycl::distance(point, ref_point);
 
           // Each work-item performs an atomic update for its path point
-          sycl::atomic_ref<double, sycl::memory_order::relaxed,
+          sycl::atomic_ref<float, sycl::memory_order::relaxed,
                            sycl::memory_scope::work_group,
                            sycl::access::address_space::local_space>
               atomicMin(pointCost[path_index]);
@@ -332,7 +333,7 @@ void CostEvaluator::pathCostFunc(const size_t trajs_size,
           if (ref_path_index == refPathSize - 1) {
             // Atomically add the computed min costs to the local cost for
             // this trajectory
-            sycl::atomic_ref<double, sycl::memory_order::relaxed,
+            sycl::atomic_ref<float, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
                              sycl::access::address_space::local_space>
                 atomic_cost(trajCost[traj]);
@@ -344,20 +345,20 @@ void CostEvaluator::pathCostFunc(const size_t trajs_size,
 
             // normalize the trajectory cost and add end point distance to it
             if (path_index == pathSize - 1) {
-              sycl::vec<double, 2> last_path_point = {
+              sycl::vec<float, 2> last_path_point = {
                   X[traj * pathSize + path_index],
                   Y[traj * pathSize + path_index]};
-              sycl::vec<double, 2> last_ref_point = {ref_X[ref_path_index],
+              sycl::vec<float, 2> last_ref_point = {ref_X[ref_path_index],
                                                      ref_Y[ref_path_index]};
               // get distance between two last points
-              double end_point_distance =
+              float end_point_distance =
                   sycl::distance(last_path_point, last_ref_point);
               trajCost[traj] =
                   costWeight * (trajCost[traj] / pathSize + end_point_distance);
 
               // Atomically add the computed contribution to the global cost
               // for this trajectory
-              sycl::atomic_ref<double, sycl::memory_order::relaxed,
+              sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                sycl::memory_scope::device,
                                sycl::access::address_space::global_space>
                   atomic_cost(costs[traj]);
@@ -371,7 +372,7 @@ void CostEvaluator::pathCostFunc(const size_t trajs_size,
 // Compute the cost of trajectory based on distance to the goal point
 void CostEvaluator::goalCostFunc(const size_t trajs_size,
                                  const Path::Point &last_ref_point,
-                                 const double path_length,
+                                 const float path_length,
                                  const double cost_weight) {
   // -----------------------------------------------------
   //  Parallelize over trajectories.
@@ -385,9 +386,9 @@ void CostEvaluator::goalCostFunc(const size_t trajs_size,
        auto X = m_devicePtrPathsX;
        auto Y = m_devicePtrPathsY;
        auto costs = m_devicePtrCosts;
-       const double costWeight = cost_weight;
+       const float costWeight = cost_weight;
        const size_t pathSize = numPointsPerTrajectory_;
-       const double pathLength = path_length;
+       const float pathLength = path_length;
        auto global_size = sycl::range<1>(trajs_size);
        // Last point of reference path
        sycl::vec<float, 2> lastRefPoint = {last_ref_point.x(),
@@ -400,12 +401,12 @@ void CostEvaluator::goalCostFunc(const size_t trajs_size,
              X[id * pathSize + pathSize - 1], Y[id * pathSize + pathSize - 1]};
 
          // end point distance normalized by path length
-         double distance =
+         float distance =
              sycl::distance(last_path_point, lastRefPoint) / pathLength;
 
          // Atomically add the computed contribution to the global cost
          // for this trajectory
-         sycl::atomic_ref<double, sycl::memory_order::relaxed,
+         sycl::atomic_ref<float, sycl::memory_order::relaxed,
                           sycl::memory_scope::device,
                           sycl::access::address_space::global_space>
              atomic_cost(costs[id]);
@@ -432,12 +433,12 @@ void CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
        auto velocitiesVy = m_devicePtrVelocitiesVy;
        auto velocitiesOmega = m_devicePtrVelocitiesOmega;
        auto costs = m_devicePtrCosts;
-       const double costWeight = cost_weight;
+       const float costWeight = cost_weight;
        const size_t trajsSize = trajs_size;
        const size_t velocitiesSize = numPointsPerTrajectory_ - 1;
-       const sycl::vec<double, 3> accLimits = {accLimits_[0], accLimits_[1],
+       const sycl::vec<float, 3> accLimits = {accLimits_[0], accLimits_[1],
                                          accLimits_[2]};
-       sycl::local_accessor<double, 1> trajCost(sycl::range<1>(trajs_size), h);
+       sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
        auto global_size = sycl::range<1>(trajs_size * velocitiesSize);
        auto workgroup_size = sycl::range<1>(velocitiesSize);
        h.parallel_for(
@@ -458,29 +459,29 @@ void CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
              // Process only if i is valid (skip i==0 since we need a previous
              // sample)
              if (vel_item >= 1 && vel_item < velocitiesSize) {
-               double cost_contrib = 0.0;
+               float cost_contrib = 0.0;
                // Get the cost contribution for each point
                if (accLimits[0] > 0) {
-                 double delta_vx =
+                 float delta_vx =
                      velocitiesVx[traj * velocitiesSize + vel_item] -
                      velocitiesVx[traj * velocitiesSize + (vel_item - 1)];
                  cost_contrib += (delta_vx * delta_vx) / accLimits[0];
                }
                if (accLimits[1] > 0) {
-                 double delta_vy =
+                 float delta_vy =
                      velocitiesVy[traj * velocitiesSize + vel_item] -
                      velocitiesVy[traj * velocitiesSize + (vel_item - 1)];
                  cost_contrib += (delta_vy * delta_vy) / accLimits[1];
                }
                if (accLimits[2] > 0) {
-                 double delta_omega =
+                 float delta_omega =
                      velocitiesOmega[traj * velocitiesSize + vel_item] -
                      velocitiesOmega[traj * velocitiesSize + (vel_item - 1)];
                  cost_contrib += (delta_omega * delta_omega) / accLimits[2];
                }
 
                // Each work-item performs an atomic update for its trajectory
-               sycl::atomic_ref<double, sycl::memory_order::relaxed,
+               sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                 sycl::memory_scope::work_group,
                                 sycl::access::address_space::local_space>
                    atomicLocal(trajCost[traj]);
@@ -500,7 +501,7 @@ void CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
 
                  // Atomically add the computed contribution to the global cost
                  // for this trajectory
-                 sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                   sycl::memory_scope::device,
                                   sycl::access::address_space::global_space>
                      atomic_cost(costs[traj]);
@@ -529,12 +530,12 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size,
        auto velocitiesVy = m_devicePtrVelocitiesVy;
        auto velocitiesOmega = m_devicePtrVelocitiesOmega;
        auto costs = m_devicePtrCosts;
-       const double costWeight = cost_weight;
+       const float costWeight = cost_weight;
        const size_t trajsSize = trajs_size;
        const size_t velocitiesSize = numPointsPerTrajectory_ - 1;
-       const sycl::vec<double, 3> accLimits = {accLimits_[0], accLimits_[1],
+       const sycl::vec<float, 3> accLimits = {accLimits_[0], accLimits_[1],
                                          accLimits_[2]};
-       sycl::local_accessor<double, 1> trajCost(sycl::range<1>(trajs_size), h);
+       sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
        auto global_size = sycl::range<1>(trajs_size * velocitiesSize);
        auto workgroup_size = sycl::range<1>(velocitiesSize);
        h.parallel_for(
@@ -555,24 +556,24 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size,
              // Process only if i is valid (skip i==0 since we need a previous
              // sample)
              if (vel_point >= 2 && vel_point < velocitiesSize) {
-               double cost_contrib = 0.0;
+               float cost_contrib = 0.0;
                // Get the cost contribution for each point
                if (accLimits[0] > 0) {
-                 double delta_vx =
+                 float delta_vx =
                      velocitiesVx[traj * velocitiesSize + vel_point] -
                      2 * velocitiesVx[traj * velocitiesSize + (vel_point - 1)] +
                      velocitiesVx[traj * velocitiesSize + (vel_point - 2)];
                  cost_contrib += (delta_vx * delta_vx) / accLimits[0];
                }
                if (accLimits[1] > 0) {
-                 double delta_vy =
+                 float delta_vy =
                      velocitiesVy[traj * velocitiesSize + vel_point] -
                      2 * velocitiesVy[traj * velocitiesSize + (vel_point - 1)] +
                      velocitiesVy[traj * velocitiesSize + (vel_point - 2)];
                  cost_contrib += (delta_vy * delta_vy) / accLimits[1];
                }
                if (accLimits[2] > 0) {
-                 double delta_omega =
+                 float delta_omega =
                      velocitiesOmega[traj * velocitiesSize + vel_point] -
                      2 * velocitiesOmega[traj * velocitiesSize +
                                          (vel_point - 1)] +
@@ -581,7 +582,7 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size,
                }
 
                // Each work-item performs an atomic update for its trajectory
-               sycl::atomic_ref<double, sycl::memory_order::relaxed,
+               sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                 sycl::memory_scope::work_group,
                                 sycl::access::address_space::local_space>
                    atomicLocal(trajCost[traj]);
@@ -601,7 +602,7 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size,
 
                  // Atomically add the computed trajectory cost to the global
                  // cost for this trajectory
-                 sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                   sycl::memory_scope::device,
                                   sycl::access::address_space::global_space>
                      atomic_cost(costs[traj]);
@@ -614,7 +615,7 @@ void CostEvaluator::jerkCostFunc(const size_t trajs_size,
 }
 
 // Calculate obstacle distance cost per trajectory (CPU)
-double CostEvaluator::obstaclesDistCostFunc(
+float CostEvaluator::obstaclesDistCostFunc(
     const Trajectory2D &trajectory,
     const std::vector<Path::Point> &obstaclePoints) {
   return trajectory.path.minDist2D(obstaclePoints);

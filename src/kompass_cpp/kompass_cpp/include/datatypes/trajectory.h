@@ -28,14 +28,14 @@ inline size_t getNumPointsPerTrajectory(double timeStep,
   return predictionHorizon / timeStep;
 }
 
-typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
-    MatrixXdR;
+typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+    MatrixXfR;
 
 // Data structure to store 2D velocities of a single trajectory
 struct TrajectoryVelocities2D {
-  Eigen::VectorXd vx;
-  Eigen::VectorXd vy;
-  Eigen::VectorXd omega;
+  Eigen::VectorXf vx;
+  Eigen::VectorXf vy;
+  Eigen::VectorXf omega;
   size_t numPointsPerTrajectory_;
 
   // default constructor
@@ -46,16 +46,16 @@ struct TrajectoryVelocities2D {
       : numPointsPerTrajectory_(numPointsPerTrajectory) {
     // velocities start from one points after the starting point on the
     // trajectory
-    vx = Eigen::VectorXd(numPointsPerTrajectory - 1);
-    vy = Eigen::VectorXd(numPointsPerTrajectory - 1);
-    omega = Eigen::VectorXd(numPointsPerTrajectory - 1);
+    vx = Eigen::VectorXf(numPointsPerTrajectory - 1);
+    vy = Eigen::VectorXf(numPointsPerTrajectory - 1);
+    omega = Eigen::VectorXf(numPointsPerTrajectory - 1);
   };
 
   // initialize from a vector of velocities
   explicit TrajectoryVelocities2D(const std::vector<Velocity2D> &velocities) {
-    vx = Eigen::VectorXd(velocities.size());
-    vy = Eigen::VectorXd(velocities.size());
-    omega = Eigen::VectorXd(velocities.size());
+    vx = Eigen::VectorXf(velocities.size());
+    vy = Eigen::VectorXf(velocities.size());
+    omega = Eigen::VectorXf(velocities.size());
     numPointsPerTrajectory_ = velocities.size() + 1;
     for (size_t i = 0; i < velocities.size(); ++i) {
       vx(i) = velocities[i].vx();
@@ -65,8 +65,8 @@ struct TrajectoryVelocities2D {
   };
 
   // initialize from eigen vectors
-  TrajectoryVelocities2D(const Eigen::VectorXd &vx_, const Eigen::VectorXd &vy_,
-                         const Eigen::VectorXd &omega_)
+  TrajectoryVelocities2D(const Eigen::VectorXf &vx_, const Eigen::VectorXf &vy_,
+                         const Eigen::VectorXf &omega_)
       : vx(vx_), vy(vy_), omega(omega_),
         numPointsPerTrajectory_(vx_.size() + 1) {};
 
@@ -129,9 +129,9 @@ struct TrajectoryVelocities2D {
 
 // Data structure to store Trajectory Path
 struct TrajectoryPath {
-  Eigen::VectorXd x;
-  Eigen::VectorXd y;
-  Eigen::VectorXd z;
+  Eigen::VectorXf x;
+  Eigen::VectorXf y;
+  Eigen::VectorXf z;
   size_t numPointsPerTrajectory_;
 
   // default constructor
@@ -140,16 +140,16 @@ struct TrajectoryPath {
   // empty initialization
   explicit TrajectoryPath(size_t numPointsPerTrajectory)
       : numPointsPerTrajectory_(numPointsPerTrajectory) {
-    x = Eigen::VectorXd(numPointsPerTrajectory);
-    y = Eigen::VectorXd(numPointsPerTrajectory);
-    z = Eigen::VectorXd(numPointsPerTrajectory);
+    x = Eigen::VectorXf(numPointsPerTrajectory);
+    y = Eigen::VectorXf(numPointsPerTrajectory);
+    z = Eigen::VectorXf(numPointsPerTrajectory);
   };
 
   // initialize from a  Path
   explicit TrajectoryPath(const Path::Path &path) {
-    x = Eigen::VectorXd(path.points.size());
-    y = Eigen::VectorXd(path.points.size());
-    z = Eigen::VectorXd(path.points.size());
+    x = Eigen::VectorXf(path.points.size());
+    y = Eigen::VectorXf(path.points.size());
+    z = Eigen::VectorXf(path.points.size());
     numPointsPerTrajectory_ = path.points.size();
     for (size_t i = 0; i < path.points.size(); ++i) {
       x(i) = path.points[i].x();
@@ -159,8 +159,8 @@ struct TrajectoryPath {
   };
 
   // initialize from eigen vectors
-  TrajectoryPath(const Eigen::VectorXd &x_, const Eigen::VectorXd &y_,
-                 const Eigen::VectorXd &z_)
+  TrajectoryPath(const Eigen::VectorXf &x_, const Eigen::VectorXf &y_,
+                 const Eigen::VectorXf &z_)
       : x(x_), y(y_), z(z_), numPointsPerTrajectory_(x.size()) {};
 
   // add point to specified index in path
@@ -174,7 +174,7 @@ struct TrajectoryPath {
   };
 
   // add point using values
-  void add(size_t idx, const double x, const double y, const double z = 0) {
+  void add(size_t idx, const float x, const float y, const float z = 0) {
     if (idx >= numPointsPerTrajectory_) {
       throw std::out_of_range("Vector index out of bounds");
     }
@@ -189,7 +189,7 @@ struct TrajectoryPath {
     if (s <= 0) {
       return 0.0f;
     }
-    float minDist = std::numeric_limits<double>::max();
+    float minDist = std::numeric_limits<float>::max();
     float dist;
     for (size_t i = 0; i < s; ++i) {
       for (size_t j = 0; j < numPointsPerTrajectory_; ++j) {
@@ -290,9 +290,9 @@ struct Trajectory2D {
 
 // Data structure to store velocities per trajectory for a set of trajectories
 struct TrajectoryVelocitySamples2D {
-  MatrixXdR vx;    // Speed on x-axis (m/s)
-  MatrixXdR vy;    // Speed on y-axis (m/s)
-  MatrixXdR omega; // Angular velocity (rad/s)
+  MatrixXfR vx;    // Speed on x-axis (m/s)
+  MatrixXfR vy;    // Speed on y-axis (m/s)
+  MatrixXfR omega; // Angular velocity (rad/s)
   size_t maxNumTrajectories_, numPointsPerTrajectory_;
   size_t velocitiesIndex_; // keep track of actual trajectories added
 
@@ -304,9 +304,9 @@ struct TrajectoryVelocitySamples2D {
                                        size_t numPointsPerTrajectory)
       : maxNumTrajectories_(maxNumTrajectories),
         numPointsPerTrajectory_(numPointsPerTrajectory), velocitiesIndex_(-1),
-        vx(MatrixXdR(maxNumTrajectories, numPointsPerTrajectory - 1)),
-        vy(MatrixXdR(maxNumTrajectories, numPointsPerTrajectory - 1)),
-        omega(MatrixXdR(maxNumTrajectories, numPointsPerTrajectory - 1)) {}
+        vx(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory - 1)),
+        vy(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory - 1)),
+        omega(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory - 1)) {}
 
   // Add a new set of velocity values from a velocity vector.
   void push_back(const std::vector<Velocity2D> &velocities) {
@@ -382,9 +382,9 @@ struct TrajectoryVelocitySamples2D {
 
 // Data structure to store path per trajectory for a set of trajectories
 struct TrajectoryPathSamples {
-  MatrixXdR x;
-  MatrixXdR y;
-  MatrixXdR z;
+  MatrixXfR x;
+  MatrixXfR y;
+  MatrixXfR z;
   size_t maxNumTrajectories_, numPointsPerTrajectory_;
   size_t pathIndex_;
 
@@ -396,9 +396,9 @@ struct TrajectoryPathSamples {
                                  size_t numPointsPerTrajectory)
       : maxNumTrajectories_(maxNumTrajectories),
         numPointsPerTrajectory_(numPointsPerTrajectory), pathIndex_(-1),
-        x(MatrixXdR(maxNumTrajectories, numPointsPerTrajectory)),
-        y(MatrixXdR(maxNumTrajectories, numPointsPerTrajectory)),
-        z(MatrixXdR(maxNumTrajectories, numPointsPerTrajectory)) {}
+        x(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory)),
+        y(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory)),
+        z(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory)) {}
 
   // Add a new path from a Path struct.
   void push_back(const Path::Path &path) {
@@ -586,16 +586,16 @@ struct TrajectorySamples2D {
 struct TrajSearchResult {
   Trajectory2D trajectory;
   bool isTrajFound = false;
-  double trajCost;
+  float trajCost;
 };
 
 // Lowest cost and its associated index for the trajectory sample
 struct LowestCost {
-  double cost;
+  float cost;
   size_t sampleIndex;
 
   // Constructor
-  LowestCost(double v = std::numeric_limits<double>::max(), size_t i = 0)
+  LowestCost(float v = std::numeric_limits<float>::max(), size_t i = 0)
       : cost(v), sampleIndex(i) {}
 
   // Combine operation for the reduction

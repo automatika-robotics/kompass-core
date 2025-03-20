@@ -18,9 +18,9 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
                              size_t maxAngularSamples, size_t maxPathLength) {
 
   this->costWeights = costsWeights;
-  accLimits_ = {ctrLimits.velXParams.maxAcceleration,
-                ctrLimits.velYParams.maxAcceleration,
-                ctrLimits.omegaParams.maxAcceleration};
+  accLimits_ = {static_cast<float>(ctrLimits.velXParams.maxAcceleration),
+                static_cast<float>(ctrLimits.velYParams.maxAcceleration),
+                static_cast<float>(ctrLimits.omegaParams.maxAcceleration)};
 }
 
 CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
@@ -34,9 +34,9 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
       getTransformation(Eigen::Quaternionf(sensor_rotation_body.data()),
                         Eigen::Vector3f(sensor_position_body.data()));
   this->costWeights = costsWeights;
-  accLimits_ = {ctrLimits.velXParams.maxAcceleration,
-                ctrLimits.velYParams.maxAcceleration,
-                ctrLimits.omegaParams.maxAcceleration};
+  accLimits_ = {static_cast<float>(ctrLimits.velXParams.maxAcceleration),
+                static_cast<float>(ctrLimits.velYParams.maxAcceleration),
+                static_cast<float>(ctrLimits.omegaParams.maxAcceleration)};
 }
 
 CostEvaluator::~CostEvaluator() {
@@ -52,8 +52,8 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     const TrajectorySamples2D &trajs, const Path::Path &reference_path,
     const Path::Path &tracked_segment, const size_t closest_segment_index) {
   double weight;
-  double total_cost;
-  double minCost = std::numeric_limits<double>::max();
+  float total_cost;
+  float minCost = std::numeric_limits<float>::max();
   Trajectory2D minCostTraj(trajs.numPointsPerTrajectory_);
   bool traj_found = false;
 
@@ -62,12 +62,12 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     if (reference_path.totalPathLength() > 0.0) {
       if ((weight = costWeights.getParameter<double>("goal_distance_weight")) >
           0.0) {
-        double goalCost = goalCostFunc(traj, reference_path);
+        float goalCost = goalCostFunc(traj, reference_path);
         total_cost += weight * goalCost;
       }
       if ((weight = costWeights.getParameter<double>(
                "reference_path_distance_weight")) > 0.0) {
-        double refPathCost = pathCostFunc(traj, reference_path);
+        float refPathCost = pathCostFunc(traj, reference_path);
         total_cost += weight * refPathCost;
       }
     }
@@ -76,18 +76,18 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
         (weight = costWeights.getParameter<double>(
              "obstacles_distance_weight")) > 0.0) {
 
-      double objCost = obstaclesDistCostFunc(traj, obstaclePoints);
+      float objCost = obstaclesDistCostFunc(traj, obstaclePoints);
       total_cost += weight * objCost;
     }
 
     if ((weight = costWeights.getParameter<double>("smoothness_weight")) >
         0.0) {
-      double smoothCost = smoothnessCostFunc(traj);
+      float smoothCost = smoothnessCostFunc(traj);
       total_cost += weight * smoothCost;
     }
 
     if ((weight = costWeights.getParameter<double>("jerk_weight")) > 0.0) {
-      double jerCost = jerkCostFunc(traj);
+      float jerCost = jerkCostFunc(traj);
       total_cost += weight * jerCost;
     }
 
@@ -107,16 +107,16 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
   return {minCostTraj, traj_found, minCost};
 }
 
-double CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
+float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
                                    const Path::Path &reference_path) {
-  double total_cost = 0.0;
+  float total_cost = 0.0;
 
-  double distError, dist;
+  float distError, dist;
 
   for (size_t i = 0; i < trajectory.path.x.size(); ++i) {
     // Set min distance between trajectory sample point i and the reference to
     // infinity
-    distError = std::numeric_limits<double>::max();
+    distError = std::numeric_limits<float>::max();
     // Get minimum distance to the reference
     for (size_t j = 0; j < reference_path.points.size(); ++j) {
       dist = Path::Path::distance(reference_path.points[j],
@@ -130,7 +130,7 @@ double CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
   }
 
   // end point distance
-  double end_dist_error =
+  float end_dist_error =
       Path::Path::distance(trajectory.path.getEnd(), reference_path.getEnd());
 
   // Divide by number of points to get average distance
@@ -139,7 +139,7 @@ double CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
 }
 
 // Compute the cost of a trajectory based on distance to a given reference path
-double CostEvaluator::goalCostFunc(const Trajectory2D &trajectory,
+float CostEvaluator::goalCostFunc(const Trajectory2D &trajectory,
                                    const Path::Path &reference_path) {
   // end point distance
   return Path::Path::distance(trajectory.path.getEnd(),
@@ -147,16 +147,16 @@ double CostEvaluator::goalCostFunc(const Trajectory2D &trajectory,
          reference_path.totalPathLength();
 }
 
-double CostEvaluator::obstaclesDistCostFunc(
+float CostEvaluator::obstaclesDistCostFunc(
     const Trajectory2D &trajectory,
     const std::vector<Path::Point> &obstaclePoints) {
   return trajectory.path.minDist2D(obstaclePoints);
 }
 
 // Compute the cost of trajectory based on smoothness in velocity commands
-double CostEvaluator::smoothnessCostFunc(const Trajectory2D &trajectory) {
-  double smoothness_cost = 0.0;
-  double delta_vx, delta_vy, delta_omega;
+float CostEvaluator::smoothnessCostFunc(const Trajectory2D &trajectory) {
+  float smoothness_cost = 0.0;
+  float delta_vx, delta_vy, delta_omega;
   for (size_t i = 1; i < trajectory.velocities.vx.size(); ++i) {
     if (accLimits_[0] > 0) {
       delta_vx = trajectory.velocities.vx[i] - trajectory.velocities.vx[i - 1];
@@ -176,9 +176,9 @@ double CostEvaluator::smoothnessCostFunc(const Trajectory2D &trajectory) {
 }
 
 // Compute the cost of trajectory based on jerk in velocity commands
-double CostEvaluator::jerkCostFunc(const Trajectory2D &trajectory) {
-  double jerk_cost = 0.0;
-  double jerk_vx, jerk_vy, jerk_omega;
+float CostEvaluator::jerkCostFunc(const Trajectory2D &trajectory) {
+  float jerk_cost = 0.0;
+  float jerk_vx, jerk_vy, jerk_omega;
   for (size_t i = 2; i < trajectory.velocities.vx.size(); ++i) {
     if (accLimits_[0] > 0) {
       jerk_vx = trajectory.velocities.vx[i] -
