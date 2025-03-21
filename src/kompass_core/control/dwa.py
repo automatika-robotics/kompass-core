@@ -303,7 +303,7 @@ class DWA(FollowerTemplate):
 
         try:
             if debug:
-                self._planner.debug_velocity_search(drop_samples, current_velocity, sensor_data)
+                self._planner.debug_velocity_search(current_velocity, sensor_data, drop_samples)
             self._result = self._planner.compute_velocity_commands(
                 current_velocity, sensor_data
             )

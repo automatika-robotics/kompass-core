@@ -251,27 +251,6 @@ DWA::computeVelocityCommandsSet(const Velocity2D &global_vel,
   return searchRes;
 }
 
-template <typename T>
-void DWA::debugVelocitySearch(const bool &drop_samples, const Velocity2D &global_vel,
-                              const T &scan_points) {
-  // Throw an error if the global path is not set
-  if (!currentPath) {
-    throw std::invalid_argument(
-        "Pointer to global path is NULL. Cannot use DWA local planner without "
-        "setting a global path");
-  }
-  // find closest segment to use in cost computation
-  determineTarget();
-
-  // Set trajectory sampler to maintain all samples for debugging mode
-  trajSampler->setSampleDroppingMode(drop_samples);
-
-  // Generate set of valid trajectories
-  TrajectorySamples2D samples_ =
-      trajSampler->generateTrajectories(global_vel, currentState, scan_points);
-  debuggingSamples_ = new TrajectoryPathSamples(samples_.paths);
-}
-
 TrajectoryPathSamples DWA::getDebuggingSamples() const {
   if (debuggingSamples_ == nullptr) {
     throw std::invalid_argument("No debugging samples are available");
