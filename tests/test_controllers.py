@@ -441,7 +441,7 @@ def test_dwa_debug():
         ranges=laser_scan.ranges, angles=laser_scan.angles
     )
 
-    dwa.planner.debug_velocity_search(current_velocity, sensor_data)
+    dwa.planner.debug_velocity_search(current_velocity, sensor_data, False)
     trajectory_paths = dwa.planner.get_debugging_samples()
     plt.figure()
     for path in trajectory_paths:
