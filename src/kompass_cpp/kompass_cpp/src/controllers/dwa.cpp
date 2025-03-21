@@ -204,11 +204,6 @@ TrajSearchResult DWA::findBestPath(const Velocity2D &global_vel,
   TrajectorySamples2D samples_ =
       trajSampler->generateTrajectories(global_vel, currentState, scan_points);
 
-  if (samples_.size() == 0) {
-    // RUN DEBUG TO GET ALL SAMPLES
-    debugVelocitySearch(global_vel, scan_points);
-  }
-
   trajCostEvaluator->setPointScan(scan_points, currentState);
 
   Path::Path trackedRefPathSegment = findTrackedPathSegment();
@@ -257,7 +252,7 @@ DWA::computeVelocityCommandsSet(const Velocity2D &global_vel,
 }
 
 template <typename T>
-void DWA::debugVelocitySearch(const Velocity2D &global_vel,
+void DWA::debugVelocitySearch(const bool &drop_samples, const Velocity2D &global_vel,
                               const T &scan_points) {
   // Throw an error if the global path is not set
   if (!currentPath) {
@@ -269,7 +264,7 @@ void DWA::debugVelocitySearch(const Velocity2D &global_vel,
   determineTarget();
 
   // Set trajectory sampler to maintain all samples for debugging mode
-  trajSampler->setSampleDroppingMode(false);
+  trajSampler->setSampleDroppingMode(drop_samples);
 
   // Generate set of valid trajectories
   TrajectorySamples2D samples_ =

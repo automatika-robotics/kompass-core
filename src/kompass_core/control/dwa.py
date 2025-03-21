@@ -246,6 +246,8 @@ class DWA(FollowerTemplate):
         point_cloud: Optional[PointCloudData] = None,
         local_map: Optional[np.ndarray] = None,
         local_map_resolution: Optional[float] = None,
+        debug: bool = False,
+        drop_samples: bool = False,
         **_,
     ) -> bool:
         """
@@ -300,6 +302,8 @@ class DWA(FollowerTemplate):
             return False
 
         try:
+            if debug:
+                self._planner.debug_velocity_search(drop_samples, current_velocity, sensor_data)
             self._result = self._planner.compute_velocity_commands(
                 current_velocity, sensor_data
             )
