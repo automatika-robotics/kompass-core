@@ -83,6 +83,7 @@ TrajectorySampler::TrajectorySampler(
 
   numTrajectories =
       getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
+  numCtrlPoints_ = control_time_ / time_step_;
 
   this->maxNumThreads = maxNumThreads;
   this->drop_samples_ = config.getParameter<bool>("drop_samples");
@@ -157,10 +158,10 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
     path.add(i + 1, simulated_pose.x, simulated_pose.y);
   }
 
-  if (!drop_samples_ && path.x.size() > 0) {
+  if (!drop_samples_ && path.x.size() >= numCtrlPoints_) {
     for (size_t j = last_free_index; j < (numPointsPerTrajectory_ - 1); ++j) {
       // Add zero vel
-      simulated_velocities.add(j, Velocity2D());
+      simulated_velocities.add(j, Velocity2D(0.0, 0.0, 0.0));
       // Robot stays at the last simulated point
       path.add(j + 1, last_free_point.x, last_free_point.y);
     }
@@ -191,7 +192,7 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
   TrajectoryPath path(numPointsPerTrajectory);
   int idx = 0;
   Velocity2D temp_vel;
-  path.add(idx, start_pose.x, start_pose.y);
+  path.add(0, start_pose.x, start_pose.y);
   bool is_collision = false;
   size_t last_free_index{numPointsPerTrajectory_ - 1};
   Path::State last_free_point;
@@ -227,15 +228,14 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
       break;
     }
 
-    simulated_velocities.add(idx, temp_vel);
-    idx += 1;
-    path.add(idx, simulated_pose.x, simulated_pose.y);
+    simulated_velocities.add(i, temp_vel);
+    path.add(i + 1, simulated_pose.x, simulated_pose.y);
   }
 
-  if (!drop_samples_ && path.x.size() > 0) {
+  if (!drop_samples_ && path.x.size() >= numCtrlPoints_) {
     for (size_t j = last_free_index; j < (numPointsPerTrajectory_ - 1); ++j) {
       // Add zero vel
-      simulated_velocities.add(j, Velocity2D());
+      simulated_velocities.add(j, Velocity2D(0.0, 0.0, 0.0));
       // Robot stays at the last simulated point
       path.add(j + 1, last_free_point.x, last_free_point.y);
     }
@@ -428,10 +428,13 @@ TrajectorySampler::getNewTrajectories(const Velocity2D &current_vel,
 
   switch (ctrType) {
   case ControlType::ACKERMANN:
+    LOG_INFO("Generating samples for Ackermann");
     return generateTrajectoriesAckermann(current_vel, current_pose);
   case ControlType::DIFFERENTIAL_DRIVE:
+    LOG_INFO("Generating samples for DiffDrive");
     return generateTrajectoriesDiffDrive(current_vel, current_pose);
   case ControlType::OMNI:
+    LOG_INFO("Generating samples for OMNI");
     return generateTrajectoriesOmni(current_vel, current_pose);
   default:
     throw std::invalid_argument("Invalid control type");

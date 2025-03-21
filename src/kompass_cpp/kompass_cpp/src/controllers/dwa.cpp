@@ -256,7 +256,7 @@ DWA::computeVelocityCommandsSet(const Velocity2D &global_vel,
 }
 
 template <typename T>
-void DWA::debugVelocitySearch(const Velocity2D &global_vel,
+void DWA::debugVelocitySearch(const bool &drop_samples, const Velocity2D &global_vel,
                               const T &scan_points) {
   // Throw an error if the global path is not set
   if (!currentPath) {
@@ -268,7 +268,7 @@ void DWA::debugVelocitySearch(const Velocity2D &global_vel,
   determineTarget();
 
   // Set trajectory sampler to maintain all samples for debugging mode
-  trajSampler->setSampleDroppingMode(false);
+  trajSampler->setSampleDroppingMode(drop_samples);
 
   // Generate set of valid trajectories
   TrajectorySamples2D samples_ =

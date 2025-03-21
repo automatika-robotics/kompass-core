@@ -218,13 +218,13 @@ void bindings_control(py::module_ &m) {
       .def("get_debugging_samples", &Control::DWA::getDebuggingSamples)
       .def("debug_velocity_search",
            // Overload for std::vector<Path::Point>
-           py::overload_cast<const Control::Velocity2D &,
+           py::overload_cast<const bool &, const Control::Velocity2D &,
                              const std::vector<Path::Point> &>(
                &Control::DWA::debugVelocitySearch<std::vector<Path::Point>>),
            py::call_guard<py::gil_scoped_release>())
       .def("debug_velocity_search",
            // Overload for LaserScan
-           py::overload_cast<const Control::Velocity2D &,
+           py::overload_cast<const bool &, const Control::Velocity2D &,
                              const Control::LaserScan &>(
                &Control::DWA::debugVelocitySearch<Control::LaserScan>),
            py::call_guard<py::gil_scoped_release>())
