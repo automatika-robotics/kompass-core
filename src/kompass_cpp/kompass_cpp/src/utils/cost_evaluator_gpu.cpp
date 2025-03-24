@@ -69,7 +69,12 @@ void CostEvaluator::initializeGPUMemory() {
   // Query maximum work-group size
   size_t max_wg_size = dev.get_info<sycl::info::device::max_work_group_size>();
   if (numPointsPerTrajectory_ > max_wg_size) {
-    LOG_WARNING("Number of points per sample trajectory should be less than:", max_wg_size, "for your device. Please try to modify the control time step and prediction horizon such that prediction_horizon/control_time_step is less than", max_wg_size);
+    LOG_WARNING("Number of points per sample trajectory should be less than:",
+                max_wg_size,
+                "for your device. Please try to modify the control time step "
+                "and prediction horizon such that "
+                "prediction_horizon/control_time_step is less than",
+                max_wg_size);
   }
 
   // Data memory allocation
@@ -224,22 +229,20 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     if (((weight = costWeights.getParameter<double>(
               "obstacles_distance_weight")) > 0.0) ||
         customTrajCostsPtrs_.size() > 0) {
-
-      m_q.fill(m_devicePtrTempCosts, 0.0, trajs.size());
-      float total_cost;
       size_t idx = 0;
       for (const auto traj : trajs) {
+        m_devicePtrTempCosts[idx] = 0.0;
         if (weight > 0.0 && obstaclePoints.size() > 0) {
-          total_cost += weight * obstaclesDistCostFunc(traj, obstaclePoints);
+          m_devicePtrTempCosts[idx] +=
+              weight * obstaclesDistCostFunc(traj, obstaclePoints);
         }
         for (const auto &custom_cost : customTrajCostsPtrs_) {
           // custom cost functions takes in the trajectory and the reference
           // path
-          total_cost += custom_cost->weight *
-                        custom_cost->evaluator_(traj, reference_path);
+          m_devicePtrTempCosts[idx] +=
+              custom_cost->weight *
+              custom_cost->evaluator_(traj, reference_path);
         }
-        // add cost to the shared temp cost array
-        m_devicePtrTempCosts[idx] = total_cost;
         idx += 1;
       }
 
@@ -251,7 +254,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
            auto costs = m_devicePtrCosts;
            // Kernel scope
            h.parallel_for<class customCostAdditionKernel>(
-               sycl::range<1>(trajs.size()),
+               sycl::range<1>(trajs_size),
                [=](sycl::id<1> id) { costs[id] += tempCosts[id]; });
          })
           .wait();
@@ -304,8 +307,6 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
     const size_t trajsSize = trajs_size;
     const size_t pathSize = numPointsPerTrajectory_;
     const size_t refPathSize = ref_path_size;
-    // local memory for storing lowest per point cost
-    sycl::local_accessor<float, 1> pointCost(sycl::range<1>(pathSize), h);
     // local memory for storing per trajectory average cost
     sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
     auto global_size = sycl::range<1>(trajs_size * pathSize);
@@ -319,9 +320,6 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
 
           // Initialize local memory once per work-group in the first thread
           if (path_index == 0) {
-            for (size_t i = 0; i < pathSize; ++i) {
-              pointCost[i] = 0;
-            }
             for (size_t i = 0; i < trajsSize; ++i) {
               trajCost[i] = 0;
             }
@@ -331,22 +329,18 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
 
           sycl::vec<float, 2> point;
           sycl::vec<float, 2> ref_point;
+          float minDist = std::numeric_limits<float>::max();
+          float distance;
 
           for (size_t i = 0; i < refPathSize; ++i) {
             point = {X[traj * pathSize + path_index],
                      Y[traj * pathSize + path_index]};
             ref_point = {ref_X[i], ref_Y[i]};
 
-            float distance = sycl::distance(point, ref_point);
-
-            // Each work-item performs an atomic update for its path point
-            sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                             sycl::memory_scope::work_group,
-                             sycl::access::address_space::local_space>
-                atomicMin(pointCost[path_index]);
-
-            // atomically get minimum cost per point
-            atomicMin.fetch_min(distance);
+            distance = sycl::distance(point, ref_point);
+            if (distance < minDist) {
+              minDist = distance;
+            }
           }
 
           // Atomically add the computed min costs to the local cost for
@@ -355,7 +349,7 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
                            sycl::memory_scope::device,
                            sycl::access::address_space::local_space>
               atomic_cost(trajCost[traj]);
-          atomic_cost.fetch_add(pointCost[path_index]);
+          atomic_cost.fetch_add(minDist);
 
           // Synchronize again so that all atomic updates are finished
           // before further processing
