@@ -1,9 +1,9 @@
-#include "test.h"
 #include "controllers/controller.h"
 #include "controllers/follower.h"
 #include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "json_export.cpp"
+#include "test.h"
 #include "utils/logger.h"
 #include "utils/trajectory_sampler.h"
 #include <boost/dll/runtime_symbol_info.hpp> // for program_location
@@ -21,8 +21,9 @@ void testTrajSampler() {
 
   // Create a test path
   // ------------------------------------------------------------------------------
-  std::vector<Path::Point> points{Path::Point(0.0, 0.0), Path::Point(1.0, 0.0),
-                                  Path::Point(2.0, 0.0)};
+  std::vector<Path::Point> points{Path::Point(0.0, 0.0, 0.0),
+                                  Path::Point(1.0, 0.0, 0.0),
+                                  Path::Point(2.0, 0.0, 0.0)};
   Path::Path raw_path(points);
 
   // Generic follower to use for raw path interpolation and segmentation
