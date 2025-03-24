@@ -60,10 +60,16 @@ void CostEvaluator::initializeGPUMemory() {
   m_q = sycl::queue{sycl::default_selector_v};
   auto dev = m_q.get_device();
   LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
-  if (dev.has(sycl::aspect::atomic64)) {
-    LOG_INFO("Device supports 64-bit atomic operations.\n");
-  } else {
-    LOG_INFO("Device does NOT support 64-bit atomic operations.\n");
+
+  if (!dev.has(sycl::aspect::atomic64)) {
+    LOG_WARNING("Device does NOT support 64-bit atomic operations. Some kernel "
+                "calculations might be slow.\n");
+  }
+
+  // Query maximum work-group size
+  size_t max_wg_size = dev.get_info<sycl::info::device::max_work_group_size>();
+  if (numPointsPerTrajectory_ < max_wg_size) {
+    LOG_WARNING("Number of points per sample trajectory should be less than:", max_wg_size, "for your device. Please try to modify the control time step and prediction horizon such that prediction_horizon/control_time_step is less than", max_wg_size);
   }
 
   // Data memory allocation
@@ -302,18 +308,17 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
     sycl::local_accessor<float, 1> pointCost(sycl::range<1>(pathSize), h);
     // local memory for storing per trajectory average cost
     sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
-    auto global_size = sycl::range<2>(trajs_size * pathSize, 1);
-    auto workgroup_size = sycl::range<2>(pathSize, refPathSize);
+    auto global_size = sycl::range<1>(trajs_size * pathSize);
+    auto workgroup_size = sycl::range<1>(refPathSize);
     // Kernel scope
     h.parallel_for<class refPathCostKernel>(
-        sycl::nd_range<2>(global_size, workgroup_size),
-        [=](sycl::nd_item<2> item) {
-          const size_t traj = item.get_group().get_group_id()[0];
-          const size_t path_index = item.get_local_id()[0];
-          const size_t ref_path_index = item.get_local_id()[1];
+        sycl::nd_range<1>(global_size, workgroup_size),
+        [=](sycl::nd_item<1> item) {
+          const size_t traj = item.get_group().get_group_id(0);
+          const size_t path_index = item.get_local_id();
 
           // Initialize local memory once per work-group in the first thread
-          if (path_index == 0 && ref_path_index == 0) {
+          if (path_index == 0) {
             for (size_t i = 0; i < pathSize; ++i) {
               pointCost[i] = 0;
             }
@@ -321,53 +326,48 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
               trajCost[i] = 0;
             }
           }
-
           // Synchronize to make sure initialization is complete
           item.barrier(sycl::access::fence_space::local_space);
 
-          sycl::vec<float, 2> point = {X[traj * pathSize + path_index],
-                                       Y[traj * pathSize + path_index]};
-          sycl::vec<float, 2> ref_point = {ref_X[ref_path_index],
-                                           ref_Y[ref_path_index]};
+          sycl::vec<float, 2> point;
+          sycl::vec<float, 2> ref_point;
 
-          float distance = sycl::distance(point, ref_point);
+          for (size_t i = 0; i < refPathSize; ++i) {
+            point = {X[traj * pathSize + path_index],
+                     Y[traj * pathSize + path_index]};
+            ref_point = {ref_X[i], ref_Y[i]};
 
-          // Each work-item performs an atomic update for its path point
-          sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                           sycl::memory_scope::work_group,
-                           sycl::access::address_space::local_space>
-              atomicMin(pointCost[path_index]);
+            float distance = sycl::distance(point, ref_point);
 
-          // atomically get minimum cost per point
-          atomicMin.fetch_min(distance);
+            // Each work-item performs an atomic update for its path point
+            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                             sycl::memory_scope::work_group,
+                             sycl::access::address_space::local_space>
+                atomicMin(pointCost[path_index]);
 
-          // Synchronize again so that all atomic updates are finished before
-          // further processing
-          item.barrier(sycl::access::fence_space::local_space);
+            // atomically get minimum cost per point
+            atomicMin.fetch_min(distance);
+          }
 
           // Atomically add the computed min costs to the local cost for
-          // this trajectory, only once per ref_path_index (last thread)
-          if (ref_path_index == refPathSize - 1) {
-            // Atomically add the computed min costs to the local cost for
-            // this trajectory
-            sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                             sycl::memory_scope::device,
-                             sycl::access::address_space::local_space>
-                atomic_cost(trajCost[traj]);
-            atomic_cost.fetch_add(pointCost[path_index]);
+          // this trajectory
+          sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                           sycl::memory_scope::device,
+                           sycl::access::address_space::local_space>
+              atomic_cost(trajCost[traj]);
+          atomic_cost.fetch_add(pointCost[path_index]);
 
-            // Synchronize again so that all atomic updates are finished
-            // before further processing
-            item.barrier(sycl::access::fence_space::local_space);
-          }
+          // Synchronize again so that all atomic updates are finished
+          // before further processing
+          item.barrier(sycl::access::fence_space::local_space);
+
           // normalize the trajectory cost and add end point distance to it
-          if (ref_path_index == refPathSize - 1 && path_index == pathSize - 1) {
-
+          if (path_index == pathSize - 1) {
             sycl::vec<float, 2> last_path_point = {
                 X[traj * pathSize + path_index],
                 Y[traj * pathSize + path_index]};
-            sycl::vec<float, 2> last_ref_point = {ref_X[ref_path_index],
-                                                  ref_Y[ref_path_index]};
+            sycl::vec<float, 2> last_ref_point = {ref_X[refPathSize - 1],
+                                                  ref_Y[refPathSize - 1]};
 
             // get distance between two last points
             float end_point_distance =
