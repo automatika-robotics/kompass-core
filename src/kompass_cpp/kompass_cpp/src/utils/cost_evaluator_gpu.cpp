@@ -68,7 +68,7 @@ void CostEvaluator::initializeGPUMemory() {
 
   // Query maximum work-group size
   size_t max_wg_size = dev.get_info<sycl::info::device::max_work_group_size>();
-  if (numPointsPerTrajectory_ < max_wg_size) {
+  if (numPointsPerTrajectory_ > max_wg_size) {
     LOG_WARNING("Number of points per sample trajectory should be less than:", max_wg_size, "for your device. Please try to modify the control time step and prediction horizon such that prediction_horizon/control_time_step is less than", max_wg_size);
   }
 
@@ -309,7 +309,7 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
     // local memory for storing per trajectory average cost
     sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
     auto global_size = sycl::range<1>(trajs_size * pathSize);
-    auto workgroup_size = sycl::range<1>(refPathSize);
+    auto workgroup_size = sycl::range<1>(pathSize);
     // Kernel scope
     h.parallel_for<class refPathCostKernel>(
         sycl::nd_range<1>(global_size, workgroup_size),
