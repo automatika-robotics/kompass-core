@@ -76,11 +76,11 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
       }
     }
 
-    if (obstaclePoints.size() > 0 and
+    if (obstaclePointsX.size() > 0 and
         (weight = costWeights.getParameter<double>(
              "obstacles_distance_weight")) > 0.0) {
 
-      float objCost = obstaclesDistCostFunc(traj, obstaclePoints);
+      float objCost = obstaclesDistCostFunc(traj);
       total_cost += weight * objCost;
     }
 
@@ -152,9 +152,8 @@ float CostEvaluator::goalCostFunc(const Trajectory2D &trajectory,
 }
 
 float CostEvaluator::obstaclesDistCostFunc(
-    const Trajectory2D &trajectory,
-    const std::vector<Path::Point> &obstaclePoints) {
-  return trajectory.path.minDist2D(obstaclePoints);
+    const Trajectory2D &trajectory) {
+  return trajectory.path.minDist2D(obstaclePointsX, obstaclePointsY);
 }
 
 // Compute the cost of trajectory based on smoothness in velocity commands

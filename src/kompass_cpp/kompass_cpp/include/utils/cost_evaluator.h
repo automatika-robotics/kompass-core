@@ -128,7 +128,8 @@ public:
    * @param current_state
    */
   void setPointScan(const LaserScan &scan, const Path::State &current_state) {
-    obstaclePoints.clear();
+    obstaclePointsX.clear();
+    obstaclePointsY.clear();
     Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
 
     for (size_t i = 0; i < scan.ranges.size(); i++) {
@@ -139,13 +140,15 @@ public:
       Eigen::Vector3f pose_trans =
           transformPosition(Eigen::Vector3f(point_x, point_y, 0.0),
                             sensor_tf_body_ * body_tf_world_);
-      obstaclePoints.push_back({pose_trans[0], pose_trans[1], 0.0});
+      obstaclePointsX.emplace_back(pose_trans[0]);
+      obstaclePointsY.emplace_back(pose_trans[1]);
     }
   };
 
   void setPointScan(const std::vector<Path::Point> &cloud,
                     const Path::State &current_state) {
-    obstaclePoints.clear();
+    obstaclePointsX.clear();
+    obstaclePointsY.clear();
     Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
 
     for (auto &point : cloud) {
@@ -153,7 +156,8 @@ public:
       Eigen::Vector3f pose_trans =
           transformPosition(Eigen::Vector3f(point.x(), point.y(), point.z()),
                             sensor_tf_body_ * body_tf_world_);
-      obstaclePoints.push_back({pose_trans[0], pose_trans[1], 0.0});
+      obstaclePointsX.emplace_back(pose_trans[0]);
+      obstaclePointsY.emplace_back(pose_trans[1]);
     }
   };
 
@@ -175,7 +179,8 @@ protected:
 
 private:
   TrajectoryCostsWeights costWeights;
-  std::vector<Path::Point> obstaclePoints;
+  std::vector<float> obstaclePointsX;
+  std::vector<float> obstaclePointsY;
 
   Eigen::Isometry3f sensor_tf_body_ =
       Eigen::Isometry3f::Identity(); // Sensor transformation with
@@ -241,8 +246,7 @@ private:
    * @param obstaclePoints
    * @return float
    */
-  float obstaclesDistCostFunc(const Trajectory2D &trajectory,
-                               const std::vector<Path::Point> &obstaclePoints);
+  float obstaclesDistCostFunc(const Trajectory2D &trajectory);
 #else
   // Built-in functions for cost evaluation
   /**
@@ -273,8 +277,7 @@ private:
    * @param obstaclePoints
    * @return float
    */
-  float obstaclesDistCostFunc(const Trajectory2D &trajectory,
-                               const std::vector<Path::Point> &obstaclePoints);
+  float obstaclesDistCostFunc(const Trajectory2D &trajectory);
 
   /**
    * @brief Trajectory cost based on the smoothness along the trajectory

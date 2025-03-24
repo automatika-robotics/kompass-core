@@ -184,8 +184,8 @@ struct TrajectoryPath {
   };
 
   // calculate minimum distance with a given vector of points
-  float minDist2D(const std::vector<Path::Point> &others) const {
-    size_t s = others.size();
+    float minDist2D(const std::vector<float> &othersX, const std::vector<float> &othersY) const {
+    size_t s = othersX.size();
     if (s <= 0) {
       return 0.0f;
     }
@@ -193,7 +193,7 @@ struct TrajectoryPath {
     float dist;
     for (size_t i = 0; i < s; ++i) {
       for (size_t j = 0; j < numPointsPerTrajectory_; ++j) {
-        dist = pow((others[i].x() - x(j)), 2) + pow((others[i].y() - y(j)), 2);
+        dist = pow((othersX[i] - x(j)), 2) + pow((othersY[i] - y(j)), 2);
         if (dist < minDist) {
           minDist = dist;
         }

@@ -232,9 +232,9 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
       size_t idx = 0;
       for (const auto traj : trajs) {
         m_devicePtrTempCosts[idx] = 0.0;
-        if (weight > 0.0 && obstaclePoints.size() > 0) {
+        if (weight > 0.0 && obstaclePointsX.size() > 0) {
           m_devicePtrTempCosts[idx] +=
-              weight * obstaclesDistCostFunc(traj, obstaclePoints);
+              weight * obstaclesDistCostFunc(traj);
         }
         for (const auto &custom_cost : customTrajCostsPtrs_) {
           // custom cost functions takes in the trajectory and the reference
@@ -623,9 +623,8 @@ sycl::event CostEvaluator::jerkCostFunc(const size_t trajs_size,
 
 // Calculate obstacle distance cost per trajectory (CPU)
 float CostEvaluator::obstaclesDistCostFunc(
-    const Trajectory2D &trajectory,
-    const std::vector<Path::Point> &obstaclePoints) {
-  return trajectory.path.minDist2D(obstaclePoints);
+    const Trajectory2D &trajectory) {
+  return trajectory.path.minDist2D(obstaclePointsX, obstaclePointsY);
 }
 }; // namespace Control
 } // namespace Kompass
