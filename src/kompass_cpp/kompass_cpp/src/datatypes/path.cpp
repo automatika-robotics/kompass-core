@@ -8,32 +8,20 @@ using namespace tk;
 
 namespace Path {
 
-Path::Path(const std::vector<Point> &points) : points(points) {}
-
-std::vector<float> Path::getX() const {
-
-  std::vector<float> x;
+Path::Path(const std::vector<Point> &points) : points(points) {
   for (const auto point : points) {
-    x.emplace_back(point.x());
+    X_.emplace_back(point.x());
+    Y_.emplace_back(point.y());
+    Z_.emplace_back(point.z());
   }
-  return x;
 }
 
-std::vector<float> Path::getY() const {
-  std::vector<float> y;
-  for (const auto point : points) {
-    y.emplace_back(point.y());
-  }
-  return y;
-}
+std::vector<float> Path::getX() const { return X_; }
 
-std::vector<float> Path::getZ() const {
-  std::vector<float> z;
-  for (const auto point : points) {
-    z.emplace_back(point.z());
-  }
-  return z;
-}
+std::vector<float> Path::getY() const { return Y_; }
+
+std::vector<float> Path::getZ() const { return Z_; }
+
 void Path::setMaxLength(double max_length) {
   this->_max_path_length = max_length;
 }
@@ -155,14 +143,23 @@ void Path::interpolate(double max_interpolation_point_dist,
         "At least two points are required to perform interpolation.");
   }
 
+  // Get copies of X and Y vectors
   std::vector<float> x = getX();
   std::vector<float> y = getY();
+
+  points.clear();
+  X_.clear();
+  Y_.clear();
+  Z_.clear();
 
   float dist, x_e, y_e;
 
   for (size_t i = 0; i < x.size() - 1; ++i) {
     // Add the first point
     points.emplace_back(x[i], y[i], 0.0);
+    X_.emplace_back(x[i]);
+    Y_.emplace_back(y[i]);
+    Z_.emplace_back(0.0);
     std::vector<double> x_points, y_points;
 
     // Add mid point to send 3 points for spline interpolation
@@ -200,6 +197,9 @@ void Path::interpolate(double max_interpolation_point_dist,
 
       y_e = _spline->operator()(x_e);
       points.emplace_back(x_e, y_e, 0.0);
+      X_.emplace_back(x_e);
+      Y_.emplace_back(y_e);
+      Z_.emplace_back(0.0);
       dist = distance({x_e, y_e, 0.0}, {x[i + 1], y[i + 1], 0.0});
       j++;
     }
@@ -216,6 +216,9 @@ void Path::interpolate(double max_interpolation_point_dist,
   if (points.size() < this->max_size) {
     // Add last point
     points.emplace_back(x.back(), y.back(), 0.0);
+    X_.emplace_back(x.back());
+    Y_.emplace_back(y.back());
+    Z_.emplace_back(0.0);
   }
 }
 

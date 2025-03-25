@@ -204,8 +204,8 @@ public:
                                  const Path::State &state2) const;
 
 protected:
-  Path::Path *currentPath = new Path::Path();
-  Path::Path *refPath = new Path::Path();
+  Path::Path *currentPath = nullptr;
+  Path::Path *refPath = nullptr;
   Path::PathPosition *closestPosition = new Path::PathPosition();
   double goal_dist_tolerance{0.0};
   double goal_orientation_tolerance{0.0};

@@ -50,8 +50,12 @@ Follower::Follower(FollowerParameters config) : Controller() {
 }
 
 Follower::~Follower() {
-  delete refPath;
-  delete currentPath;
+  if (refPath) {
+    delete refPath;
+  }
+  if (currentPath) {
+    delete currentPath;
+  }
   delete closestPosition;
 }
 
@@ -59,15 +63,18 @@ Follower::Target Follower::getTrackedTarget() const {
   return *currentTrackedTarget_;
 }
 
-const Path::Path Follower::getCurrentPath() const {
-  return *currentPath;
-}
+const Path::Path Follower::getCurrentPath() const { return *currentPath; }
 
-
-void Follower::clearCurrentPath(){
+void Follower::clearCurrentPath() {
   // Delete old reference and current path before setting new values
-  refPath = nullptr;
-  currentPath = nullptr;
+  if (refPath) {
+    delete refPath;
+    refPath = nullptr;
+  }
+  if (currentPath) {
+    delete currentPath;
+    currentPath = nullptr;
+  }
 
   reached_goal_ = true;
   reached_yaw_ = true;
@@ -78,15 +85,15 @@ void Follower::clearCurrentPath(){
 
 void Follower::setCurrentPath(const Path::Path &path) {
   // Delete old reference and current path before setting new values
-  delete refPath;
-  delete currentPath;
+  if (refPath) {
+    delete refPath;
+  }
+  if (currentPath) {
+    delete currentPath;
+  }
 
-  currentPath = new Path::Path();
-  refPath = new Path::Path();
-
-  refPath->points = path.points;
-
-  currentPath->points = refPath->points;
+  currentPath = new Path::Path(path.points);
+  refPath = new Path::Path(path.points);
 
   currentPath->setMaxLength(
       this->config.getParameter<double>("max_path_length"));
@@ -339,7 +346,7 @@ const double Follower::getPathLength() const {
   return currentPath->totalPathLength();
 }
 const bool Follower::hasPath() const {
-  if (!path_processing_){
+  if (!path_processing_) {
     return false;
   }
   return currentPath->totalPathLength() > 0.0;

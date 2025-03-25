@@ -28,7 +28,7 @@ typedef Eigen::Vector3f Point;
 
 // Structure for Path Control parameters
 struct Path {
-  std::vector<Point> points;  // List of points defining the path
+  std::vector<Point> points;  // Vector of points defining the path
   std::vector<Path> segments; // List of path segments
   tk::spline *_spline;
   // get all x values from points
@@ -81,6 +81,11 @@ struct Path {
 
   // Segment using a segment points number
   void segmentByPointsNumber(int segmentLength);
+
+private:
+  std::vector<float> X_; // Vector of X coordinates
+  std::vector<float> Y_; // Vector of Y coordinates
+  std::vector<float> Z_; // Vector of Z coordinates
 };
 
 struct PathPosition {
