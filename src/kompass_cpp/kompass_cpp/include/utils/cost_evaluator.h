@@ -58,16 +58,14 @@ public:
    * @param maxLinearSample
    * @param maxAngularSample
    */
-  CostEvaluator(TrajectoryCostsWeights costsWeights, ControlType controlType,
-                ControlLimitsParams ctrLimits, double timeStep,
-                double timeHorizon, size_t maxLinearSamples,
-                size_t maxAngularSamples, size_t maxRefPathSize);
+  CostEvaluator(TrajectoryCostsWeights costsWeights,
+                ControlLimitsParams ctrLimits, size_t maxNumTrajectories,
+                size_t numPointsPerTrajectory, size_t maxRefPathSize);
   CostEvaluator(TrajectoryCostsWeights costsWeights,
                 const std::array<float, 3> &sensor_position_body,
                 const std::array<float, 4> &sensor_rotation_body,
-                ControlType controlType, ControlLimitsParams ctrLimits,
-                double timeStep, double timeHorizon, size_t maxLinearSamples,
-                size_t maxAngularSamples, size_t maxRefPathSize);
+                ControlLimitsParams ctrLimits, size_t maxNumTrajectories,
+                size_t numPointsPerTrajectory, size_t maxRefPathSize);
 
   /**
    * @brief Destroy the Trajectory Sampler object
@@ -212,7 +210,7 @@ private:
    * @param reference_path
    */
   sycl::event pathCostFunc(const size_t trajs_size, const size_t ref_path_size,
-                    const double cost_weight);
+                           const double cost_weight);
 
   /**
    * @brief Trajectory cost based on the distance to the end (goal) of a given
@@ -221,8 +219,9 @@ private:
    * @param trajectories
    * @param reference_path
    */
-  sycl::event goalCostFunc(const size_t trajs_size, const Path::Point &last_ref_point,
-                    const float path_length, const double cost_weight);
+  sycl::event goalCostFunc(const size_t trajs_size,
+                           const Path::Point &last_ref_point,
+                           const float path_length, const double cost_weight);
 
   /**
    * @brief Trajectory cost based on the smoothness along the trajectory
@@ -231,7 +230,8 @@ private:
    * @param accLimits     Robot acceleration limits [max acceleration on
    * x-direction, max on y-direction, max angular acceleration]
    */
-  sycl::event smoothnessCostFunc(const size_t trajs_size, const double cost_weight);
+  sycl::event smoothnessCostFunc(const size_t trajs_size,
+                                 const double cost_weight);
 
   /**
    * @brief Trajectory cost based on the jerk along the trajectory
@@ -249,7 +249,8 @@ private:
    * @param obstaclePoints
    * @return float
    */
-  sycl::event obstaclesDistCostFunc(const size_t trajs_size, const double cost_weight);
+  sycl::event obstaclesDistCostFunc(const size_t trajs_size,
+                                    const double cost_weight);
 #else
   // Built-in functions for cost evaluation
   /**
@@ -260,7 +261,7 @@ private:
    * @return float
    */
   float pathCostFunc(const Trajectory2D &trajectory,
-                      const Path::Path &reference_path);
+                     const Path::Path &reference_path);
 
   /**
    * @brief Trajectory cost based on the distance to the end (goal) of a given
@@ -271,7 +272,7 @@ private:
    * @return float
    */
   float goalCostFunc(const Trajectory2D &trajectory,
-                      const Path::Path &reference_path);
+                     const Path::Path &reference_path);
 
   /**
    * @brief Trajectory cost based on the distance obstacles

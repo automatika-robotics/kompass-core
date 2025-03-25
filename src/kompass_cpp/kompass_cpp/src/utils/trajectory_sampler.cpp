@@ -40,15 +40,18 @@ TrajectorySampler::TrajectorySampler(
   max_time_ = predictionHorizon;
   control_time_ = controlHorizon;
   lin_samples_max_ = maxLinearSamples;
-  ang_samples_max_ = maxAngularSamples;
-  numPointsPerTrajectory_ = getNumPointsPerTrajectory(time_step_, max_time_);
+  // make sure number of angular samples are odd so that zero is not skipped
+  // when range is symmetrical around zero
+  ang_samples_max_ = maxAngularSamples + 1 - (maxAngularSamples % 2);
+  numPointsPerTrajectory = getNumPointsPerTrajectory(time_step_, max_time_);
 
   if (ctrType != ControlType::OMNI) {
     // Discard Vy limits to eliminate movement on Y axis
     ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
   }
 
-  numTrajectories_ = getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
+  numTrajectories =
+      getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
 
   this->maxNumThreads = maxNumThreads;
 }
@@ -71,14 +74,15 @@ TrajectorySampler::TrajectorySampler(
 
   updateParams(config);
 
-  numPointsPerTrajectory_ = getNumPointsPerTrajectory(time_step_, max_time_);
+  numPointsPerTrajectory = getNumPointsPerTrajectory(time_step_, max_time_);
 
   if (ctrType != ControlType::OMNI) {
     // Discard Vy limits to eliminate movement on Y axis
     ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
   }
 
-  numTrajectories_ = getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
+  numTrajectories =
+      getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
 
   this->maxNumThreads = maxNumThreads;
 }
@@ -106,13 +110,13 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
     return;
   }
   Path::State simulated_pose = start_pose;
-  TrajectoryVelocities2D simulated_velocities(numPointsPerTrajectory_);
-  TrajectoryPath path(numPointsPerTrajectory_);
+  TrajectoryVelocities2D simulated_velocities(numPointsPerTrajectory);
+  TrajectoryPath path(numPointsPerTrajectory);
   int idx = 0;
   path.add(idx, start_pose.x, start_pose.y);
   bool is_collision = false;
 
-  for (size_t i = 0; i < (numPointsPerTrajectory_ - 1); ++i) {
+  for (size_t i = 0; i < (numPointsPerTrajectory - 1); ++i) {
 
     simulated_pose.x += (vel.vx() * cos(simulated_pose.yaw) -
                          vel.vy() * sin(simulated_pose.yaw)) *
@@ -165,14 +169,14 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
     return;
   }
   Path::State simulated_pose = start_pose;
-  TrajectoryVelocities2D simulated_velocities(numPointsPerTrajectory_);
-  TrajectoryPath path(numPointsPerTrajectory_);
+  TrajectoryVelocities2D simulated_velocities(numPointsPerTrajectory);
+  TrajectoryPath path(numPointsPerTrajectory);
   int idx = 0;
   Velocity2D temp_vel;
   path.add(idx, start_pose.x, start_pose.y);
   bool is_collision = false;
 
-  for (size_t i = 0; i < (numPointsPerTrajectory_ - 1); ++i) {
+  for (size_t i = 0; i < (numPointsPerTrajectory - 1); ++i) {
 
     // Alternate between linear and angular movement
     if (i % 2 == 0) {
@@ -220,7 +224,8 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
 
 TrajectorySamples2D TrajectorySampler::generateTrajectoriesAckermann(
     const Velocity2D &current_vel, const Path::State &current_pose) {
-  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories_, numPointsPerTrajectory_);
+  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories,
+                                                       numPointsPerTrajectory);
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
     // Implements generating smooth arc-like trajectories within the admissible
@@ -258,7 +263,8 @@ TrajectorySamples2D TrajectorySampler::generateTrajectoriesAckermann(
 TrajectorySamples2D TrajectorySampler::generateTrajectoriesDiffDrive(
     const Velocity2D &current_vel, const Path::State &current_pose) {
 
-  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories_, numPointsPerTrajectory_);
+  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories,
+                                                       numPointsPerTrajectory);
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
 
@@ -301,7 +307,8 @@ TrajectorySamples2D TrajectorySampler::generateTrajectoriesDiffDrive(
 TrajectorySamples2D
 TrajectorySampler::generateTrajectoriesOmni(const Velocity2D &current_vel,
                                             const Path::State &current_pose) {
-  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories_, numPointsPerTrajectory_);
+  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories,
+                                                       numPointsPerTrajectory);
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
     // Generate forward/backward trajectories

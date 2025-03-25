@@ -32,8 +32,8 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
 
   trajCostEvaluator =
       new CostEvaluator(costWeights, sensor_position_body, sensor_rotation_body,
-                        controlType, controlLimits, timeStep, predictionHorizon,
-                        maxLinearSamples, maxAngularSamples, maxPathLength);
+                        controlLimits, trajSampler->numTrajectories,
+                        trajSampler->numPointsPerTrajectory, maxPathLength);
 
   // Update the max forward distance the robot can make
   if (controlType == ControlType::OMNI) {
@@ -70,8 +70,8 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
 
   trajCostEvaluator =
       new CostEvaluator(costWeights, sensor_position_body, sensor_rotation_body,
-                        controlType, controlLimits, timeStep, predictionHorizon,
-                        maxLinearSamples, maxAngularSamples, maxPathLength);
+                        controlLimits, trajSampler->numTrajectories,
+                        trajSampler->numPointsPerTrajectory, maxPathLength);
 
   // Update the max forward distance the robot can make
   double timeHorizon = config.getParameter<double>("control_horizon");
@@ -113,8 +113,8 @@ void DWA::reconfigure(ControlLimitsParams controlLimits,
       config.getParameter<double>("max_point_interpolation_distance");
   trajCostEvaluator =
       new CostEvaluator(costWeights, sensor_position_body, sensor_rotation_body,
-                        controlType, controlLimits, timeStep, predictionHorizon,
-                        maxLinearSamples, maxAngularSamples, maxPathLength);
+                        controlLimits, trajSampler->numTrajectories,
+                        trajSampler->numPointsPerTrajectory, maxPathLength);
   this->maxNumThreads = maxNumThreads;
 }
 
@@ -143,8 +143,8 @@ void DWA::reconfigure(TrajectorySampler::TrajectorySamplerParameters config,
       config.getParameter<double>("max_point_interpolation_distance");
   trajCostEvaluator =
       new CostEvaluator(costWeights, sensor_position_body, sensor_rotation_body,
-                        controlType, controlLimits, timeStep, predictionHorizon,
-                        maxLinearSamples, maxAngularSamples, maxPathLength);
+                        controlLimits, trajSampler->numTrajectories,
+                        trajSampler->numPointsPerTrajectory, maxPathLength);
   this->maxNumThreads = maxNumThreads;
 }
 

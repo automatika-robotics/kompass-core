@@ -14,16 +14,15 @@ namespace Kompass {
 
 namespace Control {
 CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
-                             ControlType controlType,
-                             ControlLimitsParams ctrLimits, double timeStep,
-                             double timeHorizon, size_t maxLinearSamples,
-                             size_t maxAngularSamples, size_t maxRefPathSize) {
+                             ControlLimitsParams ctrLimits,
+                             size_t maxNumTrajectories,
+                             size_t numPointsPerTrajectory,
+                             size_t maxRefPathSize) {
 
   this->costWeights = costsWeights;
 
-  numPointsPerTrajectory_ = getNumPointsPerTrajectory(timeStep, timeHorizon);
-  numTrajectories_ =
-      getNumTrajectories(ctrType, maxLinearSamples, maxAngularSamples);
+  numTrajectories_ = maxNumTrajectories;
+  numPointsPerTrajectory_ = numPointsPerTrajectory;
 
   accLimits_ = {static_cast<float>(ctrLimits.velXParams.maxAcceleration),
                 static_cast<float>(ctrLimits.velYParams.maxAcceleration),
@@ -35,10 +34,10 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
 CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
                              const std::array<float, 3> &sensor_position_body,
                              const std::array<float, 4> &sensor_rotation_body,
-                             ControlType controlType,
-                             ControlLimitsParams ctrLimits, double timeStep,
-                             double timeHorizon, size_t maxLinearSamples,
-                             size_t maxAngularSamples, size_t maxRefPathSize) {
+                             ControlLimitsParams ctrLimits,
+                             size_t maxNumTrajectories,
+                             size_t numPointsPerTrajectory,
+                             size_t maxRefPathSize) {
 
   sensor_tf_body_ =
       getTransformation(Eigen::Quaternionf(sensor_rotation_body.data()),
@@ -49,9 +48,8 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
                 static_cast<float>(ctrLimits.velYParams.maxAcceleration),
                 static_cast<float>(ctrLimits.omegaParams.maxAcceleration)};
 
-  numPointsPerTrajectory_ = getNumPointsPerTrajectory(timeStep, timeHorizon);
-  numTrajectories_ =
-      getNumTrajectories(ctrType, maxLinearSamples, maxAngularSamples);
+  numTrajectories_ = maxNumTrajectories;
+  numPointsPerTrajectory_ = numPointsPerTrajectory;
   maxRefPathSize_ = maxRefPathSize;
   initializeGPUMemory();
 }
