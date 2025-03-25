@@ -97,7 +97,7 @@ public:
   computeVelocityCommandsSet(const Velocity2D &global_vel,
                              const std::vector<Path::Point> &cloud);
 
-  TrajectoryPathSamples getDebuggingSamples() const;
+  TrajectorySamples2D getDebuggingSamples() const;
 
   template <typename T>
   void debugVelocitySearch(const Velocity2D &global_vel, const T &scan_points,
@@ -117,7 +117,7 @@ public:
     // Generate set of valid trajectories
     TrajectorySamples2D samples_ = trajSampler->generateTrajectories(
         global_vel, currentState, scan_points);
-    debuggingSamples_ = new TrajectoryPathSamples(samples_.paths);
+    debuggingSamples_ = new TrajectorySamples2D(samples_);
   };
 
 private:
@@ -125,7 +125,7 @@ private:
   CostEvaluator *trajCostEvaluator;
   double max_forward_distance_ = 0.0;
   int maxNumThreads;
-  TrajectoryPathSamples *debuggingSamples_ = nullptr;
+  TrajectorySamples2D *debuggingSamples_ = nullptr;
 
   /**
    * @brief get maximum reference path length
