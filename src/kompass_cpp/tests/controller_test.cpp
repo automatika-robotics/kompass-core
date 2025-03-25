@@ -3,6 +3,9 @@
 #include "test.h"
 #include "utils/cost_evaluator.h"
 #define BOOST_TEST_MODULE KOMPASS TESTS
+#include "json_export.cpp"
+#include <boost/dll/runtime_symbol_info.hpp> // for program_location
+#include <boost/filesystem.hpp>
 #include <boost/test/included/unit_test.hpp>
 #include <cmath>
 #include <vector>
@@ -36,8 +39,8 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   double timeStep = 0.1;
   double predictionHorizon = 4.0;
   double controlHorizon = 0.4;
-  int maxLinearSamples = 20;
-  int maxAngularSamples = 20;
+  int maxLinearSamples = 21;
+  int maxAngularSamples = 21;
   int maxNumThreads = 10;
 
   // Octomap resolution
@@ -47,6 +50,9 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   Control::CostEvaluator::TrajectoryCostsWeights costWeights;
   costWeights.setParameter("reference_path_distance_weight", 1.0);
   costWeights.setParameter("goal_distance_weight", 3.0);
+  costWeights.setParameter("obstacles_distance_weight", 0.0);
+  costWeights.setParameter("smoothness_weight", 0.0);
+  costWeights.setParameter("jerk_weight", 0.0);
 
   // Robot configuration
   Control::LinearVelocityControlParams x_params(1, 3, 5);
@@ -84,6 +90,30 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   planner.setCurrentPath(path);
 
   int counter = 0;
+
+  planner.setCurrentState(robotState);
+
+  planner.debugVelocitySearch(robotControl, robotScan, true);
+
+  Control::TrajectorySamples2D samples_ = planner.getDebuggingSamples();
+
+  // Plot the trajectories (Save to json then run python script for plotting)
+  boost::filesystem::path executablePath = boost::dll::program_location();
+  std::string file_location = executablePath.parent_path().string();
+
+  std::string trajectories_filename =
+      file_location + "/trajectories_controller_test";
+  std::string ref_path_filename = file_location + "/ref_path";
+
+  saveTrajectoriesToJson(samples_, trajectories_filename + ".json");
+  savePathToJson(path, ref_path_filename + ".json");
+
+  std::string command =
+      "python3 " + file_location + "/trajectory_sampler_plt --samples \"" +
+      trajectories_filename + "\" --reference \"" + ref_path_filename + "\"";
+
+  // Execute the Python script
+  int res = system(command.c_str());
 
   while (!planner.isGoalReached() and counter < 100) {
     counter++;
