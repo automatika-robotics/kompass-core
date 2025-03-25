@@ -1,8 +1,8 @@
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
 #include "test.h"
-#include "utils/cost_evaluator.h"
 #include "utils/collision_check.h"
+#include "utils/cost_evaluator.h"
 #include "utils/logger.h"
 #include <cstddef>
 #define BOOST_TEST_MODULE KOMPASS COSTS TESTS
@@ -118,9 +118,6 @@ struct TestConfig {
   double max_path_length;
   double max_interpolation_point_dist;
   size_t current_segment_index;
-  double controlHorizon;
-  int maxLinearSamples;
-  int maxAngularSamples;
   int maxNumThreads;
   double timeStep;
   double predictionHorizon;
@@ -128,7 +125,6 @@ struct TestConfig {
   LinearVelocityControlParams y_params;
   AngularVelocityControlParams angular_params;
   ControlLimitsParams controlLimits;
-  ControlType controlType;
   CollisionChecker::ShapeType robotShapeType;
   std::vector<float> robotDimensions;
   std::array<float, 3> sensor_position_body;
@@ -141,16 +137,13 @@ struct TestConfig {
                Path::Point(2.0, 0.0, 0.0)},
         reference_path(points), max_path_length(10.0),
         max_interpolation_point_dist(0.01), current_segment_index(0),
-        timeStep(0.1), predictionHorizon(1.0), controlHorizon(0.4),
-        maxLinearSamples(20), maxAngularSamples(20), maxNumThreads(10),
+        timeStep(0.1), predictionHorizon(1.0), maxNumThreads(10),
         x_params(1, 3, 5), y_params(1, 3, 5), angular_params(3.14, 3, 5, 8),
         controlLimits(x_params, y_params, angular_params),
-        controlType(ControlType::ACKERMANN),
         robotShapeType(CollisionChecker::ShapeType::BOX),
         robotDimensions{0.3, 0.3, 1.0}, sensor_position_body{0.0, 0.0, 0.5},
         sensor_rotation_body{0, 0, 0, 1}, costWeights(),
-        costEval(costWeights, controlType, controlLimits, timeStep,
-                 predictionHorizon, maxLinearSamples, maxAngularSamples,
+        costEval(costWeights, controlLimits, 10, predictionHorizon / timeStep,
                  max_path_length / max_interpolation_point_dist) {
     reference_path.setMaxLength(max_path_length);
     reference_path.interpolate(max_interpolation_point_dist,
@@ -200,22 +193,20 @@ Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
 
 BOOST_FIXTURE_TEST_SUITE(s, TestConfig)
 
-  TrajectorySamples2D samples;
-  Trajectory2D minimum_cost_traj;
-  Trajectory2D sample;
-  bool check;
+TrajectorySamples2D samples;
+Trajectory2D minimum_cost_traj;
+Trajectory2D sample;
+bool check;
 
 BOOST_AUTO_TEST_CASE(test_all_costs) {
   // Create timer
   Timer time;
   LOG_INFO("Running Reference Path Cost Test");
   // Generate test trajectory samples
-  samples =
-      generate_ref_path_test_samples(predictionHorizon, timeStep);
+  samples = generate_ref_path_test_samples(predictionHorizon, timeStep);
 
-  minimum_cost_traj =
-      run_test(costEval, reference_path, samples, current_segment_index, 1.0,
-               0.0, 0.0, 0.0, 0.0);
+  minimum_cost_traj = run_test(costEval, reference_path, samples,
+                               current_segment_index, 1.0, 0.0, 0.0, 0.0, 0.0);
   // In the generated samples the first sample contains the minimum cost path
   sample = samples.getIndex(0);
   check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
@@ -228,12 +219,10 @@ BOOST_AUTO_TEST_CASE(test_all_costs) {
 
   LOG_INFO("Running Goal Cost Test");
   // Generate test trajectory samples
-  samples =
-      generate_ref_path_test_samples(predictionHorizon, timeStep);
+  samples = generate_ref_path_test_samples(predictionHorizon, timeStep);
 
-  minimum_cost_traj =
-      run_test(costEval, reference_path, samples, current_segment_index, 0.0,
-               1.0, 0.0, 0.0, 0.0);
+  minimum_cost_traj = run_test(costEval, reference_path, samples,
+                               current_segment_index, 0.0, 1.0, 0.0, 0.0, 0.0);
   sample = samples.getIndex(0);
   check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
   BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
@@ -245,12 +234,10 @@ BOOST_AUTO_TEST_CASE(test_all_costs) {
 
   LOG_INFO("Running Smoothness Cost Test");
   // Generate test trajectory samples
-  samples =
-      generate_smoothness_test_samples(predictionHorizon, timeStep);
+  samples = generate_smoothness_test_samples(predictionHorizon, timeStep);
 
-  minimum_cost_traj =
-      run_test(costEval, reference_path, samples, current_segment_index, 0.0,
-               0.0, 0.0, 1.0, 0.0);
+  minimum_cost_traj = run_test(costEval, reference_path, samples,
+                               current_segment_index, 0.0, 0.0, 0.0, 1.0, 0.0);
   sample = samples.getIndex(0);
   check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
   BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
@@ -262,12 +249,10 @@ BOOST_AUTO_TEST_CASE(test_all_costs) {
 
   LOG_INFO("Running Jerk Cost Test");
   // Generate test trajectory samples
-  samples =
-      generate_smoothness_test_samples(predictionHorizon, timeStep);
+  samples = generate_smoothness_test_samples(predictionHorizon, timeStep);
 
-  minimum_cost_traj =
-      run_test(costEval, reference_path, samples, current_segment_index, 0.0,
-               0.0, 0.0, 0.0, 1.0);
+  minimum_cost_traj = run_test(costEval, reference_path, samples,
+                               current_segment_index, 0.0, 0.0, 0.0, 0.0, 1.0);
   sample = samples.getIndex(0);
   check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
   BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
