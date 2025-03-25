@@ -146,8 +146,8 @@ def run_control(
     interpolation_x = []
     interpolation_y = []
     for point in interpolated_path.points:
-        interpolation_x.append(point.x)
-        interpolation_y.append(point.y)
+        interpolation_x.append(point[0])
+        interpolation_y.append(point[1])
 
     i = 0
     x_robot = []
@@ -159,10 +159,11 @@ def run_control(
     robot.state.yaw = np.pi / 2
 
     laser_scan = LaserScanData()
-    # laser_scan.angles = np.array([4.0, 4.1])
-    # laser_scan.ranges = np.array([0.4, 0.3])
+    laser_scan.angles = np.array([0.0, 0.1])
+    laser_scan.ranges = np.array([0.4, 0.3])
 
     while not end_reached and i < 100:
+        print(f"Robot at: {robot.state.x}, {robot.state.y}")
         ctrl_found = controller.loop_step(current_state=robot.state, laser_scan=laser_scan)
         if not ctrl_found or not controller.path:
             end_reached = controller.reached_end()
@@ -177,6 +178,7 @@ def run_control(
             controller.linear_y_control,
             controller.angular_control,
         ):
+            print(f"Applying control: vx={vx}, omega={omega}")
             x_robot.append(robot.state.x)
             y_robot.append(robot.state.y)
             robot.set_control(
@@ -187,6 +189,8 @@ def run_control(
             robot.get_state(dt=control_time_step)
             i += 1
             end_reached = controller.reached_end()
+
+    print(f'End reached in: {i}')
 
     if plot_results:
         plot_path(
@@ -237,14 +241,14 @@ def test_path_interpolation(plot: bool = False):
         x_ref = [pose.pose.position.x for pose in ref_path.poses]
         y_ref = [pose.pose.position.y for pose in ref_path.poses]
 
-        x_inter_lin = [point.x for point in linear_interpolation.points]
-        y_inter_lin = [point.y for point in linear_interpolation.points]
+        x_inter_lin = [point[0] for point in linear_interpolation.points]
+        y_inter_lin = [point[1] for point in linear_interpolation.points]
 
-        x_inter_her = [point.x for point in hermite_spline_interpolation.points]
-        y_inter_her = [point.y for point in hermite_spline_interpolation.points]
+        x_inter_her = [point[0] for point in hermite_spline_interpolation.points]
+        y_inter_her = [point[1] for point in hermite_spline_interpolation.points]
 
-        x_inter_cub = [point.x for point in cubic_spline_interpolation.points]
-        y_inter_cub = [point.y for point in cubic_spline_interpolation.points]
+        x_inter_cub = [point[0] for point in cubic_spline_interpolation.points]
+        y_inter_cub = [point[1] for point in cubic_spline_interpolation.points]
         # Plot the path
         plt.figure()
         plt.plot(
@@ -287,12 +291,12 @@ def test_path_interpolation(plot: bool = False):
         elif isinstance(path, PathCpp):
             for idx in range(len(path.points) - 1):
                 d_x = (
-                    path.points[idx + 1].x
-                    - path.points[idx].x
+                    path.points[idx + 1][0]
+                    - path.points[idx][0]
                 )
                 d_y = (
-                    path.points[idx + 1].y
-                    - path.points[idx].y
+                    path.points[idx + 1][1]
+                    - path.points[idx][1]
                 )
                 length += np.sqrt(d_x**2 + d_y**2)
         return length
@@ -365,8 +369,8 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
         obstacles_distance_weight=1.0,
     )
     config = DWAConfig(
-        max_linear_samples=20,
-        max_angular_samples=20,
+        max_linear_samples=4,
+        max_angular_samples=4,
         octree_resolution=0.1,
         costs_weights=cost_weights,
         prediction_horizon=1.0,
