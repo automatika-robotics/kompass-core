@@ -1,4 +1,5 @@
 #ifdef GPU
+#include <limits>
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
 #include "utils/cost_evaluator.h"
@@ -104,8 +105,9 @@ void CostEvaluator::initializeGPUMemory() {
     m_devicePtrTempCosts = sycl::malloc_shared<float>(numTrajectories_, m_q);
   }
 
-  // Result struct memory allocation
+  // Result struct memory allocation and init
   m_minCost = sycl::malloc_shared<LowestCost>(1, m_q);
+  *m_minCost = LowestCost();
 }
 
 void CostEvaluator::updateCostWeights(TrajectoryCostsWeights costsWeights) {
@@ -138,6 +140,9 @@ CostEvaluator::~CostEvaluator() {
   customTrajCostsPtrs_.clear();
 
   // unallocate device memory
+  if (m_devicePtrCosts) {
+    sycl::free(m_devicePtrCosts, m_q);
+  }
   if (m_minCost) {
     sycl::free(m_minCost, m_q);
   }
@@ -155,9 +160,6 @@ CostEvaluator::~CostEvaluator() {
   }
   if (m_devicePtrVelocitiesOmega) {
     sycl::free(m_devicePtrVelocitiesOmega, m_q);
-  }
-  if (m_devicePtrCosts) {
-    sycl::free(m_devicePtrCosts, m_q);
   }
   if (m_devicePtrReferencePathX) {
     sycl::free(m_devicePtrReferencePathX, m_q);
@@ -199,7 +201,8 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
                sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1));
     m_q.memcpy(m_devicePtrVelocitiesOmega, trajs.velocities.omega.data(),
                sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1));
-    *m_minCost = LowestCost();
+    m_minCost->cost = std::numeric_limits<float>::max();
+    m_minCost->sampleIndex = 0;
 
     // wait for all data to be transferred
     m_q.wait();
@@ -291,7 +294,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
          auto reduction = sycl::reduction(minCost, sycl::plus<LowestCost>());
          // Kernel scope
          h.parallel_for<class minimumCostReduction>(
-             sycl::range<1>(trajs.size()), reduction,
+             sycl::range<1>(trajs_size), reduction,
              [=](sycl::id<1> idx, auto &minVal) {
                minVal.combine(LowestCost(costs[idx], idx));
              });
