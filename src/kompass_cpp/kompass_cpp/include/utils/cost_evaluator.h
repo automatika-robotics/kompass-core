@@ -194,12 +194,12 @@ private:
   float *m_devicePtrVelocitiesVx;
   float *m_devicePtrVelocitiesVy;
   float *m_devicePtrVelocitiesOmega;
-  float *m_devicePtrReferencePathX;
-  float *m_devicePtrReferencePathY;
   float *m_devicePtrCosts;
-  float *m_devicePtrObstaclesX;
-  float *m_devicePtrObstaclesY;
-  float *m_devicePtrTempCosts;
+  float *m_devicePtrReferencePathX = nullptr;
+  float *m_devicePtrReferencePathY = nullptr;
+  float *m_devicePtrObstaclesX = nullptr;
+  float *m_devicePtrObstaclesY = nullptr;
+  float *m_devicePtrTempCosts = nullptr;
   LowestCost *m_minCost;
   sycl::queue m_q;
   void initializeGPUMemory();
