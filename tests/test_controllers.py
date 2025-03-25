@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
-from kompass_cpp.types import PathInterpolationType
+from kompass_cpp.types import PathInterpolationType, Path as PathCpp
 
 from kompass_core.datatypes.laserscan import LaserScanData
 from kompass_core.control import (
@@ -141,12 +141,12 @@ def run_control(
     controller.set_path(global_path)
 
     # Interpolated path for visualization
-    interpolated_path = controller.interpolated_path(msg_header=None)
+    interpolated_path = controller.interpolated_path()
     interpolation_x = []
     interpolation_y = []
-    for point in interpolated_path.poses:
-        interpolation_x.append(point.pose.position.x)
-        interpolation_y.append(point.pose.position.y)
+    for point in interpolated_path.points:
+        interpolation_x.append(point.x)
+        interpolation_y.append(point.y)
 
     i = 0
     x_robot = []
@@ -158,7 +158,7 @@ def run_control(
     robot.state.yaw = np.pi / 2
 
     laser_scan = LaserScanData()
-    # laser_scan.angles = np.array([4.0, 4.1])
+    # laser_scan.angles = np.array([0.0, 0.1])
     # laser_scan.ranges = np.array([0.4, 0.3])
 
     while not end_reached and i < 100:
@@ -217,39 +217,30 @@ def test_path_interpolation(plot: bool = False):
 
     follower.set_interpolation_type(PathInterpolationType.LINEAR)
     follower.set_path(ref_path)
-    linear_interpolation = follower.interpolated_path(msg_header=ref_path.header)
+    linear_interpolation = follower.interpolated_path()
 
     follower.set_interpolation_type(PathInterpolationType.HERMITE_SPLINE)
     follower.set_path(ref_path)
     hermite_spline_interpolation = follower.interpolated_path(
-        msg_header=ref_path.header
     )
 
     follower.set_interpolation_type(PathInterpolationType.CUBIC_SPLINE)
     follower.set_path(ref_path)
-    cubic_spline_interpolation = follower.interpolated_path(msg_header=ref_path.header)
+    cubic_spline_interpolation = follower.interpolated_path()
 
     if plot:
         # Extract x and y coordinates from the Path message
         x_ref = [pose.pose.position.x for pose in ref_path.poses]
         y_ref = [pose.pose.position.y for pose in ref_path.poses]
 
-        x_inter_lin = [pose.pose.position.x for pose in linear_interpolation.poses]
-        y_inter_lin = [pose.pose.position.y for pose in linear_interpolation.poses]
+        x_inter_lin = [pose.x for pose in linear_interpolation.points]
+        y_inter_lin = [pose.y for pose in linear_interpolation.points]
 
-        x_inter_her = [
-            pose.pose.position.x for pose in hermite_spline_interpolation.poses
-        ]
-        y_inter_her = [
-            pose.pose.position.y for pose in hermite_spline_interpolation.poses
-        ]
+        x_inter_her = [pose.x for pose in hermite_spline_interpolation.points]
+        y_inter_her = [pose.y for pose in hermite_spline_interpolation.points]
 
-        x_inter_cub = [
-            pose.pose.position.x for pose in cubic_spline_interpolation.poses
-        ]
-        y_inter_cub = [
-            pose.pose.position.y for pose in cubic_spline_interpolation.poses
-        ]
+        x_inter_cub = [pose.x for pose in cubic_spline_interpolation.points]
+        y_inter_cub = [pose.y for pose in cubic_spline_interpolation.points]
         # Plot the path
         plt.figure()
         plt.plot(
@@ -284,10 +275,22 @@ def test_path_interpolation(plot: bool = False):
         :rtype: float
         """
         length = 0.0
-        for idx in range(len(path.poses) - 1):
-            d_x = path.poses[idx + 1].pose.position.x - path.poses[idx].pose.position.x
-            d_y = path.poses[idx + 1].pose.position.y - path.poses[idx].pose.position.y
-            length += np.sqrt(d_x**2 + d_y**2)
+        if isinstance(path, Path):
+            for idx in range(len(path.poses) - 1):
+                d_x = path.poses[idx + 1].pose.position.x - path.poses[idx].pose.position.x
+                d_y = path.poses[idx + 1].pose.position.y - path.poses[idx].pose.position.y
+                length += np.sqrt(d_x**2 + d_y**2)
+        elif isinstance(path, PathCpp):
+            for idx in range(len(path.points) - 1):
+                d_x = (
+                    path.points[idx + 1].x
+                    - path.points[idx].x
+                )
+                d_y = (
+                    path.points[idx + 1].y
+                    - path.points[idx].y
+                )
+                length += np.sqrt(d_x**2 + d_y**2)
         return length
 
     length_diff = path_length(ref_path) - path_length(linear_interpolation)
