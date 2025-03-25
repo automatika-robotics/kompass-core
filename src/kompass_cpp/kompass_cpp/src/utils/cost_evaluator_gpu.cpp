@@ -67,14 +67,14 @@ void CostEvaluator::initializeGPUMemory() {
   }
 
   // Query maximum work-group size
-  size_t max_wg_size = dev.get_info<sycl::info::device::max_work_group_size>();
-  if (numPointsPerTrajectory_ > max_wg_size) {
+  max_wg_size_ = dev.get_info<sycl::info::device::max_work_group_size>();
+  if (numPointsPerTrajectory_ > max_wg_size_) {
     LOG_WARNING("Number of points per sample trajectory should be less than:",
-                max_wg_size,
+                max_wg_size_,
                 "for your device. Please try to modify the control time step "
                 "and prediction horizon such that "
                 "prediction_horizon/control_time_step is less than",
-                max_wg_size);
+                max_wg_size_);
   }
 
   // Data memory allocation
@@ -98,8 +98,11 @@ void CostEvaluator::initializeGPUMemory() {
     m_devicePtrReferencePathY =
         sycl::malloc_device<float>(maxRefPathSize_, m_q);
   };
-  if (costWeights.getParameter<double>("obstacles_distance_weight") > 0.0 ||
-      customTrajCostsPtrs_.size() > 0) {
+  if (costWeights.getParameter<double>("obstacles_distance_weight") > 0.0) {
+    m_devicePtrObstaclesX = sycl::malloc_device<float>(max_wg_size_, m_q);
+    m_devicePtrObstaclesY = sycl::malloc_device<float>(max_wg_size_, m_q);
+  }
+  if (customTrajCostsPtrs_.size() > 0) {
     m_devicePtrTempCosts = sycl::malloc_shared<float>(numTrajectories_, m_q);
   }
 
@@ -118,9 +121,12 @@ void CostEvaluator::updateCostWeights(TrajectoryCostsWeights costsWeights) {
     m_devicePtrReferencePathY =
         sycl::malloc_device<float>(maxRefPathSize_, m_q);
   };
-  if ((costWeights.getParameter<double>("obstacles_distance_weight") > 0.0 ||
-       customTrajCostsPtrs_.size() > 0) &&
-      !m_devicePtrTempCosts) {
+  if (costWeights.getParameter<double>("obstacles_distance_weight") > 0.0 &&
+      !m_devicePtrObstaclesX && !m_devicePtrObstaclesY) {
+    m_devicePtrObstaclesX = sycl::malloc_device<float>(max_wg_size_, m_q);
+    m_devicePtrObstaclesY = sycl::malloc_device<float>(max_wg_size_, m_q);
+  }
+  if (customTrajCostsPtrs_.size() > 0 && !m_devicePtrTempCosts) {
     m_devicePtrTempCosts = sycl::malloc_shared<float>(numTrajectories_, m_q);
   }
 };
@@ -161,6 +167,12 @@ CostEvaluator::~CostEvaluator() {
   if (m_devicePtrReferencePathY) {
     sycl::free(m_devicePtrReferencePathY, m_q);
   }
+  if (m_devicePtrObstaclesX) {
+    sycl::free(m_devicePtrObstaclesX, m_q);
+  }
+  if (m_devicePtrObstaclesY) {
+    sycl::free(m_devicePtrObstaclesY, m_q);
+  }
   if (m_devicePtrTempCosts) {
     sycl::free(m_devicePtrTempCosts, m_q);
   }
@@ -173,6 +185,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
   try {
     double weight;
     float ref_path_length;
+    size_t obs_size;
     size_t trajs_size = trajs.size();
     std::vector<sycl::event> events;
 
@@ -221,21 +234,32 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     if ((weight = costWeights.getParameter<double>("jerk_weight")) > 0.0) {
       events.push_back(jerkCostFunc(trajs_size, weight));
     }
+    if ((weight = costWeights.getParameter<double>(
+             "obstacles_distance_weight")) > 0.0 &&
+        (obs_size = obstaclePointsX.size()) > 0) {
+      if (obs_size > max_wg_size_) {
+        LOG_WARNING("The number of obstacles registered(", obs_size,
+                    ") are more than the maximum workgroup size(", max_wg_size_,
+                    "). Some obstacles will be dropped.");
+        obs_size = max_wg_size_;
+      }
+      m_q.memcpy(m_devicePtrObstaclesX, obstaclePointsX.data(),
+                 sizeof(float) * obs_size)
+          .wait();
+      m_q.memcpy(m_devicePtrObstaclesY, obstaclePointsY.data(),
+                 sizeof(float) * obs_size)
+          .wait();
+      events.push_back(obstaclesDistCostFunc(trajs_size, weight));
+    }
 
     // wait for all costs to be calculated
     m_q.wait();
 
     // calculate costs on the CPU
-    if (((weight = costWeights.getParameter<double>(
-              "obstacles_distance_weight")) > 0.0) ||
-        customTrajCostsPtrs_.size() > 0) {
+    if (customTrajCostsPtrs_.size() > 0) {
       size_t idx = 0;
       for (const auto traj : trajs) {
         m_devicePtrTempCosts[idx] = 0.0;
-        if (weight > 0.0 && obstaclePointsX.size() > 0) {
-          m_devicePtrTempCosts[idx] +=
-              weight * obstaclesDistCostFunc(traj);
-        }
         for (const auto &custom_cost : customTrajCostsPtrs_) {
           // custom cost functions takes in the trajectory and the reference
           // path
@@ -621,10 +645,82 @@ sycl::event CostEvaluator::jerkCostFunc(const size_t trajs_size,
   });
 }
 
-// Calculate obstacle distance cost per trajectory (CPU)
-float CostEvaluator::obstaclesDistCostFunc(
-    const Trajectory2D &trajectory) {
-  return trajectory.path.minDist2D(obstaclePointsX, obstaclePointsY);
+// Calculate obstacle distance cost per trajectory
+sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
+                                                 const double cost_weight) {
+  // -----------------------------------------------------
+  //  Parallelize over trajectories and path indices.
+  //  Calculate distance of each point with each obstacle point.
+  //  Atomically add lowest distance to the trajectory’s cost.
+  // -----------------------------------------------------
+
+  // command scope
+  return m_q.submit([&](sycl::handler &h) {
+    // local copies of class members to be used inside the kernel
+    auto X = m_devicePtrPathsX;
+    auto Y = m_devicePtrPathsY;
+    auto obs_X = m_devicePtrObstaclesX;
+    auto obs_Y = m_devicePtrObstaclesY;
+    auto costs = m_devicePtrCosts;
+    const float costWeight = cost_weight;
+    const size_t trajsSize = trajs_size;
+    const size_t pathSize = numPointsPerTrajectory_;
+    const size_t obsSize = obstaclePointsX.size();
+    // local memory for storing per trajectory average cost
+    sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
+    auto global_size = sycl::range<1>(trajs_size * pathSize);
+    auto workgroup_size = sycl::range<1>(pathSize);
+    // Kernel scope
+    h.parallel_for<class obstaclesDistCostKernel>(
+        sycl::nd_range<1>(global_size, workgroup_size),
+        [=](sycl::nd_item<1> item) {
+          const size_t traj = item.get_group().get_group_id(0);
+          const size_t path_index = item.get_local_id();
+
+          // Initialize local memory once per work-group in the first thread
+          if (path_index == 0) {
+            for (size_t i = 0; i < trajsSize; ++i) {
+              trajCost[i] = std::numeric_limits<float>::max();
+            }
+          }
+          // Synchronize to make sure initialization is complete
+          item.barrier(sycl::access::fence_space::local_space);
+
+          sycl::vec<float, 2> point;
+          sycl::vec<float, 2> ref_point;
+          float distance;
+
+          for (size_t i = 0; i < obsSize; ++i) {
+            point = {X[traj * pathSize + path_index],
+                     Y[traj * pathSize + path_index]};
+            ref_point = {obs_X[i], obs_Y[i]};
+
+            distance = sycl::distance(point, ref_point);
+            // Atomically add the computed min costs to the local cost for
+            // this trajectory
+            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::local_space>
+                atomic_min(trajCost[traj]);
+            atomic_min.fetch_min(distance);
+          }
+
+          // Synchronize again so that all atomic updates are finished
+          // before further processing
+          item.barrier(sycl::access::fence_space::local_space);
+
+          // normalize the trajectory cost and add end point distance to it
+          if (path_index == 0) {
+            // Atomically add the computed contribution to the global cost
+            // for this trajectory
+            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                atomic_cost(costs[traj]);
+            atomic_cost.fetch_add(trajCost[traj]);
+          }
+        });
+  });
 }
 }; // namespace Control
 } // namespace Kompass

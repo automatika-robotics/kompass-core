@@ -190,6 +190,7 @@ private:
   size_t numTrajectories_;
   size_t numPointsPerTrajectory_;
   size_t maxRefPathSize_;
+  size_t max_wg_size_;
   float *m_devicePtrPathsX;
   float *m_devicePtrPathsY;
   float *m_devicePtrVelocitiesVx;
@@ -198,6 +199,8 @@ private:
   float *m_devicePtrReferencePathX;
   float *m_devicePtrReferencePathY;
   float *m_devicePtrCosts;
+  float *m_devicePtrObstaclesX;
+  float *m_devicePtrObstaclesY;
   float *m_devicePtrTempCosts;
   LowestCost *m_minCost;
   sycl::queue m_q;
@@ -246,7 +249,7 @@ private:
    * @param obstaclePoints
    * @return float
    */
-  float obstaclesDistCostFunc(const Trajectory2D &trajectory);
+  sycl::event obstaclesDistCostFunc(const size_t trajs_size, const double cost_weight);
 #else
   // Built-in functions for cost evaluation
   /**
