@@ -251,7 +251,7 @@ DWA::computeVelocityCommandsSet(const Velocity2D &global_vel,
   return searchRes;
 }
 
-TrajectoryPathSamples DWA::getDebuggingSamples() const {
+TrajectorySamples2D DWA::getDebuggingSamples() const {
   if (debuggingSamples_ == nullptr) {
     throw std::invalid_argument("No debugging samples are available");
   }
