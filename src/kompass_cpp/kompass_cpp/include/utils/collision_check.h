@@ -230,6 +230,8 @@ private:
   // Octree collision object pointers
   octomap::OcTree *octTree; // Octomap octree used to get data from laserscan or
                             // pointcloud and convert it to an Octree
+  // Octomap Pointcloud
+  octomap::Pointcloud octomapCloud_;
   fcl::OcTreef *tree =
       nullptr; // FCL Octree updated after converting the Octomap octree
                // (required for creating the collision object)
