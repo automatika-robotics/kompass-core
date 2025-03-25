@@ -21,9 +21,6 @@ VisionFollower::VisionFollower(const ControlType robotCtrlType,
 }
 
 void VisionFollower::resetTarget(const TrackingData tracking) {
-  // clear all
-  _recorded_wait_time = 0.0;
-  _recorded_search_time = 0.0;
   // empty the search command queue
   std::queue<std::array<double, 3>> empty;
   std::swap( _search_commands_queue, empty );
@@ -38,7 +35,7 @@ void VisionFollower::resetTarget(const TrackingData tracking) {
   else{
     double size = (tracking.size_xy[0] * tracking.size_xy[1]) /
                 (tracking.img_width * tracking.img_height);
-    LOG_INFO("Setting reference distance to size: ", size);
+    LOG_DEBUG("Setting vision target reference distance to size: ", size);
     _config.set_target_distance(size);
   }
 }
@@ -118,6 +115,9 @@ bool VisionFollower::run(const std::optional<TrackingData> tracking) {
   bool tracking_available = false;
   // Check if tracking has a value
   if (tracking.has_value()) {
+    // clear all
+    _recorded_wait_time = 0.0;
+    _recorded_search_time = 0.0;
     // Access the TrackingData object
     const auto &data = tracking.value();
     // ensure size_xy or depth have valid values
@@ -152,6 +152,7 @@ bool VisionFollower::run(const std::optional<TrackingData> tracking) {
   else{
     if (_recorded_wait_time < _config.target_wait_timeout()) {
       LOG_DEBUG("Target lost, waiting to get tracked target again ...");
+      _last_tracking == nullptr;
       // Do nothing and wait
       _recorded_wait_time += _config.control_time_step();
       return true;
