@@ -1,5 +1,4 @@
 #ifdef GPU
-#include <limits>
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
 #include "utils/cost_evaluator.h"
@@ -8,6 +7,7 @@
 #include <Eigen/src/Geometry/Transform.h>
 #include <cstddef>
 #include <cstdlib>
+#include <limits>
 #include <sycl/sycl.hpp>
 #include <vector>
 

@@ -98,7 +98,8 @@ void TrajectorySampler::updateParams(TrajectorySamplerParameters config) {
   max_time_ = config.getParameter<double>("prediction_horizon");
   control_time_ = config.getParameter<double>("control_horizon");
   lin_samples_max_ = config.getParameter<int>("max_linear_samples");
-  ang_samples_max_ = config.getParameter<int>("max_angular_samples");
+  int maxAngularSamples = config.getParameter<int>("max_angular_samples");
+  ang_samples_max_ = maxAngularSamples + 1 - (maxAngularSamples % 2);
 }
 
 void TrajectorySampler::getAdmissibleTrajsFromVel(

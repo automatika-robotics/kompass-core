@@ -61,9 +61,6 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
       sensor_position_body, sensor_rotation_body, maxNumThreads);
 
   double timeStep = config.getParameter<double>("time_step");
-  double predictionHorizon = config.getParameter<double>("prediction_horizon");
-  int maxLinearSamples = config.getParameter<int>("max_linear_samples");
-  int maxAngularSamples = config.getParameter<int>("max_angular_samples");
   size_t maxPathLength =
       this->config.getParameter<double>("max_path_length") /
       config.getParameter<double>("max_point_interpolation_distance");
@@ -133,10 +130,6 @@ void DWA::reconfigure(TrajectorySampler::TrajectorySamplerParameters config,
       sensor_position_body, sensor_rotation_body, maxNumThreads);
 
   delete trajCostEvaluator;
-  double timeStep = config.getParameter<double>("time_step");
-  double predictionHorizon = config.getParameter<double>("prediction_horizon");
-  int maxLinearSamples = config.getParameter<int>("max_linear_samples");
-  int maxAngularSamples = config.getParameter<int>("max_angular_samples");
 
   size_t maxPathLength =
       this->config.getParameter<double>("max_path_length") /
