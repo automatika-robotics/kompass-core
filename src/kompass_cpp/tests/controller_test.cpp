@@ -126,7 +126,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   }
 
   BOOST_TEST(planner.isGoalReached(),
-             "Goal Reached in " << counter << " steps");
+             "Goal not reached in " << counter << " steps");
 }
 
 BOOST_AUTO_TEST_CASE(test_FCL) {
