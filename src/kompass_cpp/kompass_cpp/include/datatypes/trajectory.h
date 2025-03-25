@@ -595,15 +595,15 @@ struct LowestCost {
   size_t sampleIndex;
 
   // Constructor
-  LowestCost(float v = std::numeric_limits<float>::max(), size_t i = 0)
+  LowestCost(const float v = std::numeric_limits<float>::max(), const size_t i = 0)
       : cost(v), sampleIndex(i) {}
 
   // Combine operation for the reduction
-  void combine(const LowestCost &other) {
-    if (other.cost < cost ||
-        (other.cost == cost && other.sampleIndex < sampleIndex)) {
-      cost = other.cost;
-      sampleIndex = other.sampleIndex;
+    void combine(const float other_cost, const size_t other_index) {
+    if (other_cost < cost ||
+        (other_cost == cost && other_index < sampleIndex)) {
+      cost = other_cost;
+      sampleIndex = other_index;
     }
   }
 };
@@ -611,7 +611,7 @@ struct LowestCost {
 // Define how to combine two LowestCost objects
 inline LowestCost operator+(const LowestCost &a, const LowestCost &b) {
   LowestCost result = a;
-  result.combine(b);
+  result.combine(b.cost, b.sampleIndex);
   return result;
 }
 
