@@ -1,17 +1,3 @@
-/**
- * *********************************************************
- *
- * @file: dwa.h
- * @brief: Contains the Dynamic window approach, based on the implementation by
- * AI Winter
- *
- * Copyright (c) 2024, AI Winter.
- * All rights reserved.
- *
- * --------------------------------------------------------
- *
- * ********************************************************
- */
 #pragma once
 
 #include "controllers/controller.h"
@@ -116,6 +102,12 @@ private:
   CostEvaluator *trajCostEvaluator;
   double max_forward_distance_ = 0.0;
   int maxNumThreads;
+
+  /**
+   * @brief get maximum reference path length
+   */
+  // size_t getMaxPathLength();
+  size_t getMaxPathLength();
 
   /**
    * @brief Given the current position and velocity of the robot, find the best
