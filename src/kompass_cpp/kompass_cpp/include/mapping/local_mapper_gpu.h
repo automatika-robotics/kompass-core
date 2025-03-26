@@ -49,9 +49,8 @@ public:
    * @param ranges         LaserScan ranges in meters
    * @param gridData      Current grid data
    */
-  void scanToGrid(const std::vector<double> &angles,
-                  const std::vector<double> &ranges,
-                  Eigen::Ref<Eigen::MatrixXi> gridData);
+  Eigen::MatrixXi &scanToGrid(const std::vector<double> &angles,
+                              const std::vector<double> &ranges);
 
 private:
   const int m_scanSize;

@@ -19,5 +19,5 @@ void bindings_mapping_gpu(py::module_ &m) {
 
       .def("scan_to_grid", &Mapping::LocalMapper::scanToGrid,
            "Convert laser scan data to occupancy grid", py::arg("angles"),
-           py::arg("ranges"), py::arg("grid_data"));
+           py::arg("ranges"), py::return_value_policy::reference_internal);
 }

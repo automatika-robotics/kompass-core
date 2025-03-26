@@ -12,10 +12,9 @@ namespace Mapping {
 // Mutex for grid update
 static std::mutex s_gridMutex;
 
-Eigen::MatrixXf LocalMapper::getPreviousGridInCurrentPose(
+void LocalMapper::getPreviousGridInCurrentPose(
     const Eigen::Vector2f &currentPositionInPreviousPose,
-    double currentOrientationInPreviousPose,
-    const Eigen::MatrixXf &previousGridData, float unknownValue) {
+    double currentOrientationInPreviousPose) {
   // The new center on the previous map
   Eigen::Vector2i currentCenter = localToGrid(currentPositionInPreviousPose);
 
@@ -38,7 +37,7 @@ Eigen::MatrixXf LocalMapper::getPreviousGridInCurrentPose(
 
   // Initialize the result matrix with unknownValue
   Eigen::MatrixXf transformedGrid(m_gridHeight, m_gridWidth);
-  transformedGrid.fill(unknownValue);
+  transformedGrid.fill(m_pPrior);
 
   for (int y = 0; y < m_gridHeight; ++y) {
     for (int x = 0; x < m_gridWidth; ++x) {
@@ -50,8 +49,8 @@ Eigen::MatrixXf LocalMapper::getPreviousGridInCurrentPose(
       double srcX = dstPoint(0);
       double srcY = dstPoint(1);
 
-      if (srcX >= 0 && srcX < previousGridData.cols() - 1 && srcY >= 0 &&
-          srcY < previousGridData.rows() - 1) {
+      if (srcX >= 0 && srcX < previousGridDataProb.cols() - 1 && srcY >= 0 &&
+          srcY < previousGridDataProb.rows() - 1) {
 
         int x0 = static_cast<int>(floor(srcX));
         int y0 = static_cast<int>(floor(srcY));
@@ -63,17 +62,17 @@ Eigen::MatrixXf LocalMapper::getPreviousGridInCurrentPose(
         float h0 = srcY - y0;
         float h1 = 1.0f - h0;
 
-        float value = h1 * (w1 * previousGridData(y0, x0) +
-                            w0 * previousGridData(y0, x1)) +
-                      h0 * (w1 * previousGridData(y1, x0) +
-                            w0 * previousGridData(y1, x1));
+        float value = h1 * (w1 * previousGridDataProb(y0, x0) +
+                            w0 * previousGridDataProb(y0, x1)) +
+                      h0 * (w1 * previousGridDataProb(y1, x0) +
+                            w0 * previousGridDataProb(y1, x1));
 
         transformedGrid(y, x) = value;
       }
     }
   }
 
-  return transformedGrid;
+  previousGridDataProb = transformedGrid;
 }
 
 void LocalMapper::fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
@@ -123,8 +122,7 @@ float LocalMapper::updateGridCellProbability(float distance, float currentRange,
   return pCurr;
 }
 
-void LocalMapper::updateGrid_(const float angle, const float range,
-                              Eigen::Ref<Eigen::MatrixXi> gridData) {
+void LocalMapper::updateGrid_(const float angle, const float range) {
 
   float x =
       m_laserscanPosition(0) + (range * cos(m_laserscanOrientation + angle));
@@ -158,10 +156,7 @@ void LocalMapper::updateGrid_(const float angle, const float range,
   }
 }
 
-void LocalMapper::updateGridBaysian_(
-    const float angle, const float range, Eigen::Ref<Eigen::MatrixXi> gridData,
-    Eigen::Ref<Eigen::MatrixXf> gridDataProb,
-    const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb) {
+void LocalMapper::updateGridBaysian_(const float angle, const float range) {
 
   float x =
       m_laserscanPosition(0) + (range * cos(m_laserscanOrientation + angle));
@@ -204,44 +199,43 @@ void LocalMapper::updateGridBaysian_(
   }
 }
 
-void LocalMapper::scanToGrid(const std::vector<double> &angles,
-                             const std::vector<double> &ranges,
-                             Eigen::Ref<Eigen::MatrixXi> gridData) {
+Eigen::MatrixXi &LocalMapper::scanToGrid(const std::vector<double> &angles,
+                                         const std::vector<double> &ranges) {
 
+  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
   // angles and ranges are handled as floats implicitly
   if (m_maxNumThreads > 1) {
     ThreadPool pool(m_maxNumThreads);
     for (std::vector<int>::size_type i = 0; i < angles.size(); ++i) {
-      pool.enqueue(&LocalMapper::updateGrid_, this, angles[i], ranges[i],
-                   std::ref(gridData));
+      pool.enqueue(&LocalMapper::updateGrid_, this, angles[i], ranges[i]);
     }
   } else {
     for (std::vector<int>::size_type i = 0; i < angles.size(); ++i) {
-      updateGrid_(angles[i], ranges[i], gridData);
+      updateGrid_(angles[i], ranges[i]);
     }
   }
+  return gridData;
 }
 
-void LocalMapper::scanToGridBaysian(
-    const std::vector<double> &angles, const std::vector<double> &ranges,
-    Eigen::Ref<Eigen::MatrixXi> gridData,
-    Eigen::Ref<Eigen::MatrixXf> gridDataProb,
-    const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb) {
+std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
+LocalMapper::scanToGridBaysian(const std::vector<double> &angles,
+                               const std::vector<double> &ranges) {
 
+  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+  gridDataProb.fill(m_pPrior);
   // angles and ranges are handled as floats implicitly
   if (m_maxNumThreads > 1) {
     ThreadPool pool(m_maxNumThreads);
     for (std::vector<int>::size_type i = 0; i < angles.size(); ++i) {
-      pool.enqueue(&LocalMapper::updateGridBaysian_, this, angles[i], ranges[i],
-                   std::ref(gridData), std::ref(gridDataProb),
-                   std::ref(previousGridDataProb));
+      pool.enqueue(&LocalMapper::updateGridBaysian_, this, angles[i],
+                   ranges[i]);
     }
   } else {
     for (std::vector<int>::size_type i = 0; i < angles.size(); ++i) {
-      updateGridBaysian_(angles[i], ranges[i], gridData, gridDataProb,
-                         previousGridDataProb);
+      updateGridBaysian_(angles[i], ranges[i]);
     }
   }
+  return std::tie(gridData, gridDataProb);
 }
 } // namespace Mapping
 } // namespace Kompass

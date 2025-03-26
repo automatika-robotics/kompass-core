@@ -4,9 +4,8 @@
 namespace Kompass {
 namespace Mapping {
 
-void LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
-                                const std::vector<double> &ranges,
-                                Eigen::Ref<Eigen::MatrixXi> gridData) {
+Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
+                                            const std::vector<double> &ranges) {
 
   try {
 
@@ -123,10 +122,10 @@ void LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
     Eigen::Map<Eigen::MatrixXi>(m_out.data(), m_gridHeight, m_gridWidth)
         .swap(gridData);
 
-
   } catch (const sycl::exception &e) {
     LOG_ERROR("Exception caught: ", e.what());
   }
+  return gridData;
 }
 } // namespace Mapping
 } // namespace Kompass

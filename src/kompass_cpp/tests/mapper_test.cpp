@@ -1,4 +1,4 @@
-#include "datatypes/trajectory.h"
+#include "datatypes/control.h"
 #include "mapping/local_mapper.h"
 #include "test.h"
 #define BOOST_TEST_MODULE KOMPASS MAPPER TESTS
@@ -21,10 +21,6 @@ struct GridMapConfig {
   float grid_res;
   float actual_size;
 
-  Eigen::MatrixXi gridData;
-  Eigen::MatrixXf gridDataProb;
-  Eigen::MatrixXf prevGridDataProb;
-
   Eigen::Vector2i centralPoint;
 
   float pPrior;
@@ -46,9 +42,6 @@ struct GridMapConfig {
       : angle_increment(0.1), corner_distance(0.5), random_points(50),
         grid_height(10), grid_width(10), grid_res(0.1),
         actual_size(grid_width * grid_res),
-        gridData(Eigen::MatrixXi(grid_height, grid_width)),
-        gridDataProb(Eigen::MatrixXf(grid_height, grid_width)),
-        prevGridDataProb(Eigen::MatrixXf(grid_height, grid_width)),
         centralPoint(std::round(grid_height / 2) - 1,
                      std::round(grid_width / 2) - 1),
         pPrior(0.6), pOccupied(0.9), pEmpty(1 - pOccupied), rangeSure(0.1),
@@ -60,11 +53,6 @@ struct GridMapConfig {
             grid_height, grid_width, grid_res, {0.0, 0.0, 0.0}, 0.0, pPrior,
             pOccupied, pEmpty, rangeSure, rangeMax, wallSize, maxPointsPerLine,
             maxNumThreads)) {
-
-    // initialize the grid
-    gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
-    gridDataProb.fill(pPrior);
-    prevGridDataProb.fill(pPrior);
 
     // Logging the central point and limit circle radius
     // (for demonstration purposes)
@@ -141,6 +129,8 @@ BOOST_FIXTURE_TEST_SUITE(s, GridMapConfig)
 
 BOOST_AUTO_TEST_CASE(test_mapper_circles) {
 
+  Eigen::MatrixXi *gridData = nullptr;
+  Eigen::MatrixXf *gridDataProb = nullptr;
   // Generate circle scan with radius 0.3
   double radius = 0.3;
   Control::LaserScan circle_scan =
@@ -152,25 +142,27 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
     filtered_ranges[i] = std::min(limit, circle_scan.ranges[i]);
   }
   {
+
     Timer timer;
-    local_mapper.scanToGridBaysian(circle_scan.angles, filtered_ranges,
-                                   gridData, gridDataProb, prevGridDataProb);
+    auto [mat1, mat2] =
+        local_mapper.scanToGridBaysian(circle_scan.angles, filtered_ranges);
+    gridData = &mat1;
+    gridDataProb = &mat2;
   }
 
   int occ_points = countPointsInGrid(
-      gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+      *gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
   int free_points = countPointsInGrid(
-      gridData, static_cast<int>(Mapping::OccupancyType::EMPTY));
+      *gridData, static_cast<int>(Mapping::OccupancyType::EMPTY));
   int unknown_points = countPointsInGrid(
-      gridData, static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+      *gridData, static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
   LOG_INFO("Number of occupied cells: ", occ_points);
   LOG_INFO("Number of free cells: ", free_points);
   LOG_INFO("Number of unknown cells: ", unknown_points);
-  std::cout << gridData << std::endl;
-  std::cout << gridDataProb << std::endl;
+  std::cout << *gridData << std::endl;
+  std::cout << *gridDataProb << std::endl;
 
   // Generate circle scan with radius 0.5
-  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
   radius = 0.5; // Example radius for the circle
   circle_scan = generateLaserScan(angle_increment, "circle", radius);
   LOG_INFO("Testing with circle points at distance: ", radius,
@@ -181,23 +173,24 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   }
   {
     Timer timer;
-    local_mapper.scanToGridBaysian(circle_scan.angles, filtered_ranges,
-                                   gridData, gridDataProb, prevGridDataProb);
+    auto [mat1, mat2] =
+        local_mapper.scanToGridBaysian(circle_scan.angles, filtered_ranges);
+    gridData = &mat1;
+    gridDataProb = &mat2;
   }
   occ_points = countPointsInGrid(
-      gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+      *gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
   free_points = countPointsInGrid(
-      gridData, static_cast<int>(Mapping::OccupancyType::EMPTY));
+      *gridData, static_cast<int>(Mapping::OccupancyType::EMPTY));
   unknown_points = countPointsInGrid(
-      gridData, static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+      *gridData, static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
   LOG_INFO("Number of occupied cells: ", occ_points);
   LOG_INFO("Number of free cells: ", free_points);
   LOG_INFO("Number of unknown cells: ", unknown_points);
-  std::cout << gridData << std::endl;
-  std::cout << gridDataProb << std::endl;
+  std::cout << *gridData << std::endl;
+  std::cout << *gridDataProb << std::endl;
 
   // Generate circle scan with radius 10.5
-  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
   radius = 2;
   circle_scan = generateLaserScan(angle_increment, "circle", radius);
   LOG_INFO("Testing with circle points at distance: ", radius,
@@ -208,20 +201,19 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   }
   {
     Timer timer;
-    local_mapper.scanToGridBaysian(circle_scan.angles, filtered_ranges,
-                                   gridData, gridDataProb, prevGridDataProb);
+    local_mapper.scanToGridBaysian(circle_scan.angles, filtered_ranges);
   }
   occ_points = countPointsInGrid(
-      gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+      *gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
   free_points = countPointsInGrid(
-      gridData, static_cast<int>(Mapping::OccupancyType::EMPTY));
+      *gridData, static_cast<int>(Mapping::OccupancyType::EMPTY));
   unknown_points = countPointsInGrid(
-      gridData, static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+      *gridData, static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
   LOG_INFO("Number of occupied cells: ", occ_points);
   LOG_INFO("Number of free cells: ", free_points);
   LOG_INFO("Number of unknown cells: ", unknown_points);
-  std::cout << gridData << std::endl;
-  std::cout << gridDataProb << std::endl;
+  std::cout << *gridData << std::endl;
+  std::cout << *gridDataProb << std::endl;
 }
 
 BOOST_AUTO_TEST_SUITE_END()

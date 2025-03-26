@@ -25,6 +25,11 @@ public:
         m_laserscanPosition(laserscanPosition), m_maxNumThreads(maxNumThreads) {
     m_startPoint = localToGrid(
         Eigen::Vector2f(laserscanPosition(0), laserscanPosition(1)));
+    gridData = Eigen::MatrixXi(gridHeight, gridWidth);
+    gridDataProb = Eigen::MatrixXf(gridHeight, gridWidth);
+    previousGridDataProb = Eigen::MatrixXf(gridHeight, gridWidth);
+    // initialize previous grid data
+    previousGridDataProb.fill(m_pPrior);
   }
 
   // Constructor with additional baysian parameters
@@ -43,6 +48,11 @@ public:
         m_laserscanPosition(laserscanPosition), m_maxNumThreads(maxNumThreads) {
     m_startPoint = localToGrid(
         Eigen::Vector2f(laserscanPosition(0), laserscanPosition(1)));
+    gridData = Eigen::MatrixXi(gridHeight, gridWidth);
+    gridDataProb = Eigen::MatrixXf(gridHeight, gridWidth);
+    previousGridDataProb = Eigen::MatrixXf(gridHeight, gridWidth);
+    // initialize previous grid data
+    previousGridDataProb.fill(m_pPrior);
   }
 
   // Default destructor
@@ -62,10 +72,9 @@ public:
    *
    * @return Transformed grid.
    */
-  Eigen::MatrixXf getPreviousGridInCurrentPose(
+  void getPreviousGridInCurrentPose(
       const Eigen::Vector2f &currentPositionInPreviousPose,
-      double currentOrientationInPreviousPose,
-      const Eigen::MatrixXf &previousGridData, float unknownValue);
+      double currentOrientationInPreviousPose);
 
   /**
    * @brief Updates a grid cell occupancy probability using the LaserScanModel
@@ -83,11 +92,10 @@ public:
    *
    * @param angles        LaserScan angles in radians
    * @param ranges         LaserScan ranges in meters
-   * @param gridData      Current grid data
+   * @returns gridData      Current grid data
    */
-  void scanToGrid(const std::vector<double> &angles,
-                  const std::vector<double> &ranges,
-                  Eigen::Ref<Eigen::MatrixXi> gridData);
+  Eigen::MatrixXi& scanToGrid(const std::vector<double> &angles,
+                  const std::vector<double> &ranges);
 
   /**
    * Processes Laserscan data (angles and ranges) to project on a 2D grid
@@ -96,15 +104,10 @@ public:
    *
    * @param angles        LaserScan angles in radians
    * @param ranges         LaserScan ranges in meters
-   * @param gridData      Current grid data
-   * @param gridDataProb Current probabilistic grid data
-   * @param previousGridDataProb Previous value of the probabilistic grid data
+   * @returns gridDataProb Current probabilistic grid data
    */
-  void scanToGridBaysian(
-      const std::vector<double> &angles, const std::vector<double> &ranges,
-      Eigen::Ref<Eigen::MatrixXi> gridData,
-      Eigen::Ref<Eigen::MatrixXf> gridDataProb,
-      const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb);
+  std::tuple<Eigen::MatrixXi&, Eigen::MatrixXf&> scanToGridBaysian(
+      const std::vector<double> &angles, const std::vector<double> &ranges);
 
 protected:
   // Transforms a point from grid coordinate (i,j) to the local coordinates
@@ -136,15 +139,11 @@ protected:
   }
 
   // Update method for scanToGrid
-  void updateGrid_(const float angle, const float range,
-                   Eigen::Ref<Eigen::MatrixXi> gridData);
+  void updateGrid_(const float angle, const float range);
 
   // Update method for scanToGridBaysian
   void updateGridBaysian_(
-      const float angle, const float range,
-      Eigen::Ref<Eigen::MatrixXi> gridData,
-      Eigen::Ref<Eigen::MatrixXf> gridDataProb,
-      const Eigen::Ref<const Eigen::MatrixXf> previousGridDataProb);
+      const float angle, const float range);
 
   /**
    * @brief Fill an area around a point on the grid with given padding.
@@ -173,6 +172,9 @@ protected:
   const Eigen::Vector2i m_centralPoint;
   const Eigen::Vector3f m_laserscanPosition;
   Eigen::Vector2i m_startPoint;
+  Eigen::MatrixXi gridData;
+  Eigen::MatrixXf gridDataProb;
+  Eigen::MatrixXf previousGridDataProb;
 
 private:
   const int m_maxNumThreads;
