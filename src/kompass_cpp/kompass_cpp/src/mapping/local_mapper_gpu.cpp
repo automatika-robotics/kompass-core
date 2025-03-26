@@ -18,8 +18,9 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
     // command scope
     m_q.submit([&](sycl::handler &h) {
       // local copies of class members to be used inside the kernel
-      const size_t rows = m_gridHeight;
-      const size_t cols = m_gridWidth;
+      const int rows = m_gridHeight; // implicitly casting size_t because its
+                                     // not behaving nicely in the kernel
+      const int cols = m_gridWidth;
       const float resolution = m_resolution;
       const float laserscanOrientation = m_laserscanOrientation;
 
@@ -45,8 +46,8 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
       h.parallel_for<class scanToGridKernel>(
           sycl::nd_range<1>{global_size * work_group_size, work_group_size},
           [=](sycl::nd_item<1> item) {
-            const int group_id = item.get_group().get_group_id();
-            const int local_id = item.get_local_id();
+            const size_t group_id = item.get_group().get_group_id();
+            const size_t local_id = item.get_local_id();
 
             double range = devicePtrRanges[group_id];
             double angle = devicePtrAngles[group_id];
@@ -88,8 +89,8 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
                             local_id; // y1 + sign(delta_y) * j
               x_float = v_startPoint[0] + (g * (y_float - v_startPoint[1]));
             }
-            int x(x_float);
-            int y(y_float);
+            int x = static_cast<int>(x_float);
+            int y = static_cast<int>(y_float);
 
             // fill grid if applicable
             if (x >= 0 && x < rows && y >= 0 && y < cols) {

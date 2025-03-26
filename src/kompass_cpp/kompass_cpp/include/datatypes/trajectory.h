@@ -184,7 +184,8 @@ struct TrajectoryPath {
   };
 
   // calculate minimum distance with a given vector of points
-    float minDist2D(const std::vector<float> &othersX, const std::vector<float> &othersY) const {
+  float minDist2D(const std::vector<float> &othersX,
+                  const std::vector<float> &othersY) const {
     size_t s = othersX.size();
     if (s <= 0) {
       return 0.0f;
@@ -294,7 +295,7 @@ struct TrajectoryVelocitySamples2D {
   MatrixXfR vy;    // Speed on y-axis (m/s)
   MatrixXfR omega; // Angular velocity (rad/s)
   size_t maxNumTrajectories_, numPointsPerTrajectory_;
-  size_t velocitiesIndex_; // keep track of actual trajectories added
+  Eigen::Index velocitiesIndex_; // keep track of actual velocity samples added
 
   // default constructor
   TrajectoryVelocitySamples2D() = default;
@@ -303,10 +304,11 @@ struct TrajectoryVelocitySamples2D {
   explicit TrajectoryVelocitySamples2D(size_t maxNumTrajectories,
                                        size_t numPointsPerTrajectory)
       : maxNumTrajectories_(maxNumTrajectories),
-        numPointsPerTrajectory_(numPointsPerTrajectory), velocitiesIndex_(-1),
+        numPointsPerTrajectory_(numPointsPerTrajectory),
         vx(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory - 1)),
         vy(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory - 1)),
-        omega(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory - 1)) {}
+        omega(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory - 1)),
+        velocitiesIndex_(-1) {}
 
   // Add a new set of velocity values from a velocity vector.
   void push_back(const std::vector<Velocity2D> &velocities) {
@@ -386,7 +388,7 @@ struct TrajectoryPathSamples {
   MatrixXfR y;
   MatrixXfR z;
   size_t maxNumTrajectories_, numPointsPerTrajectory_;
-  size_t pathIndex_;
+  Eigen::Index pathIndex_;
 
   // default constructor
   TrajectoryPathSamples() = default;
@@ -395,10 +397,11 @@ struct TrajectoryPathSamples {
   explicit TrajectoryPathSamples(size_t maxNumTrajectories,
                                  size_t numPointsPerTrajectory)
       : maxNumTrajectories_(maxNumTrajectories),
-        numPointsPerTrajectory_(numPointsPerTrajectory), pathIndex_(-1),
+        numPointsPerTrajectory_(numPointsPerTrajectory),
         x(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory)),
         y(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory)),
-        z(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory)) {}
+        z(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory)),
+        pathIndex_(-1) {}
 
   // Add a new path from a Path struct.
   void push_back(const Path::Path &path) {
@@ -526,7 +529,7 @@ struct TrajectorySamples2D {
   }
 
   // return  a Trajectory2D struct based on given index of sample
-  Trajectory2D getIndex(size_t idx) const {
+  Trajectory2D getIndex(Eigen::Index idx) const {
     if (idx > velocities.vx.size()) {
       throw std::out_of_range("Vector index out of bounds");
     }
@@ -592,14 +595,15 @@ struct TrajSearchResult {
 // Lowest cost and its associated index for the trajectory sample
 struct LowestCost {
   float cost;
-  size_t sampleIndex;
+  Eigen::Index sampleIndex;
 
   // Constructor
-  LowestCost(const float v = std::numeric_limits<float>::max(), const size_t i = 0)
+  LowestCost(const float v = std::numeric_limits<float>::max(),
+             const Eigen::Index i = 0)
       : cost(v), sampleIndex(i) {}
 
   // Combine operation for the reduction
-    void combine(const float other_cost, const size_t other_index) {
+  void combine(const float other_cost, const Eigen::Index other_index) {
     if (other_cost < cost ||
         (other_cost == cost && other_index < sampleIndex)) {
       cost = other_cost;
