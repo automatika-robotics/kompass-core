@@ -394,7 +394,7 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
             trajCost[traj] =
                 costWeight * (trajCost[traj] / pathSize + end_point_distance);
 
-            // Atomically add the computed contribution to the global cost
+            // Atomically add the computed trajectory costs to the global cost
             // for this trajectory
             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
@@ -440,7 +440,7 @@ sycl::event CostEvaluator::goalCostFunc(const size_t trajs_size,
           float distance =
               sycl::distance(last_path_point, lastRefPoint) / pathLength;
 
-          // Atomically add the computed contribution to the global cost
+          // Atomically add the computed trajectory cost to the global cost
           // for this trajectory
           sycl::atomic_ref<float, sycl::memory_order::relaxed,
                            sycl::memory_scope::device,
@@ -535,7 +535,7 @@ sycl::event CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
             trajCost[traj] =
                 costWeight * (trajCost[traj] / (3.0 * velocitiesSize));
 
-            // Atomically add the computed contribution to the global cost
+            // Atomically add the computed trajectory cost to the global cost
             // for this trajectory
             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
@@ -712,13 +712,13 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
 
           // normalize the trajectory cost and add end point distance to it
           if (path_index == 0) {
-            // Atomically add the computed contribution to the global cost
+            // Atomically add the computed trajectory cost to the global cost
             // for this trajectory
             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
                 atomic_cost(costs[traj]);
-            atomic_cost.fetch_add(trajCost[traj]);
+            atomic_cost.fetch_add(costWeight * trajCost[traj]);
           }
         });
   });
