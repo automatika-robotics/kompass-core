@@ -102,25 +102,21 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
                   sycl::distance(destPointLocal, v_startPointLocal);
 
               if (x == toPoint[0] && y == toPoint[1]) {
-                devicePtrGrid[x * cols + y] = static_cast<int>(
+                devicePtrGrid[x + y * rows] = static_cast<int>(
                     Mapping::OccupancyType::OCCUPIED); // row major
               } else {
                 if (distance < range)
-                  devicePtrGrid[x * cols + y] = static_cast<int>(
+                  devicePtrGrid[x + y * rows] = static_cast<int>(
                       Mapping::OccupancyType::EMPTY); // row major
               }
             }
           });
     });
 
-    m_q.memcpy(m_out.data(), m_devicePtrGrid,
+    m_q.memcpy(gridData.data(), m_devicePtrGrid,
                sizeof(int) * m_gridWidth * m_gridHeight);
 
     m_q.wait_and_throw();
-
-    // copy data to Eigen grid
-    Eigen::Map<Eigen::MatrixXi>(m_out.data(), m_gridHeight, m_gridWidth)
-        .swap(gridData);
 
   } catch (const sycl::exception &e) {
     LOG_ERROR("Exception caught: ", e.what());

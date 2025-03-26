@@ -22,7 +22,6 @@ public:
                       sycl::property::queue::in_order{}};
     auto dev = m_q.get_device();
     LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
-    m_out.resize(m_gridHeight * m_gridWidth);
     m_devicePtrRanges = sycl::malloc_device<double>(scanSize, m_q);
     m_devicePtrAngles = sycl::malloc_device<double>(scanSize, m_q);
     m_devicePtrGrid = sycl::malloc_device<int>(m_gridHeight * m_gridWidth, m_q);
@@ -58,7 +57,6 @@ private:
   double *m_devicePtrAngles;
   int *m_devicePtrGrid;
   sycl::queue m_q;
-  std::vector<int> m_out;
 };
 } // namespace Mapping
 } // namespace Kompass
