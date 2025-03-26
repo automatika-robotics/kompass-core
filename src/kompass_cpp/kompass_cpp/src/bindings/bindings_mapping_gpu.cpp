@@ -17,7 +17,7 @@ void bindings_mapping_gpu(py::module_ &m) {
           py::arg("laserscan_position"), py::arg("laserscan_orientation"),
           py::arg("scan_size"), py::arg("max_points_per_line") = 32)
 
-      .def("scan_to_grid", &Mapping::LocalMapper::scanToGrid,
+      .def("scan_to_grid", &Mapping::LocalMapperGPU::scanToGrid,
            "Convert laser scan data to occupancy grid", py::arg("angles"),
            py::arg("ranges"), py::return_value_policy::reference_internal);
 }
