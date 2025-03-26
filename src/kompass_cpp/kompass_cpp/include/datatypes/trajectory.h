@@ -303,12 +303,11 @@ struct TrajectoryVelocitySamples2D {
   // Constructor that pre-reserves capacity.
   explicit TrajectoryVelocitySamples2D(size_t maxNumTrajectories,
                                        size_t numPointsPerTrajectory)
-      : maxNumTrajectories_(maxNumTrajectories),
-        numPointsPerTrajectory_(numPointsPerTrajectory),
-        vx(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory - 1)),
+      : vx(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory - 1)),
         vy(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory - 1)),
         omega(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory - 1)),
-        velocitiesIndex_(-1) {}
+        maxNumTrajectories_(maxNumTrajectories),
+        numPointsPerTrajectory_(numPointsPerTrajectory), velocitiesIndex_(-1) {}
 
   // Add a new set of velocity values from a velocity vector.
   void push_back(const std::vector<Velocity2D> &velocities) {
@@ -396,12 +395,11 @@ struct TrajectoryPathSamples {
   // Constructor that pre-reserves capacity.
   explicit TrajectoryPathSamples(size_t maxNumTrajectories,
                                  size_t numPointsPerTrajectory)
-      : maxNumTrajectories_(maxNumTrajectories),
-        numPointsPerTrajectory_(numPointsPerTrajectory),
-        x(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory)),
+      : x(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory)),
         y(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory)),
         z(MatrixXfR(maxNumTrajectories, numPointsPerTrajectory)),
-        pathIndex_(-1) {}
+        maxNumTrajectories_(maxNumTrajectories),
+        numPointsPerTrajectory_(numPointsPerTrajectory), pathIndex_(-1) {}
 
   // Add a new path from a Path struct.
   void push_back(const Path::Path &path) {

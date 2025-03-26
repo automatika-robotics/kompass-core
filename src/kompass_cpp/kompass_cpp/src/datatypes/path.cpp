@@ -9,7 +9,7 @@ using namespace tk;
 namespace Path {
 
 Path::Path(const std::vector<Point> &points) : points(points) {
-  for (const auto point : points) {
+  for (const auto &point : points) {
     X_.emplace_back(point.x());
     Y_.emplace_back(point.y());
     Z_.emplace_back(point.z());
@@ -136,8 +136,8 @@ void Path::interpolate(double max_interpolation_point_dist,
 
   this->_max_interpolation_dist = max_interpolation_point_dist;
   // Set the maximum size for the points
-  this->max_size =
-      static_cast<int>(this->_max_path_length / this->_max_interpolation_dist);
+  this->max_size = static_cast<size_t>(this->_max_path_length /
+                                       this->_max_interpolation_dist);
   if (points.size() < 2) {
     throw invalid_argument(
         "At least two points are required to perform interpolation.");

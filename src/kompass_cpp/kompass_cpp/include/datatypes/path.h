@@ -42,7 +42,8 @@ struct Path {
   double _max_interpolation_dist{0.0}, _max_path_length{10.0};
   // Max segment size and max total path points size is calculated after
   // interpolation
-  int max_segment_size{10}, max_size{10};
+  int max_segment_size{10};
+  size_t max_size{10};
 
   Path(const std::vector<Point> &points = {});
 
