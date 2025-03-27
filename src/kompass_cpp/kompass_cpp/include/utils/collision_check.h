@@ -7,6 +7,7 @@
 #include <Eigen/Geometry>
 #include <bullet/btBulletCollisionCommon.h>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 namespace Kompass {
@@ -145,15 +146,17 @@ private:
   // Robot body geometry object
   Body body_;
   // Bullet collision world components
-  std::shared_ptr<btDefaultCollisionConfiguration> m_collisionConfiguration;
-  std::shared_ptr<btCollisionDispatcher> m_dispatcher;
-  std::shared_ptr<btDbvtBroadphase> m_broadphase;
-  std::shared_ptr<btConstraintSolver> m_solver;
-  std::shared_ptr<btDiscreteDynamicsWorld> m_collisionWorld;
+  std::unique_ptr<btDefaultCollisionConfiguration> m_collisionConfiguration;
+  std::unique_ptr<btCollisionDispatcher> m_dispatcher;
+  std::unique_ptr<btDbvtBroadphase> m_broadphase;
+  std::unique_ptr<btConstraintSolver> m_solver;
+  std::unique_ptr<btDiscreteDynamicsWorld> m_collisionWorld;
   btCollisionObject *m_robotObject;
 
+  std::mutex m_obstacleMutex; // Mutex to protect access to m_obstacleObjects
+
   // Stored obstacles
-  std::vector<std::shared_ptr<btCollisionShape>> m_obstacles;
+  std::vector<std::unique_ptr<btCollisionShape>> m_obstacles;
   std::vector<btCollisionObject *> m_obstacleObjects;
 
   void clearObstacles();
