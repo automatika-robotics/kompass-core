@@ -98,13 +98,7 @@ void bindings_types(py::module_ &m) {
       .def_readonly("omega", &Control::TrajectoryVelocities2D::omega,
                     py::return_value_policy::reference_internal);
 
-  // Now expose TrajectoryPathSamples
-  py::class_<Control::TrajectoryPathSamples>(m, "TrajectoryPathSamples")
-      .def(py::init<size_t, size_t>())
-      .def("size", &Control::TrajectoryPathSamples::size)
-      .def("__iter__", [](const Control::TrajectoryPathSamples &self) {
-        return py::make_iterator(self.begin(), self.end());
-      });
+
 
   py::class_<Control::Trajectory2D>(m_types, "Trajectory")
       .def(py::init<>())
@@ -121,11 +115,14 @@ void bindings_types(py::module_ &m) {
   py::enum_<CollisionChecker::ShapeType>(m_types, "RobotGeometry")
       .value("CYLINDER", CollisionChecker::ShapeType::CYLINDER)
       .value("BOX", CollisionChecker::ShapeType::BOX)
+      .value("SPHERE", CollisionChecker::ShapeType::SPHERE)
       .def("get", [](const std::string &key) {
         if (key == "CYLINDER")
           return CollisionChecker::ShapeType::CYLINDER;
         if (key == "BOX")
           return CollisionChecker::ShapeType::BOX;
+        if (key == "SPHERE")
+          return CollisionChecker::ShapeType::SPHERE;
         throw std::runtime_error("Invalid key");
       });
 

@@ -160,11 +160,13 @@ def run_control(
     robot.state.yaw = np.pi / 2
 
     laser_scan = LaserScanData()
-    # laser_scan.angles = np.array([4.0, 4.1])
+    # laser_scan.angles = np.array([0.0, 0.1])
     # laser_scan.ranges = np.array([0.4, 0.3])
 
     while not end_reached and i < 100:
-        ctrl_found = controller.loop_step(current_state=robot.state, laser_scan=laser_scan)
+        ctrl_found = controller.loop_step(
+            current_state=robot.state, laser_scan=laser_scan
+        )
         if not ctrl_found or not controller.path:
             end_reached = controller.reached_end()
             break
@@ -282,19 +284,19 @@ def test_path_interpolation(plot: bool = False):
         length = 0.0
         if isinstance(path, Path):
             for idx in range(len(path.poses) - 1):
-                d_x = path.poses[idx + 1].pose.position.x - path.poses[idx].pose.position.x
-                d_y = path.poses[idx + 1].pose.position.y - path.poses[idx].pose.position.y
+                d_x = (
+                    path.poses[idx + 1].pose.position.x
+                    - path.poses[idx].pose.position.x
+                )
+                d_y = (
+                    path.poses[idx + 1].pose.position.y
+                    - path.poses[idx].pose.position.y
+                )
                 length += np.sqrt(d_x**2 + d_y**2)
         elif isinstance(path, PathCpp):
             for idx in range(len(path.points) - 1):
-                d_x = (
-                    path.points[idx + 1].x
-                    - path.points[idx].x
-                )
-                d_y = (
-                    path.points[idx + 1].y
-                    - path.points[idx].y
-                )
+                d_x = path.points[idx + 1].x - path.points[idx].x
+                d_y = path.points[idx + 1].y - path.points[idx].y
                 length += np.sqrt(d_x**2 + d_y**2)
         return length
 
@@ -373,7 +375,7 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
         prediction_horizon=1.0,
         control_horizon=0.2,
         control_time_step=control_time_step,
-        max_num_threads=10,
+        max_num_threads=1,
     )
 
     dwa = DWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
@@ -402,14 +404,14 @@ def test_dwa_debug():
         obstacles_distance_weight=1.0,
     )
     config = DWAConfig(
-        max_linear_samples=4,
-        max_angular_samples=4,
+        max_linear_samples=21,
+        max_angular_samples=21,
         octree_resolution=0.1,
         costs_weights=cost_weights,
-        prediction_horizon=2.0,
+        prediction_horizon=1.0,
         control_horizon=0.2,
         control_time_step=control_time_step,
-        max_num_threads=10,
+        max_num_threads=1,
     )
 
     dwa = DWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
@@ -421,7 +423,7 @@ def test_dwa_debug():
     my_robot.state.yaw = 0.0
 
     laser_scan = LaserScanData()
-    laser_scan.angles = np.array([0.0, 1.1])
+    laser_scan.angles = np.array([0.0, 0.1])
     laser_scan.ranges = np.array([0.4, 0.3])
     dwa.planner.set_current_state(
         my_robot.state.x, my_robot.state.y, my_robot.state.yaw, my_robot.state.speed
@@ -438,12 +440,17 @@ def test_dwa_debug():
     )
 
     dwa.planner.debug_velocity_search(current_velocity, sensor_data, False)
-    trajectory_paths = dwa.planner.get_debugging_samples()
-    plt.figure()
-    for path in trajectory_paths:
-        plt.plot(
-            path.x, path.y
-        )
+    (paths_x, paths_y) = dwa.planner.get_debugging_samples()
+    _, ax = plt.subplots()
+    # Add the two laserscan obstacles
+    obstacle_1 = plt.Circle((-0.117319, 0), 0.1, color="black", label="obstacle")
+    obstacle_2 = plt.Circle((-0.218818, 0.02995), 0.1, color="black")
+    for idx in range(paths_x.shape[0] - 1):
+        path_i_x = paths_x[idx, :]
+        path_i_y = paths_y[idx, :]
+        plt.plot(path_i_x, path_i_y)
+    ax.add_patch(obstacle_1)
+    ax.add_patch(obstacle_2)
     plt.xlabel("X")
     plt.ylabel("Y")
     plt.title("Trajectory Samples")
@@ -464,7 +471,7 @@ def run_before_and_after_tests():
         raise ValueError("Global path file not found")
 
     my_robot = Robot(
-        robot_type=RobotType.DIFFERENTIAL_DRIVE,
+        robot_type=RobotType.ACKERMANN,
         geometry_type=RobotGeometry.Type.CYLINDER,
         geometry_params=np.array([0.1, 0.4]),
     )
@@ -520,6 +527,8 @@ def main():
     ## TESTING DWA ##
     print("RUNNING DWA CONTROLLER TEST")
     test_dwa(plot=True, figure_name="dwa", figure_tag="DWA Controller Test Results")
+
+    test_dwa_debug()
 
 
 if __name__ == "__main__":

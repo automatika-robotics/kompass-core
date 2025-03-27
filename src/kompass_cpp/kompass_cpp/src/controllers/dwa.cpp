@@ -7,7 +7,9 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <ostream>
 #include <stdexcept>
+#include <tuple>
 
 namespace Kompass {
 namespace Control {
@@ -251,7 +253,17 @@ DWA::computeVelocityCommandsSet(const Velocity2D &global_vel,
   return searchRes;
 }
 
-TrajectorySamples2D DWA::getDebuggingSamples() const {
+std::tuple<MatrixXdR, MatrixXdR> DWA::getDebuggingSamples() const {
+  if (debuggingSamples_ == nullptr) {
+    throw std::invalid_argument("No debugging samples are available");
+  }
+  size_t paths_size = debuggingSamples_->paths.size();
+  auto paths_x = debuggingSamples_->paths.x.topRows(paths_size).eval();
+  auto paths_y = debuggingSamples_->paths.y.topRows(paths_size).eval();
+  return std::tie(paths_x, paths_y);
+}
+
+Control::TrajectorySamples2D DWA::getDebuggingSamplesPure() const {
   if (debuggingSamples_ == nullptr) {
     throw std::invalid_argument("No debugging samples are available");
   }
