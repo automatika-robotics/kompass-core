@@ -17,6 +17,7 @@ __version__ = "0.4.2"
 OMPL_INCLUDE_DEFAULT_DIR = "/usr/include/ompl-1.5"
 EIGEN_INCLUDE_DEFAULT_DIR = "/usr/include/eigen3"
 PCL_INCLUDE_DEFAULT_DIR = "/usr/include/pcl-1.14"
+BULLET_INCLUDE_DIR = "/usr/include/bullet"
 
 
 def get_libraries_dir():
@@ -150,6 +151,9 @@ eigen_include_dir = pkg_config(["eigen3"], flag="--cflags-only-I")
 pcl_include_dir = pkg_config(
     ["pcl_common"], flag="--cflags-only-I", versions=pcl_versions
 ) or [PCL_INCLUDE_DEFAULT_DIR]
+bullet_include_dir = pkg_config(["bullet"], flag="--cflags-only-I") or [
+    BULLET_INCLUDE_DIR
+]
 
 # vcpkg paths when running in CI
 vcpkg_includes_dir = get_vcpkg_includes()
@@ -173,6 +177,7 @@ kompass_cpp_dependency_includes = (
     vcpkg_includes_dir
     + list(set(eigen_include_dir) - set(vcpkg_includes_dir))
     + pcl_include_dir
+    + bullet_include_dir
 )
 
 # try a static path when pkg_config does not return anything and not in CI
@@ -213,7 +218,15 @@ ext_modules = [
         "kompass_cpp",
         kompass_cpp_source_files,
         include_dirs=kompass_cpp_module_includes,
-        libraries=["fcl", "pcl_io_ply", "pcl_common"] + vcpkg_extra_libs,
+        libraries=[
+            "fcl",
+            "pcl_io_ply",
+            "pcl_common",
+            "BulletDynamics",
+            "BulletCollision",
+            "LinearMath",
+        ]
+        + vcpkg_extra_libs,
         library_dirs=get_libraries_dir(),
         define_macros=[("VERSION_INFO", __version__)],
         extra_compile_args=["-O3"] + extra_args,
