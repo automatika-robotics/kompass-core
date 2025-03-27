@@ -23,43 +23,49 @@ VisionFollower::VisionFollower(const ControlType robotCtrlType,
 void VisionFollower::resetTarget(const TrackingData tracking) {
   // empty the search command queue
   std::queue<std::array<double, 3>> empty;
-  std::swap( _search_commands_queue, empty );
-  // Set the reference depth as the current depth if it is not provided in the config
+  std::swap(_search_commands_queue, empty);
+  // Set the reference depth as the current depth if it is not provided in the
+  // config
   if (tracking.depth > 0) {
-    if(_config.target_distance() < 0)
-    {
+    if (_config.target_distance() < 0) {
       _config.set_target_distance(tracking.depth);
     }
   }
-  // if depth is not provided set the target as the current tracking bounding box size
-  else{
+  // if depth is not provided set the target as the current tracking bounding
+  // box size
+  else {
     double size = (tracking.size_xy[0] * tracking.size_xy[1]) /
-                (tracking.img_width * tracking.img_height);
+                  (tracking.img_width * tracking.img_height);
     LOG_DEBUG("Setting vision target reference distance to size: ", size);
     _config.set_target_distance(size);
   }
 }
 
 void VisionFollower::generateSearchCommands(double total_rotation,
-                                              double search_radius,
-                                              int max_rotation_steps,
-                                              bool enable_pause) {
+                                            double search_radius,
+                                            int max_rotation_steps,
+                                            bool enable_pause) {
   // Calculate rotation direction and magnitude
   double rotation_sign = (total_rotation < 0.0) ? -1.0 : 1.0;
   int rotation_steps = max_rotation_steps;
-  if (enable_pause){
+  if (enable_pause) {
     // Modify the total number of active rotation to include the pause steps
-    rotation_steps = (max_rotation_steps + _config.search_pause()) / (_config.search_pause() + 1);
+    rotation_steps = (max_rotation_steps + _config.search_pause()) /
+                     (_config.search_pause() + 1);
   }
-  // Angular velocity to rotate 'total_rotation' in total time steps 'rotation_steps' with dt = control_time_step
-  double rotation_value = (total_rotation / rotation_steps) / _config.control_time_step();
-  rotation_value = std::max(std::min(rotation_value, _ctrl_limits.omegaParams.maxOmega), _config.min_vel());
+  // Angular velocity to rotate 'total_rotation' in total time steps
+  // 'rotation_steps' with dt = control_time_step
+  double rotation_value =
+      (total_rotation / rotation_steps) / _config.control_time_step();
+  rotation_value =
+      std::max(std::min(rotation_value, _ctrl_limits.omegaParams.maxOmega),
+               _config.min_vel());
   // Generate velocity commands
   for (int i = 0; i <= rotation_steps; i = i + 1) {
     if (_ctrlType != ControlType::ACKERMANN) {
       // In-place rotation
-      _search_commands_queue.emplace(std::array<double, 3>{
-          0.0, 0.0, rotation_sign * rotation_value});
+      _search_commands_queue.emplace(
+          std::array<double, 3>{0.0, 0.0, rotation_sign * rotation_value});
     } else {
       // Angular velocity based on linear velocity and radius
       double omega_ackermann =
@@ -83,32 +89,29 @@ void VisionFollower::getFindTargetCmds() {
   // available
   double last_direction = 1.0;
   if (_last_tracking != nullptr) {
-    last_direction = ((_last_tracking->center_xy[0] -
-                        _last_tracking->img_width / 2.0) > 0.0)
-                          ? 1.0
-                          : -1.0;
+    last_direction =
+        ((_last_tracking->center_xy[0] - _last_tracking->img_width / 2.0) > 0.0)
+            ? 1.0
+            : -1.0;
     _last_tracking = nullptr;
   }
   LOG_DEBUG("Generating new search commands in direction: ", last_direction);
 
   _search_commands_queue = std::queue<std::array<double, 3>>();
-  int target_search_steps_max = static_cast<int>(_config.target_search_timeout() / _config.control_time_step());
+  int target_search_steps_max = static_cast<int>(
+      _config.target_search_timeout() / _config.control_time_step());
   // rotate pi
-  generateSearchCommands(last_direction * M_PI,
-                            _config.target_search_radius(),
-                            target_search_steps_max / 4, true);
+  generateSearchCommands(last_direction * M_PI, _config.target_search_radius(),
+                         target_search_steps_max / 4, true);
   // go back
-  generateSearchCommands(-last_direction * M_PI,
-                            _config.target_search_radius(),
-                            target_search_steps_max / 8);
+  generateSearchCommands(-last_direction * M_PI, _config.target_search_radius(),
+                         target_search_steps_max / 8);
   // rotate -pi
-  generateSearchCommands(-last_direction * M_PI,
-                            _config.target_search_radius(),
-                            target_search_steps_max / 4, true);
+  generateSearchCommands(-last_direction * M_PI, _config.target_search_radius(),
+                         target_search_steps_max / 4, true);
   // go back
-  generateSearchCommands(last_direction * M_PI,
-                            _config.target_search_radius(),
-                            target_search_steps_max / 8);
+  generateSearchCommands(last_direction * M_PI, _config.target_search_radius(),
+                         target_search_steps_max / 8);
 }
 
 bool VisionFollower::run(const std::optional<TrackingData> tracking) {
@@ -124,7 +127,7 @@ bool VisionFollower::run(const std::optional<TrackingData> tracking) {
     tracking_available =
         ((data.size_xy[0] > 0 && data.size_xy[1] > 0) || data.depth > 0);
     if (tracking_available) {
-      if (_last_tracking == nullptr){
+      if (_last_tracking == nullptr) {
         resetTarget(data);
       }
       _last_tracking = std::make_unique<TrackingData>(data);
@@ -134,7 +137,7 @@ bool VisionFollower::run(const std::optional<TrackingData> tracking) {
     }
   }
   // Tracking not available
-  if (_config.enable_search()){
+  if (_config.enable_search()) {
     if (_recorded_search_time < _config.target_search_timeout()) {
       if (_search_commands_queue.empty()) {
         getFindTargetCmds();
@@ -148,11 +151,10 @@ bool VisionFollower::run(const std::optional<TrackingData> tracking) {
       // Failed to find target
       return false;
     }
-  }
-  else{
+  } else {
     if (_recorded_wait_time < _config.target_wait_timeout()) {
       LOG_DEBUG("Target lost, waiting to get tracked target again ...");
-      _last_tracking == nullptr;
+      _last_tracking = nullptr;
       // Do nothing and wait
       _recorded_wait_time += _config.control_time_step();
       return true;
@@ -176,8 +178,9 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
   double error_y = (2 * tracking.center_xy[1] / tracking.img_height - 1.0);
   double error_x = (2 * tracking.center_xy[0] / tracking.img_width - 1.0);
 
-  LOG_DEBUG("Current distance: ", size, ", Reference: ",
-            _config.target_distance() , "Distance_error=", distance_error,
+  LOG_DEBUG("Current distance: ", size,
+            ", Reference: ", _config.target_distance(),
+            "Distance_error=", distance_error,
             ", Distance_tolerance=", distance_tolerance);
 
   // Initialize control vectors
@@ -198,13 +201,12 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
       continue;
 
     dist_speed = std::abs(distance_error) > distance_tolerance
-                            ? distance_error * _ctrl_limits.velXParams.maxVel
-                            : 0.0;
+                     ? distance_error * _ctrl_limits.velXParams.maxVel
+                     : 0.0;
 
     // X center error : (2.0 * tracking.center_xy[0] / tracking.img_width - 1.0)
     // in [-1, 1] Omega in [-alpha * omega_max, alpha * omega_max]
-    omega =
-        -_config.alpha() * error_x * _ctrl_limits.omegaParams.maxOmega;
+    omega = -_config.alpha() * error_x * _ctrl_limits.omegaParams.maxOmega;
 
     // Y center error : (2.0 * tracking.center_xy[1] / tracking.img_height
     // - 1.0) in [-1, 1] V in [-speed_max, speed_max]
@@ -226,15 +228,13 @@ void VisionFollower::trackTarget(const TrackingData &tracking) {
         if (i + 1 < _out_vel._length) {
           _out_vel.set(i + 1, 0.0, 0.0, omega);
         }
-      }
-      else if (std::abs(omega) < _config.min_vel()){
+      } else if (std::abs(omega) < _config.min_vel()) {
         // Set vx_ctrl[i] and vx_ctrl[i+1] to 0.0
         _out_vel.set(i, v, 0.0, 0.0);
         if (i + 1 < _out_vel._length) {
           _out_vel.set(i + 1, v, 0.0, 0.0);
         }
-      }
-      else {
+      } else {
         // Set vx_ctrl[i] to 0.0
         _out_vel.set(i, v, 0.0, 0.0);
         // Set vx_ctrl[i+1] to max(v, 0.0)
@@ -257,13 +257,14 @@ const Velocities VisionFollower::getCtrl() const {
   // If search is on
   else if (_recorded_search_time > 0.0) {
     Velocities _search(1);
-    LOG_DEBUG("Number of search commands remaining: ",
-            _search_commands_queue.size(), "recorded search time: ", _recorded_search_time);
+    LOG_DEBUG(
+        "Number of search commands remaining: ", _search_commands_queue.size(),
+        "recorded search time: ", _recorded_search_time);
     _search.set(0, _search_command[0], _search_command[1], _search_command[2]);
     return _search;
   }
   // If search not active -> wait till timeout
-  else{
+  else {
     // send 0.0 to wait
     Velocities _wait(1);
     return _wait;

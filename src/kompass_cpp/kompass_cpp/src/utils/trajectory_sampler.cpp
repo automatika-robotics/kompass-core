@@ -123,7 +123,6 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
   path.add(idx, start_pose.x, start_pose.y);
   bool is_collision = false;
   size_t last_free_index{numPointsPerTrajectory_ - 1};
-  Path::State last_free_point;
 
   for (size_t i = 0; i < (numPointsPerTrajectory - 1); ++i) {
 
@@ -139,31 +138,30 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
     // robot collision object) No need to update the Octree (laserscan)
     // collision object as the sensor data is the same
     if (maxNumThreads > 1) {
-      is_collision = collChecker->checkCollisions(simulated_pose);
+      is_collision = collChecker->checkCollisions(simulated_pose, true);
     } else {
       collChecker->updateState(simulated_pose);
       is_collision = collChecker->checkCollisions();
     }
 
     if (is_collision) {
-      // LOG_DEBUG("Detected collision -> dropping sample at x: ",
-      // simulated_pose.x,
-      //           ", y: ", simulated_pose.y, "with Vx: ", vel.vx(),
-      //           ", Vy: ", vel.vy(), ", Omega: ", vel.omega());
-      last_free_index = i - 1;
+      if (i > 0){
+        last_free_index = i - 1;
+      }
       break;
     }
-
     simulated_velocities.add(i, vel);
     path.add(i + 1, simulated_pose.x, simulated_pose.y);
   }
 
-  if (!drop_samples_ && path.x.size() >= numCtrlPoints_) {
-    for (size_t j = last_free_index; j < (numPointsPerTrajectory_ - 1); ++j) {
+  if (!drop_samples_ && is_collision && last_free_index > numCtrlPoints_ &&
+      last_free_index < numPointsPerTrajectory_ - 1) {
+    auto last_free_point = path.getIndex(last_free_index);
+    for (size_t j = last_free_index + 1; j < (numPointsPerTrajectory_ - 1); ++j) {
       // Add zero vel
       simulated_velocities.add(j, Velocity2D(0.0, 0.0, 0.0));
       // Robot stays at the last simulated point
-      path.add(j + 1, last_free_point.x, last_free_point.y);
+      path.add(j + 1, last_free_point.x(), last_free_point.y());
     }
     is_collision = false;
   }
@@ -195,7 +193,6 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
   path.add(0, start_pose.x, start_pose.y);
   bool is_collision = false;
   size_t last_free_index{numPointsPerTrajectory_ - 1};
-  Path::State last_free_point;
 
   for (size_t i = 0; i < (numPointsPerTrajectory - 1); ++i) {
 
@@ -217,7 +214,7 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
     // robot collision object) No need to update the Octree (laserscan)
     // collision object as the sensor data is the same
     if (maxNumThreads > 1) {
-      is_collision = collChecker->checkCollisions(simulated_pose);
+      is_collision = collChecker->checkCollisions(simulated_pose, true);
     } else {
       collChecker->updateState(simulated_pose);
       is_collision = collChecker->checkCollisions();
@@ -232,12 +229,14 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
     path.add(i + 1, simulated_pose.x, simulated_pose.y);
   }
 
-  if (!drop_samples_ && path.x.size() >= numCtrlPoints_) {
-    for (size_t j = last_free_index; j < (numPointsPerTrajectory_ - 1); ++j) {
+  if (!drop_samples_ && is_collision && last_free_index > numCtrlPoints_ &&
+      last_free_index < numPointsPerTrajectory_ - 1) {
+    auto last_free_point = path.getIndex(last_free_index);
+    for (size_t j = last_free_index + 1; j < (numPointsPerTrajectory_ - 1); ++j) {
       // Add zero vel
       simulated_velocities.add(j, Velocity2D(0.0, 0.0, 0.0));
       // Robot stays at the last simulated point
-      path.add(j + 1, last_free_point.x, last_free_point.y);
+      path.add(j + 1, last_free_point.x(), last_free_point.y());
     }
     is_collision = false;
   }
@@ -287,7 +286,7 @@ TrajectorySamples2D TrajectorySampler::generateTrajectoriesAckermann(
     }
   }
   LOG_DEBUG("Got admissible trajectories: ",
-            admissible_velocity_trajectories.velocities.velocitiesIndex_ + 1);
+           admissible_velocity_trajectories.velocities.velocitiesIndex_ + 1);
   return admissible_velocity_trajectories;
 }
 
@@ -417,6 +416,8 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity2D &current_vel,
       }
     }
   }
+  LOG_DEBUG("Got admissible trajectories: ",
+            admissible_velocity_trajectories.velocities.velocitiesIndex_ + 1);
   return admissible_velocity_trajectories;
 }
 
@@ -428,13 +429,13 @@ TrajectorySampler::getNewTrajectories(const Velocity2D &current_vel,
 
   switch (ctrType) {
   case ControlType::ACKERMANN:
-    LOG_INFO("Generating samples for Ackermann");
+    LOG_DEBUG("Generating samples for Ackermann");
     return generateTrajectoriesAckermann(current_vel, current_pose);
   case ControlType::DIFFERENTIAL_DRIVE:
-    LOG_INFO("Generating samples for DiffDrive");
+    LOG_DEBUG("Generating samples for DiffDrive");
     return generateTrajectoriesDiffDrive(current_vel, current_pose);
   case ControlType::OMNI:
-    LOG_INFO("Generating samples for OMNI");
+    LOG_DEBUG("Generating samples for OMNI");
     return generateTrajectoriesOmni(current_vel, current_pose);
   default:
     throw std::invalid_argument("Invalid control type");
