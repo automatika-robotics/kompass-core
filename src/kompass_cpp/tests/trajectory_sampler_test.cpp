@@ -41,8 +41,9 @@ void testTrajSampler() {
   double timeStep = 0.1;
   double predictionHorizon = 1.0;
   double controlHorizon = 0.2;
-  int maxLinearSamples = 4;
-  int maxAngularSamples = 4;
+  int maxLinearSamples = 20;
+  int maxAngularSamples = 20;
+  int numThreads = 10;
 
   // Octomap resolution
   double octreeRes = 0.1;
@@ -82,7 +83,8 @@ void testTrajSampler() {
     Control::TrajectorySampler trajSampler(
         controlLimits, robot_types[j], timeStep, predictionHorizon,
         controlHorizon, maxLinearSamples, maxAngularSamples, robotShapeType,
-        robotDimensions, sensor_position_body, sensor_rotation_body, octreeRes);
+        robotDimensions, sensor_position_body, sensor_rotation_body, octreeRes,
+        numThreads);
 
     // Robot initial velocity control
     Control::Velocity2D robotControl;

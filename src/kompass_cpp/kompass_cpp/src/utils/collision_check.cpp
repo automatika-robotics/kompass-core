@@ -10,6 +10,7 @@
 #include <LinearMath/btQuaternion.h>
 #include <LinearMath/btVector3.h>
 #include <memory>
+#include <vector>
 
 namespace Kompass {
 
@@ -25,12 +26,12 @@ CollisionChecker::CollisionChecker(
   octree_resolution_ = octree_resolution;
   // Initialize Bullet collision configuration
   m_collisionConfiguration =
-      std::make_shared<btDefaultCollisionConfiguration>();
+      std::make_unique<btDefaultCollisionConfiguration>();
   m_dispatcher =
-      std::make_shared<btCollisionDispatcher>(m_collisionConfiguration.get());
-  m_broadphase = std::make_shared<btDbvtBroadphase>();
-  m_solver = std::make_shared<btSequentialImpulseConstraintSolver>();
-  m_collisionWorld = std::make_shared<btDiscreteDynamicsWorld>(
+      std::make_unique<btCollisionDispatcher>(m_collisionConfiguration.get());
+  m_broadphase = std::make_unique<btDbvtBroadphase>();
+  m_solver = std::make_unique<btSequentialImpulseConstraintSolver>();
+  m_collisionWorld = std::make_unique<btDiscreteDynamicsWorld>(
       m_dispatcher.get(), m_broadphase.get(), m_solver.get(),
       m_collisionConfiguration.get());
 
@@ -39,7 +40,7 @@ CollisionChecker::CollisionChecker(
 
   switch (robot_shape_type) {
   case ShapeType::BOX:
-    body_.robotShape = std::make_shared<btBoxShape>(btVector3{
+    body_.robotShape = std::make_unique<btBoxShape>(btVector3{
         robot_dimensions[0], robot_dimensions[1], robot_dimensions[2]});
     robotHeight_ = body_.dimensions.at(2);
     robotRadius_ = std::sqrt(pow(body_.dimensions.at(0), 2) +
@@ -150,7 +151,7 @@ void CollisionChecker::updateScan(
 
     // Create a small sphere to represent the obstacle point
     auto obstacleShape =
-        std::make_shared<btSphereShape>(octree_resolution_ / 2);
+        std::make_unique<btSphereShape>(octree_resolution_ / 2);
 
     // Create collision object for the obstacle
     btCollisionObject *obstacleObject = new btCollisionObject();
@@ -189,7 +190,7 @@ void CollisionChecker::updatePointCloud(const std::vector<Path::Point> &cloud,
 
     // Create a small sphere to represent the obstacle point
     auto obstacleShape =
-        std::make_shared<btSphereShape>(octree_resolution_ / 2);
+        std::make_unique<btSphereShape>(octree_resolution_ / 2);
 
     // Create collision object for the obstacle
     btCollisionObject *obstacleObject = new btCollisionObject();
@@ -210,40 +211,33 @@ void CollisionChecker::updatePointCloud(const std::vector<Path::Point> &cloud,
 
 bool CollisionChecker::checkCollisions() {
 
-  bool collision = false;
-
   MyContactResult callback = MyContactResult();
   m_collisionWorld->addCollisionObject(m_robotObject);
+  m_collisionWorld->contactTest(m_robotObject, callback);
 
-  // Check collision with each obstacle
-  for (auto *obstacleObject : m_obstacleObjects) {
-
-    callback.hasCollided = false;
-    m_collisionWorld->contactPairTest(m_robotObject, obstacleObject, callback);
-    // Check the result
-    if (callback.hasCollided) {
-      collision = true;
-      break;
-    }
-  }
   m_collisionWorld->removeCollisionObject(m_robotObject);
-  return collision;
+  return callback.hasCollided;
 }
 
 bool CollisionChecker::checkCollisions(const Path::State current_state,
                                        const bool multi_threading) {
   if (multi_threading) {
-    bool collision = false;
-    btDiscreteDynamicsWorld *collisionWorld = new btDiscreteDynamicsWorld(
-        m_dispatcher.get(), m_broadphase.get(), m_solver.get(),
-        m_collisionConfiguration.get());
+    // Lock the mutex to ensure thread-safe access to m_obstacleObjects
+    std::lock_guard<std::mutex> lock(m_obstacleMutex);
+    auto collisionConfiguration =
+        std::make_unique<btDefaultCollisionConfiguration>();
+    auto dispatcher =
+        std::make_unique<btCollisionDispatcher>(collisionConfiguration.get());
+    auto broadphase = std::make_unique<btDbvtBroadphase>();
+    auto solver = std::make_unique<btSequentialImpulseConstraintSolver>();
+    auto collisionWorld = std::make_unique<btDiscreteDynamicsWorld>(
+        dispatcher.get(), broadphase.get(), solver.get(),
+        collisionConfiguration.get());
 
-    btCollisionObject *robotObject = new btCollisionObject();
+    auto robotObject = std::make_unique<btCollisionObject>();
     robotObject->setCollisionShape(body_.robotShape.get());
     Eigen::Matrix3f rotation =
         eulerToRotationMatrix(0.0, 0.0, current_state.yaw);
-    body_.tf = getTransformation(
-        rotation, Eigen::Vector3f(current_state.x, current_state.y, 0.0));
     btTransform robotTransform;
     Eigen::Quaternionf quat(rotation);
     robotTransform.setRotation(
@@ -254,22 +248,30 @@ bool CollisionChecker::checkCollisions(const Path::State current_state,
 
     robotObject->setWorldTransform(robotTransform);
 
-    MyContactResult callback = MyContactResult();
-    collisionWorld->addCollisionObject(robotObject);
-
-    // Check collision with each obstacle
-    for (auto *obstacleObject : m_obstacleObjects) {
-
-      callback.hasCollided = false;
-      collisionWorld->contactPairTest(robotObject, obstacleObject, callback);
-      // Check the result
-      if (callback.hasCollided) {
-        collision = true;
-        break;
-      }
+    std::vector<std::unique_ptr<btCollisionObject>> obsObjects;
+    for (auto *obstacle : m_obstacleObjects) {
+      obsObjects.emplace_back(new btCollisionObject(*obstacle));
     }
-    collisionWorld->removeCollisionObject(robotObject);
-    return collision;
+
+    MyContactResult callback = MyContactResult();
+    collisionWorld->addCollisionObject(robotObject.get());
+
+    // Add obstacles to the collision world and check for collisions
+    for (auto &obstacleObject : obsObjects) {
+      collisionWorld->addCollisionObject(obstacleObject.get());
+    }
+
+    collisionWorld->contactTest(robotObject.get(), callback);
+
+    // Remove obstacles from the collision world and delete them
+    for (auto &obstacleObject : obsObjects) {
+      collisionWorld->removeCollisionObject(obstacleObject.get());
+    }
+    collisionWorld->removeCollisionObject(robotObject.get());
+
+    obsObjects.clear();
+
+    return callback.hasCollided;
 
   } else {
     updateState(current_state);
@@ -280,7 +282,7 @@ bool CollisionChecker::checkCollisions(const Path::State current_state,
 bool CollisionChecker::checkCollisions(const std::vector<double> &ranges,
                                        const std::vector<double> &angles) {
   updateScan(ranges, angles);
-  return checkCollisions();
+  return checkCollisions(); /*  */
 }
 
 // Clear all obstacles
