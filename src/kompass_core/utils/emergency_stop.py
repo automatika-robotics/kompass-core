@@ -18,13 +18,15 @@ class EmergencyChecker:
         emergency_angle: float,
         sensor_position_robot: Optional[List[float]] = None,
         sensor_rotation_robot: Optional[List[float]] = None,
-        use_gpu: bool = False
+        use_gpu: bool = False,
     ) -> None:
         self.__emergency_distance = emergency_distance
         self.__emergency_angle = emergency_angle
         self.__sensor_position_robot = sensor_position_robot or [0.0, 0.0, 0.0]
         self.__sensor_rotation_robot = sensor_rotation_robot or [0.0, 0.0, 0.0, 1.0]
-        self.__robot_shape = RobotGeometry.Type.to_kompass_cpp_lib(self.__robot.geometry_type)
+        self.__robot_shape = RobotGeometry.Type.to_kompass_cpp_lib(
+            self.__robot.geometry_type
+        )
         self.__robot_dimensions = robot.geometry_params
         self.__use_gpu = use_gpu
 
@@ -41,6 +43,7 @@ class EmergencyChecker:
         if self.__use_gpu:
             try:
                 from kompass_cpp.utils import CriticalZoneCheckerGPU
+
                 self._critical_zone_checker = CriticalZoneCheckerGPU(
                     robot_shape=self.__robot_shape,
                     robot_dimensions=self.__robot_dimensions,
@@ -85,7 +88,5 @@ class EmergencyChecker:
                 scan_angles=scan.angles,
             )
         return self._critical_zone_checker.check(
-            ranges=scan.ranges,
-            angles=scan.angles,
-            forward=forward
+            ranges=scan.ranges, angles=scan.angles, forward=forward
         )

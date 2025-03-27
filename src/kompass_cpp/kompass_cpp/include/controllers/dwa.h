@@ -7,6 +7,7 @@
 #include "follower.h"
 #include "utils/cost_evaluator.h"
 #include "utils/trajectory_sampler.h"
+#include <cstddef>
 #include <vector>
 
 namespace Kompass {
@@ -97,7 +98,9 @@ public:
   computeVelocityCommandsSet(const Velocity2D &global_vel,
                              const std::vector<Path::Point> &cloud);
 
-  TrajectorySamples2D getDebuggingSamples() const;
+  std::tuple<MatrixXdR, MatrixXdR> getDebuggingSamples() const;
+
+  Control::TrajectorySamples2D getDebuggingSamplesPure() const;
 
   template <typename T>
   void debugVelocitySearch(const Velocity2D &global_vel, const T &scan_points,

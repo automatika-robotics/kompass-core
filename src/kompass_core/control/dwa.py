@@ -247,7 +247,7 @@ class DWA(FollowerTemplate):
         local_map: Optional[np.ndarray] = None,
         local_map_resolution: Optional[float] = None,
         debug: bool = False,
-        drop_samples: bool = False,
+        drop_samples: bool = True,
         **_,
     ) -> bool:
         """
@@ -303,7 +303,9 @@ class DWA(FollowerTemplate):
 
         try:
             if debug:
-                self._planner.debug_velocity_search(current_velocity, sensor_data, drop_samples)
+                self._planner.debug_velocity_search(
+                    current_velocity, sensor_data, drop_samples
+                )
             self._result = self._planner.compute_velocity_commands(
                 current_velocity, sensor_data
             )
@@ -384,7 +386,7 @@ class DWA(FollowerTemplate):
         :rtype: List[float]
         """
         if self._result.is_found:
-            return self.control_till_horizon.vy[:self._end_of_ctrl_horizon]
+            return self.control_till_horizon.vy[: self._end_of_ctrl_horizon]
         return [0.0]
 
     @property

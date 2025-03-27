@@ -37,11 +37,11 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
 
   // Sampling configuration
   double timeStep = 0.1;
-  double predictionHorizon = 4.0;
-  double controlHorizon = 0.4;
-  int maxLinearSamples = 21;
-  int maxAngularSamples = 21;
-  int maxNumThreads = 10;
+  double predictionHorizon = 1.0;
+  double controlHorizon = 0.2;
+  int maxLinearSamples = 4;
+  int maxAngularSamples = 5;
+  int maxNumThreads = 1;
 
   // Octomap resolution
   double octreeRes = 0.1;
@@ -55,26 +55,26 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   costWeights.setParameter("jerk_weight", 0.0);
 
   // Robot configuration
-  Control::LinearVelocityControlParams x_params(1, 3, 5);
+  Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0);
   Control::LinearVelocityControlParams y_params(1, 3, 5);
-  Control::AngularVelocityControlParams angular_params(3.14, 3, 5, 8);
+  Control::AngularVelocityControlParams angular_params(3.14, 2.0, 3.0, 3.0);
   Control::ControlLimitsParams controlLimits(x_params, y_params,
                                              angular_params);
   auto controlType = Control::ControlType::ACKERMANN;
-  auto robotShapeType = Kompass::CollisionChecker::ShapeType::BOX;
-  std::vector<float> robotDimensions{0.3, 0.3, 1.0};
+  auto robotShapeType = Kompass::CollisionChecker::ShapeType::CYLINDER;
+  std::vector<float> robotDimensions{0.1, 0.4};
   // std::array<float, 3> sensorPositionWRTbody {0.0, 0.0, 1.0};
-  const std::array<float, 3> sensor_position_body{0.0, 0.0, 0.5};
+  const std::array<float, 3> sensor_position_body{0.0, 0.0, 0.0};
   const std::array<float, 4> sensor_rotation_body{0, 0, 0, 1};
 
   // Robot start state (pose)
-  Path::State robotState(0.0, 0.0, 0.0, 0.0);
+  Path::State robotState(-0.51731912, 0.0, 0.0, 0.0);
 
   // Robot initial velocity control
   Control::Velocity2D robotControl;
 
   // Robot laserscan value (empty)
-  Control::LaserScan robotScan({10.0, 10.0, 10.0}, {0, 0.1, 0.2});
+  Control::LaserScan robotScan({0.4, 0.3}, {10, 10.1});
 
   LOG_INFO("Setting up DWA planner");
 
@@ -95,7 +95,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
 
   planner.debugVelocitySearch(robotControl, robotScan, true);
 
-  Control::TrajectorySamples2D samples_ = planner.getDebuggingSamples();
+  Control::TrajectorySamples2D samples_ = planner.getDebuggingSamplesPure();
 
   // Plot the trajectories (Save to json then run python script for plotting)
   boost::filesystem::path executablePath = boost::dll::program_location();
