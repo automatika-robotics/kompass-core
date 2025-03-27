@@ -2,6 +2,7 @@
 find_package(Eigen3 3.4 REQUIRED)
 find_package(PCL COMPONENTS common io REQUIRED)
 find_package(fcl REQUIRED)
+find_package(Bullet REQUIRED)
 
 # for bindings
 set(PYBIND11_FINDPYTHON ON)
@@ -43,11 +44,12 @@ endif()
 # add project as library
 add_library(${PROJECT_NAME} STATIC ${SOURCES})
 target_include_directories(${PROJECT_NAME} PUBLIC include)
-target_include_directories(${PROJECT_NAME} PUBLIC ${PYTHON_INCLUDE_DIRS} {$EIGEN3_INCLUDE_DIR} ${PCL_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME} PUBLIC fcl ${PCL_LIBRARIES})
+target_include_directories(${PROJECT_NAME} PUBLIC ${PYTHON_INCLUDE_DIRS} ${BULLET_INCLUDE_DIR} {$EIGEN3_INCLUDE_DIR} ${PCL_INCLUDE_DIRS})
+message(STATUS ${BULLET_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} PUBLIC fcl ${BULLET_LIBRARIES} ${PCL_LIBRARIES})
 
 # add sycl
 if(AdaptiveCpp_FOUND)
-target_compile_definitions(${PROJECT_NAME} PRIVATE GPU=1)
+# target_compile_definitions(${PROJECT_NAME} PRIVATE GPU=1)
 add_sycl_to_target(TARGET ${PROJECT_NAME} SOURCES ${SOURCES})
 endif()
