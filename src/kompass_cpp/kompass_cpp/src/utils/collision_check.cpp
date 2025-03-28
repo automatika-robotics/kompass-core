@@ -225,7 +225,7 @@ void CollisionChecker::convertLaserScanToOctomap(
   // Transform height to sensor frame
   float height_in_sensor = -sensor_tf_body_.translation()[2] / 2;
 
-  octomap::Pointcloud octomapCloud;
+ octomapCloud_.clear();
   float x, y, z, angle;
   for (size_t i = 0; i < ranges.size(); ++i) {
     angle = angle_min + i * angle_increment;
@@ -233,10 +233,10 @@ void CollisionChecker::convertLaserScanToOctomap(
     y = ranges[i] * sin(angle);
     z = height_in_sensor;
 
-    octomapCloud.push_back(x, y, z);
+    octomapCloud_.push_back(x, y, z);
   }
 
-  octTree_->insertPointCloud(octomapCloud, octomap::point3d(0, 0, 0));
+  octTree_->insertPointCloud(octomapCloud_, octomap::point3d(0, 0, 0));
 
   updateOctreePtr();
 }
@@ -256,15 +256,15 @@ void CollisionChecker::convertLaserScanToOctomap(
   // Transform height to sensor frame
   float height_in_sensor = -sensor_tf_body_.translation()[2] / 2;
 
-  octomap::Pointcloud octomapCloud;
+  octomapCloud_.clear();
   float x, y, z;
   for (size_t i = 0; i < ranges.size(); ++i) {
     x = ranges[i] * cos(angles[i]);
     y = ranges[i] * sin(angles[i]);
     z = height_in_sensor;
-    octomapCloud.push_back(x, y, z);
+    octomapCloud_.push_back(x, y, z);
   }
-  octTree_->insertPointCloud(octomapCloud, octomap::point3d(0, 0, 0));
+  octTree_->insertPointCloud(octomapCloud_, octomap::point3d(0, 0, 0));
 
   updateOctreePtr();
 }
