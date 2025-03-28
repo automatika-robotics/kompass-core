@@ -39,13 +39,13 @@ class PointCloudData(BaseAttrs):
             )
         if data.shape[1] == 3:
             return [
-                Point(x, y, height)
+                [x, y, height]
                 for x, y, _ in data.reshape(
                     -1, 3
                 )  # Flatten the array and group values by 3
             ]
 
-        return [Point(x, y, height) for x, y in data.reshape(-1, 2)]
+        return [[x, y, height] for x, y in data.reshape(-1, 2)]
 
     def add(self, x: float, y: float, z: float):
         """Adds new point to the PointCloud data
