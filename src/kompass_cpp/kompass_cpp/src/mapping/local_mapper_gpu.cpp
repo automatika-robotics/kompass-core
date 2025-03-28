@@ -1,6 +1,5 @@
 #include "mapping/local_mapper_gpu.h"
 #include "utils/logger.h"
-#include <hipSYCL/sycl/libkernel/builtins.hpp>
 #include <sycl/sycl.hpp>
 
 namespace Kompass {
