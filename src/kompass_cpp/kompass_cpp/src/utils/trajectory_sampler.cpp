@@ -122,7 +122,7 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
   int idx = 0;
   path.add(idx, start_pose.x, start_pose.y);
   bool is_collision = false;
-  size_t last_free_index{numPointsPerTrajectory_ - 1};
+  size_t last_free_index{numPointsPerTrajectory - 1};
 
   for (size_t i = 0; i < (numPointsPerTrajectory - 1); ++i) {
 
@@ -155,9 +155,9 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
   }
 
   if (!drop_samples_ && is_collision && last_free_index > numCtrlPoints_ &&
-      last_free_index < numPointsPerTrajectory_ - 1) {
+      last_free_index < numPointsPerTrajectory - 1) {
     auto last_free_point = path.getIndex(last_free_index);
-    for (size_t j = last_free_index + 1; j < (numPointsPerTrajectory_ - 1);
+    for (size_t j = last_free_index + 1; j < (numPointsPerTrajectory - 1);
          ++j) {
       // Add zero vel
       simulated_velocities.add(j, Velocity2D(0.0, 0.0, 0.0));
@@ -193,7 +193,7 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
   Velocity2D temp_vel;
   path.add(0, start_pose.x, start_pose.y);
   bool is_collision = false;
-  size_t last_free_index{numPointsPerTrajectory_ - 1};
+  size_t last_free_index{numPointsPerTrajectory - 1};
 
   for (size_t i = 0; i < (numPointsPerTrajectory - 1); ++i) {
 
@@ -231,9 +231,9 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
   }
 
   if (!drop_samples_ && is_collision && last_free_index > numCtrlPoints_ &&
-      last_free_index < numPointsPerTrajectory_ - 1) {
+      last_free_index < numPointsPerTrajectory - 1) {
     auto last_free_point = path.getIndex(last_free_index);
-    for (size_t j = last_free_index + 1; j < (numPointsPerTrajectory_ - 1);
+    for (size_t j = last_free_index + 1; j < (numPointsPerTrajectory - 1);
          ++j) {
       // Add zero vel
       simulated_velocities.add(j, Velocity2D(0.0, 0.0, 0.0));

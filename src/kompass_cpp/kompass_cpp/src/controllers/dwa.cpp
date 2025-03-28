@@ -257,7 +257,7 @@ DWA::computeVelocityCommandsSet(const Velocity2D &global_vel,
   return searchRes;
 }
 
-std::tuple<MatrixXdR, MatrixXdR> DWA::getDebuggingSamples() const {
+std::tuple<MatrixXfR, MatrixXfR> DWA::getDebuggingSamples() const {
   if (debuggingSamples_ == nullptr) {
     throw std::invalid_argument("No debugging samples are available");
   }

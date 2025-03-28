@@ -98,7 +98,7 @@ public:
   computeVelocityCommandsSet(const Velocity2D &global_vel,
                              const std::vector<Path::Point> &cloud);
 
-  std::tuple<MatrixXdR, MatrixXdR> getDebuggingSamples() const;
+  std::tuple<MatrixXfR, MatrixXfR> getDebuggingSamples() const;
 
   Control::TrajectorySamples2D getDebuggingSamplesPure() const;
 

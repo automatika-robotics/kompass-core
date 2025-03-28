@@ -149,8 +149,6 @@ private:
   double min_vy_;
   double max_omega_;
   double min_omega_;
-  size_t numTrajectories_;
-  size_t numPointsPerTrajectory_;
   size_t numCtrlPoints_;
   bool drop_samples_{true};
 
