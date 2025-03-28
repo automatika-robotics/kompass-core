@@ -224,9 +224,9 @@ void CollisionChecker::convertLaserScanToOctomap(
 
   // Transform height to sensor frame
   float height_in_sensor = -sensor_tf_body_.translation()[2] / 2;
-
- octomapCloud_.clear();
   float x, y, z, angle;
+  octomapCloud_.clear();
+
   for (size_t i = 0; i < ranges.size(); ++i) {
     angle = angle_min + i * angle_increment;
     x = ranges[i] * cos(angle);
@@ -256,8 +256,9 @@ void CollisionChecker::convertLaserScanToOctomap(
   // Transform height to sensor frame
   float height_in_sensor = -sensor_tf_body_.translation()[2] / 2;
 
-  octomapCloud_.clear();
   float x, y, z;
+  octomapCloud_.clear();
+
   for (size_t i = 0; i < ranges.size(); ++i) {
     x = ranges[i] * cos(angles[i]);
     y = ranges[i] * sin(angles[i]);
