@@ -9,13 +9,13 @@ description = "Navigation Algorithms for Kompass"
 authors = [{ name = "Automatika Robotics", email = "contact@automatikarobotics.com" }]
 readme = "README.md"
 classifiers = [
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12"]
-license = "MIT"
-license-files = ["LICENSE"]
+license = { text = "MIT" }
 
 keywords = ["robotics", "gpgpu", "navigation", "control", "planning", "mapping"]
 
