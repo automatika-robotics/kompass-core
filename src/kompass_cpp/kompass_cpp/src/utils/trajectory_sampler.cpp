@@ -134,14 +134,14 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
     // robot collision object) No need to update the Octree (laserscan)
     // collision object as the sensor data is the same
     if (maxNumThreads > 1) {
-      is_collision = collChecker->checkCollisions(simulated_pose, true);
+      is_collision = collChecker->checkCollisions(simulated_pose);
     } else {
       collChecker->updateState(simulated_pose);
       is_collision = collChecker->checkCollisions();
     }
 
     if (is_collision) {
-      if (i > 0){
+      if (i > 0) {
         last_free_index = i - 1;
       }
       break;
@@ -153,7 +153,8 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
   if (!drop_samples_ && is_collision && last_free_index > numCtrlPoints_ &&
       last_free_index < numPointsPerTrajectory_ - 1) {
     auto last_free_point = path.getIndex(last_free_index);
-    for (size_t j = last_free_index + 1; j < (numPointsPerTrajectory_ - 1); ++j) {
+    for (size_t j = last_free_index + 1; j < (numPointsPerTrajectory_ - 1);
+         ++j) {
       // Add zero vel
       simulated_velocities.add(j, Velocity2D(0.0, 0.0, 0.0));
       // Robot stays at the last simulated point
@@ -208,7 +209,7 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
     // robot collision object) No need to update the Octree (laserscan)
     // collision object as the sensor data is the same
     if (maxNumThreads > 1) {
-      is_collision = collChecker->checkCollisions(simulated_pose, true);
+      is_collision = collChecker->checkCollisions(simulated_pose);
     } else {
       collChecker->updateState(simulated_pose);
       is_collision = collChecker->checkCollisions();
@@ -226,7 +227,8 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
   if (!drop_samples_ && is_collision && last_free_index > numCtrlPoints_ &&
       last_free_index < numPointsPerTrajectory_ - 1) {
     auto last_free_point = path.getIndex(last_free_index);
-    for (size_t j = last_free_index + 1; j < (numPointsPerTrajectory_ - 1); ++j) {
+    for (size_t j = last_free_index + 1; j < (numPointsPerTrajectory_ - 1);
+         ++j) {
       // Add zero vel
       simulated_velocities.add(j, Velocity2D(0.0, 0.0, 0.0));
       // Robot stays at the last simulated point
@@ -280,7 +282,7 @@ TrajectorySamples2D TrajectorySampler::generateTrajectoriesAckermann(
     }
   }
   LOG_DEBUG("Got admissible trajectories: ",
-           admissible_velocity_trajectories.velocities.velocitiesIndex_ + 1);
+            admissible_velocity_trajectories.velocities.velocitiesIndex_ + 1);
   return admissible_velocity_trajectories;
 }
 

@@ -53,7 +53,7 @@ void setLaserscanAtAngle(double angle, double rangeValue,
   }
 }
 
-BOOST_AUTO_TEST_CASE(test_Bullet) {
+BOOST_AUTO_TEST_CASE(test_FCL) {
   // Create timer
   Timer time;
 
@@ -81,21 +81,19 @@ BOOST_AUTO_TEST_CASE(test_Bullet) {
 
   collChecker.updateState(robotState);
 
-  LOG_INFO("Updated state");
-
   bool res_false = collChecker.checkCollisions(scan_ranges, scan_angles);
   LOG_INFO("Testing collision between: \nRobot at {x: ", robotState.x,
            ", y: ", robotState.y, "}\n",
            "and Laserscan with: ranges {1.0, 1.0, 1.0, 1.0} at angles {0, 0.1, "
            "0.2, 3.14}, Collision: ",
            res_false);
-  BOOST_TEST(!res_false, "Non Collision Result: " << res_false);
+  BOOST_TEST(!res_false, "Collision Result should be FALSE Got: " << res_false);
 
   robotState.x = 3.0;
   robotState.y = 5.0;
   collChecker.updateState(robotState);
 
-  scan_ranges = {0.45, 0.5, 0.5};
+  scan_ranges = {0.25, 0.5, 0.5};
 
   bool res_true = collChecker.checkCollisions(scan_ranges, scan_angles);
   LOG_INFO("Testing collision between: \nRobot at {x: ", robotState.x,
@@ -103,14 +101,14 @@ BOOST_AUTO_TEST_CASE(test_Bullet) {
            "and Laserscan with: ranges {0.2, 0.5, 0.5} at angles {0, 0.1, "
            "0.2, 3.14} -> Collision: ",
            res_true);
-  BOOST_TEST(res_true, "Collision Result: " << res_true);
+  BOOST_TEST(res_true, "Collision Result should be TRUE got: " << res_true);
 
   LOG_INFO("Testing collision between: \nRobot at {x: ", robotState.x,
            ", y: ", robotState.y, "}\n", "and Pointcloud");
   std::vector<Path::Point> cloud;
   // Point cloud in sensor frame
   cloud.push_back(Path::Point(3.1, 5.1, -0.5));
-  collChecker.updatePointCloud(cloud);
+  collChecker.updatePointCloud(cloud, true);
   bool res = collChecker.checkCollisions();
   // float dist = collChecker.getMinDistance();
   // LOG_INFO("Min distance is: ", dist);
