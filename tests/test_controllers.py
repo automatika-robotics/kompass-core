@@ -180,7 +180,6 @@ def run_control(
             controller.linear_y_control,
             controller.angular_control,
         ):
-            print(f"Applying control: vx={vx}, omega={omega}")
             x_robot.append(robot.state.x)
             y_robot.append(robot.state.y)
             robot.set_control(
@@ -298,8 +297,8 @@ def test_path_interpolation(plot: bool = False):
                 length += np.sqrt(d_x**2 + d_y**2)
         elif isinstance(path, PathCpp):
             for idx in range(len(path.points) - 1):
-                d_x = path.points[idx + 1].x - path.points[idx].x
-                d_y = path.points[idx + 1].y - path.points[idx].y
+                d_x = path.points[idx + 1][0] - path.points[idx][0]
+                d_y = path.points[idx + 1][1] - path.points[idx][1]
                 length += np.sqrt(d_x**2 + d_y**2)
         return length
 
@@ -523,15 +522,18 @@ def main():
         plot=True, figure_name="stanley", figure_tag="Stanley Controller Test Results"
     )
 
-    # TESTING DVZ ##
+    ## TESTING DVZ ##
     print("RUNNING DVZ CONTROLLER TEST")
     test_dvz(plot=True, figure_name="dvz", figure_tag="DVZ Controller Test Results")
+
+    ## TESTING DWA DEBUG MODE ##
+    print("RUNNING ONE DWA CONTROLLER DEBUG STEP TEST")
+    test_dwa_debug()
 
     ## TESTING DWA ##
     print("RUNNING DWA CONTROLLER TEST")
     test_dwa(plot=True, figure_name="dwa", figure_tag="DWA Controller Test Results")
 
-    test_dwa_debug()
 
 
 if __name__ == "__main__":
