@@ -1,6 +1,5 @@
 #include <Eigen/Dense>
 #include <cmath>
-#include <iostream>
 #include <vector>
 
 inline void bresenham(Eigen::Vector2i p1, Eigen::Vector2i p2,
@@ -148,7 +147,6 @@ inline void hutchison(Eigen::Vector2i p1, Eigen::Vector2i p2,
     for (; y < p2[1]; y++) {
       x += m;
       rlen = ((x >> 16) - (ox >> 16));
-      std::cout << rlen << '\n';
       for (int j = 0; j < rlen; ++j) {
         points.emplace_back(row, y);
         row += 1;

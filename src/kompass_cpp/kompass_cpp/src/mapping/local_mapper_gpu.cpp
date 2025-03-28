@@ -1,4 +1,6 @@
 #include "mapping/local_mapper_gpu.h"
+#include "utils/logger.h"
+#include <hipSYCL/sycl/libkernel/builtins.hpp>
 #include <sycl/sycl.hpp>
 
 namespace Kompass {
@@ -41,6 +43,7 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
 
       // local workgroup memory for storing destination point (x2, y2)
       auto toPoint = sycl::local_accessor<int, 1>{sycl::range{2}, h};
+      auto deltas = sycl::local_accessor<int, 1>{sycl::range{2}, h};
 
       // kernel scope
       h.parallel_for<class scanToGridKernel>(
@@ -52,7 +55,7 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
             double range = devicePtrRanges[group_id];
             double angle = devicePtrAngles[group_id];
 
-            // calculate end point in the first thread of the block
+            // calculate end point and deltas in the first thread of the block
             if (local_id == 0) {
               sycl::vec<float, 2> toPointLocal;
               toPointLocal[0] =
@@ -66,31 +69,34 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
                   v_centralPointLocal[0] + (int)(toPointLocal[0] / resolution);
               toPoint[1] =
                   v_centralPointLocal[1] + (int)(toPointLocal[1] / resolution);
+              deltas[0] = toPoint[0] - v_startPoint[0];
+              deltas[1] = toPoint[1] - v_startPoint[1];
             }
             item.barrier(
                 sycl::access::fence_space::local_space); // barrier within the
                                                          // group
 
             // calculate bressenham point
-            int delta_x = toPoint[0] - v_startPoint[0];
-            int delta_y = toPoint[1] - v_startPoint[1];
-
+            float delta_x_f = static_cast<float>(deltas[0]);
+            float delta_y_f = static_cast<float>(deltas[1]);
             float x_float, y_float;
-            if (sycl::abs(delta_x) >= sycl::abs(delta_y)) {
-              float g = (float)delta_y / (float)delta_x;
-              x_float = v_startPoint[0] +
-                        ((delta_x >= 0.0) ? 1 : ((delta_x < 0.0) ? -1 : 0)) *
-                            local_id; // x1 + sign(delta_x) * j
+            if (sycl::abs(deltas[0]) >= sycl::abs(deltas[1])) {
+              float g = delta_y_f / delta_x_f;
+              x_float =
+                  v_startPoint[0] +
+                  ((delta_x_f >= 0.0) ? 1 : ((delta_x_f < 0.0) ? -1 : 0)) *
+                      local_id; // x1 + sign(delta_x) * j
               y_float = v_startPoint[1] + (g * (x_float - v_startPoint[0]));
             } else {
-              float g = (float)delta_x / (float)delta_y;
+              float g = delta_x_f / delta_y_f;
               y_float = v_startPoint[1] +
-                        ((delta_y > 0.0) ? 1 : ((delta_y < 0.0) ? -1 : 0)) *
+                        ((delta_y_f > 0.0) ? 1 : ((delta_y_f < 0.0) ? -1 : 0)) *
                             local_id; // y1 + sign(delta_y) * j
               x_float = v_startPoint[0] + (g * (y_float - v_startPoint[1]));
             }
-            int x = static_cast<int>(x_float);
-            int y = static_cast<int>(y_float);
+
+            int x = ceil(x_float);
+            int y = ceil(y_float);
 
             // fill grid if applicable
             if (x >= 0 && x < rows && y >= 0 && y < cols) {
@@ -102,13 +108,32 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
               float distance =
                   sycl::distance(destPointLocal, v_startPointLocal);
 
+              sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                               sycl::memory_scope::device,
+                               sycl::access::address_space::local_space>
+                  atomic_val(devicePtrGrid[x + y * rows]);
+              sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                               sycl::memory_scope::device,
+                               sycl::access::address_space::local_space>
+                  atomic_val_xstep(devicePtrGrid[(x - 1) + (y * rows)]);
+              sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                               sycl::memory_scope::device,
+                               sycl::access::address_space::local_space>
+                  atomic_val_ystep(devicePtrGrid[x + ((y - 1) * rows)]);
               if (x == toPoint[0] && y == toPoint[1]) {
-                devicePtrGrid[x + y * rows] = static_cast<int>(
-                    Mapping::OccupancyType::OCCUPIED); // row major
+                atomic_val.fetch_max(
+                    static_cast<int>(Mapping::OccupancyType::OCCUPIED));
               } else {
                 if (distance < range)
-                  devicePtrGrid[x + y * rows] = static_cast<int>(
-                      Mapping::OccupancyType::EMPTY); // row major
+                // Add super cover line points
+                {
+                  atomic_val.fetch_max(
+                      static_cast<int>(Mapping::OccupancyType::EMPTY));
+                  atomic_val_xstep.fetch_max(
+                      static_cast<int>(Mapping::OccupancyType::EMPTY));
+                  atomic_val_ystep.fetch_max(
+                      static_cast<int>(Mapping::OccupancyType::EMPTY));
+                }
               }
             }
           });
