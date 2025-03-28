@@ -189,7 +189,6 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
   Path::State simulated_pose = start_pose;
   TrajectoryVelocities2D simulated_velocities(numPointsPerTrajectory);
   TrajectoryPath path(numPointsPerTrajectory);
-  int idx = 0;
   Velocity2D temp_vel;
   path.add(0, start_pose.x, start_pose.y);
   bool is_collision = false;

@@ -50,7 +50,7 @@ CriticalZoneChecker::CriticalZoneChecker(
 
 void CriticalZoneChecker::preset(const std::vector<double> &angles) {
   Eigen::Vector3f cartesianPoint;
-  float x, y, theta, converted_range;
+  float x, y, theta;
 
   for (size_t i = 0; i < angles.size(); ++i) {
     x = std::cos(angles[i]);
