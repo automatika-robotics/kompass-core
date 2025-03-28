@@ -1,6 +1,5 @@
 from typing import Optional, List
 from logging import Logger
-import logging
 from ..models import (
     Robot,
     RobotGeometry,
