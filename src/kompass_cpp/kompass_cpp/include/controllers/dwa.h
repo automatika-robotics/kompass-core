@@ -137,8 +137,8 @@ private:
   size_t getMaxPathLength();
 
   /**
-   * @brief Given the current position and velocity of the robot, find the best
-   * trajectory to execute
+   * @brief Given the current position and velocity of the robot, find the
+   * best trajectory to execute
    * @param global_pose The current position of the robot
    * @param global_vel The current velocity of the robot
    * @param drive_velocities The velocities to send to the robot base
