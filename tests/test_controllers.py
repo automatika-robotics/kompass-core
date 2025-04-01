@@ -71,7 +71,7 @@ def plot_path(
     plt.title(figure_tag)
     plt.grid(True)
     plt.legend()
-    plt.savefig(f"{control_resources}/{figure_name}.png")
+    plt.savefig(f"logs/{figure_name}.png")
 
 
 def json_to_ros_path(json_file: str) -> Union[Path, None]:
@@ -273,7 +273,7 @@ def test_path_interpolation(plot: bool = False):
         plt.ylabel("Y")
         plt.grid(True)
         plt.legend()
-        plt.savefig(f"{control_resources}/interpolation_test.png")
+        plt.savefig("logs/interpolation_test.png")
 
     def path_length(path: Union[Path, PathCpp]) -> float:
         """Computes the length of a path
@@ -458,7 +458,7 @@ def test_dwa_debug():
     plt.title("Trajectory Samples")
     plt.grid(True)
     plt.legend()
-    plt.savefig(f"{control_resources}/trajectory_samples_debug.png")
+    plt.savefig("logs/trajectory_samples_debug.png")
 
 
 @pytest.fixture(autouse=True)
