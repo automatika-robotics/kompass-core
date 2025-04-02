@@ -104,7 +104,6 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
 
             // fill grid if applicable
             if (x >= 0 && x < rows && y >= 0 && y < cols) {
-
               sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                sycl::memory_scope::device,
                                sycl::access::address_space::local_space>
@@ -118,6 +117,7 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
                                sycl::access::address_space::local_space>
                   atomic_val_ystep(devicePtrGrid[x + ((y - steps[1]) * rows)]);
               if (x == toPoint[0] && y == toPoint[1]) {
+                // Add obstacle point while taking care of inside corners
                 atomic_val.fetch_max(
                     static_cast<int>(Mapping::OccupancyType::OCCUPIED));
                 atomic_val_xstep.fetch_max(

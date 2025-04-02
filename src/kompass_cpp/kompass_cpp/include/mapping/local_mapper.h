@@ -94,8 +94,8 @@ public:
    * @param ranges         LaserScan ranges in meters
    * @returns gridData      Current grid data
    */
-  Eigen::MatrixXi& scanToGrid(const std::vector<double> &angles,
-                  const std::vector<double> &ranges);
+  Eigen::MatrixXi &scanToGrid(const std::vector<double> &angles,
+                              const std::vector<double> &ranges);
 
   /**
    * Processes Laserscan data (angles and ranges) to project on a 2D grid
@@ -106,8 +106,9 @@ public:
    * @param ranges         LaserScan ranges in meters
    * @returns gridDataProb Current probabilistic grid data
    */
-  std::tuple<Eigen::MatrixXi&, Eigen::MatrixXf&> scanToGridBaysian(
-      const std::vector<double> &angles, const std::vector<double> &ranges);
+  std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
+  scanToGridBaysian(const std::vector<double> &angles,
+                    const std::vector<double> &ranges);
 
 protected:
   // Transforms a point from grid coordinate (i,j) to the local coordinates
@@ -142,8 +143,7 @@ protected:
   void updateGrid_(const float angle, const float range);
 
   // Update method for scanToGridBaysian
-  void updateGridBaysian_(
-      const float angle, const float range);
+  void updateGridBaysian_(const float angle, const float range);
 
   /**
    * @brief Fill an area around a point on the grid with given padding.
