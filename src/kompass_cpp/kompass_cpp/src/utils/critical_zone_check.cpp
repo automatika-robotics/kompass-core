@@ -40,9 +40,9 @@ CriticalZoneChecker::CriticalZoneChecker(
   angle_right_backward_ = Angle::normalizeTo0Pi(M_PI + angle_right_forward_);
   angle_left_backward_ = Angle::normalizeTo0Pi(M_PI + angle_left_forward_);
 
-  LOG_INFO("angles forward  ", angle_right_forward_, ", ", angle_left_forward_);
-  LOG_INFO("angles backward  ", angle_right_backward_, ", ",
-           angle_left_backward_);
+  LOG_DEBUG("Critical zone forward angles: [", angle_right_forward_, ", ", angle_left_forward_, "]");
+  LOG_DEBUG("Critical zone backward angles: [", angle_right_backward_, ", ",
+            angle_left_backward_, "]");
 
   // Set critical distance
   critical_distance_ = critical_distance;
