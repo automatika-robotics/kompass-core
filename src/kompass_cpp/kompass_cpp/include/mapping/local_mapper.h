@@ -113,7 +113,7 @@ protected:
   // Transforms a point from grid coordinate (i,j) to the local coordinates
   // frame of the grid (around the central cell) (x,y,z)
   Eigen::Vector3f gridToLocal(const Eigen::Vector2i &pointTargetInGrid,
-                              double height) {
+                              float height = 0.0) {
     Eigen::Vector3f poseB;
     poseB(0) = (m_centralPoint(0) - pointTargetInGrid(0)) * m_resolution;
     poseB(1) = (m_centralPoint(1) - pointTargetInGrid(1)) * m_resolution;

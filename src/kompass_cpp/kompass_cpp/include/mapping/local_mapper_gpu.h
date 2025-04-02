@@ -25,11 +25,24 @@ public:
     m_devicePtrRanges = sycl::malloc_device<double>(scanSize, m_q);
     m_devicePtrAngles = sycl::malloc_device<double>(scanSize, m_q);
     m_devicePtrGrid = sycl::malloc_device<int>(m_gridHeight * m_gridWidth, m_q);
+    m_devicePtrDistances =
+        sycl::malloc_shared<float>(m_gridHeight * m_gridWidth, m_q);
+
+    // initialize distances
+    Eigen::Vector3f destPointLocal;
+    std::cout << "Resolution: " << resolution << std::endl;
+    for (size_t i = 0; i < m_gridHeight; ++i) {
+      for (size_t j = 0; j < m_gridWidth; ++j) {
+        destPointLocal = gridToLocal({i, j});
+        m_devicePtrDistances[i + j * m_gridWidth] =
+            (destPointLocal - m_laserscanPosition).norm();
+      }
+    }
   }
 
   // Destructor
   ~LocalMapperGPU() {
-    m_q.wait();  // wait for the queue to finish before freeing memory
+    m_q.wait(); // wait for the queue to finish before freeing memory
     if (m_devicePtrGrid) {
       sycl::free(m_devicePtrGrid, m_q);
     }
@@ -38,6 +51,9 @@ public:
     }
     if (m_devicePtrAngles) {
       sycl::free(m_devicePtrAngles, m_q);
+    }
+    if (m_devicePtrDistances) {
+      sycl::free(m_devicePtrDistances, m_q);
     }
   }
 
@@ -57,6 +73,7 @@ private:
   double *m_devicePtrRanges;
   double *m_devicePtrAngles;
   int *m_devicePtrGrid;
+  float *m_devicePtrDistances;
   sycl::queue m_q;
 };
 } // namespace Mapping

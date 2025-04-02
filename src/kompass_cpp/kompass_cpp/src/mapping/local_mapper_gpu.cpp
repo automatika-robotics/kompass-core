@@ -28,13 +28,14 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
       auto devicePtrRanges = m_devicePtrRanges;
       auto devicePtrAngles = m_devicePtrAngles;
       auto devicePtrGrid = m_devicePtrGrid;
+      auto devicePtrDistances = m_devicePtrDistances;
 
       sycl::range global_size(m_scanSize); // number of laser rays
       sycl::range work_group_size(
           m_maxPointsPerLine); // max num of cells per laser
 
       const sycl::vec<int, 2> v_centralPoint{m_centralPoint(0),
-                                                  m_centralPoint(1)};
+                                             m_centralPoint(1)};
       const sycl::vec<float, 2> v_startPointLocal{m_laserscanPosition(0),
                                                   m_laserscanPosition(1)};
 
@@ -67,9 +68,9 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
                   (range * sycl::sin(laserscanOrientation + angle));
 
               toPoint[0] =
-                  v_centralPoint[0] + (int)(toPointLocal[0] / resolution);
+                  v_centralPoint[0] + ceil(toPointLocal[0] / resolution);
               toPoint[1] =
-                  v_centralPoint[1] + (int)(toPointLocal[1] / resolution);
+                  v_centralPoint[1] + ceil(toPointLocal[1] / resolution);
               deltas[0] = toPoint[0] - v_startPoint[0];
               deltas[1] = toPoint[1] - v_startPoint[1];
               steps[0] = (deltas[0] >= 0) ? 1 : -1;
@@ -98,18 +99,11 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
               x_float = v_startPoint[0] + (g * (y_float - v_startPoint[1]));
             }
 
-            int x = ceil(x_float);
-            int y = ceil(y_float);
+            int x = round(x_float);
+            int y = round(y_float);
 
             // fill grid if applicable
             if (x >= 0 && x < rows && y >= 0 && y < cols) {
-
-              // calculate distance
-              sycl::vec<float, 2> destPointLocal{
-                  (v_centralPoint[0] - x) * resolution,
-                  (v_centralPoint[1] - y) * resolution};
-              float distance =
-                  sycl::distance(destPointLocal, v_startPointLocal);
 
               sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                sycl::memory_scope::device,
@@ -126,8 +120,12 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
               if (x == toPoint[0] && y == toPoint[1]) {
                 atomic_val.fetch_max(
                     static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+                atomic_val_xstep.fetch_max(
+                    static_cast<int>(Mapping::OccupancyType::EMPTY));
+                atomic_val_ystep.fetch_max(
+                    static_cast<int>(Mapping::OccupancyType::EMPTY));
               } else {
-                if (distance < range)
+                if (devicePtrDistances[x + y * rows] < range)
                 // Add super cover line points
                 {
                   atomic_val.fetch_max(
@@ -147,8 +145,12 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
 
     m_q.wait_and_throw();
 
-  } catch (const sycl::exception &e) {
-    LOG_ERROR("Exception caught: ", e.what());
+  } catch (sycl::exception const &e) {
+    LOG_ERROR("SYCL exception caught: ", e.what());
+    throw; // Re-throw to Python
+  } catch (std::exception const &e) {
+    LOG_ERROR("Standard exception caught: ", e.what());
+    throw; // Re-throw to Python
   }
   return gridData;
 }
