@@ -191,7 +191,7 @@ def run_control(
             i += 1
             end_reached = controller.reached_end()
 
-    print(f'End reached in: {i}')
+    print(f"End reached in: {i}")
 
     if plot_results:
         plot_path(
@@ -498,6 +498,8 @@ def main():
     if not global_path:
         raise ValueError("Global path file not found")
 
+    os.makedirs("logs", exist_ok=True)
+
     my_robot = Robot(
         robot_type=RobotType.ACKERMANN,
         geometry_type=RobotGeometry.Type.CYLINDER,
@@ -533,7 +535,6 @@ def main():
     ## TESTING DWA ##
     print("RUNNING DWA CONTROLLER TEST")
     test_dwa(plot=True, figure_name="dwa", figure_tag="DWA Controller Test Results")
-
 
 
 if __name__ == "__main__":
