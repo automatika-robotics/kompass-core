@@ -84,6 +84,11 @@ class DWAConfig(FollowerConfig):
       - `1`
       - Maximum number of threads used when running the controller. Must be between `1` and `1e2`.
 
+    * - drop_samples
+      - `bool`
+      - `True`
+      - To drop the entire sample once a collision is detected (True), or maintain the first collision-free segment of the sample (if False)
+
     ```
     """
 
@@ -120,6 +125,8 @@ class DWAConfig(FollowerConfig):
     max_num_threads: int = field(
         default=1, validator=base_validators.in_range(min_value=1, max_value=1e2)
     )
+
+    drop_samples: bool = field(default=True)
 
     def __attrs_post_init__(self):
         """Attrs post init"""
@@ -247,7 +254,6 @@ class DWA(FollowerTemplate):
         local_map: Optional[np.ndarray] = None,
         local_map_resolution: Optional[float] = None,
         debug: bool = False,
-        drop_samples: bool = True,
         **_,
     ) -> bool:
         """
@@ -304,7 +310,7 @@ class DWA(FollowerTemplate):
         try:
             if debug:
                 self._planner.debug_velocity_search(
-                    current_velocity, sensor_data, drop_samples
+                    current_velocity, sensor_data, self._config.drop_samples
                 )
             self._result = self._planner.compute_velocity_commands(
                 current_velocity, sensor_data
@@ -314,6 +320,15 @@ class DWA(FollowerTemplate):
             logging.error(f"Could not find velocity command: {e}")
             return False
 
+        return True
+
+    def has_result(self) -> None:
+        """
+        Set global path to be tracked by the planner
+
+        :param global_path: Global reference path
+        :type global_path: Path
+        """
         return self._result.is_found
 
     def set_path(self, global_path, **_) -> None:
