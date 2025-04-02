@@ -39,6 +39,10 @@ if (NOT SKBUILD)
   after editing C++ files.")
 endif()
 
+# Let's add optimization for release builds
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
+
 # for bindings
 find_package(Python 3.8
   REQUIRED COMPONENTS Interpreter Development.Module
