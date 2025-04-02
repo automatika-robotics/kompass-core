@@ -39,7 +39,7 @@ if (NOT SKBUILD)
   after editing C++ files.")
 endif()
 
-# Let's add optimization for release builds
+# add optimization for release builds
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 

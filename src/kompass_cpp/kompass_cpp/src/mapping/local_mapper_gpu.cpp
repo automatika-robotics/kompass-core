@@ -33,16 +33,18 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
       sycl::range work_group_size(
           m_maxPointsPerLine); // max num of cells per laser
 
-      const sycl::vec<int, 2> v_centralPointLocal{m_centralPoint(0),
+      const sycl::vec<int, 2> v_centralPoint{m_centralPoint(0),
                                                   m_centralPoint(1)};
       const sycl::vec<float, 2> v_startPointLocal{m_laserscanPosition(0),
                                                   m_laserscanPosition(1)};
 
       const sycl::vec<int, 2> v_startPoint{m_startPoint(0), m_startPoint(1)};
 
-      // local workgroup memory for storing destination point (x2, y2)
+      // local workgroup memory for storing destination point (x2, y2), deltas
+      // and steps
       auto toPoint = sycl::local_accessor<int, 1>{sycl::range{2}, h};
       auto deltas = sycl::local_accessor<int, 1>{sycl::range{2}, h};
+      auto steps = sycl::local_accessor<int, 1>{sycl::range{2}, h};
 
       // kernel scope
       h.parallel_for<class scanToGridKernel>(
@@ -65,11 +67,13 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
                   (range * sycl::sin(laserscanOrientation + angle));
 
               toPoint[0] =
-                  v_centralPointLocal[0] + (int)(toPointLocal[0] / resolution);
+                  v_centralPoint[0] + (int)(toPointLocal[0] / resolution);
               toPoint[1] =
-                  v_centralPointLocal[1] + (int)(toPointLocal[1] / resolution);
+                  v_centralPoint[1] + (int)(toPointLocal[1] / resolution);
               deltas[0] = toPoint[0] - v_startPoint[0];
               deltas[1] = toPoint[1] - v_startPoint[1];
+              steps[0] = (deltas[0] >= 0) ? 1 : -1;
+              steps[1] = (deltas[1] >= 0) ? 1 : -1;
             }
             item.barrier(
                 sycl::access::fence_space::local_space); // barrier within the
@@ -102,8 +106,8 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
 
               // calculate distance
               sycl::vec<float, 2> destPointLocal{
-                  (v_centralPointLocal[0] - x) * resolution,
-                  (v_centralPointLocal[1] - y) * resolution};
+                  (v_centralPoint[0] - x) * resolution,
+                  (v_centralPoint[1] - y) * resolution};
               float distance =
                   sycl::distance(destPointLocal, v_startPointLocal);
 
@@ -114,11 +118,11 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
               sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                sycl::memory_scope::device,
                                sycl::access::address_space::local_space>
-                  atomic_val_xstep(devicePtrGrid[(x - 1) + (y * rows)]);
+                  atomic_val_xstep(devicePtrGrid[(x - steps[0]) + (y * rows)]);
               sycl::atomic_ref<int, sycl::memory_order::relaxed,
                                sycl::memory_scope::device,
                                sycl::access::address_space::local_space>
-                  atomic_val_ystep(devicePtrGrid[x + ((y - 1) * rows)]);
+                  atomic_val_ystep(devicePtrGrid[x + ((y - steps[1]) * rows)]);
               if (x == toPoint[0] && y == toPoint[1]) {
                 atomic_val.fetch_max(
                     static_cast<int>(Mapping::OccupancyType::OCCUPIED));

@@ -29,6 +29,7 @@ public:
 
   // Destructor
   ~LocalMapperGPU() {
+    m_q.wait();  // wait for the queue to finish before freeing memory
     if (m_devicePtrGrid) {
       sycl::free(m_devicePtrGrid, m_q);
     }
