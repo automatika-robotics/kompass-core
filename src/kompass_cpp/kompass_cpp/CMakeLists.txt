@@ -1,14 +1,6 @@
-# Set the module name
-set(MODULE_NAME kompass_cpp)
+set(MODULE_NAME kompass)
 
-# find required packages
-find_package(Eigen3 3.4 REQUIRED)
-find_package(PCL COMPONENTS common io REQUIRED)
-find_package(fcl REQUIRED)
-
-# find sycl
-find_package(AdaptiveCpp)
-
+# Sort sources if AdaptiveCpp found and set debug level
 if(AdaptiveCpp_FOUND)
     message(STATUS "Found AdaptiveCpp. Initiating build with ACPP.")
     if(NOT ACPP_DEBUG_LEVEL)
@@ -37,16 +29,10 @@ else()
     endforeach()
 endif()
 
-# add project as library if with cmake and python module if with skbuild
-if (SKBUILD)
-  pybind11_add_module(${MODULE_NAME} MODULE ${SOURCES})
-  target_include_directories(${MODULE_NAME} PRIVATE include)
-  target_include_directories(${MODULE_NAME} PRIVATE ${PYTHON_INCLUDE_DIRS} {$EIGEN3_INCLUDE_DIR} ${PCL_INCLUDE_DIRS})
-else()
-  add_library(${MODULE_NAME} STATIC ${SOURCES})
-  target_include_directories(${MODULE_NAME} PUBLIC include)
-  target_include_directories(${MODULE_NAME} PUBLIC ${PYTHON_INCLUDE_DIRS} {$EIGEN3_INCLUDE_DIR} ${PCL_INCLUDE_DIRS})
-endif()
+# add project as library
+add_library(${MODULE_NAME} STATIC ${SOURCES})
+target_include_directories(${MODULE_NAME} PUBLIC include)
+target_include_directories(${MODULE_NAME} PUBLIC ${PYTHON_INCLUDE_DIRS} {$EIGEN3_INCLUDE_DIR} ${PCL_INCLUDE_DIRS})
 
 # Link fcl and PCL
 target_link_libraries(${MODULE_NAME} PRIVATE fcl ${PCL_LIBRARIES})
@@ -55,9 +41,4 @@ target_link_libraries(${MODULE_NAME} PRIVATE fcl ${PCL_LIBRARIES})
 if(AdaptiveCpp_FOUND)
     target_compile_definitions(${MODULE_NAME} PRIVATE GPU=1)
     add_sycl_to_target(TARGET ${MODULE_NAME} SOURCES ${SOURCES})
-endif()
-
-# install in site-packages only if run through pip
-if (SKBUILD)
-  install(TARGETS ${MODULE_NAME} LIBRARY DESTINATION .)
 endif()

@@ -43,24 +43,10 @@ endif()
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 
-# for bindings
-find_package(Python 3.8
-  REQUIRED COMPONENTS Interpreter Development.Module
-  OPTIONAL_COMPONENTS Development.SABIModule)
-find_package(PythonLibs REQUIRED)
-find_package(pybind11 CONFIG REQUIRED)
-
 # Add kompass cpp
-add_subdirectory(src/kompass_cpp/kompass_cpp)
+add_subdirectory(src/kompass_cpp)
 
-# Add kompass cpp tests if building with cmake
-if (NOT SKBUILD)
-  enable_testing()
-  add_subdirectory(src/kompass_cpp/tests)
-endif()
-
-# Add ompl bindings only for skbuild
+# Add ompl bindings if building with skbuild
 if (SKBUILD)
-  add_subdirectory(src/ompl)
+add_subdirectory(src/ompl_bindings)
 endif()
-

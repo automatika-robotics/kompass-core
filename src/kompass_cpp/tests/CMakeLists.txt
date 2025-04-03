@@ -1,4 +1,5 @@
-set(MODULE_NAME kompass_cpp)
+# Set the module name
+set(MODULE_NAME kompass)
 
 find_package(nlohmann_json 3.2.0 REQUIRED)
 find_package(Boost COMPONENTS unit_test_framework REQUIRED)
