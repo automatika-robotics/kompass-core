@@ -42,3 +42,8 @@ if(AdaptiveCpp_FOUND)
     target_compile_definitions(${MODULE_NAME} PRIVATE GPU=1)
     add_sycl_to_target(TARGET ${MODULE_NAME} SOURCES ${SOURCES})
 endif()
+
+# install if built with skbuild
+if (SKBUILD)
+    install(TARGETS ${MODULE_NAME} LIBRARY DESTINATION .)
+endif()
