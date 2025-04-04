@@ -92,11 +92,26 @@ void to_json(json &j, const Control::TrajectorySamples2D &samples,
 }
 
 // Save trajectories to a JSON file
-void saveTrajectoriesToJson(
-    const Control::TrajectorySamples2D &trajectories,
-    const std::string &filename) {
+void saveTrajectoriesToJson(const Control::TrajectorySamples2D &trajectories,
+                            const std::string &filename) {
   json j;
   to_json(j, trajectories);
+  std::ofstream file(filename);
+  if (file.is_open()) {
+    file << j.dump(4); // Pretty print with 4 spaces indentation
+    file.close();
+  } else {
+    std::cerr << "Unable to open file: " << filename << std::endl;
+  }
+}
+
+void saveTrajectoryToJson(const Control::Trajectory2D &trajectory,
+                          const std::string &filename) {
+  json j;
+  j["paths"] = json::array(); // Initialize as a JSON array
+  json j_p;
+  to_json(j_p, trajectory.path);
+  j["paths"].push_back(j_p); // Serialize each Point
   std::ofstream file(filename);
   if (file.is_open()) {
     file << j.dump(4); // Pretty print with 4 spaces indentation
