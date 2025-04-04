@@ -8,6 +8,7 @@
 #include "utils/cost_evaluator.h"
 #include "utils/trajectory_sampler.h"
 #include <cstddef>
+#include <memory>
 #include <vector>
 
 namespace Kompass {
@@ -71,6 +72,8 @@ public:
 
   void resetOctreeResolution(const double octreeRes);
 
+  void setCurrentState(const Path::State &position);
+
   /**
    * @brief Adds a new custom cost to be used in the trajectory evaluation
    *
@@ -123,18 +126,9 @@ public:
     debuggingSamples_ = new TrajectorySamples2D(samples_);
   };
 
-private:
-  TrajectorySampler *trajSampler;
-  CostEvaluator *trajCostEvaluator;
-  double max_forward_distance_ = 0.0;
-  int maxNumThreads;
-  TrajectorySamples2D *debuggingSamples_ = nullptr;
-
-  /**
-   * @brief get maximum reference path length
-   */
-  // size_t getMaxPathLength();
-  size_t getMaxPathLength();
+protected:
+  std::unique_ptr<TrajectorySampler> trajSampler;
+  std::unique_ptr<CostEvaluator> trajCostEvaluator;
 
   /**
    * @brief Given the current position and velocity of the robot, find the
@@ -148,6 +142,17 @@ private:
   template <typename T>
   TrajSearchResult findBestPath(const Velocity2D &global_vel,
                                 const T &scan_points);
+
+private:
+  double max_forward_distance_ = 0.0;
+  int maxNumThreads;
+  TrajectorySamples2D *debuggingSamples_ = nullptr;
+
+  /**
+   * @brief get maximum reference path length
+   */
+  // size_t getMaxPathLength();
+  size_t getMaxPathLength();
 
   Path::Path findTrackedPathSegment();
 };
