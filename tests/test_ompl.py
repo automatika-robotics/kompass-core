@@ -200,7 +200,8 @@ def ompl_geometric_testing(test_repetitions: int = 1):
             "simplification_time": simplify_time / test_repetitions,
         }
 
-    ompl_df.to_csv(f"{ompl_resources}/test_results.csv", index=False)
+    os.makedirs('logs', exist_ok=True)
+    ompl_df.to_csv("logs/ompl_test_results.csv", index=False)
     return ompl_df
 
 
