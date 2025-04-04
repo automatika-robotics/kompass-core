@@ -7,6 +7,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <memory>
 #include <stdexcept>
 #include <tuple>
 
@@ -78,7 +79,7 @@ void DWA::configure(ControlLimitsParams controlLimits,
   trajSampler = std::make_unique<TrajectorySampler>(
       controlLimits, controlType, timeStep, predictionHorizon, controlHorizon,
       maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
-      sensor_position_body, sensor_rotation_body, octreeRes, maxNumThreads);
+      sensor_position_body, sensor_rotation_body, octreeRes, maxNumThreads));
 
   trajCostEvaluator = std::make_unique<CostEvaluator>(
       costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
@@ -98,7 +99,7 @@ void DWA::configure(TrajectorySampler::TrajectorySamplerParameters config,
                       const int maxNumThreads) {
   trajSampler = std::make_unique<TrajectorySampler>(
       config, controlLimits, controlType, robotShapeType, robotDimensions,
-      sensor_position_body, sensor_rotation_body, maxNumThreads);
+      sensor_position_body, sensor_rotation_body, maxNumThreads));
 
   trajCostEvaluator = std::make_unique<CostEvaluator>(
       costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
@@ -118,6 +119,11 @@ void DWA::setSensorMaxRange(const float max_range) {
 void DWA::addCustomCost(
     double weight, CostEvaluator::CustomCostFunction custom_cost_function) {
   trajCostEvaluator->addCustomCost(weight, custom_cost_function);
+}
+
+void DWA::setCurrentState(const Path::State &position) {
+  this->currentState = position;
+  this->trajSampler->updateState(position);
 }
 
 Path::Path DWA::findTrackedPathSegment() {

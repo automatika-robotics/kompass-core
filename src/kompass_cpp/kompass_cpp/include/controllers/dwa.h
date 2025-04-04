@@ -144,6 +144,17 @@ private:
   TrajSearchResult findBestPath(const Velocity2D &global_vel,
                                 const T &scan_points);
 
+private:
+  double max_forward_distance_ = 0.0;
+  int maxNumThreads;
+  TrajectorySamples2D *debuggingSamples_ = nullptr;
+
+  /**
+   * @brief get maximum reference path length
+   */
+  // size_t getMaxPathLength();
+  size_t getMaxPathLength();
+
   Path::Path findTrackedPathSegment();
 };
 
