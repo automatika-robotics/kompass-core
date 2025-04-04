@@ -115,7 +115,6 @@ push = true
 ]
 
 [tool.cibuildwheel]
-environment = {VCPKG_ROOT="/project/deps/vcpkg", CMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"}
 skip = ["pp*", "*musllinux*"]
 test-requires = "pytest"
 test-command = "pytest {package}/tests/test_fcl.py"
@@ -123,13 +122,18 @@ manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
 
 [tool.cibuildwheel.linux]
+environment = {VCPKG_ROOT="/project/deps/vcpkg", CMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"}
 before-all = "bash build_dependencies/install_linux.sh"
 
 [[tool.cibuildwheel.overrides]]
 select = "*-manylinux_x86_64"
-environment = {VCPKG_ROOT="/project/deps/vcpkg", CMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake", VCPKG_TARGET_TRIPLET = "x64-linux-release", LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib"}
+inherit.environment = "append"
+environment.VCPKG_TARGET_TRIPLET = "x64-linux-release"
+environment.LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib"
 
 [[tool.cibuildwheel.overrides]]
 select = "*-manylinux_aarch64"
-environment = {VCPKG_ROOT="/project/deps/vcpkg", CMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake", VCPKG_TARGET_TRIPLET = "arm64-linux-release", LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib"}
+inherit.environment = "append"
+environment.VCPKG_TARGET_TRIPLET = "arm64-linux-release"
+environment.LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib"
 
