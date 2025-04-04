@@ -7,6 +7,8 @@
 #include "datatypes/trajectory.h"
 #include <array>
 #include <cmath>
+#include <functional>
+#include <memory>
 #include <vector>
 
 #ifndef MIN_VEL
@@ -95,6 +97,9 @@ public:
    */
   ~TrajectorySampler();
 
+  void updateState(const Path::State &current_state);
+
+
   void setSampleDroppingMode(const bool drop_samples);
 
   /**
@@ -124,6 +129,14 @@ public:
    */
   void resetOctreeResolution(const double resolution);
 
+  Trajectory2D
+  generateSingleSampleFromVel(const Velocity2D &vel,
+                              const Path::State &pose = Path::State());
+
+  template <typename T>
+  bool checkStatesFeasibility(const std::vector<Path::State> &states,
+                                const T &sensor_points);
+
   size_t numTrajectories;
   size_t numPointsPerTrajectory;
 
@@ -131,7 +144,7 @@ protected:
   // Protected member variables
   ControlType ctrType;
   ControlLimitsParams ctrlimits;
-  CollisionChecker *collChecker;
+  std::unique_ptr<CollisionChecker> collChecker;
   int maxNumThreads;
 
 private:
