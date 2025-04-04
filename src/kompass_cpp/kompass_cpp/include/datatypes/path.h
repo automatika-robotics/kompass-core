@@ -1,5 +1,6 @@
 #pragma once
 
+#include "datatypes/control.h"
 #include "utils/spline.h"
 #include <Eigen/Dense>
 #include <cmath>
@@ -20,7 +21,15 @@ struct State {
 
   State(double poseX = 0.0, double poseY = 0.0, double PoseYaw = 0.0,
         double speedValue = 0.0)
-      : x(poseX), y(poseY), yaw(PoseYaw), speed(speedValue) {}
+      : x(poseX), y(poseY), yaw(PoseYaw), speed(speedValue){};
+
+  void update(const Kompass::Control::Velocity2D &vel, const float timeStep) {
+    this->x +=
+        (vel.vx() * cos(this->yaw) - vel.vy() * sin(this->yaw)) * timeStep;
+    this->y +=
+        (vel.vx() * sin(this->yaw) + vel.vy() * cos(this->yaw)) * timeStep;
+    this->yaw += vel.omega() * timeStep;
+  };
 };
 
 // Point in 3D space
