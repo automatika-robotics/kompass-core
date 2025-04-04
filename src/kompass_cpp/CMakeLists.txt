@@ -1,5 +1,5 @@
 # find required packages
-find_package(Eigen3 3.4 REQUIRED)
+find_package(Eigen3 3.4 REQUIRED NO_MODULE)
 find_package(PCL COMPONENTS common io REQUIRED)
 find_package(fcl REQUIRED)
 

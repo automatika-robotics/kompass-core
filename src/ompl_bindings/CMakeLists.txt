@@ -1,7 +1,7 @@
 set(MODULE_NAME omplpy)
 
 # find required packages
-find_package(Eigen3 3.4 REQUIRED)
+find_package(Eigen3 3.4 REQUIRED NO_MODULE)
 find_package(ompl 1.5 REQUIRED)
 
 # Detect the installed nanobind package and import it into CMake
