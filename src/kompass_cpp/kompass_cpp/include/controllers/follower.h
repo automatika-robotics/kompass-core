@@ -82,7 +82,7 @@ public:
    *
    * @param path Global path to be followed
    */
-  void setCurrentPath(const Path::Path &path);
+  void setCurrentPath(const Path::Path &path, const bool interpolate = true);
 
   void clearCurrentPath();
 
