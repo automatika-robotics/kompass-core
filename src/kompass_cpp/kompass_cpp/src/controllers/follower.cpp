@@ -83,7 +83,7 @@ void Follower::clearCurrentPath() {
   return;
 }
 
-void Follower::setCurrentPath(const Path::Path &path) {
+void Follower::setCurrentPath(const Path::Path &path, const bool interpolate) {
   // Delete old reference and current path before setting new values
   if (refPath) {
     delete refPath;
@@ -98,13 +98,17 @@ void Follower::setCurrentPath(const Path::Path &path) {
   currentPath->setMaxLength(
       this->config.getParameter<double>("max_path_length"));
 
-  currentPath->interpolate(maxDist, interpolationType);
+  if (interpolate) {
+    currentPath->interpolate(maxDist, interpolationType);
 
-  // Segment path
-  currentPath->segment(path_segment_length);
+    // Segment path
+    currentPath->segment(path_segment_length);
 
-  // Get max number of segments in the path
-  max_segment_index_ = currentPath->getMaxNumSegments();
+    // Get max number of segments in the path
+    max_segment_index_ = currentPath->getMaxNumSegments();
+  } else {
+    max_segment_index_ = 0;
+  }
 
   path_processing_ = true;
   current_segment_index_ = 0;
