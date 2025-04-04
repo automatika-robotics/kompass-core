@@ -1,37 +1,36 @@
-#include <pybind11/eigen.h>
-#include <pybind11/functional.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <nanobind/eigen/dense.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/string.h>
 
 #include "datatypes/parameter.h"
 
-namespace py = pybind11;
+namespace py = nanobind;
 
 // Method to set parameter values based on dict instance
 void set_parameters_from_dict(Parameters &params,
                               const py::object &attrs_instance) {
-  auto attrs_dict = attrs_instance.cast<py::dict>();
-  for (const auto &item : attrs_dict) {
-    const std::string &name = py::str(item.first);
-    py::handle value = item.second;
-    try {
-      auto it = params.parameters.find(name);
-      if (it != params.parameters.end()) {
-        if (py::isinstance<py::bool_>(value)) {
-          it->second.setValue(value.cast<bool>());
-        } else if (py::isinstance<py::float_>(value)) {
-          it->second.setValue(value.cast<double>());
-        } else if (py::isinstance<py::str>(value)) {
-          it->second.setValue(py::str(value).cast<std::string>());
-        } else if (py::isinstance<py::int_>(value)) {
-          it->second.setValue(value.cast<int>());
+    auto attrs_dict = py::cast<py::dict>(attrs_instance);
+    for (const auto &item : attrs_dict) {
+        const std::string name = py::cast<std::string>(item.first);
+        py::handle value = item.second;
+        try {
+            auto it = params.parameters.find(name);
+            if (it != params.parameters.end()) {
+                if (py::isinstance<py::bool_>(value)) {
+                    it->second.setValue(py::cast<bool>(value));
+                } else if (py::isinstance<py::float_>(value)) {
+                    it->second.setValue(py::cast<double>(value));
+                } else if (py::isinstance<py::str>(value)) {
+                    it->second.setValue(py::cast<std::string>(py::str(value)));
+                } else if (py::isinstance<py::int_>(value)) {
+                    it->second.setValue(py::cast<int>(value));
+                }
+            }
+        } catch (const std::exception &e) {
+            PyErr_SetString(PyExc_RuntimeError, e.what());
+            throw py::python_error();
         }
-      }
-    } catch (const std::exception &e) {
-      PyErr_SetString(PyExc_RuntimeError, e.what());
-      throw py::error_already_set();
     }
-  }
 }
 
 // Config parameters bindings submodule

@@ -1,12 +1,15 @@
 # Set the module name
 set(MODULE_NAME kompass_cpp)
 
-# for bindings
+# Detect the installed nanobind package and import it into CMake
 find_package(Python 3.8
   REQUIRED COMPONENTS Interpreter Development.Module
   OPTIONAL_COMPONENTS Development.SABIModule)
-find_package(PythonLibs REQUIRED)
-find_package(pybind11 CONFIG REQUIRED)
+execute_process(
+  COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+  OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_DIR)
+list(APPEND CMAKE_PREFIX_PATH "${nanobind_DIR}")
+find_package(nanobind CONFIG REQUIRED)
 
 # Take out GPU bindings if adaptive cpp not found
 if(NOT AdaptiveCpp_FOUND)
@@ -22,7 +25,7 @@ else()
 endif()
 
 # add project as pybind module
-pybind11_add_module(${MODULE_NAME} MODULE ${SOURCES})
+nanobind_add_module(${MODULE_NAME} ${SOURCES})
 target_link_libraries(${MODULE_NAME} PRIVATE kompass)
 
 if (AdaptiveCpp_FOUND)
@@ -31,4 +34,6 @@ if (AdaptiveCpp_FOUND)
 endif()
 
 # install location
-install(TARGETS ${MODULE_NAME} LIBRARY DESTINATION .)
+if (SKBUILD)
+    install(TARGETS ${MODULE_NAME} LIBRARY DESTINATION .)
+endif()

@@ -1,11 +1,11 @@
-#include <pybind11/eigen.h>
-#include <pybind11/functional.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <Eigen/Dense>
+#include <nanobind/nanobind.h>
+#include <nanobind/operators.h>
+#include <variant>
 
 #include "utils/logger.h"
 
-namespace py = pybind11;
+namespace py = nanobind;
 
 void bindings_types(py::module_ &);
 void bindings_config(py::module_ &);
@@ -18,7 +18,7 @@ using namespace Kompass;
 // Define a variant type to hold different parameter value types
 using ParamValue = std::variant<double, int, bool, std::string>;
 
-PYBIND11_MODULE(kompass_cpp, m) {
+NB_MODULE(kompass_cpp, m) {
   m.doc() = "Algorithms for robot path tracking and control";
 
   bindings_types(m);

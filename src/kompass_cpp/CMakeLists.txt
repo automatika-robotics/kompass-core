@@ -16,6 +16,6 @@ if (NOT SKBUILD)
 endif()
 
 # Add bindings if skbuild
-if (SKBUILD)
+if (SKBUILD OR CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_subdirectory(bindings)
 endif()

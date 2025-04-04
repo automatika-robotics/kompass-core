@@ -1,11 +1,11 @@
 #include "mapping/local_mapper_gpu.h"
 #include "utils/critical_zone_check_gpu.h"
-#include <pybind11/eigen.h>
-#include <pybind11/functional.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <nanobind/eigen/dense.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/vector.h>
+#include <nanobind/stl/array.h>
 
-namespace py = pybind11;
+namespace py = nanobind;
 using namespace Kompass;
 
 // Mapping bindings submodule
@@ -19,7 +19,7 @@ void bindings_mapping_gpu(py::module_ &m) {
 
       .def("scan_to_grid", &Mapping::LocalMapperGPU::scanToGrid,
            "Convert laser scan data to occupancy grid", py::arg("angles"),
-           py::arg("ranges"), py::return_value_policy::reference_internal);
+           py::arg("ranges"), py::rv_policy::reference_internal);
 }
 
 // Utils bindings submodule

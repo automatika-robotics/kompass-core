@@ -47,6 +47,6 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g")
 add_subdirectory(src/kompass_cpp)
 
 # Add ompl bindings if building with skbuild
-if (SKBUILD)
+if (SKBUILD OR CMAKE_BUILD_TYPE STREQUAL "Debug")
 add_subdirectory(src/ompl_bindings)
 endif()

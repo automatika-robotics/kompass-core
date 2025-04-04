@@ -1,11 +1,9 @@
 #include "utils/critical_zone_check.h"
-#include <array>
-#include <pybind11/functional.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-#include <vector>
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/vector.h>
+#include <nanobind/stl/array.h>
 
-namespace py = pybind11;
+namespace py = nanobind;
 using namespace Kompass;
 
 #if GPU
