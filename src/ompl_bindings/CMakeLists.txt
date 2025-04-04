@@ -1,4 +1,4 @@
-set(MODULE_NAME ompl)
+set(MODULE_NAME omplpy)
 
 # find required packages
 find_package(Eigen3 3.4 REQUIRED)
@@ -16,7 +16,7 @@ find_package(nanobind CONFIG REQUIRED)
 
 # add bindings as pybind11 module
 nanobind_add_module(${MODULE_NAME} bindings.cpp)
-target_include_directories(${MODULE_NAME} PRIVATE ${PYTHON_INCLUDE_DIRS} {$EIGEN3_INCLUDE_DIR} ${OMPL_INCLUDE_DIRS})
+target_include_directories(${MODULE_NAME} PRIVATE {$EIGEN3_INCLUDE_DIR} ${OMPL_INCLUDE_DIRS})
 target_link_libraries(${MODULE_NAME} PRIVATE ${OMPL_LIBRARIES})
 
 # install location

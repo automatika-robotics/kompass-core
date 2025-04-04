@@ -42,8 +42,8 @@ Wheels are available on Pypi for linux x86_64 and aarch64 architectures. Please 
 The following three packages will become available once kompass-core is installed.
 
 - `kompass_core`: The main Python API containing all the wrappers and utilities for motion planning and control for navigation in 2D spaces.
-- `kompass_cpp`: Pybind11 python bindings for Kompass core C++ library containing the algorithms implementation for path tracking and motion control.
-- `ompl`: Bespoke Pybind11 python bindings for the Open Motion Planning Library (OMPL).
+- `kompass_cpp`: Python bindings for Kompass core C++ library containing the algorithms implementation for path tracking and motion control.
+- `omplpy`: Bespoke python bindings for the Open Motion Planning Library (OMPL).
 
 ## Testing
 

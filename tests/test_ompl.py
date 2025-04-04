@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from nav_msgs.msg import MapMetaData
 
-import ompl
+import omplpy as ompl
 from kompass_core.models import Robot, RobotGeometry, RobotType
 from kompass_core.third_party.ompl.config import create_config_class, initializePlanners
 from kompass_core.third_party.ompl.planner import OMPLGeometric

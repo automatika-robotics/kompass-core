@@ -4,7 +4,7 @@ from typing import Any
 from attrs import field, make_class
 from ...utils.common import BaseAttrs, base_validators
 
-import ompl
+import omplpy as ompl
 
 
 class PlanningAlgorithms(object):
@@ -22,7 +22,7 @@ class PlanningAlgorithms(object):
         :param module: ompl.geometric
         """
         self.available_planners = {
-            f"{module.__name__}.{name}": self.get_param_map(planner)
+            f"ompl.{module.__name__.split('.')[-1]}.{name}": self.get_param_map(planner)
             for name, planner in inspect.getmembers(module, predicate=inspect.isclass)
             if issubclass(planner, ompl.base.Planner)
         }

@@ -60,7 +60,7 @@ std::vector<std::string> py_getParamNames(ob::ParamSet &paramset) {
   return params;
 }
 
-NB_MODULE(ompl, m) {
+NB_MODULE(omplpy, m) {
   m.doc() = "Python Bindings for OMPL";
 
   auto m_base = m.def_submodule("base", "ompl.base");
