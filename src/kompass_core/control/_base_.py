@@ -173,7 +173,7 @@ class FollowerTemplate:
             return
 
         for point in global_path.poses:
-            parsed_point = [point.pose.position.x, point.pose.position.y, 0.0]
+            parsed_point = np.array([point.pose.position.x, point.pose.position.y, 0.0])
             parsed_points.append(parsed_point)
 
         self.planner.set_current_path(kompass_cpp.types.Path(points=parsed_points))

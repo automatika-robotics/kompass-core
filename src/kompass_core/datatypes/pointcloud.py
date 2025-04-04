@@ -1,7 +1,6 @@
 from attrs import define, field
 from typing import List
 from ..utils.common import BaseAttrs
-from kompass_cpp.types import Point
 import numpy as np
 
 
@@ -13,21 +12,21 @@ class PointCloudData(BaseAttrs):
     y_points: List[float] = field(default=[])
     z_points: List[float] = field(default=[])
 
-    def to_kompass_cpp(self) -> List[Point]:
+    def to_kompass_cpp(self) -> List[np.ndarray]:
         """Convert to kompass_cpp PointCloud structure
 
         :return:
         :rtype: List[Point]
         """
         return [
-            Point(x, y, z)
+            np.array([x, y, z])
             for x, y, z in zip(self.x_points, self.y_points, self.z_points)
         ]
 
     @classmethod
     def numpy_to_kompass_cpp(
         cls, data: np.ndarray, height: float = 0.05
-    ) -> List[Point]:
+    ) -> List[np.ndarray]:
         """Convert to kompass_cpp PointCloud structure
 
         :return:
@@ -39,13 +38,13 @@ class PointCloudData(BaseAttrs):
             )
         if data.shape[1] == 3:
             return [
-                [x, y, height]
+                np.array([x, y, height])
                 for x, y, _ in data.reshape(
                     -1, 3
                 )  # Flatten the array and group values by 3
             ]
 
-        return [[x, y, height] for x, y in data.reshape(-1, 2)]
+        return [np.array([x, y, height]) for x, y in data.reshape(-1, 2)]
 
     def add(self, x: float, y: float, z: float):
         """Adds new point to the PointCloud data
