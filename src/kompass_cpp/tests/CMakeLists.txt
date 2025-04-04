@@ -41,6 +41,11 @@ add_executable(collisions_test collisions_test.cpp)
 target_link_libraries(collisions_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework)
 add_test(collisions_tests collisions_test)
 
+# Vision DWA test
+add_executable(vision_dwa_test vision_dwa_test.cpp)
+target_link_libraries(vision_dwa_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework)
+add_test(vision_dwa_tests vision_dwa_test)
+
 # find sycl
 find_package(AdaptiveCpp)
 
