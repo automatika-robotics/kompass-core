@@ -1,8 +1,11 @@
 #pragma once
 
 #include <Eigen/Dense>
+#include <Eigen/src/Core/Matrix.h>
+#include <Eigen/src/Geometry/Quaternion.h>
 #include <cmath>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 // Namespace for Control Types
@@ -11,6 +14,103 @@ namespace Control {
 
 // Enumeration for control modes
 enum class ControlType { ACKERMANN = 0, DIFFERENTIAL_DRIVE = 1, OMNI = 2 };
+
+class Pose3D {
+
+public:
+  Pose3D(const Eigen::Vector3f &position, const Eigen::Vector4f &orientation)
+      : position_(position), orientation_(orientation),
+        rotation_matrix_(orientation_.toRotationMatrix()){};
+
+  Pose3D(const Eigen::Vector3f &position, const Eigen::Quaternionf &orientation)
+      : position_(position), orientation_(orientation),
+        rotation_matrix_(orientation.toRotationMatrix()){};
+
+  /**
+   * @brief Construct a new Pose3D object using 2D pose information
+   *
+   * @param pose_x
+   * @param pose_y
+   * @param pose_yaw
+   */
+  Pose3D(const float &pose_x, const float &pose_y, const float &pose_yaw)
+      {update(pose_x, pose_y, pose_yaw);};
+
+  void setFrame(const std::string &frame_id) { frame_id_ = frame_id; }
+
+  std::string getFrame() const { return frame_id_; }
+
+  bool inFrame(const std::string &frame_id) const {
+    return frame_id == frame_id_;
+  }
+
+  float norm() const { return position_.norm(); };
+
+  /**
+   * @brief Extract x coordinates
+   *
+   * @return float
+   */
+  float x() const { return position_(0); };
+
+  /**
+   * @brief Extract y coordinates
+   *
+   * @return float
+   */
+  float y() const { return position_(1); };
+
+  /**
+   * @brief Extract z coordinates
+   *
+   * @return float
+   */
+  float z() const { return position_(2); };
+
+  /**
+   * @brief Extract pitch (y-axis rotation) from the rotation matrix
+   *
+   * @return float
+   */
+  float pitch() const { return std::asin(rotation_matrix_(2, 0)); };
+
+  /**
+   * @brief Extract roll (x-axis rotation) from the rotation matrix
+   *
+   * @return float
+   */
+  float roll() const {
+    return std::atan2(rotation_matrix_(2, 1), rotation_matrix_(2, 2));
+  };
+
+  /**
+   * @brief Extract yaw (x-axis rotation) from the rotation matrix
+   *
+   * @return float
+   */
+  float yaw() const {
+    return std::atan2(rotation_matrix_(1, 0), rotation_matrix_(0, 0));
+  };
+
+  void update(const float &pose_x, const float &pose_y, const float &pose_yaw){
+    position_ = {pose_x, pose_y, 0.0};
+    setRotation(0.0, 0.0, pose_yaw);
+  }
+
+  void setRotation(const float pitch, const float roll, const float yaw){
+    Eigen::AngleAxisf rotZ(yaw, Eigen::Vector3f::UnitZ());
+    Eigen::AngleAxisf rotY(pitch, Eigen::Vector3f::UnitY());
+    Eigen::AngleAxisf rotX(roll, Eigen::Vector3f::UnitX());
+    orientation_ = rotZ * rotY * rotX;
+    rotation_matrix_ = orientation_.toRotationMatrix();
+  }
+
+  protected :
+  Eigen::Vector3f position_;
+  Eigen::Quaternionf orientation_;
+  Eigen::Matrix3f rotation_matrix_;
+  std::string frame_id_;
+};
 
 class Velocity2D {
 public:
@@ -35,6 +135,47 @@ public:
 
 private:
   Eigen::Vector4d velocity_{0.0, 0.0, 0.0, 0.0};
+};
+
+class TrackedPose2D : public Pose3D {
+
+public:
+  TrackedPose2D(const Eigen::Vector3f &position,
+                const Eigen::Vector4f &orientation, const Velocity2D &vel)
+      : Pose3D(position, orientation), vel_(vel){};
+
+  TrackedPose2D(const Eigen::Vector3f &position,
+                const Eigen::Quaternionf &orientation, const Velocity2D &vel)
+      : Pose3D(position, orientation), vel_(vel){};
+
+  TrackedPose2D(const float &pose_x, const float &pose_y, const float &pose_yaw,
+                const Velocity2D &vel)
+      : Pose3D(pose_x, pose_y, pose_yaw), vel_(vel){};
+
+  TrackedPose2D(const float &pose_x, const float &pose_y, const float &pose_yaw,
+                const float &vx, const float &vy, const float &omega)
+      : Pose3D(pose_x, pose_y, pose_yaw), vel_(vx, vy, omega){};
+
+  float v() const { return Eigen::Vector2f{vel_.vx(), vel_.vy()}.norm(); };
+
+  float omega() const { return vel_.omega(); };
+
+  void update(const float timeStep) {
+    position_(0) +=
+        (vel_.vx() * cos(this->yaw()) - vel_.vy() * sin(this->yaw())) * timeStep;
+    position_(1) +=
+        (vel_.vx() * sin(this->yaw()) + vel_.vy() * cos(this->yaw())) * timeStep;
+    float yaw = this->yaw() + vel_.omega() * timeStep;
+    setRotation(0.0, 0.0, yaw);
+  }
+
+  float distance(const float x, const float y, const float z = 0.0) const{
+    return sqrt(pow(position_.x() - x, 2) + pow(position_.y() - y, 2) +
+                pow(position_.z() - z, 2));
+  }
+
+protected:
+  Velocity2D vel_;
 };
 
 struct Velocities {
