@@ -1,5 +1,5 @@
 [build-system]
-requires = ["scikit-build-core", "pybind11>=2.10.0"]
+requires = ["scikit-build-core", "nanobind"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -23,7 +23,6 @@ dependencies = [
     "numpy<=1.26.4",
     "numpy-quaternion>=2023.0.3",
     "python-fcl-fork",
-    "pybind11",
     "omegaconf",
     "attrs>=23.2.0",
     "pyyaml",
@@ -51,6 +50,10 @@ wheel.py-api = "cp312"
 cmake.version = ">=3.5.0"
 # Fast build
 build.tool-args = ["-j8"]
+# For vcpkg based builds
+[tool.scikit-build.cmake.define]
+CMAKE_TOOLCHAIN_FILE = {env="CMAKE_TOOLCHAIN_FILE"}
+VCPKG_TARGET_TRIPLET = {env="VCPKG_TARGET_TRIPLET"}
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -107,11 +110,12 @@ tag = true
 push = true
 
 [tool.bumpver.file_patterns]
-"setup.py" = [
-    "{version}",
+"pyproject.toml" = [
+    'version = "{version}"',
 ]
 
 [tool.cibuildwheel]
+environment = {VCPKG_ROOT="/project/deps/vcpkg", CMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"}
 skip = ["pp*", "*musllinux*"]
 test-requires = "pytest"
 test-command = "pytest {package}/tests/test_fcl.py"
@@ -119,5 +123,13 @@ manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
 
 [tool.cibuildwheel.linux]
-environment = {VCPKG_ROOT="/project/deps/vcpkg", LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/x64-linux/lib:$VCPKG_ROOT/installed/arm64-linux/lib"}
 before-all = "bash build_dependencies/install_linux.sh"
+
+[[tool.cibuildwheel.overrides]]
+select = "*-manylinux_x86_64"
+environment = {VCPKG_ROOT="/project/deps/vcpkg", CMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake", VCPKG_TARGET_TRIPLET = "x64-linux-release", LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib"}
+
+[[tool.cibuildwheel.overrides]]
+select = "*-manylinux_aarch64"
+environment = {VCPKG_ROOT="/project/deps/vcpkg", CMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake", VCPKG_TARGET_TRIPLET = "arm64-linux-release", LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib"}
+
