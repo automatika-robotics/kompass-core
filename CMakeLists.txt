@@ -39,9 +39,10 @@ if (NOT SKBUILD)
   after editing C++ files.")
 endif()
 
-# add optimization for release builds
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
-set(CMAKE_CXX_FLAGS_DEBUG "-g")
+# add flags for builds
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG --std=c++17 -fPIC -Wall")
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS} -Wall -O3 -fPIC")
+set(CMAKE_CXX_FLAGS_DEBUG "-g --std=c++17 -fPIC -Wall")
 
 # Add kompass cpp
 add_subdirectory(src/kompass_cpp)
