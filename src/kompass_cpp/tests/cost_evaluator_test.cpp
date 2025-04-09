@@ -16,7 +16,7 @@ using namespace Kompass::Control;
 TrajectorySamples2D generate_ref_path_test_samples(double predictionHorizon,
                                                    double timeStep) {
   size_t number_of_points = predictionHorizon / timeStep;
-  float vel_1 = 1.0, vel_2 = 0.5, ang = 0.1;
+  float vel_1 = 1.0, vel_2 = 0.5, ang = 1.0;
 
   TrajectoryPath sample1(number_of_points), sample2(number_of_points),
       sample3(number_of_points);
@@ -26,6 +26,7 @@ TrajectorySamples2D generate_ref_path_test_samples(double predictionHorizon,
   for (size_t i = 0; i < number_of_points; ++i) {
     // sample 1 along the x-axis
     sample1.add(i, Path::Point(timeStep * vel_1 * i, 0.0, 0.0));
+
     // sample 2: positive ang
     sample2.add(i,
                 Path::Point(timeStep * vel_2 * i * std::cos(ang * timeStep * i),
@@ -36,6 +37,7 @@ TrajectorySamples2D generate_ref_path_test_samples(double predictionHorizon,
         i,
         Path::Point(timeStep * vel_2 * i * std::cos(-ang * timeStep * i),
                     timeStep * vel_2 * i * std::sin(-ang * timeStep * i), 0.0));
+
     if (i < number_of_points - 1) {
       sample1_vel.add(i, Velocity2D(vel_1, 0.0, 0.0));
       sample2_vel.add(i, Velocity2D(vel_2, 0.0, ang));
@@ -159,7 +161,8 @@ Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
                       const double goal_distance_weight,
                       const double obstacles_distance_weight,
                       const double smoothness_weight,
-                      const double jerk_weight) {
+                      const double jerk_weight,
+                      const bool add_obstacles = false) {
 
   // Cost weights
   CostEvaluator::TrajectoryCostsWeights costWeights;
@@ -172,8 +175,12 @@ Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
   costWeights.setParameter("jerk_weight", jerk_weight);
   costEval.updateCostWeights(costWeights);
 
-  // // Robot laserscan value (empty)
-  // LaserScan robotScan({10.0, 10.0, 10.0}, {0, 0.1, 0.2});
+  if (add_obstacles){
+    // Robot laserscan value (empty)
+    LaserScan robotScan({10.0, 0.5, 0.5}, {0, M_PI_4, 2 * M_PI - M_PI_4});
+    float maxObstaclesDist = 10.0;
+    costEval.setPointScan(robotScan, Path::State(), maxObstaclesDist);
+  }
 
   TrajSearchResult result = costEval.getMinTrajectoryCost(
       samples, reference_path, reference_path.segments[current_segment_index],
@@ -183,7 +190,7 @@ Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
              "Minimum reference path cost trajectory is not found!");
 
   if (result.isTrajFound) {
-    LOG_INFO("Cost Evaluator Returned a Minimum Cost Path");
+    LOG_INFO("Cost Evaluator Returned a Minimum Cost Path With Cost: ", result.trajCost);
   } else {
     throw std::logic_error(
         "Did not find any valid trajectory, this should not happen.");
@@ -253,6 +260,21 @@ BOOST_AUTO_TEST_CASE(test_all_costs) {
 
   minimum_cost_traj = run_test(costEval, reference_path, samples,
                                current_segment_index, 0.0, 0.0, 0.0, 0.0, 1.0);
+  sample = samples.getIndex(0);
+  check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
+  BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
+                    "equal to the correct minimum! "
+                        << minimum_cost_traj.path.x);
+  if (check) {
+    LOG_INFO("Test Passed!");
+  }
+
+  LOG_INFO("Running Obstacles Cost Test");
+  // Generate test trajectory samples
+  samples = generate_ref_path_test_samples(predictionHorizon, timeStep);
+
+  minimum_cost_traj = run_test(costEval, reference_path, samples,
+                               current_segment_index, 0.0, 0.0, 1.0, 0.0, 0.0, true);
   sample = samples.getIndex(0);
   check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
   BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
