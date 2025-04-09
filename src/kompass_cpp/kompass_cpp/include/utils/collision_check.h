@@ -58,7 +58,7 @@ public:
    * @brief Destroy the Collision Checker object
    *
    */
-  ~CollisionChecker();
+  ~CollisionChecker() = default;
 
   /**
    * @brief Reset the resolution of the obstacles Octree

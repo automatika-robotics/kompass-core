@@ -69,8 +69,6 @@ CollisionChecker::CollisionChecker(
   sensor_tf_world_ = sensor_tf_body_;
 }
 
-CollisionChecker::~CollisionChecker() {}
-
 void CollisionChecker::resetOctreeResolution(const double resolution) {
   if (resolution != octree_resolution_) {
     octree_resolution_ = resolution;
