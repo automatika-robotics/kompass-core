@@ -25,7 +25,7 @@ else()
 endif()
 
 # add project as pybind module
-nanobind_add_module(${MODULE_NAME} ${SOURCES})
+nanobind_add_module(${MODULE_NAME} STABLE_ABI ${SOURCES})
 target_link_libraries(${MODULE_NAME} PRIVATE kompass)
 
 if (AdaptiveCpp_FOUND)

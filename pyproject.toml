@@ -115,6 +115,7 @@ push = true
 ]
 
 [tool.cibuildwheel]
+build-verbosity = 1
 skip = ["pp*", "*musllinux*"]
 test-requires = "pytest"
 test-command = "pytest {package}/tests/test_fcl.py"

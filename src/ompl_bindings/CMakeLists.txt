@@ -15,7 +15,7 @@ list(APPEND CMAKE_PREFIX_PATH "${nanobind_DIR}")
 find_package(nanobind CONFIG REQUIRED)
 
 # add bindings as pybind11 module
-nanobind_add_module(${MODULE_NAME} bindings.cpp)
+nanobind_add_module(${MODULE_NAME} STABLE_ABI bindings.cpp)
 target_include_directories(${MODULE_NAME} PRIVATE {$EIGEN3_INCLUDE_DIR} ${OMPL_INCLUDE_DIRS})
 target_link_libraries(${MODULE_NAME} PRIVATE ${OMPL_LIBRARIES})
 
