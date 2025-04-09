@@ -42,7 +42,7 @@ endif()
 # add flags for builds
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG --std=c++17 -fPIC -Wall")
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS} -Wall -O3 -fPIC")
-set(CMAKE_CXX_FLAGS_DEBUG "-g --std=c++17 -fPIC -Wall")
+set(CMAKE_CXX_FLAGS_DEBUG "--std=c++17 -Wall")
 
 # Add kompass cpp
 add_subdirectory(src/kompass_cpp)
