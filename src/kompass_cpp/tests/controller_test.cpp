@@ -4,7 +4,7 @@
 #include "utils/cost_evaluator.h"
 #include <system_error>
 #define BOOST_TEST_MODULE KOMPASS TESTS
-#include "json_export.cpp"
+#include "json_export.h"
 #include <boost/dll/runtime_symbol_info.hpp> // for program_location
 #include <boost/filesystem.hpp>
 #include <boost/test/included/unit_test.hpp>
@@ -110,7 +110,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   savePathToJson(path, ref_path_filename + ".json");
 
   std::string command =
-      "python3 " + file_location + "/trajectory_sampler_plt --samples \"" +
+      "python3 " + file_location + "/trajectory_sampler_plt.py --samples \"" +
       trajectories_filename + "\" --reference \"" + ref_path_filename + "\"";
 
   // Execute the Python script

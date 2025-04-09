@@ -12,18 +12,18 @@ using json = nlohmann::json;
 using namespace Kompass;
 
 // Convert Point to JSON
-void to_json(json &j, const Path::Point &p) {
+inline void to_json(json &j, const Path::Point &p) {
   j = json{{"x", p.x()}, {"y", p.y()}};
 }
 
 // Convert JSON to Point
-void from_json(const json &j, Path::Point &p) {
+inline void from_json(const json &j, Path::Point &p) {
   p.x() = j.at("x");
   p.y() = j.at("y");
 }
 
 // Convert Path to JSON
-void to_json(json &j, const Path::Path &p) {
+inline void to_json(json &j, const Path::Path &p) {
   j["points"] = json::array(); // Initialize as a JSON array
   for (const auto &point : p.points) {
     j["points"].push_back(
@@ -32,7 +32,7 @@ void to_json(json &j, const Path::Path &p) {
 }
 
 // Convert TrajectoryPath to JSON
-void to_json(json &j, const Control::TrajectoryPath &p) {
+inline void to_json(json &j, const Control::TrajectoryPath &p) {
   j["points"] = json::array(); // Initialize as a JSON array
   for (const auto &point : p) {
     j["points"].push_back(
@@ -41,7 +41,7 @@ void to_json(json &j, const Control::TrajectoryPath &p) {
 }
 
 // Convert JSON to Path
-void from_json(const json &j, Path::Path &p) {
+inline void from_json(const json &j, Path::Path &p) {
   p.points.clear(); // Clear existing points
   for (const auto &item : j.at("points")) {
     Path::Point point;
@@ -52,7 +52,7 @@ void from_json(const json &j, Path::Path &p) {
 }
 
 // Convert Velocity to JSON
-void to_json(json &j, const Control::Velocity2D &v) {
+inline void to_json(json &j, const Control::Velocity2D &v) {
   j = json{{"vx", v.vx()},
            {"vy", v.vy()},
            {"omega", v.omega()},
@@ -60,7 +60,7 @@ void to_json(json &j, const Control::Velocity2D &v) {
 }
 
 // Convert JSON to Velocity
-void from_json(const json &j, Control::Velocity2D &v) {
+inline void from_json(const json &j, Control::Velocity2D &v) {
   v.setVx(j.at("vx"));
   v.setVy(j.at("vy"));
   v.setOmega(j.at("omega"));
@@ -68,7 +68,7 @@ void from_json(const json &j, Control::Velocity2D &v) {
 }
 
 // Convert Trajectory to JSON
-void to_json(json &j, const Control::TrajectorySamples2D &samples) {
+inline void to_json(json &j, const Control::TrajectorySamples2D &samples) {
   j["paths"] = json::array(); // Initialize as a JSON array
   for (const auto &traj : samples) {
     json j_p;
@@ -78,7 +78,7 @@ void to_json(json &j, const Control::TrajectorySamples2D &samples) {
 }
 
 // Convert Trajectory & Costs to JSON
-void to_json(json &j, const Control::TrajectorySamples2D &samples,
+inline void to_json(json &j, const Control::TrajectorySamples2D &samples,
              const std::vector<double> &costs) {
   j["paths"] = json::array(); // Initialize as a JSON array
   int idx{0};
@@ -92,7 +92,7 @@ void to_json(json &j, const Control::TrajectorySamples2D &samples,
 }
 
 // Save trajectories to a JSON file
-void saveTrajectoriesToJson(
+inline void saveTrajectoriesToJson(
     const Control::TrajectorySamples2D &trajectories,
     const std::string &filename) {
   json j;
@@ -107,7 +107,7 @@ void saveTrajectoriesToJson(
 }
 
 // Save one path to a JSON file
-void savePathToJson(const Path::Path &path, const std::string &filename) {
+inline void savePathToJson(const Path::Path &path, const std::string &filename) {
   json j;
   to_json(j, path);
   std::ofstream file(filename);

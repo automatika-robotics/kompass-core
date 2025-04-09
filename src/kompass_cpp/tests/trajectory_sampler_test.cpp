@@ -2,7 +2,7 @@
 #include "controllers/follower.h"
 #include "datatypes/control.h"
 #include "datatypes/path.h"
-#include "json_export.cpp"
+#include "json_export.h"
 #include "test.h"
 #include "utils/logger.h"
 #include "utils/trajectory_sampler.h"
@@ -110,7 +110,7 @@ void testTrajSampler() {
     savePathToJson(path, ref_path_filename + ".json");
 
     std::string command =
-        "python3 " + file_location + "/trajectory_sampler_plt --samples \"" +
+        "python3 " + file_location + "/trajectory_sampler_plt.py --samples \"" +
         trajectories_filename + "\" --reference \"" + ref_path_filename + "\"";
 
     // Execute the Python script

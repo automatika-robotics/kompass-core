@@ -4,22 +4,15 @@ set(MODULE_NAME kompass)
 find_package(nlohmann_json 3.2.0 REQUIRED)
 find_package(Boost COMPONENTS unit_test_framework REQUIRED)
 
-# Controller Tests
-add_executable(controller_test controller_test.cpp)
-target_link_libraries(controller_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework)
-add_test(controller_tests controller_test)
-
-# Find Python interpreter
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-
 # Specify the location of the Python script
 set(PYTHON_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/trajectory_sampler_plt.py)
+# Create a symbolic link for the Python script
+execute_process(COMMAND ln -s ${PYTHON_SCRIPT} ${CMAKE_CURRENT_BINARY_DIR})
 
-# Create a symbolic link or copy to create a "binary" for the Python script
-add_custom_target(trajectory_sampler_plt ALL
-    DEPENDS ${PYTHON_SCRIPT}
-    COMMAND ${CMAKE_COMMAND} -E create_symlink ${PYTHON_SCRIPT} ${CMAKE_CURRENT_BINARY_DIR}/trajectory_sampler_plt
-)
+# Controller Tests
+add_executable(controller_test controller_test.cpp)
+target_link_libraries(controller_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework nlohmann_json::nlohmann_json)
+add_test(controller_tests controller_test)
 
 # Trajectory Sampler Test (Generate and Plot Samples)
 add_executable(trajectory_sampler_test trajectory_sampler_test.cpp)
