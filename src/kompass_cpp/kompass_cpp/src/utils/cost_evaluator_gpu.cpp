@@ -224,8 +224,8 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
         m_q.memcpy(m_devicePtrReferencePathY, reference_path.getY().data(),
                    sizeof(float) * reference_path.points.size())
             .wait();
-        events.push_back(
-            pathCostFunc(trajs_size, reference_path.points.size(), weight));
+        events.push_back(pathCostFunc(trajs_size, reference_path.points.size(),
+                                      ref_path_length, weight));
       }
     }
     if ((weight = costWeights.getParameter<double>("smoothness_weight")) >
@@ -312,6 +312,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
 // path
 sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
                                         const size_t ref_path_size,
+                                        const float ref_path_length,
                                         const double cost_weight) {
 
   // -----------------------------------------------------
@@ -332,6 +333,7 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
     const size_t trajsSize = trajs_size;
     const size_t pathSize = numPointsPerTrajectory_;
     const size_t refPathSize = ref_path_size;
+    const float refPathLength = ref_path_length;
     // local memory for storing per trajectory average cost
     sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
     auto global_size = sycl::range<1>(trajs_size * pathSize);
@@ -390,9 +392,10 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
 
             // get distance between two last points
             float end_point_distance =
-                sycl::distance(last_path_point, last_ref_point);
+                sycl::distance(last_path_point, last_ref_point) / refPathLength;
             trajCost[traj] =
-                costWeight * (trajCost[traj] / pathSize + end_point_distance);
+                costWeight *
+                ((trajCost[traj] / pathSize + end_point_distance) / 2);
 
             // Atomically add the computed trajectory costs to the global cost
             // for this trajectory
@@ -667,6 +670,7 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
     const size_t trajsSize = trajs_size;
     const size_t pathSize = numPointsPerTrajectory_;
     const size_t obsSize = obstaclePointsX.size();
+    const float maxObstacleDistance = maxObstaclesDist;
     // local memory for storing per trajectory average cost
     sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
     auto global_size = sycl::range<1>(trajs_size * pathSize);
@@ -713,12 +717,17 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
           // normalize the trajectory cost and add end point distance to it
           if (path_index == 0) {
             // Atomically add the computed trajectory cost to the global cost
-            // for this trajectory
+            // for this trajectory. Before adding normalize the cost to [0, 1]
+            // based on the robot max local range for the obstacles. Minimum
+            // cost is assigned at distance value maxObstaclesDist
             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
                 atomic_cost(costs[traj]);
-            atomic_cost.fetch_add(costWeight * trajCost[traj]);
+            atomic_cost.fetch_add(
+                costWeight *
+                (sycl::max((maxObstacleDistance - trajCost[traj]), 0.0f) /
+                 maxObstacleDistance));
           }
         });
   });

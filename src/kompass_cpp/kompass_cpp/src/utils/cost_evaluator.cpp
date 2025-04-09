@@ -1,4 +1,3 @@
-#include <limits>
 #ifndef GPU
 #include "utils/cost_evaluator.h"
 #include "datatypes/path.h"
@@ -7,6 +6,7 @@
 #include <Eigen/src/Geometry/Transform.h>
 #include <cstddef>
 #include <cstdlib>
+#include <limits>
 #include <vector>
 
 namespace Kompass {
@@ -59,21 +59,22 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     const Path::Path &tracked_segment, const size_t closest_segment_index) {
   double weight;
   float total_cost;
+  float ref_path_length;
   float minCost = std::numeric_limits<float>::max();
   Trajectory2D minCostTraj(trajs.numPointsPerTrajectory_);
   bool traj_found = false;
 
   for (const auto &traj : trajs) {
     total_cost = 0.0;
-    if (reference_path.totalPathLength() > 0.0) {
+    if ((ref_path_length = reference_path.totalPathLength()) > 0.0) {
       if ((weight = costWeights.getParameter<double>("goal_distance_weight")) >
           0.0) {
-        float goalCost = goalCostFunc(traj, reference_path);
+        float goalCost = goalCostFunc(traj, reference_path, ref_path_length);
         total_cost += weight * goalCost;
       }
       if ((weight = costWeights.getParameter<double>(
                "reference_path_distance_weight")) > 0.0) {
-        float refPathCost = pathCostFunc(traj, reference_path);
+        float refPathCost = pathCostFunc(traj, reference_path, ref_path_length);
         total_cost += weight * refPathCost;
       }
     }
@@ -114,7 +115,8 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
 }
 
 float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
-                                  const Path::Path &reference_path) {
+                                  const Path::Path &reference_path,
+                                  const float ref_path_length) {
   float total_cost = 0.0;
 
   float distError, dist;
@@ -138,27 +140,24 @@ float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
   // end point distance
   float end_dist_error =
       Path::Path::distance(trajectory.path.getEnd(), reference_path.getEnd()) /
-      reference_path.totalPathLength();
+      ref_path_length;
 
   // Divide by number of points to get average distance
   // and normalize the total cost
-  auto normalized_cost = (total_cost / trajectory.path.x.size() + end_dist_error) / 2;
-
-  return std::min(normalized_cost, 1.0f);
+  return (total_cost / trajectory.path.x.size() + end_dist_error) / 2;
 }
 
 // Compute the cost of a trajectory based on distance to a given reference path
 float CostEvaluator::goalCostFunc(const Trajectory2D &trajectory,
-                                  const Path::Path &reference_path) {
+                                  const Path::Path &reference_path,
+                                  const float ref_path_length) {
   // end point distance normalized to range [0, 1]
-  auto cost = std::min(Path::Path::distance(trajectory.path.getEnd(),
+  return Path::Path::distance(trajectory.path.getEnd(),
                               reference_path.getEnd()) /
-         reference_path.totalPathLength(), 1.0f);
-  return std::min(cost, 1.0f);
+         ref_path_length;
 }
 
-float CostEvaluator::obstaclesDistCostFunc(
-    const Trajectory2D &trajectory) {
+float CostEvaluator::obstaclesDistCostFunc(const Trajectory2D &trajectory) {
   auto dist = trajectory.path.minDist2D(obstaclePointsX, obstaclePointsY);
   // Normalize the cost to [0, 1] based on the robot max local range for the
   // obstacles Minimum cost is assigned at distance value maxObstaclesDist
@@ -184,7 +183,7 @@ float CostEvaluator::smoothnessCostFunc(const Trajectory2D &trajectory) {
       smoothness_cost += std::pow(delta_omega, 2) / accLimits_[2];
     }
   }
-  return std::min(smoothness_cost / (3 * trajectory.velocities.vx.size()), 1.0f);
+  return smoothness_cost / (3 * trajectory.velocities.vx.size());
 }
 
 // Compute the cost of trajectory based on jerk in velocity commands
@@ -211,7 +210,7 @@ float CostEvaluator::jerkCostFunc(const Trajectory2D &trajectory) {
       jerk_cost += std::pow(jerk_omega, 2) / accLimits_[2];
     }
   }
-  return std::min(jerk_cost / (3 * trajectory.velocities.vx.size()), 1.0f);
+  return jerk_cost / (3 * trajectory.velocities.vx.size());
 }
 
 }; // namespace Control

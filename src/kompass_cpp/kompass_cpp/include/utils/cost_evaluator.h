@@ -125,7 +125,8 @@ public:
    * @param scan / point cloud
    * @param current_state
    */
-  void setPointScan(const LaserScan &scan, const Path::State &current_state, const float max_range) {
+  void setPointScan(const LaserScan &scan, const Path::State &current_state,
+                    const float max_range) {
     obstaclePointsX.clear();
     obstaclePointsY.clear();
     maxObstaclesDist = max_range / maxObstacleCostToRangeMultiple;
@@ -218,6 +219,7 @@ private:
    * @param reference_path
    */
   sycl::event pathCostFunc(const size_t trajs_size, const size_t ref_path_size,
+                           const float ref_path_length,
                            const double cost_weight);
 
   /**
@@ -269,7 +271,8 @@ private:
    * @return float
    */
   float pathCostFunc(const Trajectory2D &trajectory,
-                     const Path::Path &reference_path);
+                     const Path::Path &reference_path,
+                     const float ref_path_length);
 
   /**
    * @brief Trajectory cost based on the distance to the end (goal) of a given
@@ -280,7 +283,8 @@ private:
    * @return float
    */
   float goalCostFunc(const Trajectory2D &trajectory,
-                     const Path::Path &reference_path);
+                     const Path::Path &reference_path,
+                     const float ref_path_length);
 
   /**
    * @brief Trajectory cost based on the distance obstacles
