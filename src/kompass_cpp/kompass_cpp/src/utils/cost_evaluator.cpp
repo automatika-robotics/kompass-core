@@ -1,3 +1,4 @@
+#include <limits>
 #ifndef GPU
 #include "utils/cost_evaluator.h"
 #include "datatypes/path.h"
@@ -136,25 +137,32 @@ float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
 
   // end point distance
   float end_dist_error =
-      Path::Path::distance(trajectory.path.getEnd(), reference_path.getEnd());
+      Path::Path::distance(trajectory.path.getEnd(), reference_path.getEnd()) /
+      reference_path.totalPathLength();
 
   // Divide by number of points to get average distance
+  // and normalize the total cost
+  auto normalized_cost = (total_cost / trajectory.path.x.size() + end_dist_error) / 2;
 
-  return total_cost / trajectory.path.x.size() + end_dist_error;
+  return std::min(normalized_cost, 1.0f);
 }
 
 // Compute the cost of a trajectory based on distance to a given reference path
 float CostEvaluator::goalCostFunc(const Trajectory2D &trajectory,
                                   const Path::Path &reference_path) {
-  // end point distance
-  return Path::Path::distance(trajectory.path.getEnd(),
+  // end point distance normalized to range [0, 1]
+  auto cost = std::min(Path::Path::distance(trajectory.path.getEnd(),
                               reference_path.getEnd()) /
-         reference_path.totalPathLength();
+         reference_path.totalPathLength(), 1.0f);
+  return std::min(cost, 1.0f);
 }
 
 float CostEvaluator::obstaclesDistCostFunc(
     const Trajectory2D &trajectory) {
-  return trajectory.path.minDist2D(obstaclePointsX, obstaclePointsY);
+  auto dist = trajectory.path.minDist2D(obstaclePointsX, obstaclePointsY);
+  // Normalize the cost to [0, 1] based on the robot max local range for the
+  // obstacles Minimum cost is assigned at distance value maxObstaclesDist
+  return std::max(maxObstaclesDist - dist, 0.0f) / (maxObstaclesDist);
 }
 
 // Compute the cost of trajectory based on smoothness in velocity commands
@@ -176,7 +184,7 @@ float CostEvaluator::smoothnessCostFunc(const Trajectory2D &trajectory) {
       smoothness_cost += std::pow(delta_omega, 2) / accLimits_[2];
     }
   }
-  return smoothness_cost / (3 * trajectory.velocities.vx.size());
+  return std::min(smoothness_cost / (3 * trajectory.velocities.vx.size()), 1.0f);
 }
 
 // Compute the cost of trajectory based on jerk in velocity commands
@@ -203,7 +211,7 @@ float CostEvaluator::jerkCostFunc(const Trajectory2D &trajectory) {
       jerk_cost += std::pow(jerk_omega, 2) / accLimits_[2];
     }
   }
-  return jerk_cost / (3 * trajectory.velocities.vx.size());
+  return std::min(jerk_cost / (3 * trajectory.velocities.vx.size()), 1.0f);
 }
 
 }; // namespace Control

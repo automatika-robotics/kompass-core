@@ -71,6 +71,8 @@ public:
 
   void resetOctreeResolution(const double octreeRes);
 
+  void setSensorMaxRange(const float max_range);
+
   /**
    * @brief Adds a new custom cost to be used in the trajectory evaluation
    *
@@ -128,6 +130,7 @@ private:
   CostEvaluator *trajCostEvaluator;
   double max_forward_distance_ = 0.0;
   int maxNumThreads;
+  float maxLocalRange_ = 10.0;    // Max range of the laserscan or the robot local map, default to 10 meters. Used to calculate the cost of coming close to obstacles
   TrajectorySamples2D *debuggingSamples_ = nullptr;
 
   /**

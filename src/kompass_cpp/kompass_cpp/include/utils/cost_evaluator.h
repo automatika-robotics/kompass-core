@@ -125,9 +125,10 @@ public:
    * @param scan / point cloud
    * @param current_state
    */
-  void setPointScan(const LaserScan &scan, const Path::State &current_state) {
+  void setPointScan(const LaserScan &scan, const Path::State &current_state, const float max_range) {
     obstaclePointsX.clear();
     obstaclePointsY.clear();
+    maxObstaclesDist = max_range / maxObstacleCostToRangeMultiple;
     Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
 
     for (size_t i = 0; i < scan.ranges.size(); i++) {
@@ -144,9 +145,10 @@ public:
   };
 
   void setPointScan(const std::vector<Path::Point> &cloud,
-                    const Path::State &current_state) {
+                    const Path::State &current_state, const float max_range) {
     obstaclePointsX.clear();
     obstaclePointsY.clear();
+    maxObstaclesDist = max_range / maxObstacleCostToRangeMultiple;
     Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
 
     for (auto &point : cloud) {
@@ -179,6 +181,12 @@ private:
   TrajectoryCostsWeights costWeights;
   std::vector<float> obstaclePointsX;
   std::vector<float> obstaclePointsY;
+  float maxObstacleCostToRangeMultiple =
+      3.0; // Sets the maximum obstacle distance cost at
+           // 1/maxObstacleCostToRangeMultiple of the maximum robot local range
+  float
+      maxObstaclesDist; // Distance at the maximum cost = max_robot_local_range
+                        // / maxObstacleCostToRangeMultiple
 
   Eigen::Isometry3f sensor_tf_body_ =
       Eigen::Isometry3f::Identity(); // Sensor transformation with

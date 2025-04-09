@@ -140,6 +140,10 @@ void DWA::resetOctreeResolution(const double octreeRes) {
   trajSampler->resetOctreeResolution(octreeRes);
 }
 
+void DWA::setSensorMaxRange(const float max_range){
+  maxLocalRange_ = max_range;
+}
+
 void DWA::addCustomCost(
     double weight, CostEvaluator::CustomCostFunction custom_cost_function) {
   trajCostEvaluator->addCustomCost(weight, custom_cost_function);
@@ -210,7 +214,7 @@ TrajSearchResult DWA::findBestPath(const Velocity2D &global_vel,
     return TrajSearchResult();
   }
 
-  trajCostEvaluator->setPointScan(scan_points, currentState);
+  trajCostEvaluator->setPointScan(scan_points, currentState, maxLocalRange_);
 
   Path::Path trackedRefPathSegment = findTrackedPathSegment();
 
