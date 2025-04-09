@@ -2,6 +2,7 @@
 #include "datatypes/trajectory.h"
 #include "test.h"
 #include "utils/cost_evaluator.h"
+#include <system_error>
 #define BOOST_TEST_MODULE KOMPASS TESTS
 #include "json_export.cpp"
 #include <boost/dll/runtime_symbol_info.hpp> // for program_location
@@ -114,6 +115,9 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
 
   // Execute the Python script
   int res = system(command.c_str());
+  if (res != 0)
+      throw std::system_error(res, std::generic_category(),
+                              "Python script failed with error code");
 
   while (!planner.isGoalReached() and counter < 100) {
     counter++;

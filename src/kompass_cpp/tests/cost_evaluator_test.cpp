@@ -15,7 +15,7 @@ using namespace Kompass::Control;
 
 TrajectorySamples2D generate_ref_path_test_samples(double predictionHorizon,
                                                    double timeStep) {
-  int number_of_points = predictionHorizon / timeStep;
+  size_t number_of_points = predictionHorizon / timeStep;
   float vel_1 = 1.0, vel_2 = 0.5, ang = 0.1;
 
   TrajectoryPath sample1(number_of_points), sample2(number_of_points),
@@ -52,7 +52,7 @@ TrajectorySamples2D generate_ref_path_test_samples(double predictionHorizon,
 
 TrajectorySamples2D generate_smoothness_test_samples(double predictionHorizon,
                                                      double timeStep) {
-  int number_of_points = predictionHorizon / timeStep;
+  size_t number_of_points = predictionHorizon / timeStep;
   double v_1 = 1.0, ang1 = 0.1;
 
   TrajectoryPath sample1(number_of_points), sample2(number_of_points),
@@ -103,7 +103,7 @@ bool check_sample_equal_result(TrajectoryPath sample_path,
     return false;
   }
   double EPSILON = 0.001;
-  for (size_t i; i < sample_path.x.size(); ++i) {
+  for (Eigen::Index i = 0; i < sample_path.x.size(); ++i) {
     if ((std::abs(sample_path.x[i] - traj_path.x[i]) > EPSILON) ||
         (std::abs(sample_path.y[i] - traj_path.y[i])) > EPSILON) {
       return false;
@@ -118,9 +118,9 @@ struct TestConfig {
   double max_path_length;
   double max_interpolation_point_dist;
   size_t current_segment_index;
-  int maxNumThreads;
   double timeStep;
   double predictionHorizon;
+  int maxNumThreads;
   LinearVelocityControlParams x_params;
   LinearVelocityControlParams y_params;
   AngularVelocityControlParams angular_params;

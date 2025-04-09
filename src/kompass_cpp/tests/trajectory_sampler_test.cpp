@@ -58,7 +58,6 @@ void testTrajSampler() {
   Control::AngularVelocityControlParams angular_params(3.14, 3, 5, 8);
   Control::ControlLimitsParams controlLimits(x_params, y_params,
                                              angular_params);
-  auto controlType = Control::ControlType::ACKERMANN;
   auto robotShapeType = Kompass::CollisionChecker::ShapeType::BOX;
   std::vector<float> robotDimensions{0.3, 0.3, 1.0};
   // std::array<float, 3> sensorPositionWRTbody {0.0, 0.0, 1.0};
@@ -116,6 +115,9 @@ void testTrajSampler() {
 
     // Execute the Python script
     int res = system(command.c_str());
+    if (res != 0)
+      throw std::system_error(res, std::generic_category(),
+                              "Python script failed with error code");
   }
 }
 
