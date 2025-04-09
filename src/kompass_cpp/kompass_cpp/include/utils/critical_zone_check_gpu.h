@@ -36,7 +36,18 @@ public:
     m_devicePtrRanges = sycl::malloc_device<double>(m_scanSize, m_q);
     m_devicePtrAngles = sycl::malloc_device<double>(m_scanSize, m_q);
     m_result = sycl::malloc_shared<bool>(1, m_q);
+
+    // set forward and backward indices
     preset(angles);
+    m_devicePtrForward =
+        sycl::malloc_device<size_t>(indicies_forward_.size(), m_q);
+    m_devicePtrBackward =
+        sycl::malloc_device<size_t>(indicies_backward_.size(), m_q);
+    m_q.memcpy(m_devicePtrForward, indicies_forward_.data(),
+               sizeof(size_t) * indicies_forward_.size());
+    m_q.memcpy(m_devicePtrBackward, indicies_backward_.data(),
+               sizeof(size_t) * indicies_backward_.size());
+
     m_scan_in_zone =
         std::max(indicies_forward_.size(), indicies_backward_.size());
     m_devicePtrOutput = sycl::malloc_device<bool>(m_scan_in_zone, m_q);
@@ -52,6 +63,12 @@ public:
     }
     if (m_devicePtrAngles) {
       sycl::free(m_devicePtrAngles, m_q);
+    }
+    if (m_devicePtrForward) {
+      sycl::free(m_devicePtrForward, m_q);
+    }
+    if (m_devicePtrBackward) {
+      sycl::free(m_devicePtrBackward, m_q);
     }
     if (m_result) {
       sycl::free(m_result, m_q);
@@ -74,6 +91,8 @@ private:
   size_t m_scan_in_zone;
   double *m_devicePtrRanges;
   double *m_devicePtrAngles;
+  size_t *m_devicePtrForward;
+  size_t *m_devicePtrBackward;
   bool *m_devicePtrOutput;
   bool *m_result;
   sycl::queue m_q;

@@ -10,7 +10,6 @@ namespace Kompass {
 bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
                                    const std::vector<double> &angles,
                                    const bool forward) {
-  bool result;
   try {
 
     m_q.fill(m_devicePtrOutput, false, m_scan_in_zone);
@@ -35,21 +34,20 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
       auto devicePtrAngles = m_devicePtrAngles;
       auto devicePtrOutput = m_devicePtrOutput;
       auto criticalDistance = critical_distance_;
-      std::vector<size_t> *critical_indices;
+      size_t *critical_indices;
+      sycl::range<1> global_size;
       if (forward) {
-        critical_indices = &indicies_forward_;
+        critical_indices = m_devicePtrForward;
+        global_size = sycl::range<1>(indicies_forward_.size());
       } else {
-        critical_indices = &indicies_backward_;
+        critical_indices = m_devicePtrBackward;
+        global_size = sycl::range<1>(indicies_backward_.size());
       }
-
-      sycl::range<1> global_size(
-          critical_indices->size()); // number of laser rays within the zone
 
       // kernel scope
       h.parallel_for<class checkCriticalZoneKernel>(
           global_size, [=](sycl::id<1> idx) {
-            const int index = idx[0];
-            const size_t local_id = critical_indices->at(index);
+            const size_t local_id = critical_indices[idx];
             double range = devicePtrRanges[local_id];
             double angle = devicePtrAngles[local_id];
 
@@ -65,14 +63,14 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
             double converted_range = sycl::length(transformed_point);
             if (converted_range - robot_radius <= criticalDistance) {
               // point within the zone and range is low
-              devicePtrOutput[index] = true;
+              devicePtrOutput[idx] = true;
             }
           });
     });
 
-    *m_result = 0;
+    *m_result = false;
     // Launch a kernel that reduces the array using a logical OR operation.
-    // If any d_flags element is true, the reduction will produce true.
+    // If any element is true, the reduction will produce true.
     m_q.submit([&](sycl::handler &h) {
       auto reduction = sycl::reduction(m_result, sycl::logical_or<bool>());
       auto devicePtrOutput = m_devicePtrOutput;
@@ -83,13 +81,11 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
 
     m_q.wait_and_throw();
 
-    result = *m_result;
-
   } catch (const sycl::exception &e) {
     LOG_ERROR("Exception caught: ", e.what());
   }
 
-  return result;
+  return *m_result;
 }
 
 } // namespace Kompass
