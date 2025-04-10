@@ -7,7 +7,7 @@
 #include "utils/logger.h"
 #include <memory>
 #define BOOST_TEST_MODULE KOMPASS TESTS
-#include "json_export.cpp"
+#include "json_export.h"
 #include <boost/dll/runtime_symbol_info.hpp> // for program_location
 #include <boost/filesystem.hpp>
 #include <boost/test/included/unit_test.hpp>
@@ -62,8 +62,8 @@ struct VisionDWATestConfig {
                       const float maxVel = 1.0, const float maxOmega = 2.0,
                       const int maxNumThreads = 1,
                       const double reference_path_distance_weight = 1.0,
-                      const double goal_distance_weight = 0.5,
-                      const double obstacles_distance_weight = 0.0)
+                      const double goal_distance_weight = 1.0,
+                      const double obstacles_distance_weight = 1.0)
       : timeStep(timeStep), predictionHorizon(predictionHorizon),
         controlHorizon(controlHorizon), maxLinearSamples(maxLinearSamples),
         maxAngularSamples(maxAngularSamples), maxNumThreads(maxNumThreads),
@@ -154,11 +154,14 @@ struct VisionDWATestConfig {
     // savePathToJson(reference_segment, ref_path_filename + ".json");
 
     std::string command = "python3 " + file_location +
-                          "/trajectory_sampler_plt --samples \"" +
+                          "/trajectory_sampler_plt.py --samples \"" +
                           trajectories_filename + "\"";
 
     // Execute the Python script
     int res = system(command.c_str());
+    if (res != 0)
+      throw std::system_error(res, std::generic_category(),
+                              "Python script failed with error code");
     return true;
   }
 };
