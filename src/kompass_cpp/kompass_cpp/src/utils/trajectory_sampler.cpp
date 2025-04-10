@@ -29,9 +29,9 @@ TrajectorySampler::TrajectorySampler(
     const std::array<float, 4> &sensor_rotation_body, const double octreeRes,
     const int maxNumThreads) {
   // Setup the collision checker
-  collChecker = new CollisionChecker(robotShapeType, robotDimensions,
-                                     sensor_position_body, sensor_rotation_body,
-                                     octreeRes);
+  collChecker = std::make_unique<CollisionChecker>(
+      robotShapeType, robotDimensions, sensor_position_body,
+      sensor_rotation_body, octreeRes);
 
   // Setup configuration parameters
   ctrlimits = controlLimits;
@@ -64,10 +64,9 @@ TrajectorySampler::TrajectorySampler(
     const std::array<float, 4> &sensor_rotation_body, const int maxNumThreads) {
   double octreeRes = config.getParameter<double>("octree_map_resolution");
   // Setup the collision checker
-  collChecker = new CollisionChecker(robotShapeType, robotDimensions,
-                                     sensor_position_body, sensor_rotation_body,
-                                     octreeRes);
-
+  collChecker = std::make_unique<CollisionChecker>(
+      robotShapeType, robotDimensions, sensor_position_body,
+      sensor_rotation_body, octreeRes);
   // Setup configuration parameters
   ctrlimits = controlLimits;
   ctrType = controlType;
@@ -88,8 +87,6 @@ TrajectorySampler::TrajectorySampler(
   this->maxNumThreads = maxNumThreads;
   this->drop_samples_ = config.getParameter<bool>("drop_samples");
 }
-
-TrajectorySampler::~TrajectorySampler() { delete collChecker; }
 
 void TrajectorySampler::resetOctreeResolution(const double resolution) {
   collChecker->resetOctreeResolution(resolution);

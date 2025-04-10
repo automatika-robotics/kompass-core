@@ -93,7 +93,7 @@ public:
    * @brief Destroy the Trajectory Sampler object
    *
    */
-  ~TrajectorySampler();
+  ~TrajectorySampler() = default;
 
   void setSampleDroppingMode(const bool drop_samples);
 
@@ -131,7 +131,7 @@ protected:
   // Protected member variables
   ControlType ctrType;
   ControlLimitsParams ctrlimits;
-  CollisionChecker *collChecker;
+  std::unique_ptr<CollisionChecker> collChecker;
   int maxNumThreads;
 
 private:
