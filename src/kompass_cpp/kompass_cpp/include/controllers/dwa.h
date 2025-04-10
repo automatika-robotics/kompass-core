@@ -126,8 +126,8 @@ public:
   };
 
 private:
-  TrajectorySampler *trajSampler;
-  CostEvaluator *trajCostEvaluator;
+  std::unique_ptr<TrajectorySampler> trajSampler;
+  std::unique_ptr<CostEvaluator> trajCostEvaluator;
   double max_forward_distance_ = 0.0;
   int maxNumThreads;
   float maxLocalRange_ = 10.0;    // Max range of the laserscan or the robot local map, default to 10 meters. Used to calculate the cost of coming close to obstacles

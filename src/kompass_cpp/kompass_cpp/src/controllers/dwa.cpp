@@ -25,15 +25,15 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
          const int maxNumThreads)
     : Follower() {
   // Setup the trajectory sampler
-  trajSampler = new TrajectorySampler(
+  trajSampler = std::make_unique<TrajectorySampler>(
       controlLimits, controlType, timeStep, predictionHorizon, controlHorizon,
       maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
       sensor_position_body, sensor_rotation_body, octreeRes, maxNumThreads);
 
-  trajCostEvaluator =
-      new CostEvaluator(costWeights, sensor_position_body, sensor_rotation_body,
-                        controlLimits, trajSampler->numTrajectories,
-                        trajSampler->numPointsPerTrajectory, getMaxPathLength());
+  trajCostEvaluator = std::make_unique<CostEvaluator>(
+      costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
+      trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
+      getMaxPathLength());
 
   // Update the max forward distance the robot can make
   if (controlType == ControlType::OMNI) {
@@ -56,14 +56,14 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
          const int maxNumThreads)
     : Follower() {
   // Setup the trajectory sampler
-  trajSampler = new TrajectorySampler(
+  trajSampler = std::make_unique<TrajectorySampler>(
       config, controlLimits, controlType, robotShapeType, robotDimensions,
       sensor_position_body, sensor_rotation_body, maxNumThreads);
 
-  trajCostEvaluator =
-      new CostEvaluator(costWeights, sensor_position_body, sensor_rotation_body,
-                        controlLimits, trajSampler->numTrajectories,
-                        trajSampler->numPointsPerTrajectory, getMaxPathLength());
+  trajCostEvaluator = std::make_unique<CostEvaluator>(
+      costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
+      trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
+      getMaxPathLength());
 
   // Update the max forward distance the robot can make
   double timeHorizon = config.getParameter<double>("control_horizon");
@@ -78,8 +78,6 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
 }
 
 DWA::~DWA() {
-  delete trajSampler;
-  delete trajCostEvaluator;
   delete debuggingSamples_;
 }
 
@@ -94,17 +92,15 @@ void DWA::reconfigure(ControlLimitsParams controlLimits,
                       const double octreeRes,
                       CostEvaluator::TrajectoryCostsWeights costWeights,
                       const int maxNumThreads) {
-  delete trajSampler;
-  trajSampler = new TrajectorySampler(
+  trajSampler = std::make_unique<TrajectorySampler>(
       controlLimits, controlType, timeStep, predictionHorizon, controlHorizon,
       maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
       sensor_position_body, sensor_rotation_body, octreeRes, maxNumThreads);
 
-  delete trajCostEvaluator;
-  trajCostEvaluator =
-      new CostEvaluator(costWeights, sensor_position_body, sensor_rotation_body,
-                        controlLimits, trajSampler->numTrajectories,
-                        trajSampler->numPointsPerTrajectory, getMaxPathLength());
+  trajCostEvaluator = std::make_unique<CostEvaluator>(
+      costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
+      trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
+      getMaxPathLength());
   this->maxNumThreads = maxNumThreads;
 }
 
@@ -117,17 +113,14 @@ void DWA::reconfigure(TrajectorySampler::TrajectorySamplerParameters config,
                       const std::array<float, 4> &sensor_rotation_body,
                       CostEvaluator::TrajectoryCostsWeights costWeights,
                       const int maxNumThreads) {
-  delete trajSampler;
-  trajSampler = new TrajectorySampler(
+  trajSampler = std::make_unique<TrajectorySampler>(
       config, controlLimits, controlType, robotShapeType, robotDimensions,
       sensor_position_body, sensor_rotation_body, maxNumThreads);
 
-  delete trajCostEvaluator;
-
-  trajCostEvaluator =
-      new CostEvaluator(costWeights, sensor_position_body, sensor_rotation_body,
-                        controlLimits, trajSampler->numTrajectories,
-                        trajSampler->numPointsPerTrajectory, getMaxPathLength());
+  trajCostEvaluator = std::make_unique<CostEvaluator>(
+      costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
+      trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
+      getMaxPathLength());
   this->maxNumThreads = maxNumThreads;
 }
 
@@ -140,7 +133,7 @@ void DWA::resetOctreeResolution(const double octreeRes) {
   trajSampler->resetOctreeResolution(octreeRes);
 }
 
-void DWA::setSensorMaxRange(const float max_range){
+void DWA::setSensorMaxRange(const float max_range) {
   maxLocalRange_ = max_range;
 }
 
