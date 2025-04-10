@@ -55,16 +55,16 @@ CostEvaluator::~CostEvaluator() {
 };
 
 TrajSearchResult CostEvaluator::getMinTrajectoryCost(
-    const TrajectorySamples2D &trajs, const Path::Path &reference_path,
+    const std::unique_ptr<TrajectorySamples2D> &trajs, const Path::Path &reference_path,
     const Path::Path &tracked_segment, const size_t closest_segment_index) {
   double weight;
   float total_cost;
   float ref_path_length;
   float minCost = std::numeric_limits<float>::max();
-  Trajectory2D minCostTraj(trajs.numPointsPerTrajectory_);
+  Trajectory2D minCostTraj(trajs->numPointsPerTrajectory_);
   bool traj_found = false;
 
-  for (const auto &traj : trajs) {
+  for (const auto &traj : *trajs) {
     total_cost = 0.0;
     if ((ref_path_length = reference_path.totalPathLength()) > 0.0) {
       if ((weight = costWeights.getParameter<double>("goal_distance_weight")) >

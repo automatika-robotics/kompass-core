@@ -40,9 +40,9 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   double timeStep = 0.1;
   double predictionHorizon = 1.0;
   double controlHorizon = 0.2;
-  int maxLinearSamples = 4;
-  int maxAngularSamples = 5;
-  int maxNumThreads = 1;
+  int maxLinearSamples = 20;
+  int maxAngularSamples = 20;
+  int maxNumThreads = 10;
 
   // Octomap resolution
   double octreeRes = 0.1;

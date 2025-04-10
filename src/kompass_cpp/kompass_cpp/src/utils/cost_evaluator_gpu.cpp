@@ -190,28 +190,24 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     size_t trajs_size = trajs->size();
     std::vector<sycl::event> events;
 
-    m_q.fill(m_devicePtrCosts, 0.0, trajs_size).wait();
+    m_q.fill(m_devicePtrCosts, 0.0, trajs_size);
 
     m_q.memcpy(m_devicePtrPathsX, trajs->paths.x.data(),
-               sizeof(float) * trajs_size * numPointsPerTrajectory_)
-        .wait();
+               sizeof(float) * trajs_size * numPointsPerTrajectory_);
     m_q.memcpy(m_devicePtrPathsY, trajs->paths.y.data(),
-               sizeof(float) * trajs_size * numPointsPerTrajectory_)
-        .wait();
+               sizeof(float) * trajs_size * numPointsPerTrajectory_);
     m_q.memcpy(m_devicePtrVelocitiesVx, trajs->velocities.vx.data(),
-               sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1))
-        .wait();
+               sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1));
     m_q.memcpy(m_devicePtrVelocitiesVy, trajs->velocities.vy.data(),
-               sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1))
-        .wait();
+               sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1));
     m_q.memcpy(m_devicePtrVelocitiesOmega, trajs->velocities.omega.data(),
-               sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1))
-        .wait();
+               sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1));
+
     m_minCost->cost = std::numeric_limits<float>::max();
     m_minCost->sampleIndex = 0;
 
     // wait for all data to be transferred
-    // m_q.wait();
+    m_q.wait();
 
     if ((costWeights.getParameter<double>("reference_path_distance_weight") >
              0.0 ||
