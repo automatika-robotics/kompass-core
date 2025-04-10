@@ -68,9 +68,26 @@ public:
                    CostEvaluator::TrajectoryCostsWeights costWeights,
                    const int maxNumThreads = 1);
 
+  /**
+   * @brief Reset the resolution of the robot's local map, this is equivalent to the box size representing each obstacle after conversion
+   *
+   * @param octreeRes
+   */
   void resetOctreeResolution(const double octreeRes);
 
+  /**
+   * @brief Set the robot's sensor or local map max range (meters)
+   *
+   * @param max_range
+   */
   void setSensorMaxRange(const float max_range);
+
+  /**
+   * @brief Set the Current State of the robot
+   *
+   * @param position
+   */
+  void setCurrentState(const Path::State &position);
 
   /**
    * @brief Adds a new custom cost to be used in the trajectory evaluation
@@ -144,6 +161,9 @@ private:
   double max_forward_distance_ = 0.0;
   int maxNumThreads;
   TrajectorySamples2D *debuggingSamples_ = nullptr;
+  float maxLocalRange_ =
+      10.0; // Max range of the robot sensor or local map in meters. Used to
+            // calculate the cost of coming close to obstacles
 
   /**
    * @brief get maximum reference path length
