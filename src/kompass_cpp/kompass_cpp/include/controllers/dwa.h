@@ -42,7 +42,7 @@ public:
   /**
    * @brief  Destructor
    */
-  ~DWA();
+  ~DWA() = default;
 
   /**
    * @brief Reconfigures the trajectory planner
@@ -120,9 +120,8 @@ public:
     trajSampler->setSampleDroppingMode(drop_samples);
 
     // Generate set of valid trajectories
-    TrajectorySamples2D samples_ = trajSampler->generateTrajectories(
+    debuggingSamples_ = trajSampler->generateTrajectories(
         global_vel, currentState, scan_points);
-    debuggingSamples_ = new TrajectorySamples2D(samples_);
   };
 
 private:
@@ -131,7 +130,7 @@ private:
   double max_forward_distance_ = 0.0;
   int maxNumThreads;
   float maxLocalRange_ = 10.0;    // Max range of the laserscan or the robot local map, default to 10 meters. Used to calculate the cost of coming close to obstacles
-  TrajectorySamples2D *debuggingSamples_ = nullptr;
+  std::unique_ptr<TrajectorySamples2D> debuggingSamples_;
 
   /**
    * @brief get maximum reference path length

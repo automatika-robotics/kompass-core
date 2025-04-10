@@ -77,10 +77,6 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
   this->maxNumThreads = maxNumThreads;
 }
 
-DWA::~DWA() {
-  delete debuggingSamples_;
-}
-
 void DWA::reconfigure(ControlLimitsParams controlLimits,
                       ControlType controlType, double timeStep,
                       double predictionHorizon, double controlHorizon,
@@ -200,10 +196,9 @@ TrajSearchResult DWA::findBestPath(const Velocity2D &global_vel,
   determineTarget();
 
   // Generate set of valid trajectories in the DW
-  TrajectorySamples2D samples_ =
+  std::unique_ptr<TrajectorySamples2D> samples_ =
       trajSampler->generateTrajectories(global_vel, currentState, scan_points);
-
-  if (samples_.size() == 0) {
+  if (samples_->size() == 0) {
     return TrajSearchResult();
   }
 

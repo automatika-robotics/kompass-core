@@ -5,6 +5,7 @@
 #include "utils/cost_evaluator.h"
 #include "utils/logger.h"
 #include <cstddef>
+#include <memory>
 #define BOOST_TEST_MODULE KOMPASS COSTS TESTS
 #include <boost/test/included/unit_test.hpp>
 #include <cmath>
@@ -13,8 +14,8 @@
 using namespace Kompass;
 using namespace Kompass::Control;
 
-TrajectorySamples2D generate_ref_path_test_samples(double predictionHorizon,
-                                                   double timeStep) {
+std::unique_ptr<TrajectorySamples2D>
+generate_ref_path_test_samples(double predictionHorizon, double timeStep) {
   size_t number_of_points = predictionHorizon / timeStep;
   float vel_1 = 1.0, vel_2 = 0.5, ang = 1.0;
 
@@ -45,15 +46,16 @@ TrajectorySamples2D generate_ref_path_test_samples(double predictionHorizon,
     }
   }
 
-  TrajectorySamples2D samples(3, number_of_points);
-  samples.push_back(sample1_vel, sample1);
-  samples.push_back(sample2_vel, sample2);
-  samples.push_back(sample3_vel, sample3);
+  std::unique_ptr<TrajectorySamples2D> samples =
+      std::make_unique<TrajectorySamples2D>(3, number_of_points);
+  samples->push_back(sample1_vel, sample1);
+  samples->push_back(sample2_vel, sample2);
+  samples->push_back(sample3_vel, sample3);
   return samples;
 }
 
-TrajectorySamples2D generate_smoothness_test_samples(double predictionHorizon,
-                                                     double timeStep) {
+std::unique_ptr<TrajectorySamples2D>
+generate_smoothness_test_samples(double predictionHorizon, double timeStep) {
   size_t number_of_points = predictionHorizon / timeStep;
   double v_1 = 1.0, ang1 = 0.1;
 
@@ -90,10 +92,11 @@ TrajectorySamples2D generate_smoothness_test_samples(double predictionHorizon,
     }
   }
 
-  TrajectorySamples2D samples(3, number_of_points);
-  samples.push_back(sample1_vel, sample1);
-  samples.push_back(sample2_vel, sample2);
-  samples.push_back(sample3_vel, sample3);
+  std::unique_ptr<TrajectorySamples2D> samples =
+      std::make_unique<TrajectorySamples2D>(3, number_of_points);
+  samples->push_back(sample1_vel, sample1);
+  samples->push_back(sample2_vel, sample2);
+  samples->push_back(sample3_vel, sample3);
   return samples;
 }
 
@@ -155,13 +158,12 @@ struct TestConfig {
 };
 
 Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
-                      TrajectorySamples2D &samples,
+                      std::unique_ptr<TrajectorySamples2D> &samples,
                       const size_t current_segment_index,
                       const double reference_path_distance_weight,
                       const double goal_distance_weight,
                       const double obstacles_distance_weight,
-                      const double smoothness_weight,
-                      const double jerk_weight,
+                      const double smoothness_weight, const double jerk_weight,
                       const bool add_obstacles = false) {
 
   // Cost weights
@@ -175,7 +177,7 @@ Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
   costWeights.setParameter("jerk_weight", jerk_weight);
   costEval.updateCostWeights(costWeights);
 
-  if (add_obstacles){
+  if (add_obstacles) {
     // Robot laserscan value (empty)
     LaserScan robotScan({10.0, 0.5, 0.5}, {0, M_PI_4, 2 * M_PI - M_PI_4});
     float maxObstaclesDist = 10.0;
@@ -190,7 +192,8 @@ Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
              "Minimum reference path cost trajectory is not found!");
 
   if (result.isTrajFound) {
-    LOG_INFO("Cost Evaluator Returned a Minimum Cost Path With Cost: ", result.trajCost);
+    LOG_INFO("Cost Evaluator Returned a Minimum Cost Path With Cost: ",
+             result.trajCost);
   } else {
     throw std::logic_error(
         "Did not find any valid trajectory, this should not happen.");
@@ -210,12 +213,13 @@ BOOST_AUTO_TEST_CASE(test_all_costs) {
   Timer time;
   LOG_INFO("Running Reference Path Cost Test");
   // Generate test trajectory samples
-  samples = generate_ref_path_test_samples(predictionHorizon, timeStep);
+  std::unique_ptr<TrajectorySamples2D> samples =
+      generate_ref_path_test_samples(predictionHorizon, timeStep);
 
   minimum_cost_traj = run_test(costEval, reference_path, samples,
                                current_segment_index, 1.0, 0.0, 0.0, 0.0, 0.0);
   // In the generated samples the first sample contains the minimum cost path
-  sample = samples.getIndex(0);
+  sample = samples->getIndex(0);
   check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
   BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
                     "equal to the correct minimum! "
@@ -230,7 +234,7 @@ BOOST_AUTO_TEST_CASE(test_all_costs) {
 
   minimum_cost_traj = run_test(costEval, reference_path, samples,
                                current_segment_index, 0.0, 1.0, 0.0, 0.0, 0.0);
-  sample = samples.getIndex(0);
+  sample = samples->getIndex(0);
   check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
   BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
                     "equal to the correct minimum! "
@@ -245,7 +249,7 @@ BOOST_AUTO_TEST_CASE(test_all_costs) {
 
   minimum_cost_traj = run_test(costEval, reference_path, samples,
                                current_segment_index, 0.0, 0.0, 0.0, 1.0, 0.0);
-  sample = samples.getIndex(0);
+  sample = samples->getIndex(0);
   check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
   BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
                     "equal to the correct minimum! "
@@ -260,7 +264,7 @@ BOOST_AUTO_TEST_CASE(test_all_costs) {
 
   minimum_cost_traj = run_test(costEval, reference_path, samples,
                                current_segment_index, 0.0, 0.0, 0.0, 0.0, 1.0);
-  sample = samples.getIndex(0);
+  sample = samples->getIndex(0);
   check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
   BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
                     "equal to the correct minimum! "
@@ -273,9 +277,10 @@ BOOST_AUTO_TEST_CASE(test_all_costs) {
   // Generate test trajectory samples
   samples = generate_ref_path_test_samples(predictionHorizon, timeStep);
 
-  minimum_cost_traj = run_test(costEval, reference_path, samples,
-                               current_segment_index, 0.0, 0.0, 1.0, 0.0, 0.0, true);
-  sample = samples.getIndex(0);
+  minimum_cost_traj =
+      run_test(costEval, reference_path, samples, current_segment_index, 0.0,
+               0.0, 1.0, 0.0, 0.0, true);
+  sample = samples->getIndex(0);
   check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
   BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
                     "equal to the correct minimum! "

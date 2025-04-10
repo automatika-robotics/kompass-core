@@ -5,6 +5,7 @@
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
 #include "utils/transformation.h"
+#include <memory>
 #include <array>
 #include <cmath>
 #include <vector>
@@ -102,7 +103,7 @@ public:
    * the global path
    * @return TrajSearchResult
    */
-  TrajSearchResult getMinTrajectoryCost(const TrajectorySamples2D &trajs,
+  TrajSearchResult getMinTrajectoryCost(const std::unique_ptr<TrajectorySamples2D> &trajs,
                                         const Path::Path &reference_path,
                                         const Path::Path &tracked_segment,
                                         const size_t closest_segment_index);

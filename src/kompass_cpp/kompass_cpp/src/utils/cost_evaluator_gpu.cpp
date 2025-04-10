@@ -179,33 +179,39 @@ CostEvaluator::~CostEvaluator() {
 };
 
 TrajSearchResult CostEvaluator::getMinTrajectoryCost(
-    const TrajectorySamples2D &trajs, const Path::Path &reference_path,
-    const Path::Path &tracked_segment, const size_t closest_segment_index) {
+    const std::unique_ptr<TrajectorySamples2D> &trajs,
+    const Path::Path &reference_path, const Path::Path &tracked_segment,
+    const size_t closest_segment_index) {
 
   try {
     double weight;
     float ref_path_length;
     size_t obs_size;
-    size_t trajs_size = trajs.size();
+    size_t trajs_size = trajs->size();
     std::vector<sycl::event> events;
 
-    m_q.fill(m_devicePtrCosts, 0.0, trajs_size);
+    m_q.fill(m_devicePtrCosts, 0.0, trajs_size).wait();
 
-    m_q.memcpy(m_devicePtrPathsX, trajs.paths.x.data(),
-               sizeof(float) * trajs_size * numPointsPerTrajectory_);
-    m_q.memcpy(m_devicePtrPathsY, trajs.paths.y.data(),
-               sizeof(float) * trajs_size * numPointsPerTrajectory_);
-    m_q.memcpy(m_devicePtrVelocitiesVx, trajs.velocities.vx.data(),
-               sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1));
-    m_q.memcpy(m_devicePtrVelocitiesVy, trajs.velocities.vy.data(),
-               sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1));
-    m_q.memcpy(m_devicePtrVelocitiesOmega, trajs.velocities.omega.data(),
-               sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1));
+    m_q.memcpy(m_devicePtrPathsX, trajs->paths.x.data(),
+               sizeof(float) * trajs_size * numPointsPerTrajectory_)
+        .wait();
+    m_q.memcpy(m_devicePtrPathsY, trajs->paths.y.data(),
+               sizeof(float) * trajs_size * numPointsPerTrajectory_)
+        .wait();
+    m_q.memcpy(m_devicePtrVelocitiesVx, trajs->velocities.vx.data(),
+               sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1))
+        .wait();
+    m_q.memcpy(m_devicePtrVelocitiesVy, trajs->velocities.vy.data(),
+               sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1))
+        .wait();
+    m_q.memcpy(m_devicePtrVelocitiesOmega, trajs->velocities.omega.data(),
+               sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1))
+        .wait();
     m_minCost->cost = std::numeric_limits<float>::max();
     m_minCost->sampleIndex = 0;
 
     // wait for all data to be transferred
-    m_q.wait();
+    // m_q.wait();
 
     if ((costWeights.getParameter<double>("reference_path_distance_weight") >
              0.0 ||
@@ -259,7 +265,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     // calculate costs on the CPU
     if (customTrajCostsPtrs_.size() > 0) {
       size_t idx = 0;
-      for (const auto traj : trajs) {
+      for (const auto traj : *trajs) {
         m_devicePtrTempCosts[idx] = 0.0;
         for (const auto &custom_cost : customTrajCostsPtrs_) {
           // custom cost functions takes in the trajectory and the reference
@@ -301,7 +307,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
        })
         .wait();
 
-    return {trajs.getIndex(m_minCost->sampleIndex), true, m_minCost->cost};
+    return {trajs->getIndex(m_minCost->sampleIndex), true, m_minCost->cost};
   } catch (const sycl::exception &e) {
     LOG_ERROR("Exception caught: ", e.what());
   }
