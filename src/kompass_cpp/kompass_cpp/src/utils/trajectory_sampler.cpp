@@ -1,6 +1,7 @@
 #include <array>
 #include <cmath>
 #include <cstdlib>
+#include <memory>
 #include <mutex>
 #include <vector>
 
@@ -247,13 +248,16 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
       admissible_velocity_trajectories->push_back(simulated_velocities, path);
     }
   }
-  return;
 }
 
-TrajectorySamples2D TrajectorySampler::generateTrajectoriesAckermann(
+std::unique_ptr<TrajectorySamples2D>
+TrajectorySampler::generateTrajectoriesAckermann(
     const Velocity2D &current_vel, const Path::State &current_pose) {
-  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories,
-                                                       numPointsPerTrajectory);
+  // create admissible trajectories container and pass raw ptr to generation
+  // functions for the sake of multithreaded ownership handlings
+  std::unique_ptr<TrajectorySamples2D> admissible_velocity_trajectories =
+      std::make_unique<TrajectorySamples2D>(numTrajectories,
+                                            numPointsPerTrajectory);
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
     // Implements generating smooth arc-like trajectories within the admissible
@@ -266,7 +270,7 @@ TrajectorySamples2D TrajectorySampler::generateTrajectoriesAckermann(
           Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
           // Get admissible trajectories in separate threads
           pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
-                       current_pose, &admissible_velocity_trajectories);
+                       current_pose, admissible_velocity_trajectories.get());
         }
       }
     }
@@ -278,21 +282,25 @@ TrajectorySamples2D TrajectorySampler::generateTrajectoriesAckermann(
 
           Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
           getAdmissibleTrajsFromVel(vel, current_pose,
-                                    &admissible_velocity_trajectories);
+                                    admissible_velocity_trajectories.get());
         }
       }
     }
   }
   LOG_DEBUG("Got admissible trajectories: ",
-            admissible_velocity_trajectories.velocities.velocitiesIndex_ + 1);
+            admissible_velocity_trajectories->velocities.velocitiesIndex_ + 1);
   return admissible_velocity_trajectories;
 }
 
-TrajectorySamples2D TrajectorySampler::generateTrajectoriesDiffDrive(
+std::unique_ptr<TrajectorySamples2D>
+TrajectorySampler::generateTrajectoriesDiffDrive(
     const Velocity2D &current_vel, const Path::State &current_pose) {
 
-  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories,
-                                                       numPointsPerTrajectory);
+  // create admissible trajectories container and pass raw ptr to generation
+  // functions for the sake of multithreaded ownership handlings
+  std::unique_ptr<TrajectorySamples2D> admissible_velocity_trajectories =
+      std::make_unique<TrajectorySamples2D>(numTrajectories,
+                                            numPointsPerTrajectory);
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
 
@@ -301,7 +309,7 @@ TrajectorySamples2D TrajectorySampler::generateTrajectoriesDiffDrive(
       Velocity2D vel = Velocity2D(vx, 0.0, 0.0); // Limit Y movement
       // Get admissible trajectories in separate threads
       pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
-                   current_pose, &admissible_velocity_trajectories);
+                   current_pose, admissible_velocity_trajectories.get());
       // Generate rotation trajectories (Rotate then move)
       for (double omega = min_omega_; omega <= max_omega_;
            omega += ang_sample_resolution_) {
@@ -309,7 +317,7 @@ TrajectorySamples2D TrajectorySampler::generateTrajectoriesDiffDrive(
         // Get admissible trajectories in separate threads
         pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive,
                      this, vel, current_pose,
-                     &admissible_velocity_trajectories);
+                     admissible_velocity_trajectories.get());
       }
     }
   } else {
@@ -317,26 +325,29 @@ TrajectorySamples2D TrajectorySampler::generateTrajectoriesDiffDrive(
     for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
       Velocity2D vel = Velocity2D(vx, 0.0, 0.0); // Limit Y movement
       getAdmissibleTrajsFromVel(vel, current_pose,
-                                &admissible_velocity_trajectories);
+                                admissible_velocity_trajectories.get());
       // Generate rotation trajectories (Rotate then move)
       for (double omega = min_omega_; omega <= max_omega_;
            omega += ang_sample_resolution_) {
         Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
-        getAdmissibleTrajsFromVelDiffDrive(vel, current_pose,
-                                           &admissible_velocity_trajectories);
+        getAdmissibleTrajsFromVelDiffDrive(
+            vel, current_pose, admissible_velocity_trajectories.get());
       }
     }
   }
   LOG_DEBUG("Got admissible trajectories: ",
-            admissible_velocity_trajectories.velocities.velocitiesIndex_ + 1);
+            admissible_velocity_trajectories->velocities.velocitiesIndex_ + 1);
   return admissible_velocity_trajectories;
 }
 
-TrajectorySamples2D
+std::unique_ptr<TrajectorySamples2D>
 TrajectorySampler::generateTrajectoriesOmni(const Velocity2D &current_vel,
                                             const Path::State &current_pose) {
-  TrajectorySamples2D admissible_velocity_trajectories(numTrajectories,
-                                                       numPointsPerTrajectory);
+  // create admissible trajectories container and pass raw ptr to generation
+  // functions for the sake of multithreaded ownership handlings
+  std::unique_ptr<TrajectorySamples2D> admissible_velocity_trajectories =
+      std::make_unique<TrajectorySamples2D>(numTrajectories,
+                                            numPointsPerTrajectory);
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
     // Generate forward/backward trajectories
@@ -344,7 +355,7 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity2D &current_vel,
       Velocity2D vel = Velocity2D(vx, 0.0, 0.0);
       // Get admissible trajectories in separate threads
       pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
-                   current_pose, &admissible_velocity_trajectories);
+                   current_pose, admissible_velocity_trajectories.get());
     }
 
     // Generate lateral left/right trajectories
@@ -352,7 +363,7 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity2D &current_vel,
       Velocity2D vel = Velocity2D(0.0, vy, 0.0);
       // Get admissible trajectories in separate threads
       pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
-                   current_pose, &admissible_velocity_trajectories);
+                   current_pose, admissible_velocity_trajectories.get());
     }
 
     // Generate rotation trajectories (Rotate then move forward)
@@ -363,7 +374,7 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity2D &current_vel,
         // Get admissible trajectories in separate threads
         pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive,
                      this, vel, current_pose,
-                     &admissible_velocity_trajectories);
+                     admissible_velocity_trajectories.get());
       }
     }
 
@@ -375,7 +386,7 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity2D &current_vel,
         // Get admissible trajectories in separate threads
         pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive,
                      this, vel, current_pose,
-                     &admissible_velocity_trajectories);
+                     admissible_velocity_trajectories.get());
       }
     }
   } else {
@@ -384,14 +395,14 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity2D &current_vel,
     for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
       Velocity2D vel = Velocity2D(vx, 0.0, 0.0);
       getAdmissibleTrajsFromVel(vel, current_pose,
-                                &admissible_velocity_trajectories);
+                                admissible_velocity_trajectories.get());
     }
 
     // Generate lateral left/right trajectories
     for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
       Velocity2D vel = Velocity2D(0.0, vy, 0.0);
       getAdmissibleTrajsFromVel(vel, current_pose,
-                                &admissible_velocity_trajectories);
+                                admissible_velocity_trajectories.get());
     }
 
     // Generate rotation trajectories (Rotate then move forward)
@@ -399,8 +410,8 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity2D &current_vel,
       for (double omega = min_omega_; omega <= max_omega_;
            omega += ang_sample_resolution_) {
         Velocity2D vel = Velocity2D(vx, 0.0, omega);
-        getAdmissibleTrajsFromVelDiffDrive(vel, current_pose,
-                                           &admissible_velocity_trajectories);
+        getAdmissibleTrajsFromVelDiffDrive(
+            vel, current_pose, admissible_velocity_trajectories.get());
       }
     }
 
@@ -409,17 +420,17 @@ TrajectorySampler::generateTrajectoriesOmni(const Velocity2D &current_vel,
       for (double omega = min_omega_; omega <= max_omega_;
            omega += ang_sample_resolution_) {
         Velocity2D vel = Velocity2D(0.0, vy, omega);
-        getAdmissibleTrajsFromVelDiffDrive(vel, current_pose,
-                                           &admissible_velocity_trajectories);
+        getAdmissibleTrajsFromVelDiffDrive(
+            vel, current_pose, admissible_velocity_trajectories.get());
       }
     }
   }
   LOG_DEBUG("Got admissible trajectories: ",
-            admissible_velocity_trajectories.velocities.velocitiesIndex_ + 1);
+            admissible_velocity_trajectories->velocities.velocitiesIndex_ + 1);
   return admissible_velocity_trajectories;
 }
 
-TrajectorySamples2D
+std::unique_ptr<TrajectorySamples2D>
 TrajectorySampler::getNewTrajectories(const Velocity2D &current_vel,
                                       const Path::State &current_pose) {
   // Get the range of reachable velocities from the current velocity
@@ -440,7 +451,7 @@ TrajectorySampler::getNewTrajectories(const Velocity2D &current_vel,
   }
 }
 
-TrajectorySamples2D
+std::unique_ptr<TrajectorySamples2D>
 TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
                                         const Path::State &current_pose,
                                         const Control::LaserScan &scan) {
@@ -451,7 +462,7 @@ TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
   return getNewTrajectories(current_vel, current_pose);
 }
 
-TrajectorySamples2D
+std::unique_ptr<TrajectorySamples2D>
 TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
                                         const Path::State &current_pose,
                                         const std::vector<Path::Point> &cloud) {

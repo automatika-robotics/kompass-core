@@ -108,11 +108,11 @@ public:
    * @return TrajectorySamples2D
    */
 
-  TrajectorySamples2D generateTrajectories(const Velocity2D &current_vel,
-                                           const Path::State &current_pose,
-                                           const LaserScan &scan);
+  std::unique_ptr<TrajectorySamples2D>
+  generateTrajectories(const Velocity2D &current_vel,
+                       const Path::State &current_pose, const LaserScan &scan);
 
-  TrajectorySamples2D
+  std::unique_ptr<TrajectorySamples2D>
   generateTrajectories(const Velocity2D &current_vel,
                        const Path::State &current_pose,
                        const std::vector<Path::Point> &cloud);
@@ -167,8 +167,9 @@ private:
    */
   void UpdateReachableVelocityRange(Control::Velocity2D currentVel);
 
-  TrajectorySamples2D getNewTrajectories(const Velocity2D &current_vel,
-                                         const Path::State &current_pose);
+  std::unique_ptr<TrajectorySamples2D>
+  getNewTrajectories(const Velocity2D &current_vel,
+                     const Path::State &current_pose);
 
   /**
    * @brief Get the admissible constant velocity trajectories from a starting
@@ -195,7 +196,7 @@ private:
    * @param scan
    * @return std::vector<Trajectory>
    */
-  TrajectorySamples2D
+  std::unique_ptr<TrajectorySamples2D>
   generateTrajectoriesAckermann(const Velocity2D &current_vel,
                                 const Path::State &current_pose);
 
@@ -207,7 +208,7 @@ private:
    * @param scan
    * @return std::vector<Trajectory>
    */
-  TrajectorySamples2D
+  std::unique_ptr<TrajectorySamples2D>
   generateTrajectoriesDiffDrive(const Velocity2D &current_vel,
                                 const Path::State &current_pose);
 
@@ -219,8 +220,9 @@ private:
    * @param scan
    * @return std::vector<Trajectory>
    */
-  TrajectorySamples2D generateTrajectoriesOmni(const Velocity2D &current_vel,
-                                               const Path::State &current_pose);
+  std::unique_ptr<TrajectorySamples2D>
+  generateTrajectoriesOmni(const Velocity2D &current_vel,
+                           const Path::State &current_pose);
 };
 }; // namespace Control
 } // namespace Kompass

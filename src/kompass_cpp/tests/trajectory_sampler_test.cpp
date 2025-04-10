@@ -87,7 +87,7 @@ void testTrajSampler() {
 
     // Robot initial velocity control
     Control::Velocity2D robotControl;
-    Control::TrajectorySamples2D samples;
+    std::unique_ptr<Control::TrajectorySamples2D> samples;
 
     LOG_INFO("TESTING ", Control::controlTypeToString(robot_types[j]));
 
@@ -106,7 +106,7 @@ void testTrajSampler() {
         Control::controlTypeToString(robot_types[j]);
     std::string ref_path_filename = file_location + "/ref_path";
 
-    saveTrajectoriesToJson(samples, trajectories_filename + ".json");
+    saveTrajectoriesToJson(*samples, trajectories_filename + ".json");
     savePathToJson(path, ref_path_filename + ".json");
 
     std::string command =
