@@ -190,7 +190,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     size_t trajs_size = trajs->size();
     std::vector<sycl::event> events;
 
-    m_q.fill(m_devicePtrCosts, 0.0, trajs_size);
+    m_q.fill(m_devicePtrCosts, 0.0f, trajs_size);
 
     m_q.memcpy(m_devicePtrPathsX, trajs->paths.x.data(),
                sizeof(float) * trajs_size * numPointsPerTrajectory_);
@@ -350,7 +350,7 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
           // Initialize local memory once per work-group in the first thread
           if (path_index == 0) {
             for (size_t i = 0; i < trajsSize; ++i) {
-              trajCost[i] = 0;
+              trajCost[i] = 0.0f;
             }
           }
           // Synchronize to make sure initialization is complete
@@ -490,7 +490,7 @@ sycl::event CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
           // Initialize local memory once per work-group in the first thread
           if (vel_item == 0) {
             for (size_t i = 0; i < trajsSize; ++i) {
-              trajCost[i] = 0;
+              trajCost[i] = 0.0f;
             }
           }
           // Synchronize to make sure initialization is complete
@@ -586,7 +586,7 @@ sycl::event CostEvaluator::jerkCostFunc(const size_t trajs_size,
           // Initialize local memory once per work-group in the first thread
           if (vel_point == 0) {
             for (size_t i = 0; i < trajsSize; ++i) {
-              trajCost[i] = 0;
+              trajCost[i] = 0.0f;
             }
           }
           // Synchronize to make sure initialization is complete
