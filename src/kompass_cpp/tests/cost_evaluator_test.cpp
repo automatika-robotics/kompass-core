@@ -100,8 +100,55 @@ generate_smoothness_test_samples(double predictionHorizon, double timeStep) {
   return samples;
 }
 
-bool check_sample_equal_result(TrajectoryPath sample_path,
-                               TrajectoryPath traj_path) {
+// --- Test Runner Function (uses the global costEval instance via reference)
+// ---
+Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
+                      std::unique_ptr<TrajectorySamples2D> &samples,
+                      const size_t current_segment_index,
+                      const double reference_path_distance_weight,
+                      const double goal_distance_weight,
+                      const double obstacles_distance_weight,
+                      const double smoothness_weight, const double jerk_weight,
+                      const bool add_obstacles = false) {
+
+  // Cost weights specific to this run
+  CostEvaluator::TrajectoryCostsWeights run_costWeights;
+  run_costWeights.setParameter("reference_path_distance_weight",
+                               reference_path_distance_weight);
+  run_costWeights.setParameter("obstacles_distance_weight",
+                               obstacles_distance_weight);
+  run_costWeights.setParameter("goal_distance_weight", goal_distance_weight);
+  run_costWeights.setParameter("smoothness_weight", smoothness_weight);
+  run_costWeights.setParameter("jerk_weight", jerk_weight);
+  costEval.updateCostWeights(
+      run_costWeights); // Update the *single* evaluator instance
+
+  if (add_obstacles) {
+    LaserScan robotScan({10.0f, 0.5f, 0.5f},
+                        {0.0f, (float)M_PI_4, (float)(2.0 * M_PI - M_PI_4)});
+    float maxObstaclesDist = 10.0f;
+    // Update the *single* evaluator instance's obstacle data
+    costEval.setPointScan(robotScan, Path::State(), maxObstaclesDist);
+  }
+
+  TrajSearchResult result = costEval.getMinTrajectoryCost(
+      samples, reference_path, reference_path.segments[current_segment_index],
+      current_segment_index);
+
+  BOOST_TEST(result.isTrajFound, "Minimum cost trajectory is not found!");
+
+  if (result.isTrajFound) {
+    LOG_INFO("Cost Evaluator Returned a Minimum Cost Path With Cost: ",
+             result.trajCost);
+  } else {
+    throw std::logic_error(
+        "Did not find any valid trajectory, this should not happen.");
+  }
+  return result.trajectory;
+}
+
+bool check_sample_equal_result(const TrajectoryPath &sample_path,
+                               const TrajectoryPath &traj_path) {
   if (sample_path.x.size() != traj_path.x.size()) {
     LOG_INFO("Sample path and trajectory path do not contain the same number "
              "of points");
@@ -117,7 +164,12 @@ bool check_sample_equal_result(TrajectoryPath sample_path,
   return true;
 }
 
+// --- Global Fixture Definition ---
 struct TestConfig {
+  // Static pointer to the single instance
+  static TestConfig *instance;
+
+  // --- Members needed by tests ---
   std::vector<Path::Point> points;
   Path::Path reference_path;
   double max_path_length;
@@ -125,7 +177,6 @@ struct TestConfig {
   size_t current_segment_index;
   double timeStep;
   double predictionHorizon;
-  int maxNumThreads;
   LinearVelocityControlParams x_params;
   LinearVelocityControlParams y_params;
   AngularVelocityControlParams angular_params;
@@ -134,159 +185,195 @@ struct TestConfig {
   std::vector<float> robotDimensions;
   std::array<float, 3> sensor_position_body;
   std::array<float, 4> sensor_rotation_body;
-  CostEvaluator::TrajectoryCostsWeights costWeights;
-  CostEvaluator costEval;
+  CostEvaluator::TrajectoryCostsWeights costWeights; // Holds current weights
+  CostEvaluator costEval; // The cost evaluator instance
 
+  // Constructor: Setup runs ONCE
   TestConfig()
       : points{Path::Point(0.0, 0.0, 0.0), Path::Point(1.0, 0.0, 0.0),
                Path::Point(2.0, 0.0, 0.0)},
         reference_path(points), max_path_length(10.0),
         max_interpolation_point_dist(0.01), current_segment_index(0),
-        timeStep(0.1), predictionHorizon(1.0), maxNumThreads(10),
+        timeStep(0.1), predictionHorizon(1.0),
         x_params(1, 3, 5), y_params(1, 3, 5), angular_params(3.14, 3, 5, 8),
         controlLimits(x_params, y_params, angular_params),
         robotShapeType(CollisionChecker::ShapeType::BOX),
         robotDimensions{0.3, 0.3, 1.0}, sensor_position_body{0.0, 0.0, 0.5},
-        sensor_rotation_body{0, 0, 0, 1}, costWeights(),
-        costEval(costWeights, controlLimits, 10, predictionHorizon / timeStep,
-                 max_path_length / max_interpolation_point_dist) {
+        sensor_rotation_body{0.0f, 0.0f, 0.0f, 1.0f}, // Use 0.0f for float
+        costEval(costWeights, controlLimits, 10,
+                 static_cast<size_t>(predictionHorizon / timeStep),
+                 static_cast<size_t>(max_path_length /
+                                     max_interpolation_point_dist)) {
     reference_path.setMaxLength(max_path_length);
     reference_path.interpolate(max_interpolation_point_dist,
                                Path::InterpolationType::LINEAR);
     reference_path.segment(1.0);
   }
+
+  // Destructor: Teardown runs ONCE
+  ~TestConfig() {
+    LOG_INFO("--- Global TestConfig Destroyed ONCE ---");
+    /*instance = nullptr;*/
+  }
+
+  // Prevent copying/moving
+  TestConfig(const TestConfig &) = delete;
+  TestConfig &operator=(const TestConfig &) = delete;
+  TestConfig(TestConfig &&) = delete;
+  TestConfig &operator=(TestConfig &&) = delete;
 };
 
-Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
-                      std::unique_ptr<TrajectorySamples2D> &samples,
-                      const size_t current_segment_index,
-                      const double reference_path_distance_weight,
-                      const double goal_distance_weight,
-                      const double obstacles_distance_weight,
-                      const double smoothness_weight, const double jerk_weight,
-                      const bool add_obstacles = false) {
+// Define the static member outside the class
+/*TestConfig *TestConfig::instance = nullptr;*/
 
-  // Cost weights
-  CostEvaluator::TrajectoryCostsWeights costWeights;
-  costWeights.setParameter("reference_path_distance_weight",
-                           reference_path_distance_weight);
-  costWeights.setParameter("obstacles_distance_weight",
-                           obstacles_distance_weight);
-  costWeights.setParameter("goal_distance_weight", goal_distance_weight);
-  costWeights.setParameter("smoothness_weight", smoothness_weight);
-  costWeights.setParameter("jerk_weight", jerk_weight);
-  costEval.updateCostWeights(costWeights);
+// Register TestConfig as a global fixture managed by Boost Test
+/*BOOST_GLOBAL_FIXTURE(TestConfig);*/
 
-  if (add_obstacles) {
-    // Robot laserscan value (empty)
-    LaserScan robotScan({10.0, 0.5, 0.5}, {0, M_PI_4, 2 * M_PI - M_PI_4});
-    float maxObstaclesDist = 10.0;
-    costEval.setPointScan(robotScan, Path::State(), maxObstaclesDist);
-  }
-
-  TrajSearchResult result = costEval.getMinTrajectoryCost(
-      samples, reference_path, reference_path.segments[current_segment_index],
-      current_segment_index);
-
-  BOOST_TEST(result.isTrajFound,
-             "Minimum reference path cost trajectory is not found!");
-
-  if (result.isTrajFound) {
-    LOG_INFO("Cost Evaluator Returned a Minimum Cost Path With Cost: ",
-             result.trajCost);
-  } else {
-    throw std::logic_error(
-        "Did not find any valid trajectory, this should not happen.");
-  }
-  return result.trajectory;
-}
-
+// --- Test Suite Definition ---
 BOOST_FIXTURE_TEST_SUITE(s, TestConfig)
 
-TrajectorySamples2D samples;
-Trajectory2D minimum_cost_traj;
-Trajectory2D sample;
-bool check;
-
-BOOST_AUTO_TEST_CASE(test_all_costs) {
-  // Create timer
-  Timer time;
+// Test Case 1: Reference Path Cost
+BOOST_AUTO_TEST_CASE(test_reference_path_cost) {
   LOG_INFO("Running Reference Path Cost Test");
   // Generate test trajectory samples
   std::unique_ptr<TrajectorySamples2D> samples =
       generate_ref_path_test_samples(predictionHorizon, timeStep);
 
-  minimum_cost_traj = run_test(costEval, reference_path, samples,
-                               current_segment_index, 1.0, 0.0, 0.0, 0.0, 0.0);
+  Trajectory2D minimum_cost_traj =
+      run_test(costEval, reference_path, samples, current_segment_index,
+               1.0,  // reference_path_distance_weight
+               0.0,  // goal_distance_weight
+               0.0,  // obstacles_distance_weight
+               0.0,  // smoothness_weight
+               0.0); // jerk_weight
   // In the generated samples the first sample contains the minimum cost path
-  sample = samples->getIndex(0);
-  check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
-  BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
-                    "equal to the correct minimum! "
-                        << minimum_cost_traj.path.x);
+  Trajectory2D expected_sample =
+      samples->getIndex(0); // Assuming getIndex exists
+  bool check =
+      check_sample_equal_result(expected_sample.path, minimum_cost_traj.path);
+  BOOST_TEST(check, "Reference Path Cost Test: Minimum cost trajectory is "
+                    "found but not equal to the expected minimum! Got: "
+                        << minimum_cost_traj.path.x
+                        << ", Expected: " << expected_sample.path.x);
   if (check) {
-    LOG_INFO("Test Passed!");
+    LOG_INFO("Reference Path Cost Test Passed!");
   }
+}
 
+// Test Case 2: Goal Distance Cost
+BOOST_AUTO_TEST_CASE(test_goal_cost) {
   LOG_INFO("Running Goal Cost Test");
   // Generate test trajectory samples
-  samples = generate_ref_path_test_samples(predictionHorizon, timeStep);
+  std::unique_ptr<TrajectorySamples2D> samples =
+      generate_ref_path_test_samples(predictionHorizon, timeStep);
 
-  minimum_cost_traj = run_test(costEval, reference_path, samples,
-                               current_segment_index, 0.0, 1.0, 0.0, 0.0, 0.0);
-  sample = samples->getIndex(0);
-  check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
-  BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
-                    "equal to the correct minimum! "
-                        << minimum_cost_traj.path.x);
+  Trajectory2D minimum_cost_traj =
+      run_test(costEval, reference_path, samples, current_segment_index,
+               0.0,  // reference_path_distance_weight
+               1.0,  // goal_distance_weight
+               0.0,  // obstacles_distance_weight
+               0.0,  // smoothness_weight
+               0.0); // jerk_weight
+  Trajectory2D expected_sample = samples->getIndex(
+      0); // Assuming sample 0 is still the best for goal cost in this setup
+  bool check =
+      check_sample_equal_result(expected_sample.path, minimum_cost_traj.path);
+  BOOST_TEST(check, "Goal Cost Test: Minimum cost trajectory is found but not "
+                    "equal to the expected minimum! Got: "
+                        << minimum_cost_traj.path.x
+                        << ", Expected: " << expected_sample.path.x);
   if (check) {
-    LOG_INFO("Test Passed!");
+    LOG_INFO("Goal Cost Test Passed!");
   }
+}
 
+// Test Case 3: Smoothness Cost
+BOOST_AUTO_TEST_CASE(test_smoothness_cost) {
   LOG_INFO("Running Smoothness Cost Test");
-  // Generate test trajectory samples
-  samples = generate_smoothness_test_samples(predictionHorizon, timeStep);
+  // Generate test trajectory samples specifically for smoothness
+  std::unique_ptr<TrajectorySamples2D> samples =
+      generate_smoothness_test_samples(predictionHorizon, timeStep);
 
-  minimum_cost_traj = run_test(costEval, reference_path, samples,
-                               current_segment_index, 0.0, 0.0, 0.0, 1.0, 0.0);
-  sample = samples->getIndex(0);
-  check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
-  BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
-                    "equal to the correct minimum! "
-                        << minimum_cost_traj.path.x);
+  Trajectory2D minimum_cost_traj =
+      run_test(costEval, reference_path, samples, current_segment_index,
+               0.0,  // reference_path_distance_weight
+               0.0,  // goal_distance_weight
+               0.0,  // obstacles_distance_weight
+               1.0,  // smoothness_weight
+               0.0); // jerk_weight
+  // Sample 0 in generate_smoothness_test_samples is designed to be the
+  // smoothest
+  Trajectory2D expected_sample = samples->getIndex(0);
+  bool check =
+      check_sample_equal_result(expected_sample.path, minimum_cost_traj.path);
+  BOOST_TEST(check, "Smoothness Cost Test: Minimum cost trajectory is found "
+                    "but not equal to the expected minimum! Got: "
+                        << minimum_cost_traj.path.x
+                        << ", Expected: " << expected_sample.path.x);
   if (check) {
-    LOG_INFO("Test Passed!");
+    LOG_INFO("Smoothness Cost Test Passed!");
   }
+}
 
+// Test Case 4: Jerk Cost
+BOOST_AUTO_TEST_CASE(test_jerk_cost) {
   LOG_INFO("Running Jerk Cost Test");
-  // Generate test trajectory samples
-  samples = generate_smoothness_test_samples(predictionHorizon, timeStep);
+  // Generate test trajectory samples specifically for smoothness/jerk
+  std::unique_ptr<TrajectorySamples2D> samples =
+      generate_smoothness_test_samples(predictionHorizon, timeStep);
 
-  minimum_cost_traj = run_test(costEval, reference_path, samples,
-                               current_segment_index, 0.0, 0.0, 0.0, 0.0, 1.0);
-  sample = samples->getIndex(0);
-  check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
-  BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
-                    "equal to the correct minimum! "
-                        << minimum_cost_traj.path.x);
+  Trajectory2D minimum_cost_traj =
+      run_test(costEval, reference_path, samples, current_segment_index,
+               0.0,  // reference_path_distance_weight
+               0.0,  // goal_distance_weight
+               0.0,  // obstacles_distance_weight
+               0.0,  // smoothness_weight
+               1.0); // jerk_weight
+  // Sample 0 in generate_smoothness_test_samples is also expected to have the
+  // lowest jerk
+  Trajectory2D expected_sample = samples->getIndex(0);
+  bool check =
+      check_sample_equal_result(expected_sample.path, minimum_cost_traj.path);
+  BOOST_TEST(check, "Jerk Cost Test: Minimum cost trajectory is found but not "
+                    "equal to the expected minimum! Got: "
+                        << minimum_cost_traj.path.x
+                        << ", Expected: " << expected_sample.path.x);
   if (check) {
-    LOG_INFO("Test Passed!");
+    LOG_INFO("Jerk Cost Test Passed!");
   }
+}
 
+// Test Case 5: Obstacles Distance Cost
+BOOST_AUTO_TEST_CASE(test_obstacles_cost) {
   LOG_INFO("Running Obstacles Cost Test");
-  // Generate test trajectory samples
-  samples = generate_ref_path_test_samples(predictionHorizon, timeStep);
+  // Generate reference path samples (obstacles are added in run_test)
+  std::unique_ptr<TrajectorySamples2D> samples =
+      generate_ref_path_test_samples(predictionHorizon, timeStep);
 
-  minimum_cost_traj =
-      run_test(costEval, reference_path, samples, current_segment_index, 0.0,
-               0.0, 1.0, 0.0, 0.0, true);
-  sample = samples->getIndex(0);
-  check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
-  BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
-                    "equal to the correct minimum! "
-                        << minimum_cost_traj.path.x);
+  Trajectory2D minimum_cost_traj =
+      run_test(costEval, reference_path, samples, current_segment_index,
+               0.0,   // reference_path_distance_weight
+               0.0,   // goal_distance_weight
+               1.0,   // obstacles_distance_weight
+               0.0,   // smoothness_weight
+               0.0,   // jerk_weight
+               true); // Add obstacles
+  // With the specific obstacle setup (0.5m at +/- 45deg), sample 0 (straight
+  // path) might still be the best if it doesn't collide or comes closest
+  // safely. This depends heavily on the collision checking logic and exact
+  // obstacle placement. Assuming sample 0 remains the expected best for this
+  // simple obstacle scenario.
+  Trajectory2D expected_sample = samples->getIndex(0);
+  bool check =
+      check_sample_equal_result(expected_sample.path, minimum_cost_traj.path);
+  // Note: The assertion message might need refinement if sample 0 is *not* the
+  // expected best with obstacles.
+  BOOST_TEST(check, "Obstacles Cost Test: Minimum cost trajectory is found but "
+                    "not equal to the expected minimum! Got: "
+                        << minimum_cost_traj.path.x
+                        << ", Expected: " << expected_sample.path.x);
   if (check) {
-    LOG_INFO("Test Passed!");
+    LOG_INFO("Obstacles Cost Test Passed!");
   }
 }
 

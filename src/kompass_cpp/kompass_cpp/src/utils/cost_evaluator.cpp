@@ -55,8 +55,8 @@ CostEvaluator::~CostEvaluator() {
 };
 
 TrajSearchResult CostEvaluator::getMinTrajectoryCost(
-    const std::unique_ptr<TrajectorySamples2D> &trajs, const Path::Path &reference_path,
-    const Path::Path &tracked_segment, const size_t closest_segment_index) {
+    const std::unique_ptr<TrajectorySamples2D> &trajs,
+    const Path::Path &reference_path) {
   double weight;
   float total_cost;
   float ref_path_length;

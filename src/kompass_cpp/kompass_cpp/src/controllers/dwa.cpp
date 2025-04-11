@@ -204,11 +204,8 @@ TrajSearchResult DWA::findBestPath(const Velocity2D &global_vel,
 
   trajCostEvaluator->setPointScan(scan_points, currentState, maxLocalRange_);
 
-  Path::Path trackedRefPathSegment = findTrackedPathSegment();
-
   // Evaluate the samples and get the sample with the minimum cost
-  return trajCostEvaluator->getMinTrajectoryCost(
-      samples_, *currentPath, trackedRefPathSegment, current_segment_index_);
+  return trajCostEvaluator->getMinTrajectoryCost(samples_, *currentPath);
 }
 
 template <typename T>
