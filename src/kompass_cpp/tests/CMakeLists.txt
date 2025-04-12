@@ -50,4 +50,6 @@ if(AdaptiveCpp_FOUND)
   add_sycl_to_target(TARGET collisions_test_gpu SOURCES collisions_test_gpu.cpp)
   add_test(collisions_tests collisions_test_gpu)
 
+  # Add sycl to cost evaluator test if AdaptiveCpp found
+  add_sycl_to_target(TARGET cost_evaluator_test SOURCES fake_test.cpp)
 endif()

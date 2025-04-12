@@ -5,9 +5,9 @@
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
 #include "utils/transformation.h"
-#include <memory>
 #include <array>
 #include <cmath>
+#include <memory>
 #include <vector>
 #ifdef GPU
 #include <sycl/sycl.hpp>
@@ -103,10 +103,9 @@ public:
    * the global path
    * @return TrajSearchResult
    */
-  TrajSearchResult getMinTrajectoryCost(const std::unique_ptr<TrajectorySamples2D> &trajs,
-                                        const Path::Path &reference_path,
-                                        const Path::Path &tracked_segment,
-                                        const size_t closest_segment_index);
+  TrajSearchResult
+  getMinTrajectoryCost(const std::unique_ptr<TrajectorySamples2D> &trajs,
+                       const Path::Path &reference_path);
 
   /**
    * @brief Adds a new custome cost to be used in the trajectory evaluation
