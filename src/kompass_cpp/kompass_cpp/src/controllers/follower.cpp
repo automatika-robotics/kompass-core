@@ -29,6 +29,7 @@ Follower::Follower() : Controller(), config() {
   } else {
     rotate_in_place = true;
   }
+  maxSegmentSize = getMaxSegmentSize();
 }
 
 Follower::Follower(FollowerParameters config) : Controller() {
@@ -47,6 +48,7 @@ Follower::Follower(FollowerParameters config) : Controller() {
   } else {
     rotate_in_place = true;
   }
+  maxSegmentSize = getMaxSegmentSize();
 }
 
 Follower::~Follower() {
@@ -57,6 +59,13 @@ Follower::~Follower() {
     delete currentPath;
   }
   delete closestPosition;
+}
+
+size_t Follower::getMaxSegmentSize() const {
+  return this->config.getParameter<double>("path_segment_length") /
+             this->config.getParameter<double>(
+                 "max_point_interpolation_distance") +
+         1;
 }
 
 Follower::Target Follower::getTrackedTarget() const {

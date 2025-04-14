@@ -14,13 +14,13 @@
 namespace Kompass {
 
 namespace Control {
-CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
+CostEvaluator::CostEvaluator(TrajectoryCostsWeights &costsWeights,
                              ControlLimitsParams ctrLimits,
                              size_t maxNumTrajectories,
                              size_t numPointsPerTrajectory,
-                             size_t maxRefPathSize) {
+                             size_t maxRefPathSegmentSize) {
 
-  this->costWeights = costsWeights;
+  this->costWeights = std::make_unique<TrajectoryCostsWeights>(costsWeights);
 
   numTrajectories_ = maxNumTrajectories;
   numPointsPerTrajectory_ = numPointsPerTrajectory;
@@ -28,22 +28,22 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
   accLimits_ = {static_cast<float>(ctrLimits.velXParams.maxAcceleration),
                 static_cast<float>(ctrLimits.velYParams.maxAcceleration),
                 static_cast<float>(ctrLimits.omegaParams.maxAcceleration)};
-  maxRefPathSize_ = maxRefPathSize;
+  maxRefPathSegmentSize_ = maxRefPathSegmentSize;
   initializeGPUMemory();
 }
 
-CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
+CostEvaluator::CostEvaluator(TrajectoryCostsWeights &costsWeights,
                              const std::array<float, 3> &sensor_position_body,
                              const std::array<float, 4> &sensor_rotation_body,
                              ControlLimitsParams ctrLimits,
                              size_t maxNumTrajectories,
                              size_t numPointsPerTrajectory,
-                             size_t maxRefPathSize) {
+                             size_t maxRefPathSegmentSize) {
 
   sensor_tf_body_ =
       getTransformation(Eigen::Quaternionf(sensor_rotation_body.data()),
                         Eigen::Vector3f(sensor_position_body.data()));
-  this->costWeights = costsWeights;
+  this->costWeights = std::make_unique<TrajectoryCostsWeights>(costsWeights);
 
   accLimits_ = {static_cast<float>(ctrLimits.velXParams.maxAcceleration),
                 static_cast<float>(ctrLimits.velYParams.maxAcceleration),
@@ -51,7 +51,7 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights costsWeights,
 
   numTrajectories_ = maxNumTrajectories;
   numPointsPerTrajectory_ = numPointsPerTrajectory;
-  maxRefPathSize_ = maxRefPathSize;
+  maxRefPathSegmentSize_ = maxRefPathSegmentSize;
   initializeGPUMemory();
 }
 
@@ -90,14 +90,14 @@ void CostEvaluator::initializeGPUMemory() {
   m_devicePtrCosts = sycl::malloc_device<float>(numTrajectories_, m_q);
 
   // Cost specific memory allocation
-  if (costWeights.getParameter<double>("reference_path_distance_weight") >
+  if (costWeights->getParameter<double>("reference_path_distance_weight") >
       0.0) {
-    m_devicePtrReferencePathX =
-        sycl::malloc_device<float>(maxRefPathSize_, m_q);
-    m_devicePtrReferencePathY =
-        sycl::malloc_device<float>(maxRefPathSize_, m_q);
+    m_devicePtrTrackedSegmentX =
+        sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
+    m_devicePtrTrackedSegmentY =
+        sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
   };
-  if (costWeights.getParameter<double>("obstacles_distance_weight") > 0.0) {
+  if (costWeights->getParameter<double>("obstacles_distance_weight") > 0.0) {
     m_devicePtrObstaclesX = sycl::malloc_device<float>(max_wg_size_, m_q);
     m_devicePtrObstaclesY = sycl::malloc_device<float>(max_wg_size_, m_q);
   }
@@ -110,18 +110,18 @@ void CostEvaluator::initializeGPUMemory() {
   *m_minCost = LowestCost();
 }
 
-void CostEvaluator::updateCostWeights(TrajectoryCostsWeights costsWeights) {
-  this->costWeights = costsWeights;
+void CostEvaluator::updateCostWeights(TrajectoryCostsWeights &newCostsWeights) {
+  this->costWeights = std::make_unique<TrajectoryCostsWeights>(newCostsWeights);
   // Do Cost specific memory allocation if not already done
-  if (costWeights.getParameter<double>("reference_path_distance_weight") >
+  if (costWeights->getParameter<double>("reference_path_distance_weight") >
           0.0 &&
-      !m_devicePtrReferencePathX && !m_devicePtrReferencePathY) {
-    m_devicePtrReferencePathX =
-        sycl::malloc_device<float>(maxRefPathSize_, m_q);
-    m_devicePtrReferencePathY =
-        sycl::malloc_device<float>(maxRefPathSize_, m_q);
+      !m_devicePtrTrackedSegmentX && !m_devicePtrTrackedSegmentY) {
+    m_devicePtrTrackedSegmentX =
+        sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
+    m_devicePtrTrackedSegmentY =
+        sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
   };
-  if (costWeights.getParameter<double>("obstacles_distance_weight") > 0.0 &&
+  if (costWeights->getParameter<double>("obstacles_distance_weight") > 0.0 &&
       !m_devicePtrObstaclesX && !m_devicePtrObstaclesY) {
     m_devicePtrObstaclesX = sycl::malloc_device<float>(max_wg_size_, m_q);
     m_devicePtrObstaclesY = sycl::malloc_device<float>(max_wg_size_, m_q);
@@ -161,11 +161,11 @@ CostEvaluator::~CostEvaluator() {
   if (m_devicePtrVelocitiesOmega) {
     sycl::free(m_devicePtrVelocitiesOmega, m_q);
   }
-  if (m_devicePtrReferencePathX) {
-    sycl::free(m_devicePtrReferencePathX, m_q);
+  if (m_devicePtrTrackedSegmentX) {
+    sycl::free(m_devicePtrTrackedSegmentX, m_q);
   }
-  if (m_devicePtrReferencePathY) {
-    sycl::free(m_devicePtrReferencePathY, m_q);
+  if (m_devicePtrTrackedSegmentY) {
+    sycl::free(m_devicePtrTrackedSegmentY, m_q);
   }
   if (m_devicePtrObstaclesX) {
     sycl::free(m_devicePtrObstaclesX, m_q);
@@ -180,7 +180,7 @@ CostEvaluator::~CostEvaluator() {
 
 TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     const std::unique_ptr<TrajectorySamples2D> &trajs,
-    const Path::Path &reference_path) {
+    const Path::Path &reference_path, const Path::Path &tracked_segment) {
 
   try {
     double weight;
@@ -208,35 +208,37 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     // wait for all data to be transferred
     m_q.wait();
 
-    if ((costWeights.getParameter<double>("reference_path_distance_weight") >
+    if ((costWeights->getParameter<double>("reference_path_distance_weight") >
              0.0 ||
-         costWeights.getParameter<double>("goal_distance_weight") > 0.0) &&
+         costWeights->getParameter<double>("goal_distance_weight") > 0.0) &&
         (ref_path_length = reference_path.totalPathLength()) > 0.0) {
-      if ((weight = costWeights.getParameter<double>("goal_distance_weight")) >
+      if ((weight = costWeights->getParameter<double>("goal_distance_weight")) >
           0.0) {
         events.push_back(goalCostFunc(trajs_size, reference_path.getEnd(),
                                       ref_path_length, weight));
       }
-      if ((weight = costWeights.getParameter<double>(
+      if ((weight = costWeights->getParameter<double>(
                "reference_path_distance_weight")) > 0.0) {
-        m_q.memcpy(m_devicePtrReferencePathX, reference_path.getX().data(),
-                   sizeof(float) * reference_path.points.size())
+        size_t tracked_segment_size = tracked_segment.points.size();
+        m_q.memcpy(m_devicePtrTrackedSegmentX, tracked_segment.getX().data(),
+                   sizeof(float) * tracked_segment_size)
             .wait();
-        m_q.memcpy(m_devicePtrReferencePathY, reference_path.getY().data(),
-                   sizeof(float) * reference_path.points.size())
+        m_q.memcpy(m_devicePtrTrackedSegmentY, tracked_segment.getY().data(),
+                   sizeof(float) * tracked_segment_size)
             .wait();
-        events.push_back(pathCostFunc(trajs_size, reference_path.points.size(),
-                                      ref_path_length, weight));
+        events.push_back(pathCostFunc(trajs_size, tracked_segment_size,
+                                      tracked_segment.totalPathLength(),
+                                      weight));
       }
     }
-    if ((weight = costWeights.getParameter<double>("smoothness_weight")) >
+    if ((weight = costWeights->getParameter<double>("smoothness_weight")) >
         0.0) {
       events.push_back(smoothnessCostFunc(trajs_size, weight));
     }
-    if ((weight = costWeights.getParameter<double>("jerk_weight")) > 0.0) {
+    if ((weight = costWeights->getParameter<double>("jerk_weight")) > 0.0) {
       events.push_back(jerkCostFunc(trajs_size, weight));
     }
-    if ((weight = costWeights.getParameter<double>(
+    if ((weight = costWeights->getParameter<double>(
              "obstacles_distance_weight")) > 0.0 &&
         (obs_size = obstaclePointsX.size()) > 0) {
       if (obs_size > max_wg_size_) {
@@ -312,8 +314,8 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
 // Compute the cost of a trajectory based on distance to a given reference
 // path
 sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
-                                        const size_t ref_path_size,
-                                        const float ref_path_length,
+                                        const size_t tracked_segment_size,
+                                        const float tracked_segment_length,
                                         const double cost_weight) {
 
   // -----------------------------------------------------
@@ -327,14 +329,14 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
     // local copies of class members to be used inside the kernel
     auto X = m_devicePtrPathsX;
     auto Y = m_devicePtrPathsY;
-    auto ref_X = m_devicePtrReferencePathX;
-    auto ref_Y = m_devicePtrReferencePathY;
+    auto tracked_X = m_devicePtrTrackedSegmentX;
+    auto tracked_Y = m_devicePtrTrackedSegmentY;
     auto costs = m_devicePtrCosts;
-    const float costWeight = cost_weight;
+    const float costWeight = static_cast<float>(cost_weight);
     const size_t trajsSize = trajs_size;
     const size_t pathSize = numPointsPerTrajectory_;
-    const size_t refPathSize = ref_path_size;
-    const float refPathLength = ref_path_length;
+    const size_t trackedSegmentSize = tracked_segment_size;
+    const float trackedSegmentLength = tracked_segment_length;
     // local memory for storing per trajectory average cost
     sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
     auto global_size = sycl::range<1>(trajs_size * pathSize);
@@ -360,10 +362,10 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
           float minDist = std::numeric_limits<float>::max();
           float distance;
 
-          for (size_t i = 0; i < refPathSize; ++i) {
+          for (size_t i = 0; i < trackedSegmentSize; ++i) {
             point = {X[traj * pathSize + path_index],
                      Y[traj * pathSize + path_index]};
-            ref_point = {ref_X[i], ref_Y[i]};
+            ref_point = {tracked_X[i], tracked_Y[i]};
 
             distance = sycl::distance(point, ref_point);
             if (distance < minDist) {
@@ -388,12 +390,14 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
             sycl::vec<float, 2> last_path_point = {
                 X[traj * pathSize + path_index],
                 Y[traj * pathSize + path_index]};
-            sycl::vec<float, 2> last_ref_point = {ref_X[refPathSize - 1],
-                                                  ref_Y[refPathSize - 1]};
+            sycl::vec<float, 2> last_ref_point = {
+                tracked_X[trackedSegmentSize - 1],
+                tracked_Y[trackedSegmentSize - 1]};
 
             // get distance between two last points
             float end_point_distance =
-                sycl::distance(last_path_point, last_ref_point) / refPathLength;
+                sycl::distance(last_path_point, last_ref_point) /
+                trackedSegmentLength;
             trajCost[traj] =
                 costWeight *
                 ((trajCost[traj] / pathSize + end_point_distance) / 2);
@@ -413,7 +417,7 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
 // Compute the cost of trajectory based on distance to the goal point
 sycl::event CostEvaluator::goalCostFunc(const size_t trajs_size,
                                         const Path::Point &last_ref_point,
-                                        const float path_length,
+                                        const float ref_path_length,
                                         const double cost_weight) {
   // -----------------------------------------------------
   //  Parallelize over trajectories.
@@ -427,9 +431,9 @@ sycl::event CostEvaluator::goalCostFunc(const size_t trajs_size,
     auto X = m_devicePtrPathsX;
     auto Y = m_devicePtrPathsY;
     auto costs = m_devicePtrCosts;
-    const float costWeight = cost_weight;
+    const float costWeight = static_cast<float>(cost_weight);
     const size_t pathSize = numPointsPerTrajectory_;
-    const float pathLength = path_length;
+    const float pathLength = ref_path_length;
     auto global_size = sycl::range<1>(trajs_size);
     // Last point of reference path
     sycl::vec<float, 2> lastRefPoint = {last_ref_point.x(), last_ref_point.y()};
@@ -472,7 +476,7 @@ sycl::event CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
     auto velocitiesVy = m_devicePtrVelocitiesVy;
     auto velocitiesOmega = m_devicePtrVelocitiesOmega;
     auto costs = m_devicePtrCosts;
-    const float costWeight = cost_weight;
+    const float costWeight = static_cast<float>(cost_weight);
     const size_t trajsSize = trajs_size;
     const size_t velocitiesSize = numPointsPerTrajectory_ - 1;
     const sycl::vec<float, 3> accLimits = {accLimits_[0], accLimits_[1],
@@ -568,7 +572,7 @@ sycl::event CostEvaluator::jerkCostFunc(const size_t trajs_size,
     auto velocitiesVy = m_devicePtrVelocitiesVy;
     auto velocitiesOmega = m_devicePtrVelocitiesOmega;
     auto costs = m_devicePtrCosts;
-    const float costWeight = cost_weight;
+    const float costWeight = static_cast<float>(cost_weight);
     const size_t trajsSize = trajs_size;
     const size_t velocitiesSize = numPointsPerTrajectory_ - 1;
     const sycl::vec<float, 3> accLimits = {accLimits_[0], accLimits_[1],
@@ -667,7 +671,7 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
     auto obs_X = m_devicePtrObstaclesX;
     auto obs_Y = m_devicePtrObstaclesY;
     auto costs = m_devicePtrCosts;
-    const float costWeight = cost_weight;
+    const float costWeight = static_cast<float>(cost_weight);
     const size_t trajsSize = trajs_size;
     const size_t pathSize = numPointsPerTrajectory_;
     const size_t obsSize = obstaclePointsX.size();

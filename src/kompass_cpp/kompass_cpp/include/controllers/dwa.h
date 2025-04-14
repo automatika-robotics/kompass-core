@@ -133,12 +133,6 @@ private:
   std::unique_ptr<TrajectorySamples2D> debuggingSamples_;
 
   /**
-   * @brief get maximum reference path length
-   */
-  // size_t getMaxPathLength();
-  size_t getMaxPathLength();
-
-  /**
    * @brief Given the current position and velocity of the robot, find the
    * best trajectory to execute
    * @param global_pose The current position of the robot

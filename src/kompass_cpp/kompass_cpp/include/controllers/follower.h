@@ -1,16 +1,3 @@
-/**
- * *********************************************************
- *
- * @file follower.h
- * @author Based on the implementation of Alexander Buchegger
- * @brief
- * @version 0.1
- * @date 2024-06-20
- *
- * @copyright Copyright (c) 2024. ARTI - Autonomous Robot Technology GmbH. All
- * rights reserved.
- *
- */
 #pragma once
 
 #include "controller.h"
@@ -215,6 +202,7 @@ protected:
   bool enable_reverse_driving{false};
   double path_segment_length{0.0};
   double maxDist{0.0};
+  size_t maxSegmentSize;
   Path::InterpolationType interpolationType = Path::InterpolationType::LINEAR;
 
   FollowerParameters config;
@@ -281,6 +269,12 @@ private:
    */
   Path::State projectPointOnSegment(const Path::Point &a, const Path::Point &b,
                                     double &segment_length);
+
+  /**
+   * @brief Get max segment size
+   * @return size_t Number of points in the biggest segment possible
+   */
+  size_t getMaxSegmentSize() const;
 };
 
 } // namespace Control

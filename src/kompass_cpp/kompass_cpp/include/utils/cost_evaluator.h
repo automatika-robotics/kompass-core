@@ -37,11 +37,10 @@ public:
                     "Weight of the cost for the distance between a trajectory "
                     "sample and the closest obstacle"));
 
-      addParameter(
-          "smoothness_weight",
-          Parameter(
-              1.0, 0.0, 1000.0,
-              "Weight of the cost for the  trajectory sample non smoothness"));
+      addParameter("smoothness_weight",
+                   Parameter(1.0, 0.0, 1000.0,
+                             "Weight of the cost for the non-smoothness of the "
+                             "trajectory sample"));
       addParameter(
           "jerk_weight",
           Parameter(1.0, 0.0, 1000.0,
@@ -59,14 +58,14 @@ public:
    * @param maxLinearSample
    * @param maxAngularSample
    */
-  CostEvaluator(TrajectoryCostsWeights costsWeights,
+  CostEvaluator(TrajectoryCostsWeights &costsWeights,
                 ControlLimitsParams ctrLimits, size_t maxNumTrajectories,
-                size_t numPointsPerTrajectory, size_t maxRefPathSize);
-  CostEvaluator(TrajectoryCostsWeights costsWeights,
+                size_t numPointsPerTrajectory, size_t maxRefPathSegmentSize);
+  CostEvaluator(TrajectoryCostsWeights &costsWeights,
                 const std::array<float, 3> &sensor_position_body,
                 const std::array<float, 4> &sensor_rotation_body,
                 ControlLimitsParams ctrLimits, size_t maxNumTrajectories,
-                size_t numPointsPerTrajectory, size_t maxRefPathSize);
+                size_t numPointsPerTrajectory, size_t maxRefPathSegmentSize);
 
   /**
    * @brief Destroy the Trajectory Sampler object
@@ -105,7 +104,8 @@ public:
    */
   TrajSearchResult
   getMinTrajectoryCost(const std::unique_ptr<TrajectorySamples2D> &trajs,
-                       const Path::Path &reference_path);
+                       const Path::Path &reference_path,
+                       const Path::Path &tracked_segment);
 
   /**
    * @brief Adds a new custome cost to be used in the trajectory evaluation
@@ -168,7 +168,7 @@ public:
    *
    * @param costsWeights
    */
-  void updateCostWeights(TrajectoryCostsWeights costsWeights);
+  void updateCostWeights(TrajectoryCostsWeights &costsWeights);
 
 protected:
   // Protected member variables
@@ -179,7 +179,7 @@ protected:
   std::vector<CustomTrajectoryCost *> customTrajCostsPtrs_;
 
 private:
-  TrajectoryCostsWeights costWeights;
+  std::unique_ptr<TrajectoryCostsWeights> costWeights;
   std::vector<float> obstaclePointsX;
   std::vector<float> obstaclePointsY;
   float maxObstacleCostToRangeMultiple =
@@ -196,7 +196,7 @@ private:
 #ifdef GPU
   size_t numTrajectories_;
   size_t numPointsPerTrajectory_;
-  size_t maxRefPathSize_;
+  size_t maxRefPathSegmentSize_;
   size_t max_wg_size_;
   float *m_devicePtrPathsX;
   float *m_devicePtrPathsY;
@@ -204,8 +204,8 @@ private:
   float *m_devicePtrVelocitiesVy;
   float *m_devicePtrVelocitiesOmega;
   float *m_devicePtrCosts;
-  float *m_devicePtrReferencePathX = nullptr;
-  float *m_devicePtrReferencePathY = nullptr;
+  float *m_devicePtrTrackedSegmentX = nullptr;
+  float *m_devicePtrTrackedSegmentY = nullptr;
   float *m_devicePtrObstaclesX = nullptr;
   float *m_devicePtrObstaclesY = nullptr;
   float *m_devicePtrTempCosts = nullptr;
@@ -218,8 +218,9 @@ private:
    * @param trajectories
    * @param reference_path
    */
-  sycl::event pathCostFunc(const size_t trajs_size, const size_t ref_path_size,
-                           const float ref_path_length,
+  sycl::event pathCostFunc(const size_t trajs_size,
+                           const size_t tracked_segment_size,
+                           const float tracked_segment_length,
                            const double cost_weight);
 
   /**
@@ -231,7 +232,8 @@ private:
    */
   sycl::event goalCostFunc(const size_t trajs_size,
                            const Path::Point &last_ref_point,
-                           const float path_length, const double cost_weight);
+                           const float ref_path_length,
+                           const double cost_weight);
 
   /**
    * @brief Trajectory cost based on the smoothness along the trajectory
@@ -271,8 +273,8 @@ private:
    * @return float
    */
   float pathCostFunc(const Trajectory2D &trajectory,
-                     const Path::Path &reference_path,
-                     const float ref_path_length);
+                     const Path::Path &tracked_segment,
+                     const float tracked_segment_length);
 
   /**
    * @brief Trajectory cost based on the distance to the end (goal) of a given

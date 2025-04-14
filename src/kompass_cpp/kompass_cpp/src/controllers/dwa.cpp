@@ -7,7 +7,6 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <ostream>
 #include <stdexcept>
 #include <tuple>
 
@@ -33,7 +32,7 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
   trajCostEvaluator = std::make_unique<CostEvaluator>(
       costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
       trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
-      getMaxPathLength());
+      maxSegmentSize);
 
   // Update the max forward distance the robot can make
   if (controlType == ControlType::OMNI) {
@@ -63,7 +62,7 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
   trajCostEvaluator = std::make_unique<CostEvaluator>(
       costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
       trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
-      getMaxPathLength());
+      maxSegmentSize);
 
   // Update the max forward distance the robot can make
   double timeHorizon = config.getParameter<double>("control_horizon");
@@ -96,7 +95,7 @@ void DWA::reconfigure(ControlLimitsParams controlLimits,
   trajCostEvaluator = std::make_unique<CostEvaluator>(
       costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
       trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
-      getMaxPathLength());
+      maxSegmentSize);
   this->maxNumThreads = maxNumThreads;
 }
 
@@ -116,13 +115,8 @@ void DWA::reconfigure(TrajectorySampler::TrajectorySamplerParameters config,
   trajCostEvaluator = std::make_unique<CostEvaluator>(
       costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
       trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
-      getMaxPathLength());
+      maxSegmentSize);
   this->maxNumThreads = maxNumThreads;
-}
-
-size_t DWA::getMaxPathLength() {
-  return this->config.getParameter<double>("max_path_length") /
-         this->config.getParameter<double>("max_point_interpolation_distance");
 }
 
 void DWA::resetOctreeResolution(const double octreeRes) {
@@ -139,7 +133,7 @@ void DWA::addCustomCost(
 }
 
 Path::Path DWA::findTrackedPathSegment() {
-  Path::Path trackedPathSegment;
+  std::vector<Path::Point> trackedPoints;
   size_t segment_index{current_segment_index_ + 1};
   Path::Path currentSegment = currentPath->segments[current_segment_index_];
 
@@ -147,23 +141,27 @@ Path::Path DWA::findTrackedPathSegment() {
   // take the next segment
   if (closestPosition->index > currentSegment.points.size() - 1 and
       current_segment_index_ < max_segment_index_) {
-    trackedPathSegment = currentPath->segments[current_segment_index_ + 1];
+    trackedPoints = currentPath->segments[current_segment_index_ + 1].points;
     segment_index = current_segment_index_ + 1;
   }
   // Else take the segment points from the current point onwards
   else {
-    trackedPathSegment.points = {currentSegment.points.begin() +
-                                     closestPosition->index,
-                                 currentSegment.points.end()};
+    trackedPoints = {currentSegment.points.begin() + closestPosition->index,
+                     currentSegment.points.end()};
   }
   size_t point_index{0};
 
-  double segment_length = trackedPathSegment.totalPathLength();
+  float segment_length = 0.0;
+  for (size_t i = 1; i < trackedPoints.size(); ++i) {
+    segment_length +=
+        Path::Path::distance(trackedPoints[i - 1], trackedPoints[i]);
+  }
 
   // If the segment does not have the required number of points add more points
   // from next path segment
-  while (segment_length <= max_forward_distance_ and
-         segment_index <= max_segment_index_) {
+  while (segment_length < max_forward_distance_ and
+         segment_index <= max_segment_index_ and
+         trackedPoints.size() < maxSegmentSize) {
     if (point_index >= currentPath->segments[segment_index].points.size()) {
       point_index = 0;
       segment_index++;
@@ -172,15 +170,15 @@ Path::Path DWA::findTrackedPathSegment() {
       }
     }
     // Add distance between last point and new point
-    Path::Point back_point = trackedPathSegment.points.back();
+    Path::Point back_point = trackedPoints.back();
     segment_length += calculateDistance(
         back_point, currentPath->segments[segment_index].points[point_index]);
-    trackedPathSegment.points.push_back(
+    trackedPoints.push_back(
         currentPath->segments[segment_index].points[point_index]);
     point_index++;
   }
 
-  return trackedPathSegment;
+  return Path::Path(trackedPoints);
 }
 
 template <typename T>
@@ -204,8 +202,11 @@ TrajSearchResult DWA::findBestPath(const Velocity2D &global_vel,
 
   trajCostEvaluator->setPointScan(scan_points, currentState, maxLocalRange_);
 
+  Path::Path trackedRefPathSegment = findTrackedPathSegment();
+
   // Evaluate the samples and get the sample with the minimum cost
-  return trajCostEvaluator->getMinTrajectoryCost(samples_, *currentPath);
+  return trajCostEvaluator->getMinTrajectoryCost(samples_, *currentPath,
+                                                 trackedRefPathSegment);
 }
 
 template <typename T>
