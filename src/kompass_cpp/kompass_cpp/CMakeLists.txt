@@ -32,7 +32,7 @@ endif()
 # add project as library
 add_library(${MODULE_NAME} STATIC ${SOURCES})
 target_include_directories(${MODULE_NAME} PUBLIC include)
-target_include_directories(${MODULE_NAME} PUBLIC {$EIGEN3_INCLUDE_DIR} ${PCL_INCLUDE_DIRS})
+target_include_directories(${MODULE_NAME} PUBLIC ${EIGEN3_INCLUDE_DIR} ${PCL_INCLUDE_DIRS})
 
 # Link fcl and PCL
 target_link_libraries(${MODULE_NAME} PRIVATE fcl ${PCL_LIBRARIES})
