@@ -202,11 +202,6 @@ struct TestConfig {
 
 BOOST_FIXTURE_TEST_SUITE(s, TestConfig)
 
-TrajectorySamples2D samples;
-Trajectory2D minimum_cost_traj;
-Trajectory2D sample;
-bool check;
-
 BOOST_AUTO_TEST_CASE(test_all_costs) {
   // Create timer
   Timer time;
@@ -215,11 +210,11 @@ BOOST_AUTO_TEST_CASE(test_all_costs) {
   std::unique_ptr<TrajectorySamples2D> samples =
       generate_ref_path_test_samples(predictionHorizon, timeStep);
 
-  minimum_cost_traj = run_test(costEval, reference_path, samples,
+  Trajectory2D minimum_cost_traj = run_test(costEval, reference_path, samples,
                                current_segment_index, 1.0, 0.0, 0.0, 0.0, 0.0);
   // In the generated samples the first sample contains the minimum cost path
-  sample = samples->getIndex(0);
-  check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
+  Trajectory2D sample = samples->getIndex(0);
+  bool check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
   BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
                     "equal to the correct minimum! "
                         << minimum_cost_traj.path.x);

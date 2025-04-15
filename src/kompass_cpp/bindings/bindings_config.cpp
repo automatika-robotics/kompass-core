@@ -38,35 +38,18 @@ void bindings_config(py::module_ &m) {
   auto m_config = m.def_submodule("configure", "Configuration classes");
 
   py::class_<Parameter>(m_config, "ConfigParameter")
-      .def(py::init<>())
-      .def(py::init<int, int, int>())
-      .def(py::init<double, double, double>())
-      .def(py::init<std::string>())
-      .def(py::init<bool>())
       .def("set_value", (void(Parameter::*)(int)) & Parameter::setValue<int>)
+      .def("set_value", (void(Parameter::*)(bool)) & Parameter::setValue<bool>)
       .def("set_value",
            (void(Parameter::*)(double)) & Parameter::setValue<double>)
       .def("set_value",
            (void(Parameter::*)(std::string)) & Parameter::setValue<std::string>)
       .def("get_value_int", &Parameter::getValue<int>)
       .def("get_value_double", &Parameter::getValue<double>)
-      .def("get_value_string", &Parameter::getValue<std::string>);
+      .def("get_value_string", &Parameter::getValue<std::string>)
+      .def("get_value_bool", &Parameter::getValue<bool>);
 
   py::class_<Parameters>(m_config, "ConfigParameters")
       .def(py::init<>())
-      .def("add_parameter",
-           (void(Parameters::*)(const std::string &, const Parameter &)) &
-               Parameters::addParameter)
-      .def("add_parameter", (void(Parameters::*)(const std::string &, bool)) &
-                                Parameters::addParameter)
-      .def("add_parameter",
-           (void(Parameters::*)(const std::string &, const char *)) &
-               Parameters::addParameter)
-      .def("add_parameter",
-           (void(Parameters::*)(const std::string &, int, int, int)) &
-               Parameters::addParameter)
-      .def("add_parameter",
-           (void(Parameters::*)(const std::string &, double, double, double)) &
-               Parameters::addParameter)
       .def("from_dict", &set_parameters_from_dict);
 }
