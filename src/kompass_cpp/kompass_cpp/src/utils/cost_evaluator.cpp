@@ -122,7 +122,7 @@ float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
 
   float distError, dist;
 
-  for (size_t i = 0; i < trajectory.path.x.size(); ++i) {
+  for (Eigen::Index i = 0; i < trajectory.path.x.size(); ++i) {
     // Set min distance between trajectory sample point i and the reference to
     // infinity
     distError = std::numeric_limits<float>::max();
@@ -169,7 +169,7 @@ float CostEvaluator::obstaclesDistCostFunc(const Trajectory2D &trajectory) {
 float CostEvaluator::smoothnessCostFunc(const Trajectory2D &trajectory) {
   float smoothness_cost = 0.0;
   float delta_vx, delta_vy, delta_omega;
-  for (size_t i = 1; i < trajectory.velocities.vx.size(); ++i) {
+  for (Eigen::Index i = 1; i < trajectory.velocities.vx.size(); ++i) {
     if (accLimits_[0] > 0) {
       delta_vx = trajectory.velocities.vx[i] - trajectory.velocities.vx[i - 1];
       smoothness_cost += std::pow(delta_vx, 2) / accLimits_[0];
@@ -191,7 +191,7 @@ float CostEvaluator::smoothnessCostFunc(const Trajectory2D &trajectory) {
 float CostEvaluator::jerkCostFunc(const Trajectory2D &trajectory) {
   float jerk_cost = 0.0;
   float jerk_vx, jerk_vy, jerk_omega;
-  for (size_t i = 2; i < trajectory.velocities.vx.size(); ++i) {
+  for (Eigen::Index i = 2; i < trajectory.velocities.vx.size(); ++i) {
     if (accLimits_[0] > 0) {
       jerk_vx = trajectory.velocities.vx[i] -
                 2 * trajectory.velocities.vx[i - 1] +
