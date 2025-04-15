@@ -34,7 +34,7 @@ dependencies = [
 requires-python = ">=3.8.4,<3.13"
 
 [project.optional-dependencies]
-dev = ["pip-tools", "pytest==8.0.0", "pre-commit"]
+dev = ["pip-tools", "pytest==8.0.0", "pre-commit", "opencv-python"]
 
 [project.urls]
 Homepage = "https://github.com/automatika-robotics/kompass-core"
@@ -117,8 +117,8 @@ push = true
 [tool.cibuildwheel]
 build-verbosity = 1
 skip = ["pp*", "*musllinux*"]
-test-requires = "pytest"
-test-command = "pytest {package}/tests/test_fcl.py"
+test-requires = ["pytest", "opencv-python"]
+test-command = "cd {package}/tests && pytest"
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
 
