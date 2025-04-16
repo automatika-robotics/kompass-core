@@ -74,7 +74,6 @@ from kompass_core.models import (
     RobotGeometry,
     RobotType,
 )
-from nav_msgs.msg import Path
 
 # Setup the robot
 my_robot = Robot(
@@ -100,18 +99,6 @@ dvz = DVZ(
         ctrl_limits=robot_ctr_limits,
         control_time_step=control_time_step,
     )
-
-# Set the reference path
-global_path : Path = Path()
-
-# Set the reference path for the motion control
-dvz.set_path(global_path)
-
-# Get the sensor data
-laser_scan = LaserScanData()
-
-# At each control step run
-dvz.loop_step(current_state=robot.state, laser_scan=laser_scan)
 ```
 
 ## Copyright
