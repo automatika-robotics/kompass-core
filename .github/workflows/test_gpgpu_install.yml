@@ -26,7 +26,7 @@ jobs:
         run: curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/heads/feature/emergency_stop/build_dependencies/install_gpu.sh | bash
 
       - name: Install pytest
-        run: pip install pytest
+        run: pip install pytest opencv-python
 
       - name: Run tests
         run: pytest
