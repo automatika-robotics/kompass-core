@@ -282,6 +282,7 @@ def test_path_interpolation(plot: bool = False):
 
         x_inter_cub = [point[0] for point in cubic_spline_interpolation.points]
         y_inter_cub = [point[1] for point in cubic_spline_interpolation.points]
+
         # Plot the path
         plt.figure()
         plt.plot(
