@@ -191,17 +191,17 @@ if [ $FOUND_LLVM_VERSION -eq 0 ]; then
         set +x
     fi
 
-    # Install required packages
-    $SUDO apt install -y \
-        "libclang-${LLVM_VERSION}-dev" "clang-tools-${LLVM_VERSION}" \
-        "libomp-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-dev" "lld-${LLVM_VERSION}"
-
     # Cleanup
     rm -f llvm.sh
 else
     LLVM_VERSION=$FOUND_LLVM_VERSION
     log INFO "Found LLVM/Clang version $FOUND_LLVM_VERSION. Skipping LLVM/Clang installation."
 fi
+
+# Install required packages for acpp
+$SUDO apt install -y \
+    "libclang-${LLVM_VERSION}-dev" "clang-tools-${LLVM_VERSION}" \
+    "libomp-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-dev" "lld-${LLVM_VERSION}"
 
 # Get LLVM/Clang paths
 LLVM_DIR=$(llvm-config-${LLVM_VERSION} --cmakedir)
@@ -232,7 +232,7 @@ mkdir -p build && cd build
 log INFO "Configuring build with CMake..."
 CXX=$CLANG_EXECUTABLE_PATH cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" -DLLVM_DIR="$LLVM_DIR" -DCLANG_EXECUTABLE_PATH="$CLANG_EXECUTABLE_PATH" ..
 log INFO "Building and installing AdaptiveCpp to $INSTALL_PREFIX..."
-$SUDO make install
+$SUDO make install -j8
 
 # Back to main pwd
 cd ../..
