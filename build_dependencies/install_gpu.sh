@@ -251,7 +251,7 @@ $SUDO apt install -y libpcl-dev libode-dev
 # Clone and build kompass-core
 if [[ ! -d "kompass-core" ]]; then
     log INFO "Cloning kompass-core repository..."
-    git clone --depth 1 --branch fix/backward_compatibility "$KOMPASS_CORE_URL"
+    git clone --depth 1 "$KOMPASS_CORE_URL"
 else
     log WARN "kompass-core directory already exists. Skipping download."
 fi
