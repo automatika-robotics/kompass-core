@@ -19,13 +19,13 @@ jobs:
     runs-on: ${{ matrix.os-arch.os }}
 
     steps:
-      - name: Install curl and pip
+      - name: Install curl
         run: sudo apt-get update && sudo apt-get install -y curl
 
-      - name: Install GPU dependencies
+      - name: Install GPGPU dependancies and kompass-core
         run: curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/heads/feature/emergency_stop/build_dependencies/install_gpu.sh | bash
 
-      - name: Install pytest
+      - name: Install test dependancies
         run: pip install pytest opencv-python
 
       - name: Run tests

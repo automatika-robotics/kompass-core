@@ -30,6 +30,7 @@ from kompass_core.models import (
 )
 
 logger = logging.getLogger(__name__)
+os.makedirs("logs", exist_ok=True)
 
 dir_name = os.path.dirname(os.path.abspath(__file__))
 control_resources = os.path.join(dir_name, "resources/control")
@@ -530,8 +531,6 @@ def main():
 
     if not global_path:
         raise ValueError("Global path file not found")
-
-    os.makedirs("logs", exist_ok=True)
 
     my_robot = Robot(
         robot_type=RobotType.ACKERMANN,
