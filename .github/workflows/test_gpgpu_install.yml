@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
   pull_request:
   push:
-    # branches:
-    #   - main
+    branches:
+      - main
 
 jobs:
   install_gpu:
@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Install curl and pip
-        run: sudo apt-get update && sudo apt-get install -y curl python3-pip
+        run: sudo apt-get update && sudo apt-get install -y curl
 
       - name: Install GPU dependencies
         run: curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/heads/feature/emergency_stop/build_dependencies/install_gpu.sh | bash
