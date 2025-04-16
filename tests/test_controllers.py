@@ -1,14 +1,13 @@
 import json
 import logging
 import os
-from typing import Union
+from typing import Union, List
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from attrs import define, field, Factory
 
-from geometry_msgs.msg import PoseStamped
-from nav_msgs.msg import Path
 import kompass_cpp
 from kompass_cpp.types import PathInterpolationType, Path as PathCpp
 
@@ -35,6 +34,43 @@ logger = logging.getLogger(__name__)
 dir_name = os.path.dirname(os.path.abspath(__file__))
 control_resources = os.path.join(dir_name, "resources/control")
 EPSILON = 1e-3
+
+
+# Data Classes similar to ROS geometry_msgs.msg.PoseStamped and nav_msgs.msg.Path for testing
+@define
+class Vector4:
+    """Class that replaces ROS Point and Quaternion classes for testing"""
+
+    x: float = field(default=0.0)
+    y: float = field(default=0.0)
+    z: float = field(default=0.0)
+    w: float = field(default=1.0)
+
+
+@define
+class Pose:
+    """Class that replaces ROS geometry_msgs/Pose class for testing"""
+
+    position: Vector4 = field(default=Factory(Vector4))
+    orientation: Vector4 = field(default=Factory(Vector4))
+
+
+@define
+class PoseStamped:
+    """Class that replaces ROS geometry_msgs/PoseStamped class for testing
+    Discards the 'Header' part as it is not required for testing
+    """
+
+    pose: Pose = field(default=Factory(Pose))
+
+
+@define
+class Path:
+    """Class that replaces ROS nav_msgs/Path class for testing
+    Discards the 'Header' part as it is not required for testing
+    """
+
+    poses: List[PoseStamped] = field()
 
 
 def plot_path(
@@ -87,16 +123,10 @@ def json_to_ros_path(json_file: str) -> Union[Path, None]:
         with open(json_file, "r") as f:
             path_dict = json.load(f)
 
-        path = Path()
-        path.header.stamp.sec = path_dict["header"]["stamp"]["sec"]
-        path.header.stamp.nanosec = path_dict["header"]["stamp"]["nanosec"]
-        path.header.frame_id = path_dict["header"]["frame_id"]
+        poses: List[PoseStamped] = []
 
         for pose_dict in path_dict["poses"]:
             pose_stamped = PoseStamped()
-            pose_stamped.header.stamp.sec = pose_dict["header"]["stamp"]["sec"]
-            pose_stamped.header.stamp.nanosec = pose_dict["header"]["stamp"]["nanosec"]
-            pose_stamped.header.frame_id = pose_dict["header"]["frame_id"]
 
             pose_stamped.pose.position.x = pose_dict["pose"]["position"]["x"]
             pose_stamped.pose.position.y = pose_dict["pose"]["position"]["y"]
@@ -107,7 +137,9 @@ def json_to_ros_path(json_file: str) -> Union[Path, None]:
             pose_stamped.pose.orientation.z = pose_dict["pose"]["orientation"]["z"]
             pose_stamped.pose.orientation.w = pose_dict["pose"]["orientation"]["w"]
 
-            path.poses.append(pose_stamped)
+            poses.append(pose_stamped)
+
+        path = Path(poses=poses)
 
         return path
     # File not found or format is not compatible
