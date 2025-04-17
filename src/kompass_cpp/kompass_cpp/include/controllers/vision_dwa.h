@@ -126,9 +126,6 @@ private:
 
   bool _rotate_in_place;
   Velocities _out_vel;
-  double _recorded_search_time = 0.0, _recorded_wait_time = 0.0;
-  std::queue<std::array<double, 3>> _search_commands_queue;
-  std::array<double, 3> _search_command;
   std::unique_ptr<TrackingImgData> _last_tracking = nullptr;
 
   /**

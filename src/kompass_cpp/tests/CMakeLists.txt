@@ -39,6 +39,11 @@ add_executable(vision_dwa_test vision_dwa_test.cpp)
 target_link_libraries(vision_dwa_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework)
 add_test(vision_dwa_tests vision_dwa_test)
 
+# Set path to the test image
+add_executable(vision_tracking_test vision_tracking_test.cpp)
+target_link_libraries(vision_tracking_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework nlohmann_json::nlohmann_json)
+add_test(vision_tracking_tests vision_tracking_test)
+
 # find sycl
 find_package(AdaptiveCpp)
 
