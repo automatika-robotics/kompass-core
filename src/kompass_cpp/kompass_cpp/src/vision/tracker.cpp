@@ -1,6 +1,5 @@
 #include "vision/tracker.h"
 #include "datatypes/tracking.h"
-#include <Eigen/src/Core/Matrix.h>
 #include <math.h>
 
 namespace Kompass {
