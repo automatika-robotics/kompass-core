@@ -1,6 +1,4 @@
 #define EIGEN_DONT_PARALLELIZE  // TODO: resolve error when enabling Eigen parallelization
-#include <Eigen/Dense>
-#include <optional>
 #include "utils/kalman_filter.h"
 #include "utils/logger.h"
 
