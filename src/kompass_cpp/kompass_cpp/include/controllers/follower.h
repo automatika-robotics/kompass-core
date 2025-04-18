@@ -5,6 +5,7 @@
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
 #include <cmath>
+#include <memory>
 
 namespace Kompass {
 namespace Control {
@@ -72,7 +73,7 @@ public:
   Follower(FollowerParameters config);
 
   // Destructor
-  virtual ~Follower();
+  virtual ~Follower() = default;
 
   /**
    * @brief Sets the global path to be followed
@@ -191,9 +192,9 @@ public:
                                  const Path::State &state2) const;
 
 protected:
-  Path::Path *currentPath = nullptr;
-  Path::Path *refPath = nullptr;
-  Path::PathPosition *closestPosition = new Path::PathPosition();
+  std::unique_ptr<Path::Path> currentPath = nullptr;
+  std::unique_ptr<Path::Path> refPath = nullptr;
+  std::unique_ptr<Path::PathPosition> closestPosition = std::make_unique<Path::PathPosition>();
   double goal_dist_tolerance{0.0};
   double goal_orientation_tolerance{0.0};
   double loosing_goal_distance{0.0};
@@ -225,7 +226,7 @@ protected:
   void determineTarget();
 
   bool path_processing_{false};
-  Target *currentTrackedTarget_ = new Target();
+  std::unique_ptr<Target> currentTrackedTarget_ = std::make_unique<Target>();
 
   size_t current_segment_index_{0};
   double current_position_in_segment_{0.0};

@@ -1,6 +1,7 @@
 #include <Eigen/Dense>
 #include <cmath>
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -51,16 +52,6 @@ Follower::Follower(FollowerParameters config) : Controller() {
   maxSegmentSize = getMaxSegmentSize();
 }
 
-Follower::~Follower() {
-  if (refPath) {
-    delete refPath;
-  }
-  if (currentPath) {
-    delete currentPath;
-  }
-  delete closestPosition;
-}
-
 size_t Follower::getMaxSegmentSize() const {
   return this->config.getParameter<double>("path_segment_length") /
              this->config.getParameter<double>(
@@ -77,11 +68,9 @@ const Path::Path Follower::getCurrentPath() const { return *currentPath; }
 void Follower::clearCurrentPath() {
   // Delete old reference and current path before setting new values
   if (refPath) {
-    delete refPath;
     refPath = nullptr;
   }
   if (currentPath) {
-    delete currentPath;
     currentPath = nullptr;
   }
 
@@ -93,16 +82,8 @@ void Follower::clearCurrentPath() {
 }
 
 void Follower::setCurrentPath(const Path::Path &path) {
-  // Delete old reference and current path before setting new values
-  if (refPath) {
-    delete refPath;
-  }
-  if (currentPath) {
-    delete currentPath;
-  }
-
-  currentPath = new Path::Path(path.points);
-  refPath = new Path::Path(path.points);
+  currentPath = std::make_unique<Path::Path>(path.points);
+  refPath = std::make_unique<Path::Path>(path.points);
 
   currentPath->setMaxLength(
       this->config.getParameter<double>("max_path_length"));
@@ -291,19 +272,15 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 }
 
 void Follower::determineTarget() {
-  // delete closestPosition;
-  delete currentTrackedTarget_;
 
-  currentTrackedTarget_ = new Target();
+  currentTrackedTarget_ = std::make_unique<Target>();
   // closestPosition = new Path::PathPosition();
 
   // closest position is never updated
-  if (closestPosition->segment_length <= 0.0) {
-    *closestPosition = findClosestPathPoint();
-  }
-  // If we reached end of segment or end of path -> Find new point
-  else if (closestPosition->segment_index >= currentPath->points.size() - 1 ||
-           closestPosition->segment_length >= 1.0) {
+  // OR If we reached end of segment or end of path -> Find new point
+  if ((closestPosition->segment_length <= 0.0) ||
+      (closestPosition->segment_index >= currentPath->points.size() - 1) ||
+      (closestPosition->segment_length >= 1.0)) {
     *closestPosition = findClosestPathPoint();
   }
   // If end of segment is not reached -> only find closest point on segment
