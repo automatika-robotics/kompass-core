@@ -32,11 +32,11 @@ struct Path {
   std::vector<Path> segments; // List of path segments
   tk::spline *_spline;
   // get all x values from points
-  std::vector<float> getX() const;
+  const std::vector<float>& getX() const;
   // get all y values from points
-  std::vector<float> getY() const;
+  const std::vector<float>& getY() const;
   // get all z values from points
-  std::vector<float> getZ() const;
+  const std::vector<float>& getZ() const;
   // Max interpolation distance and total path distance are updated from user
   // config
   double _max_interpolation_dist{0.0}, _max_path_length{10.0};
@@ -44,6 +44,7 @@ struct Path {
   // interpolation
   int max_segment_size{10};
   size_t max_size{10};
+  size_t max_interpolation_iterations{500}; // Max number of iterations for interpolation between two path points
 
   Path(const std::vector<Point> &points = {});
 

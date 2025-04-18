@@ -16,11 +16,11 @@ Path::Path(const std::vector<Point> &points) : points(points) {
   }
 }
 
-std::vector<float> Path::getX() const { return X_; }
+const std::vector<float>& Path::getX() const { return X_; }
 
-std::vector<float> Path::getY() const { return Y_; }
+const std::vector<float>& Path::getY() const { return Y_; }
 
-std::vector<float> Path::getZ() const { return Z_; }
+const std::vector<float>& Path::getZ() const { return Z_; }
 
 void Path::setMaxLength(double max_length) {
   this->_max_path_length = max_length;
@@ -192,7 +192,8 @@ void Path::interpolate(double max_interpolation_point_dist,
     int j = 1;
 
     // Interpolate new points between i, i+1
-    while (dist > max_interpolation_point_dist and j < 500) {
+    while (dist > max_interpolation_point_dist and
+           j < max_interpolation_iterations) {
       x_e = x[i] + j * (x[i + 1] - x[i]) * max_interpolation_point_dist;
 
       y_e = _spline->operator()(x_e);
