@@ -6,7 +6,6 @@
 #include <Eigen/src/Geometry/Transform.h>
 #include <cstddef>
 #include <cstdlib>
-#include <limits>
 #include <vector>
 
 namespace Kompass {
@@ -47,10 +46,7 @@ void CostEvaluator::updateCostWeights(TrajectoryCostsWeights& costsWeights) {
 
 CostEvaluator::~CostEvaluator() {
 
-  // delete and clear custom cost pointers
-  for (auto ptr : customTrajCostsPtrs_) {
-    delete ptr;
-  }
+  //Clear custom cost pointers
   customTrajCostsPtrs_.clear();
 };
 
@@ -61,7 +57,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
   double weight;
   float total_cost;
   float ref_path_length;
-  float minCost = std::numeric_limits<float>::max();
+  float minCost = DEFAULT_MIN_DIST;
   Trajectory2D minCostTraj(trajs->numPointsPerTrajectory_);
   bool traj_found = false;
 
@@ -125,7 +121,7 @@ float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
   for (Eigen::Index i = 0; i < trajectory.path.x.size(); ++i) {
     // Set min distance between trajectory sample point i and the reference to
     // infinity
-    distError = std::numeric_limits<float>::max();
+    distError = DEFAULT_MIN_DIST;
     // Get minimum distance to the reference
     for (size_t j = 0; j < tracked_segment.points.size(); ++j) {
       dist = Path::Path::distance(tracked_segment.points[j],

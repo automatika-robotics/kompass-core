@@ -16,6 +16,7 @@
 namespace Kompass {
 
 namespace Control {
+
 class CostEvaluator {
 public:
   class TrajectoryCostsWeights : public Parameters {
@@ -90,7 +91,7 @@ public:
     CustomCostFunction evaluator_;
 
     CustomTrajectoryCost(double weight, CustomCostFunction evaluator)
-        : weight(weight), evaluator_(evaluator) {}
+        : weight(weight), evaluator_(evaluator) {};
   };
 
   /**
@@ -114,9 +115,9 @@ public:
    * @param custom_cost_function
    */
   void addCustomCost(double weight, CustomCostFunction custom_cost_function) {
-    CustomTrajectoryCost *newCost =
-        new CustomTrajectoryCost(weight, custom_cost_function);
-    customTrajCostsPtrs_.push_back(newCost);
+    auto newCost =
+        std::make_unique<CustomTrajectoryCost>(weight, custom_cost_function);
+    customTrajCostsPtrs_.push_back(std::move(newCost));
   };
 
   /**
@@ -126,10 +127,11 @@ public:
    * @param current_state
    */
   void setPointScan(const LaserScan &scan, const Path::State &current_state,
-                    const float max_range) {
+                    const float max_sensor_range,
+                    const float max_obstacle_cost_range_multiple = 3.0) {
     obstaclePointsX.clear();
     obstaclePointsY.clear();
-    maxObstaclesDist = max_range / maxObstacleCostToRangeMultiple;
+    maxObstaclesDist = max_sensor_range / max_obstacle_cost_range_multiple;
     Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
 
     for (size_t i = 0; i < scan.ranges.size(); i++) {
@@ -146,14 +148,13 @@ public:
   };
 
   void setPointScan(const std::vector<Path::Point> &cloud,
-                    const Path::State &current_state, const float max_range) {
+                    const Path::State &current_state, const float max_sensor_range, const float max_obstacle_cost_range_multiple = 3.0) {
     obstaclePointsX.clear();
     obstaclePointsY.clear();
-    maxObstaclesDist = max_range / maxObstacleCostToRangeMultiple;
+    maxObstaclesDist = max_sensor_range / max_obstacle_cost_range_multiple;
     Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
 
     for (auto &point : cloud) {
-      // TODO: fix
       Eigen::Vector3f pose_trans =
           transformPosition(Eigen::Vector3f(point.x(), point.y(), point.z()),
                             sensor_tf_body_ * body_tf_world_);
@@ -176,15 +177,12 @@ protected:
   std::array<float, 3> accLimits_;
 
   // Vector of pointers to the trajectory costs
-  std::vector<CustomTrajectoryCost *> customTrajCostsPtrs_;
+  std::vector<std::unique_ptr<CustomTrajectoryCost>> customTrajCostsPtrs_;
 
 private:
   std::unique_ptr<TrajectoryCostsWeights> costWeights;
   std::vector<float> obstaclePointsX;
   std::vector<float> obstaclePointsY;
-  float maxObstacleCostToRangeMultiple =
-      3.0; // Sets the maximum obstacle distance cost at
-           // 1/maxObstacleCostToRangeMultiple of the maximum robot local range
   float
       maxObstaclesDist; // Distance at the maximum cost = max_robot_local_range
                         // / maxObstacleCostToRangeMultiple

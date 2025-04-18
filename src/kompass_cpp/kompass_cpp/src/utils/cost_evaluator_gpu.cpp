@@ -116,6 +116,12 @@ void CostEvaluator::updateCostWeights(TrajectoryCostsWeights &newCostsWeights) {
   if (costWeights->getParameter<double>("reference_path_distance_weight") >
           0.0 &&
       !m_devicePtrTrackedSegmentX && !m_devicePtrTrackedSegmentY) {
+    if (m_devicePtrTrackedSegmentX) {
+      sycl::free(m_devicePtrTrackedSegmentX, m_q);
+    }
+    if (m_devicePtrTrackedSegmentY) {
+      sycl::free(m_devicePtrTrackedSegmentY, m_q);
+    }
     m_devicePtrTrackedSegmentX =
         sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
     m_devicePtrTrackedSegmentY =
@@ -123,20 +129,27 @@ void CostEvaluator::updateCostWeights(TrajectoryCostsWeights &newCostsWeights) {
   };
   if (costWeights->getParameter<double>("obstacles_distance_weight") > 0.0 &&
       !m_devicePtrObstaclesX && !m_devicePtrObstaclesY) {
+    if (m_devicePtrObstaclesX) {
+      sycl::free(m_devicePtrObstaclesX, m_q);
+    }
+    if (m_devicePtrObstaclesY) {
+      sycl::free(m_devicePtrObstaclesY, m_q);
+    }
     m_devicePtrObstaclesX = sycl::malloc_device<float>(max_wg_size_, m_q);
     m_devicePtrObstaclesY = sycl::malloc_device<float>(max_wg_size_, m_q);
   }
   if (customTrajCostsPtrs_.size() > 0 && !m_devicePtrTempCosts) {
+    if (m_devicePtrTempCosts) {
+      sycl::free(m_devicePtrTempCosts, m_q);
+    }
+    // Allocate shared memory for temporary costs
     m_devicePtrTempCosts = sycl::malloc_shared<float>(numTrajectories_, m_q);
   }
 };
 
 CostEvaluator::~CostEvaluator() {
 
-  // delete and clear custom cost pointers
-  for (auto ptr : customTrajCostsPtrs_) {
-    delete ptr;
-  }
+  // Clear custom cost pointers
   customTrajCostsPtrs_.clear();
 
   // unallocate device memory
@@ -202,7 +215,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     m_q.memcpy(m_devicePtrVelocitiesOmega, trajs->velocities.omega.data(),
                sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1));
 
-    m_minCost->cost = std::numeric_limits<float>::max();
+    m_minCost->cost = DEFAULT_MIN_DIST;
     m_minCost->sampleIndex = 0;
 
     // wait for all data to be transferred
@@ -256,9 +269,6 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
       events.push_back(obstaclesDistCostFunc(trajs_size, weight));
     }
 
-    // wait for all costs to be calculated
-    m_q.wait();
-
     // calculate costs on the CPU
     if (customTrajCostsPtrs_.size() > 0) {
       size_t idx = 0;
@@ -307,6 +317,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     return {trajs->getIndex(m_minCost->sampleIndex), true, m_minCost->cost};
   } catch (const sycl::exception &e) {
     LOG_ERROR("Exception caught: ", e.what());
+    throw;
   }
   return TrajSearchResult();
 }
@@ -359,7 +370,7 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
 
           sycl::vec<float, 2> point;
           sycl::vec<float, 2> ref_point;
-          float minDist = std::numeric_limits<float>::max();
+          float minDist = DEFAULT_MIN_DIST;
           float distance;
 
           for (size_t i = 0; i < trackedSegmentSize; ++i) {
@@ -690,7 +701,7 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
           // Initialize local memory once per work-group in the first thread
           if (path_index == 0) {
             for (size_t i = 0; i < trajsSize; ++i) {
-              trajCost[i] = std::numeric_limits<float>::max();
+              trajCost[i] = DEFAULT_MIN_DIST;
             }
           }
           // Synchronize to make sure initialization is complete
