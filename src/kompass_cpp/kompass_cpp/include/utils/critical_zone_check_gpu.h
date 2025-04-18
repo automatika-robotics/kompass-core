@@ -44,9 +44,9 @@ public:
     m_devicePtrBackward =
         sycl::malloc_device<size_t>(indicies_backward_.size(), m_q);
     m_q.memcpy(m_devicePtrForward, indicies_forward_.data(),
-               sizeof(size_t) * indicies_forward_.size());
+               sizeof(size_t) * indicies_forward_.size()).wait();
     m_q.memcpy(m_devicePtrBackward, indicies_backward_.data(),
-               sizeof(size_t) * indicies_backward_.size());
+               sizeof(size_t) * indicies_backward_.size()).wait();
 
     m_scan_in_zone =
         std::max(indicies_forward_.size(), indicies_backward_.size());
