@@ -10,14 +10,6 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
                                    const std::vector<double> &angles,
                                    const bool forward) {
   try {
-
-
-    // Check if the number of ranges and angles is equal to the scan size
-    if (ranges.size() != m_scanSize || angles.size() != m_scanSize) {
-      LOG_ERROR("Ranges and angles size do not match the scan size.");
-      return false;
-    }
-
     m_q.fill(m_devicePtrOutput, false, m_scan_in_zone);
 
     m_q.memcpy(m_devicePtrAngles, angles.data(), sizeof(double) * m_scanSize);
