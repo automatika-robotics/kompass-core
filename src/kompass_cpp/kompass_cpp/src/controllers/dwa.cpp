@@ -23,16 +23,11 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
          CostEvaluator::TrajectoryCostsWeights costWeights,
          const int maxNumThreads)
     : Follower() {
-  // Setup the trajectory sampler
-  trajSampler = std::make_unique<TrajectorySampler>(
-      controlLimits, controlType, timeStep, predictionHorizon, controlHorizon,
-      maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
-      sensor_position_body, sensor_rotation_body, octreeRes, maxNumThreads);
-
-  trajCostEvaluator = std::make_unique<CostEvaluator>(
-      costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
-      trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
-      maxSegmentSize);
+  // Setup the trajectory sampler and cost evaluator
+  configure(controlLimits, controlType, timeStep, predictionHorizon,
+            controlHorizon, maxLinearSamples, maxAngularSamples,
+            robotShapeType, robotDimensions, sensor_position_body,
+            sensor_rotation_body, octreeRes, costWeights, maxNumThreads);
 
   // Update the max forward distance the robot can make
   if (controlType == ControlType::OMNI) {
@@ -42,7 +37,6 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
   } else {
     max_forward_distance_ = controlLimits.velXParams.maxVel * predictionHorizon;
   }
-  this->maxNumThreads = maxNumThreads;
 }
 
 DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
@@ -54,15 +48,10 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
          CostEvaluator::TrajectoryCostsWeights costWeights,
          const int maxNumThreads)
     : Follower() {
-  // Setup the trajectory sampler
-  trajSampler = std::make_unique<TrajectorySampler>(
-      config, controlLimits, controlType, robotShapeType, robotDimensions,
-      sensor_position_body, sensor_rotation_body, maxNumThreads);
-
-  trajCostEvaluator = std::make_unique<CostEvaluator>(
-      costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
-      trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
-      maxSegmentSize);
+  // Setup the trajectory sampler and cost evaluator
+  configure(config, controlLimits, controlType, robotShapeType,
+            robotDimensions, sensor_position_body, sensor_rotation_body,
+            costWeights, maxNumThreads);
 
   // Update the max forward distance the robot can make
   double timeHorizon = config.getParameter<double>("control_horizon");
@@ -73,10 +62,9 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
   } else {
     max_forward_distance_ = controlLimits.velXParams.maxVel * timeHorizon;
   }
-  this->maxNumThreads = maxNumThreads;
 }
 
-void DWA::reconfigure(ControlLimitsParams controlLimits,
+void DWA::configure(ControlLimitsParams controlLimits,
                       ControlType controlType, double timeStep,
                       double predictionHorizon, double controlHorizon,
                       int maxLinearSamples, int maxAngularSamples,
@@ -99,7 +87,7 @@ void DWA::reconfigure(ControlLimitsParams controlLimits,
   this->maxNumThreads = maxNumThreads;
 }
 
-void DWA::reconfigure(TrajectorySampler::TrajectorySamplerParameters config,
+void DWA::configure(TrajectorySampler::TrajectorySamplerParameters config,
                       ControlLimitsParams controlLimits,
                       ControlType controlType,
                       const CollisionChecker::ShapeType robotShapeType,

@@ -7,7 +7,6 @@
 #include "follower.h"
 #include "utils/cost_evaluator.h"
 #include "utils/trajectory_sampler.h"
-#include <cstddef>
 #include <vector>
 
 namespace Kompass {
@@ -48,7 +47,7 @@ public:
    * @brief Reconfigures the trajectory planner
    */
   // void reconfigure(DWAConfig &cfg);
-  void reconfigure(ControlLimitsParams controlLimits, ControlType controlType,
+  void configure(ControlLimitsParams controlLimits, ControlType controlType,
                    double timeStep, double predictionHorizon,
                    double controlHorizon, int maxLinearSamples,
                    int maxAngularSamples,
@@ -60,7 +59,7 @@ public:
                    CostEvaluator::TrajectoryCostsWeights costWeights,
                    const int maxNumThreads = 1);
 
-  void reconfigure(TrajectorySampler::TrajectorySamplerParameters config,
+  void configure(TrajectorySampler::TrajectorySamplerParameters config,
                    ControlLimitsParams controlLimits, ControlType controlType,
                    const CollisionChecker::ShapeType robotShapeType,
                    const std::vector<float> robotDimensions,
