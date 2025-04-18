@@ -250,7 +250,7 @@ log INFO "Installing kompass-core dependencies..."
 # Clone and build kompass-core
 if [[ ! -d "kompass-core" ]]; then
     log INFO "Cloning kompass-core repository..."
-    git clone --depth 1 --branch feature/emergency_stop "$KOMPASS_CORE_URL"
+    git clone --depth 1 --branch main "$KOMPASS_CORE_URL"
 else
     log WARN "kompass-core directory already exists. Skipping download."
 fi

@@ -23,7 +23,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y curl
 
       - name: Install GPGPU dependancies and kompass-core
-        run: curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/heads/feature/emergency_stop/build_dependencies/install_gpu.sh | bash
+        run: curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/heads/main/build_dependencies/install_gpu.sh | bash
 
       - name: Install test dependancies
         run: pip install pytest opencv-python
