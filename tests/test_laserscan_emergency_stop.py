@@ -6,6 +6,8 @@ import pytest
 import matplotlib.pyplot as plt
 from kompass_core.datatypes import LaserScanData
 from kompass_core.utils.geometry import get_laserscan_transformed_polar_coordinates
+from kompass_core.utils.emergency_stop import EmergencyChecker
+from kompass_core.models import Robot, RobotType, RobotGeometry
 
 
 def laser_scan_data_fixed() -> LaserScanData:
@@ -120,7 +122,50 @@ def test_laserscan_partial_data(laser_scan_data: LaserScanData, plot: bool = Fal
     assert len(partial_ranges) <= laser_scan_data.ranges.size
 
 
+@pytest.mark.parametrize("use_gpu", [False, True])
+def test_emergency_stop(laser_scan_data: LaserScanData, use_gpu):
+    """Test emergency stop
+
+    :param laser_scan_data: Laser scan data
+    :type laser_scan_data: LaserScanData
+    """
+    robot_radius = 0.1
+    robot = Robot(
+        robot_type=RobotType.ACKERMANN,
+        geometry_type=RobotGeometry.Type.CYLINDER,
+        geometry_params=np.array([robot_radius, 0.4]),
+    )
+    emergency_distance = 0.5
+    emergency_angle = 90.0
+
+    large_range = 10.0
+    emergency_value = robot_radius + emergency_distance / 2
+
+    emergency_stop = EmergencyChecker(
+        robot=robot,
+        emergency_distance=emergency_distance,
+        emergency_angle=emergency_angle,
+        sensor_position_robot=[0.0, 0.0, 0.173],
+        sensor_rotation_robot=[0.0, 0.0, 0.0, 1.0],
+        use_gpu=use_gpu,
+    )
+    angles_size = np.arange(
+        laser_scan_data.angle_min,
+        laser_scan_data.angle_max,
+        laser_scan_data.angle_increment,
+    ).shape[0]
+    laser_scan_data.ranges = np.array([large_range] * angles_size)
+
+    assert not emergency_stop.run(scan=laser_scan_data, forward=True)
+
+    # Add an obstacle in the critical zone in front of the robot
+    laser_scan_data.ranges[0] = emergency_value
+    assert emergency_stop.run(scan=laser_scan_data, forward=True)
+    assert not emergency_stop.run(scan=laser_scan_data, forward=False)
+
+
 if __name__ == "__main__":
     laser_scan = laser_scan_data_fixed()
     test_laserscan_polar_tf(laser_scan, plot=True)
     test_laserscan_partial_data(laser_scan, plot=True)
+    test_emergency_stop(laser_scan, True)
