@@ -1,4 +1,5 @@
 #include "controllers/controller.h"
+#include <algorithm>
 
 namespace Kompass {
 namespace Control {
@@ -76,13 +77,7 @@ double Controller::restrictVelocityTolimits(
   }
 
   // Respect the maximum absolute velocity
-  if (std::abs(velocityCommand) > maxVel) {
-    if (velocityCommand > 0) {
-      velocityCommand = maxVel;
-    } else {
-      velocityCommand = -maxVel;
-    }
-  }
+  velocityCommand = std::clamp(velocityCommand, -maxVel, maxVel);
 
   return velocityCommand;
 }
