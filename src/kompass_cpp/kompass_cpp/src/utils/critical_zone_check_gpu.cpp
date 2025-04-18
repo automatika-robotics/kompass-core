@@ -1,7 +1,6 @@
 #include "utils/critical_zone_check_gpu.h"
 #include "utils/logger.h"
 #include <CL/sycl.hpp>
-#include <cstddef>
 #include <hipSYCL/sycl/libkernel/marray.hpp>
 #include <sycl/sycl.hpp>
 
@@ -11,6 +10,13 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
                                    const std::vector<double> &angles,
                                    const bool forward) {
   try {
+
+
+    // Check if the number of ranges and angles is equal to the scan size
+    if (ranges.size() != m_scanSize || angles.size() != m_scanSize) {
+      LOG_ERROR("Ranges and angles size do not match the scan size.");
+      return false;
+    }
 
     m_q.fill(m_devicePtrOutput, false, m_scan_in_zone);
 
@@ -30,10 +36,10 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
           transformation_matrix(1, 0), transformation_matrix(1, 1),
           transformation_matrix(1, 2), transformation_matrix(1, 3)};
 
-      auto devicePtrRanges = m_devicePtrRanges;
-      auto devicePtrAngles = m_devicePtrAngles;
-      auto devicePtrOutput = m_devicePtrOutput;
-      auto criticalDistance = critical_distance_;
+      const auto devicePtrRanges = m_devicePtrRanges;
+      const auto devicePtrAngles = m_devicePtrAngles;
+      const auto devicePtrOutput = m_devicePtrOutput;
+      const auto criticalDistance = critical_distance_;
       size_t *critical_indices;
       sycl::range<1> global_size;
       if (forward) {
@@ -83,6 +89,7 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
 
   } catch (const sycl::exception &e) {
     LOG_ERROR("Exception caught: ", e.what());
+    throw;
   }
 
   return *m_result;
