@@ -1,4 +1,5 @@
 #include "controllers/controller.h"
+#include <algorithm>
 
 namespace Kompass {
 namespace Control {
@@ -34,7 +35,7 @@ void Controller::setControlType(const Control::ControlType &controlType) {
   this->ctrType = controlType;
 }
 
-void Controller::setCurrentVelocity(const Control::Velocity &vel) {
+void Controller::setCurrentVelocity(const Control::Velocity2D &vel) {
   this->currentVel = vel;
 }
 
@@ -52,7 +53,7 @@ void Controller::setCurrentState(double pose_x, double pose_y, double pose_yaw,
 
 Control::ControlType Controller::getControlType() const { return ctrType; }
 
-Control::Velocity Controller::getControl() const { return currentCtr; }
+Control::Velocity2D Controller::getControl() const { return currentCtr; }
 
 // Function to compute the velocity command
 double Controller::restrictVelocityTolimits(
@@ -76,13 +77,7 @@ double Controller::restrictVelocityTolimits(
   }
 
   // Respect the maximum absolute velocity
-  if (std::abs(velocityCommand) > maxVel) {
-    if (velocityCommand > 0) {
-      velocityCommand = maxVel;
-    } else {
-      velocityCommand = -maxVel;
-    }
-  }
+  velocityCommand = std::clamp(velocityCommand, -maxVel, maxVel);
 
   return velocityCommand;
 }

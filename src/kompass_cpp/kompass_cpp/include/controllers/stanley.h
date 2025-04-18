@@ -45,7 +45,7 @@ public:
   /**
    * @brief Computes a new Stanley velocity control to follow the current path
    *
-   * @param timeStep  Control tiem step [seconds]
+   * @param timeStep  Control time step [seconds]
    * @return Controller::Result
    */
   Controller::Result computeVelocityCommand(double timeStep);
@@ -77,8 +77,8 @@ protected:
   double determined_control_gain{0.0};
 
   /**
-   * @brief Comptes the velcity control given computed Stanley control values to
-   * respect robot control limits
+   * @brief Computes the velocity control given computed Stanley control values
+   * to respect robot control limits
    *
    * @param current_velocity
    * @param linear_velocity
@@ -86,7 +86,7 @@ protected:
    * @param time_step
    * @return Control::Velocity
    */
-  Control::Velocity computeCommand(Control::Velocity current_velocity,
+  Control::Velocity2D computeCommand(Control::Velocity2D current_velocity,
                                    double linear_velocity,
                                    double steering_angle,
                                    double time_step) const;

@@ -34,14 +34,11 @@ class GridData(BaseAttrs):
     p_prior: float = field(default=0.5)
     occupancy: np.ndarray = field(init=False)
     occupancy_prob: np.ndarray = field(init=False)
-    scan_occupancy: np.ndarray = field(init=False)
-    scan_occupancy_prob: np.ndarray = field(init=False)
     # TODO: Add semantic occupancy
     # semantic_occupancy : np.ndarray = field(init=False)
     # semantic : np.ndarray = field(init=False)
 
     def __attrs_post_init__(self):
-        self.init_scan_data()
         self.occupancy = self.get_initial_grid_data()
         self.occupancy_prob = self.get_initial_grid_data()
 
@@ -59,14 +56,6 @@ class GridData(BaseAttrs):
             order="F",
         )
         return data
-
-    def init_scan_data(self, baysian: bool = False) -> None:
-        """Initialize Scan Occupancy Layers"""
-        self.scan_occupancy = self.get_initial_grid_data()
-        if baysian:
-            self.scan_occupancy_prob = np.full(
-                (self.width, self.height), self.p_prior, dtype=np.float32, order="F"
-            )
 
 
 @define(kw_only=True)
@@ -173,14 +162,6 @@ class LocalMapper:
             p_prior=self.scan_update_model.p_prior,
         )
 
-        # for bayesian update
-        if self.config.baysian_update:
-            self.previous_grid_prob_transformed = np.full(
-                (self.grid_data.width, self.grid_data.height),
-                self.grid_data.p_prior,
-                dtype=np.float32,
-                order="F",
-            )
         # turned to true after the first map update is done
         self.processed = False
 
@@ -251,7 +232,6 @@ class LocalMapper:
             self.local_mapper.get_previous_grid_in_current_pose(
                 current_position_in_previous_pose=_position_in_previous_pose[:2],
                 current_orientation_in_previous_pose=_orientation_in_previous_pose,
-                previous_grid_data=self.grid_data.scan_occupancy_prob,
                 unknown_value=self.scan_update_model.p_prior,
             )
         )
@@ -291,38 +271,32 @@ class LocalMapper:
         if self.config.baysian_update:
             if self.processed:
                 self._calculate_grid_shift(robot_pose)
-            self.grid_data.init_scan_data(self.config.baysian_update)
-            self.local_mapper.scan_to_grid_baysian(
+            scan_occupancy, scan_occupancy_prob = self.local_mapper.scan_to_grid_baysian(
                 angles=laser_scan.angles,
                 ranges=filtered_ranges,
-                grid_data=self.grid_data.scan_occupancy,
-                grid_data_prob=self.grid_data.scan_occupancy_prob,
-                previous_grid_data_prob=self.previous_grid_prob_transformed,
             )
 
             # Update grid
-            self.grid_data.occupancy = np.copy(self.grid_data.scan_occupancy)
+            self.grid_data.occupancy = np.copy(scan_occupancy)
 
             self.grid_data.occupancy_prob[
-                self.grid_data.scan_occupancy_prob > self.scan_update_model.p_prior
+                scan_occupancy_prob > self.scan_update_model.p_prior
             ] = OCCUPANCY_TYPE.OCCUPIED.value
             self.grid_data.occupancy_prob[
-                self.grid_data.scan_occupancy_prob == self.scan_update_model.p_prior
+                scan_occupancy_prob == self.scan_update_model.p_prior
             ] = OCCUPANCY_TYPE.UNEXPLORED.value
             self.grid_data.occupancy_prob[
-                self.grid_data.scan_occupancy_prob < self.scan_update_model.p_prior
+                scan_occupancy_prob < self.scan_update_model.p_prior
             ] = OCCUPANCY_TYPE.EMPTY.value
 
         else:
-            self.grid_data.init_scan_data(self.config.baysian_update)
-            self.local_mapper.scan_to_grid(
+            scan_occupancy = self.local_mapper.scan_to_grid(
                 angles=laser_scan.angles,
                 ranges=filtered_ranges,
-                grid_data=self.grid_data.scan_occupancy,
             )
 
             # Update grid
-            self.grid_data.occupancy = np.copy(self.grid_data.scan_occupancy)
+            self.grid_data.occupancy = np.copy(scan_occupancy)
 
         # flag to enable fetching the mapping data
         self.processed = True

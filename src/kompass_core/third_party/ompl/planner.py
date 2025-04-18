@@ -5,9 +5,9 @@ from attrs import asdict, define, field
 from ...utils.common import BaseAttrs, base_validators
 from ...utils.geometry import convert_to_plus_minus_pi
 
-import ompl
+import omplpy as ompl
 from ...models import Robot, RobotState
-from ompl import base, geometric
+from omplpy import base, geometric
 
 from ..fcl.collisions import FCL
 from ..fcl.config import FCLConfig

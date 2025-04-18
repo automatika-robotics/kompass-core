@@ -1,11 +1,10 @@
-#include <pybind11/eigen.h>
-#include <pybind11/functional.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <nanobind/eigen/dense.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/vector.h>
 
 #include "mapping/local_mapper.h"
 
-namespace py = pybind11;
+namespace py = nanobind;
 using namespace Kompass;
 
 #if GPU
@@ -37,21 +36,19 @@ void bindings_mapping(py::module_ &m) {
 
       .def("scan_to_grid", &Mapping::LocalMapper::scanToGrid,
            "Convert laser scan data to occupancy grid", py::arg("angles"),
-           py::arg("ranges"), py::arg("grid_data"))
+           py::arg("ranges"), py::rv_policy::reference_internal)
 
       .def("scan_to_grid_baysian", &Mapping::LocalMapper::scanToGridBaysian,
            "Convert laser scan data to occupancy grid, with baysian update",
-           py::arg("angles"), py::arg("ranges"), py::arg("grid_data"),
-           py::arg("grid_data_prob"), py::arg("previous_grid_data_prob"))
+           py::arg("angles"), py::arg("ranges"),
+           py::rv_policy::reference_internal)
 
       .def("get_previous_grid_in_current_pose",
            &Mapping::LocalMapper::getPreviousGridInCurrentPose,
            py::arg("current_position_in_previous_pose"),
-           py::arg("current_orientation_in_previous_pose"),
-           py::arg("previous_grid_data"), py::arg("unknown_value"));
+           py::arg("current_orientation_in_previous_pose"));
 
 #if GPU
   bindings_mapping_gpu(m_mapping);
 #endif
-
 }

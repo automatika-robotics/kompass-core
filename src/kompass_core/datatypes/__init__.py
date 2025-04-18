@@ -12,7 +12,7 @@ from .path import (
     Range2D,
     Odom2D,
 )
-from .pointcloud import PointCloudData, Point3D
+from .pointcloud import PointCloudData
 from .pose import PoseData
 from .vision import TrackingData, ImageMetaData
 
@@ -30,7 +30,6 @@ __all__ = [
     "Range2D",
     "Odom2D",
     "PointCloudData",
-    "Point3D",
     "PoseData",
     "TrackingData",
     "ImageMetaData",

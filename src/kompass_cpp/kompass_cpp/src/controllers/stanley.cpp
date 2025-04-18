@@ -53,11 +53,10 @@ Controller::Result Stanley::computeVelocityCommand(double timeStep) {
 
   // Stanley control law
   double control_steering_angle =
-     - cross_track_gain *
+      -cross_track_gain *
           std::atan2(target.crosstrack_error,
                      std::max(std::abs(target_speed), min_velocity)) +
-          heading_gain * Angle::normalizeToMinusPiPlusPi(target.heading_error);
-
+      heading_gain * Angle::normalizeToMinusPiPlusPi(target.heading_error);
 
   current_segment_index_ = target.segment_index;
   current_position_in_segment_ = target.position_in_segment;
@@ -67,43 +66,43 @@ Controller::Result Stanley::computeVelocityCommand(double timeStep) {
   latest_velocity_command_ = computeCommand(
       latest_velocity_command_, target_speed, control_steering_angle, timeStep);
 
-  LOG_DEBUG("Commmand: {", latest_velocity_command_.vx, ", ",
-            latest_velocity_command_.omega, "}\n");
+  LOG_DEBUG("Command: {", latest_velocity_command_.vx(), ", ",
+            latest_velocity_command_.omega(), "}\n");
 
   return {Result::Status::COMMAND_FOUND, latest_velocity_command_};
 }
 
 void Stanley::setWheelBase(double length) { robotWheelBase = length; }
 
-Control::Velocity Stanley::computeCommand(Control::Velocity current_velocity,
+Control::Velocity2D Stanley::computeCommand(Control::Velocity2D current_velocity,
                                           double linear_velocity,
                                           double steering_angle,
                                           double time_step) const {
 
   // Restrict the linear velocity command based on the limits
-  double linearCtrl =
-      restrictVelocityTolimits(current_velocity.vx, linear_velocity,
+  float linearCtrl =
+      restrictVelocityTolimits(current_velocity.vx(), linear_velocity,
                                ctrlimitsParams.velXParams.maxAcceleration,
                                ctrlimitsParams.velXParams.maxDeceleration,
                                ctrlimitsParams.velXParams.maxVel, time_step);
 
-  Control::Velocity velocity_command{linearCtrl, 0.0, 0.0, 0.0};
+  Control::Velocity2D velocity_command{linearCtrl, 0.0, 0.0, 0.0};
   double max_steering_angle_ = ctrlimitsParams.omegaParams.maxAngle;
 
   // Limit steering angle to +-max_steering_angle_:
-  velocity_command.steer_ang = std::min(
-      std::max(steering_angle, -max_steering_angle_), max_steering_angle_);
+  velocity_command.setSteerAng(std::min(
+      std::max(steering_angle, -max_steering_angle_), max_steering_angle_));
 
   // Compute angular velocity from steering angle:
-  double omega = std::tan(velocity_command.steer_ang) * std::abs(linearCtrl) /
+  double omega = std::tan(velocity_command.steer_ang()) * std::abs(linearCtrl) /
                  robotWheelBase;
 
   // Restrict the angular velocity
-  velocity_command.omega =
-      restrictVelocityTolimits(current_velocity.omega, omega,
-                               ctrlimitsParams.omegaParams.maxAcceleration,
-                               ctrlimitsParams.omegaParams.maxDeceleration,
-                               ctrlimitsParams.omegaParams.maxOmega, time_step);
+  velocity_command.setOmega(restrictVelocityTolimits(
+      current_velocity.omega(), omega,
+      ctrlimitsParams.omegaParams.maxAcceleration,
+      ctrlimitsParams.omegaParams.maxDeceleration,
+      ctrlimitsParams.omegaParams.maxOmega, time_step));
 
   return velocity_command;
 }

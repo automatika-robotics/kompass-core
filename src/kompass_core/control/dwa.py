@@ -84,6 +84,11 @@ class DWAConfig(FollowerConfig):
       - `1`
       - Maximum number of threads used when running the controller. Must be between `1` and `1e2`.
 
+    * - drop_samples
+      - `bool`
+      - `True`
+      - To drop the entire sample once a collision is detected (True), or maintain the first collision-free segment of the sample (if False)
+
     ```
     """
 
@@ -120,6 +125,8 @@ class DWAConfig(FollowerConfig):
     max_num_threads: int = field(
         default=1, validator=base_validators.in_range(min_value=1, max_value=1e2)
     )
+
+    drop_samples: bool = field(default=True)
 
     def __attrs_post_init__(self):
         """Attrs post init"""
@@ -229,6 +236,9 @@ class DWA(FollowerTemplate):
 
         # Init the following result
         self._result = kompass_cpp.control.SamplingControlResult()
+        self._end_of_ctrl_horizon: int = max(
+            int(self._config.control_horizon / self._config.control_time_step), 1
+        )
         logging.info("DWA PATH CONTROLLER IS READY")
 
     @property
@@ -243,6 +253,7 @@ class DWA(FollowerTemplate):
         point_cloud: Optional[PointCloudData] = None,
         local_map: Optional[np.ndarray] = None,
         local_map_resolution: Optional[float] = None,
+        debug: bool = False,
         **_,
     ) -> bool:
         """
@@ -297,6 +308,10 @@ class DWA(FollowerTemplate):
             return False
 
         try:
+            if debug:
+                self._planner.debug_velocity_search(
+                    current_velocity, sensor_data, self._config.drop_samples
+                )
             self._result = self._planner.compute_velocity_commands(
                 current_velocity, sensor_data
             )
@@ -305,6 +320,15 @@ class DWA(FollowerTemplate):
             logging.error(f"Could not find velocity command: {e}")
             return False
 
+        return True
+
+    def has_result(self) -> None:
+        """
+        Set global path to be tracked by the planner
+
+        :param global_path: Global reference path
+        :type global_path: Path
+        """
         return self._result.is_found
 
     def set_path(self, global_path, **_) -> None:
@@ -320,26 +344,25 @@ class DWA(FollowerTemplate):
     def logging_info(self) -> str:
         """logging_info."""
         if self._result.is_found:
-            return f"Controller found trajectory with cost: {self._result.cost}, Velocity command: {self._result.trajectory.velocity[0]}"
+            return f"DWA Controller found trajectory with cost: {self._result.cost}"
         else:
-            return "Controller Failed"
+            return "DWA Controller Failed to find a valid trajectory"
 
     @property
-    def control_till_horizon(self) -> Optional[List[kompass_cpp.types.ControlCmd]]:
+    def control_till_horizon(
+        self,
+    ) -> Optional[List[kompass_cpp.types.TrajectoryVelocities2D]]:
         """
         Getter of the planner control result until the control horizon
 
         :return: Velocity commands of the minimal cost path
-        :rtype: List[kompass_cpp.types.ControlCmd]
+        :rtype: List[kompass_cpp.types.TrajectoryVelocities2D]
         """
         if self._result.is_found:
-            end_of_ctrl_horizon: int = max(
-                int(self._config.control_horizon / self._config.control_time_step), 1
-            )
-            return self._result.trajectory.velocity[:end_of_ctrl_horizon]
+            return self._result.trajectory.velocities
         return None
 
-    def optimal_path(self) -> Optional[kompass_cpp.types.Path]:
+    def optimal_path(self) -> Optional[kompass_cpp.types.TrajectoryPath]:
         """Get optimal (local) plan."""
         if not self._result.is_found:
             return None
@@ -358,7 +381,7 @@ class DWA(FollowerTemplate):
         return None
 
     @property
-    def linear_x_control(self) -> List[float]:
+    def linear_x_control(self) -> np.ndarray:
         """
         Getter of the last linear forward velocity control computed by the controller
 
@@ -366,11 +389,11 @@ class DWA(FollowerTemplate):
         :rtype: List[float]
         """
         if self._result.is_found:
-            return [vel.vx for vel in self.control_till_horizon]
+            return self.control_till_horizon.vx[: self._end_of_ctrl_horizon]
         return [0.0]
 
     @property
-    def linear_y_control(self) -> List[float]:
+    def linear_y_control(self) -> np.ndarray:
         """
         Getter the last linear velocity lateral control computed by the controller
 
@@ -378,11 +401,11 @@ class DWA(FollowerTemplate):
         :rtype: List[float]
         """
         if self._result.is_found:
-            return [vel.vy for vel in self.control_till_horizon]
+            return self.control_till_horizon.vy[: self._end_of_ctrl_horizon]
         return [0.0]
 
     @property
-    def angular_control(self) -> List[float]:
+    def angular_control(self) -> np.ndarray:
         """
         Getter of the last angular velocity control computed by the controller
 
@@ -390,5 +413,5 @@ class DWA(FollowerTemplate):
         :rtype: List[float]
         """
         if self._result.is_found:
-            return [vel.omega for vel in self.control_till_horizon]
+            return self.control_till_horizon.omega[: self._end_of_ctrl_horizon]
         return [0.0]

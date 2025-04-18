@@ -1,3 +1,8 @@
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/function.h>
+#include <nanobind/stl/shared_ptr.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 #include <ompl/base/OptimizationObjective.h>
 #include <ompl/base/Path.h>
 #include <ompl/base/Planner.h>
@@ -42,17 +47,12 @@
 #include <ompl/geometric/planners/sst/SST.h>
 #include <ompl/geometric/planners/stride/STRIDE.h>
 #include <ompl/util/Console.h>
-#include <pybind11/functional.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
-#include <string>
-#include <vector>
 
 namespace ob = ompl::base;
 namespace og = ompl::geometric;
 namespace om = ompl::msg;
 
-namespace py = pybind11;
+namespace py = nanobind;
 
 std::vector<std::string> py_getParamNames(ob::ParamSet &paramset) {
   std::vector<std::string> params;
@@ -60,7 +60,7 @@ std::vector<std::string> py_getParamNames(ob::ParamSet &paramset) {
   return params;
 }
 
-PYBIND11_MODULE(ompl, m) {
+NB_MODULE(omplpy, m) {
   m.doc() = "Python Bindings for OMPL";
 
   auto m_base = m.def_submodule("base", "ompl.base");
@@ -75,32 +75,25 @@ PYBIND11_MODULE(ompl, m) {
   m_util.doc() = "OMPL utilities module used to configure OMPL logging level";
 
   // States and spaces
-  py::class_<ompl::base::ScopedState<>,
-             std::shared_ptr<ompl::base::ScopedState<>>>(m_base, "ScopedState")
-      .def(py::init<const ompl::base::SpaceInformationPtr &>())
-      .def(py::init<ompl::base::StateSpacePtr>())
-      .def(py::init<const ompl::base::ScopedState<> &>())
-      .def("getSpace", &ompl::base::ScopedState<>::getSpace)
-      .def("random", &ompl::base::ScopedState<>::random)
-      .def("enforceBounds", &ompl::base::ScopedState<>::enforceBounds)
-      .def("satisfiesBounds", &ompl::base::ScopedState<>::satisfiesBounds)
-      .def("reals", &ompl::base::ScopedState<>::reals)
-      .def("print", &ompl::base::ScopedState<>::print)
-      .def("get", py::overload_cast<>(&ompl::base::ScopedState<>::get),
-           py::return_value_policy::reference_internal);
+  py::class_<ob::ScopedState<>>(m_base, "ScopedState")
+      .def(py::init<const ob::SpaceInformationPtr &>())
+      .def(py::init<ob::StateSpacePtr>())
+      .def(py::init<const ob::ScopedState<> &>())
+      .def("getSpace", &ob::ScopedState<>::getSpace)
+      .def("random", &ob::ScopedState<>::random)
+      .def("enforceBounds", &ob::ScopedState<>::enforceBounds)
+      .def("satisfiesBounds", &ob::ScopedState<>::satisfiesBounds)
+      .def("reals", &ob::ScopedState<>::reals)
+      .def("print", &ob::ScopedState<>::print)
+      .def("get", py::overload_cast<>(&ob::ScopedState<>::get),
+           py::rv_policy::reference_internal);
 
-  py::class_<ob::State, std::unique_ptr<ob::State, py::nodelete>>(m_base,
-                                                                  "State");
-  py::class_<ob::CompoundState, ob::State,
-             std::unique_ptr<ob::CompoundState, py::nodelete>>(m_base,
-                                                               "CompoundState");
-  py::class_<ob::StateSpace, std::shared_ptr<ob::StateSpace>>(m_base,
-                                                              "StateSpace");
-  py::class_<ob::CompoundStateSpace, ob::StateSpace,
-             std::shared_ptr<ob::CompoundStateSpace>>(m_base,
-                                                      "CompoundStateSpace");
-  py::class_<ob::SpaceInformation, std::shared_ptr<ob::SpaceInformation>>(
-      m_base, "SpaceInformation")
+  py::class_<ob::State>(m_base, "State");
+  py::class_<ob::CompoundState, ob::State>(m_base, "CompoundState");
+  py::class_<ob::StateSpace>(m_base, "StateSpace");
+  py::class_<ob::CompoundStateSpace, ob::StateSpace>(m_base,
+                                                     "CompoundStateSpace");
+  py::class_<ob::SpaceInformation>(m_base, "SpaceInformation")
       .def(py::init<ob::StateSpacePtr>())
       .def("satisfiesBounds", &ob::SpaceInformation::satisfiesBounds);
 
@@ -115,12 +108,11 @@ PYBIND11_MODULE(ompl, m) {
       .def("setYaw", &ob::SE2StateSpace::StateType::setYaw)
       .doc() = "A state in the SE2StateSpace (2D space) SE(2): (x, y, yaw)";
 
-  py::class_<ob::SE2StateSpace, ob::CompoundStateSpace,
-             std::shared_ptr<ob::SE2StateSpace>>(m_base, "SE2StateSpace")
+  py::class_<ob::SE2StateSpace, ob::CompoundStateSpace>(m_base, "SE2StateSpace")
       .def(py::init<>())
       .def("setBounds", &ob::SE2StateSpace::setBounds)
-      .def("allocState", &ompl::base::SE2StateSpace::allocState)
-      .def("freeState", &ompl::base::SE2StateSpace::freeState)
+      .def("allocState", &ob::SE2StateSpace::allocState)
+      .def("freeState", &ob::SE2StateSpace::freeState)
       .doc() =
       "2D space SE(2) used for planning 2D navigation in the (x,y) plane";
 
@@ -151,12 +143,13 @@ PYBIND11_MODULE(ompl, m) {
       .def("setStateValidityChecker",
            py::overload_cast<const ob::StateValidityCheckerPtr &>(
                &og::SimpleSetup::setStateValidityChecker))
-      .def("setStateValidityChecker",
+      .def("setStateValidityChecker", // State Validy Checker Function - Takes
+                                      // of form Callable(State) -> bool
            py::overload_cast<const ob::StateValidityCheckerFn &>(
                &og::SimpleSetup::setStateValidityChecker))
       .def("print", &og::SimpleSetup::print)
       .def("getSpaceInformation", &og::SimpleSetup::getSpaceInformation,
-           py::return_value_policy::copy)
+           py::rv_policy::copy)
       .def("setPlanner", &og::SimpleSetup::setPlanner)
       .def("setOptimizationObjective",
            &og::SimpleSetup::setOptimizationObjective)
@@ -181,27 +174,23 @@ PYBIND11_MODULE(ompl, m) {
       .def("subdivide", &og::PathGeometric::subdivide)
       .def("reverse", &og::PathGeometric::reverse)
       .def("checkAndRepair", &og::PathGeometric::checkAndRepair)
-      .def("append", py::overload_cast<const ompl::base::State *>(
-                         &og::PathGeometric::append))
-      .def("append", py::overload_cast<const ompl::geometric::PathGeometric &>(
+      .def("append",
+           py::overload_cast<const ob::State *>(&og::PathGeometric::append))
+      .def("append", py::overload_cast<const og::PathGeometric &>(
                          &og::PathGeometric::append))
       .def("prepend", &og::PathGeometric::prepend)
       .def("keepAfter", &og::PathGeometric::keepAfter)
       .def("keepBefore", &og::PathGeometric::keepBefore)
       .def("getClosestIndex", &og::PathGeometric::getClosestIndex)
       .def("getStates", &og::PathGeometric::getStates,
-           py::return_value_policy::reference_internal)
+           py::rv_policy::reference_internal)
       .def("getState",
            py::overload_cast<unsigned int>(&og::PathGeometric::getState),
-           py::return_value_policy::reference_internal)
+           py::rv_policy::reference_internal)
       .def("getStateCount", &og::PathGeometric::getStateCount)
       .def("clear", &og::PathGeometric::clear)
       .doc() = "Definition of a geometric path along with possible methods "
                "applied to the geomteric path";
-
-  // State Validy Checker Function - Takes of form Callable(State) -> bool
-  py::class_<ob::StateValidityCheckerFn>(m_base, "StateValidityCheckerFn")
-      .def(py::init<std::function<bool(const ob::State *)>>());
 
   py::class_<ob::RealVectorBounds>(m_base, "RealVectorBounds")
       .def(py::init<unsigned int>(), py::arg("dim"))
@@ -221,14 +210,13 @@ PYBIND11_MODULE(ompl, m) {
       .def("getVolume", &ob::RealVectorBounds::getVolume)
       .def("getDifference", &ob::RealVectorBounds::getDifference)
       .def("check", &ob::RealVectorBounds::check)
-      .def_readwrite("low", &ob::RealVectorBounds::low)
-      .def_readwrite("high", &ob::RealVectorBounds::high)
+      .def_rw("low", &ob::RealVectorBounds::low)
+      .def_rw("high", &ob::RealVectorBounds::high)
       .doc() = "The lower and upper bounds for an R^n space, used to set the "
                "bounds on the used StateSpace in the planning problem";
 
   // Params and Paramset
-  py::class_<ob::GenericParam, std::shared_ptr<ob::GenericParam>>(
-      m_base, "GenericParam")
+  py::class_<ob::GenericParam>(m_base, "GenericParam")
       .def("getName", &ob::GenericParam::getName)
       .def("setName", &ob::GenericParam::setName)
       .def("setValue", &ob::GenericParam::setValue)
@@ -251,160 +239,135 @@ PYBIND11_MODULE(ompl, m) {
       .def("getParamValues", &ob::ParamSet::getParamValues)
       .def("hasParam", &ob::ParamSet::hasParam)
       .def("__getitem__", &ob::ParamSet::operator[],
-           py::return_value_policy::reference_internal)
+           py::rv_policy::reference_internal)
       .doc() = "A set of GenericParam used for a Motion planning algorithm";
 
   // Exposed Planners
-  py::class_<ob::Planner, std::shared_ptr<ob::Planner>>(m_base, "Planner")
-      .def("params", py::overload_cast<>(&ompl::base::Planner::params),
-           py::return_value_policy::reference_internal)
-      .def("params",
-           py::overload_cast<>(&ompl::base::Planner::params, py::const_),
-           py::return_value_policy::reference_internal)
+  py::class_<ob::Planner>(m_base, "Planner")
+      .def("params", py::overload_cast<>(&ob::Planner::params),
+           py::rv_policy::reference_internal)
+      .def("params", py::overload_cast<>(&ob::Planner::params, py::const_),
+           py::rv_policy::reference_internal)
       .doc() = "Generic parent class for any motion planner";
 
-  py::class_<og::EST, ob::Planner, std::shared_ptr<og::EST>>(m_geometric, "EST")
+  py::class_<og::EST, ob::Planner>(m_geometric, "EST")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Expansive Space Trees (EST) Planner";
 
-  py::class_<og::BiEST, ob::Planner, std::shared_ptr<og::BiEST>>(m_geometric,
-                                                                 "BiEST")
+  py::class_<og::BiEST, ob::Planner>(m_geometric, "BiEST")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Bi-directional Expansive Space Trees (BiEST) Planner";
 
-  py::class_<og::FMT, ob::Planner, std::shared_ptr<og::FMT>>(m_geometric, "FMT")
+  py::class_<og::FMT, ob::Planner>(m_geometric, "FMT")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Asymptotically Optimal Fast Marching Tree algorithm developed "
                "by L. Janson and M. Pavone";
 
-  py::class_<og::BFMT, ob::Planner, std::shared_ptr<og::BFMT>>(m_geometric,
-                                                               "BFMT")
+  py::class_<og::BFMT, ob::Planner>(m_geometric, "BFMT")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Bidirectional Asymptotically Optimal Fast Marching Tree "
                "algorithm developed by J. Starek, J.V. Gomez, et al.";
 
-  py::class_<og::ABITstar, ob::Planner, std::shared_ptr<og::ABITstar>>(
-      m_geometric, "ABITstar")
+  py::class_<og::ABITstar, ob::Planner>(m_geometric, "ABITstar")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Advanced Batch Informed Trees (ABIT*) Planner";
 
-  py::class_<og::AITstar, ob::Planner, std::shared_ptr<og::AITstar>>(
-      m_geometric, "AITstar")
+  py::class_<og::AITstar, ob::Planner>(m_geometric, "AITstar")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Adaptively Informed Trees (AIT*) Planner";
 
-  py::class_<og::BITstar, ob::Planner, std::shared_ptr<og::BITstar>>(
-      m_geometric, "BITstar")
+  py::class_<og::BITstar, ob::Planner>(m_geometric, "BITstar")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Batch Informed Trees (BIT*) Planner";
 
-  py::class_<og::BKPIECE1, ob::Planner, std::shared_ptr<og::BKPIECE1>>(
-      m_geometric, "BKPIECE1")
+  py::class_<og::BKPIECE1, ob::Planner>(m_geometric, "BKPIECE1")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Bi-directional KPIECE with one level of discretization";
 
-  py::class_<og::InformedRRTstar, ob::Planner,
-             std::shared_ptr<og::InformedRRTstar>>(m_geometric,
-                                                   "InformedRRTstar")
+  py::class_<og::InformedRRTstar, ob::Planner>(m_geometric, "InformedRRTstar")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Informed Optimal Rapidly-exploring Random Trees RRT*";
 
-  py::class_<og::KPIECE1, ob::Planner, std::shared_ptr<og::KPIECE1>>(
-      m_geometric, "KPIECE1")
+  py::class_<og::KPIECE1, ob::Planner>(m_geometric, "KPIECE1")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Kinematic Planning by Interior-Exterior Cell Exploration";
 
-  py::class_<og::LBKPIECE1, ob::Planner, std::shared_ptr<og::LBKPIECE1>>(
-      m_geometric, "LBKPIECE1")
+  py::class_<og::LBKPIECE1, ob::Planner>(m_geometric, "LBKPIECE1")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Lazy Bi-directional KPIECE with one level of discretization";
 
-  py::class_<og::LBTRRT, ob::Planner, std::shared_ptr<og::LBTRRT>>(m_geometric,
-                                                                   "LBTRRT")
+  py::class_<og::LBTRRT, ob::Planner>(m_geometric, "LBTRRT")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Lower Bound Tree Rapidly-exploring Random Trees";
 
-  py::class_<og::LazyLBTRRT, ob::Planner, std::shared_ptr<og::LazyLBTRRT>>(
-      m_geometric, "LazyLBTRRT")
+  py::class_<og::LazyLBTRRT, ob::Planner>(m_geometric, "LazyLBTRRT")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Rapidly-exploring Random Trees";
 
-  py::class_<og::LazyPRM, ob::Planner, std::shared_ptr<og::LazyPRM>>(
-      m_geometric, "LazyPRM")
+  py::class_<og::LazyPRM, ob::Planner>(m_geometric, "LazyPRM")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Lazy Probabilistic RoadMap planner";
 
-  py::class_<og::LazyPRMstar, ob::Planner, std::shared_ptr<og::LazyPRMstar>>(
-      m_geometric, "LazyPRMstar")
+  py::class_<og::LazyPRMstar, ob::Planner>(m_geometric, "LazyPRMstar")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Probabilistic RoadMap Star (PRM*) planner";
 
-  py::class_<og::LazyRRT, ob::Planner, std::shared_ptr<og::LazyRRT>>(
-      m_geometric, "LazyRRT")
+  py::class_<og::LazyRRT, ob::Planner>(m_geometric, "LazyRRT")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Lazy Rapidly-exploring Random Trees";
 
-  py::class_<og::PDST, ob::Planner, std::shared_ptr<og::PDST>>(m_geometric,
-                                                               "PDST")
+  py::class_<og::PDST, ob::Planner>(m_geometric, "PDST")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Path-Directed Subdivision Tree";
 
-  py::class_<og::PRM, ob::Planner, std::shared_ptr<og::PRM>>(m_geometric, "PRM")
+  py::class_<og::PRM, ob::Planner>(m_geometric, "PRM")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Probabilistic RoadMap planner";
 
-  py::class_<og::PRMstar, ob::Planner, std::shared_ptr<og::PRMstar>>(
-      m_geometric, "PRMstar")
+  py::class_<og::PRMstar, ob::Planner>(m_geometric, "PRMstar")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Probabilistic RoadMap planner Start";
 
-  py::class_<og::ProjEST, ob::Planner, std::shared_ptr<og::ProjEST>>(
-      m_geometric, "ProjEST")
+  py::class_<og::ProjEST, ob::Planner>(m_geometric, "ProjEST")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Expansive Space Trees";
 
-  py::class_<og::RRT, ob::Planner, std::shared_ptr<og::RRT>>(m_geometric, "RRT")
+  py::class_<og::RRT, ob::Planner>(m_geometric, "RRT")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Rapidly-exploring Random Trees";
 
-  py::class_<og::RRTConnect, ob::Planner, std::shared_ptr<og::RRTConnect>>(
-      m_geometric, "RRTConnect")
+  py::class_<og::RRTConnect, ob::Planner>(m_geometric, "RRTConnect")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "RRTConnect";
 
-  py::class_<og::RRTXstatic, ob::Planner, std::shared_ptr<og::RRTXstatic>>(
-      m_geometric, "RRTXstatic")
+  py::class_<og::RRTXstatic, ob::Planner>(m_geometric, "RRTXstatic")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Optimal Rapidly-exploring Random Trees Maintaining A Pseudo "
                "Optimal Tree";
 
-  py::class_<og::RRTsharp, ob::Planner, std::shared_ptr<og::RRTsharp>>(
-      m_geometric, "RRTsharp")
+  py::class_<og::RRTsharp, ob::Planner>(m_geometric, "RRTsharp")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() =
       "Optimal Rapidly-exploring Random Trees Maintaining An Optimal Tree";
 
-  py::class_<og::RRTstar, ob::Planner, std::shared_ptr<og::RRTstar>>(
-      m_geometric, "RRTstar")
+  py::class_<og::RRTstar, ob::Planner>(m_geometric, "RRTstar")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Optimal Rapidly-exploring Random Trees";
 
-  py::class_<og::TRRT, ob::Planner, std::shared_ptr<og::TRRT>>(m_geometric,
-                                                               "TRRT")
+  py::class_<og::TRRT, ob::Planner>(m_geometric, "TRRT")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Transition-based Rapidly-exploring Random Trees";
 
-  py::class_<og::SST, ob::Planner, std::shared_ptr<og::SST>>(m_geometric, "SST")
+  py::class_<og::SST, ob::Planner>(m_geometric, "SST")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Sparse Sampling Tree";
 
-  py::class_<og::SBL, ob::Planner, std::shared_ptr<og::SBL>>(m_geometric, "SBL")
+  py::class_<og::SBL, ob::Planner>(m_geometric, "SBL")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "Single-Query Bi-Directional Probabilistic Roadmap Planner with "
                "Lazy Collision Checking";
 
-  py::class_<og::STRIDE, ob::Planner, std::shared_ptr<og::STRIDE>>(m_geometric,
-                                                                   "STRIDE")
+  py::class_<og::STRIDE, ob::Planner>(m_geometric, "STRIDE")
       .def(py::init<const ob::SpaceInformationPtr &, bool, unsigned int,
                     unsigned int, unsigned int, unsigned int, double>(),
            py::arg("si"), py::arg("useProjectedDistance") = false,
@@ -444,26 +407,22 @@ PYBIND11_MODULE(ompl, m) {
       .doc() = "A class to store the result (exit status) of Planner.solve()";
 
   // Optimization Objectives
-  py::class_<ob::OptimizationObjective,
-             std::shared_ptr<ob::OptimizationObjective>>(
-      m_base, "OptimizationObjective");
+  py::class_<ob::OptimizationObjective>(m_base, "OptimizationObjective");
 
-  py::class_<ob::PathLengthOptimizationObjective, ob::OptimizationObjective,
-             std::shared_ptr<ob::PathLengthOptimizationObjective>>(
+  py::class_<ob::PathLengthOptimizationObjective, ob::OptimizationObjective>(
       m_base, "PathLengthOptimizationObjective")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() =
       "An optimization objective which corresponds to optimizing path length";
 
-  py::class_<ob::MechanicalWorkOptimizationObjective, ob::OptimizationObjective,
-             std::shared_ptr<ob::MechanicalWorkOptimizationObjective>>(
-      m_base, "MechanicalWorkOptimizationObjective")
+  py::class_<ob::MechanicalWorkOptimizationObjective,
+             ob::OptimizationObjective>(m_base,
+                                        "MechanicalWorkOptimizationObjective")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() = "An optimization objective which defines path cost using the "
                "idea of mechanical work. To be used in conjunction with TRRT";
 
-  py::class_<ob::MaximizeMinClearanceObjective, ob::OptimizationObjective,
-             std::shared_ptr<ob::MaximizeMinClearanceObjective>>(
+  py::class_<ob::MaximizeMinClearanceObjective, ob::OptimizationObjective>(
       m_base, "MaximizeMinClearanceObjective")
       .def(py::init<const ob::SpaceInformationPtr &>())
       .doc() =

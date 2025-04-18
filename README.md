@@ -11,7 +11,7 @@
 [python-badge]: https://img.shields.io/pypi/pyversions/kompass-core.svg
 [python-url]: https://www.python.org/downloads/
 
-Kompass Core is a fast, GPU powered motion planning and control package for robot navigation. The package contains C++ implementation for core algorithms along with Python wrappers. It also implements third party integrations with [OMPL](https://ompl.kavrakilab.org/) and [FCL](https://github.com/flexible-collision-library/fcl). The Kompass philosophy is to be blazzingly fast and highly reliable, by implementing parallelized algorithms which are agnostic to underlying hardware. Thus Kompass Core can be run on CPUs, GPUs, NPUs or FPGAs from a wide variety of vendors, making it easy for robot manufacturers to switch underlying compute architecture.
+Kompass Core is a fast, GPU powered motion planning and control package for robot navigation. The package contains C++ implementation for core algorithms along with Python wrappers. It also implements third party integrations with [OMPL](https://ompl.kavrakilab.org/) and [FCL](https://github.com/flexible-collision-library/fcl). The Kompass philosophy is to be blazzingly fast and highly reliable, by implementing GPGPU supported parallelized algorithms which are agnostic to underlying hardware. Thus Kompass Core can be run on CPUs, GPUs or FPGAs from a wide variety of vendors, making it easy for robot hardware manufacturers to switch underlying compute architecture.
 
 This package is developed to be used with [Kompass](https://github.com/automatika-robotics/kompass) for creating navigation stacks in [ROS2](https://docs.ros.org/en/rolling/index.html). For detailed usage documentation, check Kompass [docs](https://automatika-robotics.github.io/kompass/).
 
@@ -19,13 +19,13 @@ This package is developed to be used with [Kompass](https://github.com/automatik
 
 ### Install with GPU Support (Recommended)
 
-To install kompass-core with GPU support, on any Ubuntu (including Jetpack) based machine, you can simply run the following:
+To install kompass-core with GPU support, on any Ubuntu 20+ (including Jetpack) based machine, you can simply run the following:
 
 - `curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/heads/main/build_dependencies/install_gpu.sh | bash`
 
 This script will install all relevant dependencies, including [AdaptiveCPP](https://github.com/AdaptiveCpp/AdaptiveCpp) and install the latest version of kompass-core from source. It is good practice to read the [script](https://github.com/automatika-robotics/kompass-core/blob/main/build_dependencies/install_gpu.sh) first.
 
-### Installing with pip
+### Installing with pip (CPU only)
 
 On Ubuntu versions >= 22.04, install dependencies by running the following:
 
@@ -42,8 +42,8 @@ Wheels are available on Pypi for linux x86_64 and aarch64 architectures. Please 
 The following three packages will become available once kompass-core is installed.
 
 - `kompass_core`: The main Python API containing all the wrappers and utilities for motion planning and control for navigation in 2D spaces.
-- `kompass_cpp`: Pybind11 python bindings for Kompass core C++ library containing the algorithms implementation for path tracking and motion control.
-- `ompl`: Bespoke Pybind11 python bindings for the Open Motion Planning Library (OMPL).
+- `kompass_cpp`: Python bindings for Kompass core C++ library containing the algorithms implementation for path tracking and motion control.
+- `omplpy`: Bespoke python bindings for the Open Motion Planning Library (OMPL).
 
 ## Testing
 
@@ -74,7 +74,6 @@ from kompass_core.models import (
     RobotGeometry,
     RobotType,
 )
-from nav_msgs.msg import Path
 
 # Setup the robot
 my_robot = Robot(
@@ -100,18 +99,6 @@ dvz = DVZ(
         ctrl_limits=robot_ctr_limits,
         control_time_step=control_time_step,
     )
-
-# Set the reference path
-global_path : Path = Path()
-
-# Set the reference path for the motion control
-dvz.set_path(global_path)
-
-# Get the sensor data
-laser_scan = LaserScanData()
-
-# At each control step run
-dvz.loop_step(current_state=robot.state, laser_scan=laser_scan)
 ```
 
 ## Copyright

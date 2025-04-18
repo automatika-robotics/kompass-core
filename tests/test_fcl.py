@@ -2,6 +2,7 @@ import json
 
 import fcl
 import numpy as np
+import os
 
 
 def print_collision_result(o1_name, o2_name, result):
@@ -343,7 +344,8 @@ def test_fcl(save_results: bool = False):
             "collision_manager_1_data": rdata.result.is_collision,
         }
         results["pointcloud_with_manager"] = res_dict
-        with open("fcl_result.json", "w") as f:
+        os.makedirs('logs', exist_ok=True)
+        with open("logs/fcl_result.json", "w") as f:
             json.dump(results, f)
 
 

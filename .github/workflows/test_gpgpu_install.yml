@@ -1,0 +1,33 @@
+name: Test GPGPU Install with ACPP
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  install_gpu:
+    strategy:
+      matrix:
+        os-arch:
+          - { os: ubuntu-latest, arch: x86_64 }
+          - { os: ubuntu-24.04-arm, arch: aarch64 }
+
+    name: Build on ${{ matrix.os-arch.os }} ${{ matrix.os-arch.arch }}
+    runs-on: ${{ matrix.os-arch.os }}
+
+    steps:
+      - name: Install curl
+        run: sudo apt-get update && sudo apt-get install -y curl
+
+      - name: Install GPGPU dependancies and kompass-core
+        run: curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/heads/feature/emergency_stop/build_dependencies/install_gpu.sh | bash
+
+      - name: Install test dependancies
+        run: pip install pytest opencv-python
+
+      - name: Run tests
+        run: pytest
+        working-directory: kompass-core/tests

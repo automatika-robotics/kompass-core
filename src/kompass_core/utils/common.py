@@ -4,7 +4,8 @@ from typing import List, Optional
 import yaml
 
 
-from ros_sugar.config import BaseAttrs, base_validators
+from .base_attrs import BaseAttrs
+from . import base_validators
 
 
 __all__ = ["BaseAttrs", "base_validators", "set_params_from_yaml", "setup_logging"]

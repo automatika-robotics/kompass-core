@@ -1,11 +1,11 @@
 #pragma once
 
+#include "utils/spline.h"
+#include <Eigen/Dense>
 #include <cmath>
 #include <cstddef>
 #include <math.h>
 #include <vector>
-#include "utils/spline.h"
-
 
 namespace Path {
 
@@ -13,7 +13,7 @@ enum class InterpolationType { LINEAR, CUBIC_SPLINE, HERMITE_SPLINE };
 
 // Structure for Position
 struct State {
-  double x; // Speed on x-asix (m/s)
+  double x; // Speed on x-axis (m/s)
   double y;
   double yaw; // angular velocity (rad/s)
   double speed;
@@ -23,23 +23,34 @@ struct State {
       : x(poseX), y(poseY), yaw(PoseYaw), speed(speedValue) {}
 };
 
-// Structure for a point in 2D space
-struct Point {
-  double x; // X coordinate
-  double y; // Y coordinate
-
-  Point(double xCoord = 0.0, double yCoord = 0.0) : x(xCoord), y(yCoord) {}
-};
+// Point in 3D space
+typedef Eigen::Vector3f Point;
 
 // Structure for Path Control parameters
 struct Path {
-  std::vector<Point> points;  // List of points defining the path
+  std::vector<Point> points;  // Vector of points defining the path
   std::vector<Path> segments; // List of path segments
-  tk::spline* _spline;
+  tk::spline *_spline;
+  // get all x values from points
+  const std::vector<float>& getX() const;
+  // get all y values from points
+  const std::vector<float>& getY() const;
+  // get all z values from points
+  const std::vector<float>& getZ() const;
+  // Max interpolation distance and total path distance are updated from user
+  // config
+  double _max_interpolation_dist{0.0}, _max_path_length{10.0};
+  // Max segment size and max total path points size is calculated after
+  // interpolation
+  int max_segment_size{10};
+  size_t max_size{10};
+  size_t max_interpolation_iterations{500}; // Max number of iterations for interpolation between two path points
 
   Path(const std::vector<Point> &points = {});
 
   size_t getMaxNumSegments();
+
+  void setMaxLength(double max_length);
 
   bool endReached(State currentState, double minDist);
 
@@ -47,18 +58,16 @@ struct Path {
 
   Point getStart() const;
 
-  double getEndOrientation() const;
+  float getEndOrientation() const;
 
-  double getStartOrientation() const;
+  float getStartOrientation() const;
 
-  double getOrientation(const size_t index) const;
+  float getOrientation(const size_t index) const;
 
-  static double distance(const Point &p1, const Point &p2);
-
-  double minDist(const std::vector<Point> &others) const;
+  static float distance(const Point &p1, const Point &p2);
 
   // Function to compute the total path length
-  double totalPathLength() const;
+  float totalPathLength() const;
 
   Point getPointAtLength(const double length) const;
 
@@ -75,6 +84,10 @@ struct Path {
   // Segment using a segment points number
   void segmentByPointsNumber(int segmentLength);
 
+private:
+  std::vector<float> X_; // Vector of X coordinates
+  std::vector<float> Y_; // Vector of Y coordinates
+  std::vector<float> Z_; // Vector of Z coordinates
 };
 
 struct PathPosition {

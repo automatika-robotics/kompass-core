@@ -8,8 +8,8 @@
 #include <vector>
 
 #include <fcl/broadphase/broadphase_dynamic_AABB_tree.h>
-#include <fcl/narrowphase/collision_object.h>
 #include <fcl/geometry/octree/octree.h>
+#include <fcl/narrowphase/collision_object.h>
 #include <octomap/OcTree.h>
 #include <octomap/Pointcloud.h>
 #include <octomap/octomap.h>
@@ -17,24 +17,24 @@
 #include <pcl/point_types.h>
 
 #include "datatypes/path.h"
-#include "datatypes/trajectory.h"
 
 namespace Kompass {
 /**
  * @brief Collision Checker using FCL (Flexible Collisions Library)
- * The collision checker supports sensor input data from PoinCloud and LaserScan
+ * The collision checker supports sensor input data from PointCloud and
+ * LaserScan
  *
  */
 class CollisionChecker {
 public:
-  enum class ShapeType { CYLINDER, BOX };
+  enum class ShapeType { CYLINDER, BOX, SPHERE };
 
   struct Body {
     ShapeType shapeType = ShapeType::BOX;
     std::vector<float>
-        dimensions; // For cylinder: dimensions[0]=radius, dimensions[1]=height.
-                    // For box: dimensions[0]=x, dimensions[1]=y,
-                    // dimensions[2]=z.
+        dimensions; // For cylinder: dimensions[0]=radius,
+                    // dimensions[1]=height. For box: dimensions[0]=x,
+                    // dimensions[1]=y, dimensions[2]=z.
     Eigen::Isometry3f tf = Eigen::Isometry3f::Identity();
     ; // Transformation matrix of the body
   };
@@ -44,8 +44,8 @@ public:
    *
    * @param robotShapeType    Type of the robot shape geometry
    * @param robotDimensions   Corresponding geometry dimensions
-   * @param sensorPositionWRTbody         Position of the sensor w.r.t the robot
-   * body - Considered constant
+   * @param sensorPositionWRTbody         Position of the sensor w.r.t the
+   * robot body - Considered constant
    * @param octreeRes         Resolution of the constructed OctTree
    */
   CollisionChecker(const ShapeType robot_shape_type,
@@ -58,7 +58,7 @@ public:
    * @brief Destroy the Collision Checker object
    *
    */
-  ~CollisionChecker();
+  ~CollisionChecker() = default;
 
   /**
    * @brief Reset the resolution of the obstacles Octree
@@ -75,6 +75,15 @@ public:
   void updateState(const Path::State current_state);
 
   /**
+   * @brief Update the current state of the robot with 2D pose (x, y, yaw)
+   *
+   * @param x
+   * @param y
+   * @param yaw
+   */
+  void updateState(const double x, const double y, const double yaw);
+
+  /**
    * @brief Update the sensor input from laser scan data
    *
    * @param ranges
@@ -88,7 +97,8 @@ public:
    *
    * @param cloud
    */
-  void updatePointCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
+  void updatePointCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+                        const bool global_frame = true);
 
   /**
    * @brief Update the sensor input from PointCloud like struct
@@ -96,7 +106,8 @@ public:
    *
    * @param cloud
    */
-  void updatePointCloud(const std::vector<Control::Point3D> &cloud);
+  void updatePointCloud(const std::vector<Path::Point> &cloud,
+                        const bool global_frame = true);
 
   /**
    * @brief Check collisions between the robot and the constructed OctTree
@@ -168,16 +179,18 @@ public:
    * @return true
    * @return false
    */
-  bool checkCollisions(const std::vector<Control::Point3D> &cloud);
+  bool checkCollisions(const std::vector<Path::Point> &cloud);
 
   /**
-   * @brief Check collisions between the robot and given LaserScan data defined
-   * by a vector of ranges values, minimum scan angle and scan angle step
+   * @brief Check collisions between the robot and given LaserScan data
+   * defined by a vector of ranges values, minimum scan angle and scan angle
+   * step
    *
    * @param ranges
    * @param angle_min
    * @param angle_increment
-   * @param height        Height of the constructed OctTree map, defaults to 0.1
+   * @param height        Height of the constructed OctTree map, defaults to
+   * 0.1
    * @return true
    * @return false
    */
@@ -185,18 +198,18 @@ public:
                        double angle_increment, double height = 0.1);
 
   /**
-   * @brief Check collisions between the robot and given LaserScan data defined
-   * by a vector of ranges values, and a vector of angles values
+   * @brief Check collisions between the robot and given LaserScan data
+   * defined by a vector of ranges values, and a vector of angles values
    *
    * @param ranges
    * @param angles
-   * @param height        Height of the constructed OctTree map, defaults to 0.1
+   * @param height        Height of the constructed OctTree map, defaults to
+   * 0.1
    * @return true
    * @return false
    */
   bool checkCollisions(const std::vector<double> &ranges,
                        const std::vector<double> &angles, double height = 0.1);
-
 
   /**
    * @brief Check collisions between the given robot state and existing
@@ -208,36 +221,39 @@ public:
    */
   bool checkCollisions(const Path::State current_state);
 
-private:
-  // Collision Manager
-  fcl::DynamicAABBTreeCollisionManagerf *collManager;
-
-  // Robot body geometry object
-  std::shared_ptr<Body> body;
-  double robotHeight_{1.0};
-  std::shared_ptr<fcl::CollisionGeometryf> bodyGeometry;
-
-  // Robot body collision object pointer
-  fcl::CollisionObjectf *bodyObjPtr = nullptr;
-
-  // Octree collision object pointers
-  octomap::OcTree *octTree; // Octomap octree used to get data from laserscan or
-                            // pointcloud and convert it to an Octreee
-  fcl::OcTreef *tree =
-      nullptr; // FCL Octree updated after coverting the Octomap octree
-               // (required for creating the collision object)
-  std::vector<fcl::CollisionObjectf *>
-      OctreeBoxes; // Vector of Boxes collision objects used to check collisions
-                   // with an octTree
-
-  double octree_resolution_{0.01};
-
+protected:
+  double robotHeight_{1.0}, robotRadius_;
   // sensor tf with respect to the world
   Eigen::Isometry3f sensor_tf_world_ = Eigen::Isometry3f::Identity();
 
   Eigen::Isometry3f sensor_tf_body_ =
       Eigen::Isometry3f::Identity(); // Sensor transformation with
                                      // respect to the robot
+
+private:
+  // Collision Manager
+  std::unique_ptr<fcl::DynamicAABBTreeCollisionManagerf> collManager_;
+
+  // Robot body geometry object
+  std::shared_ptr<Body> body;
+  std::shared_ptr<fcl::CollisionGeometryf> bodyGeometry_;
+
+  // Robot body collision object pointer
+  std::shared_ptr<fcl::CollisionObjectf> bodyObjPtr_ = nullptr;
+
+  // Octree collision object pointers
+  std::shared_ptr<octomap::OcTree>
+      octTree_; // Octomap octree used to get data from laserscan
+                // or pointcloud and convert it to an Octree
+  std::unique_ptr<fcl::OcTreef> fclTree_ =
+      nullptr; // FCL Octree updated after converting the Octomap octree
+  // (required for creating the collision object)
+  octomap::Pointcloud octomapCloud_;
+  std::vector<fcl::CollisionObjectf *>
+      OctreeBoxes; // Vector of Boxes collision objects used to check
+                   // collisions with an octTree
+
+  double octree_resolution_{0.01};
 
   /**
    * @brief Updates the Octree collision object pointer
@@ -246,7 +262,8 @@ private:
   void updateOctreePtr();
 
   /**
-   * @brief Generates a vector of fcl::Box collision objects from an fcl::Octree
+   * @brief Generates a vector of fcl::Box collision objects from an
+   * fcl::Octree
    *
    * @param boxes
    * @param tree
@@ -260,14 +277,16 @@ private:
    * @param cloud
    */
   void
-  convertPointCloudToOctomap(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
+  convertPointCloudToOctomap(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+                             const bool global_frame = true);
 
   /**
    * @brief Helper method to convert PointCloud data to an Octomap
    *
    * @param cloud
    */
-  void convertPointCloudToOctomap(const std::vector<Control::Point3D> &cloud);
+  void convertPointCloudToOctomap(const std::vector<Path::Point> &cloud,
+                                  const bool global_frame = true);
 
   /**
    * @brief Helper method to convert LaserScan data to an OctoMap. LaserScan

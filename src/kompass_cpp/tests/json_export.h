@@ -12,54 +12,63 @@ using json = nlohmann::json;
 using namespace Kompass;
 
 // Convert Point to JSON
-void to_json(json &j, const Path::Point &p) {
-  j = json{{"x", p.x}, {"y", p.y}};
+inline void to_json(json &j, const Path::Point &p) {
+  j = json{{"x", p.x()}, {"y", p.y()}};
 }
 
 // Convert JSON to Point
-void from_json(const json &j, Path::Point &p) {
-  j.at("x").get_to(p.x);
-  j.at("y").get_to(p.y);
+inline void from_json(const json &j, Path::Point &p) {
+  p.x() = j.at("x");
+  p.y() = j.at("y");
 }
 
 // Convert Path to JSON
-void to_json(json &j, const Path::Path &p) {
+inline void to_json(json &j, const Path::Path &p) {
   j["points"] = json::array(); // Initialize as a JSON array
   for (const auto &point : p.points) {
     j["points"].push_back(
-        json{{"x", point.x}, {"y", point.y}}); // Serialize each Point
+        json{{"x", point.x()}, {"y", point.y()}}); // Serialize each Point
+  }
+}
+
+// Convert TrajectoryPath to JSON
+inline void to_json(json &j, const Control::TrajectoryPath &p) {
+  j["points"] = json::array(); // Initialize as a JSON array
+  for (const auto &point : p) {
+    j["points"].push_back(
+        json{{"x", point.x()}, {"y", point.y()}}); // Serialize each Point
   }
 }
 
 // Convert JSON to Path
-void from_json(const json &j, Path::Path &p) {
+inline void from_json(const json &j, Path::Path &p) {
   p.points.clear(); // Clear existing points
   for (const auto &item : j.at("points")) {
     Path::Point point;
-    item.at("x").get_to(point.x);
-    item.at("y").get_to(point.y);
+    point.x() = item.at("x");
+    point.y() = item.at("y");
     p.points.push_back(point); // Deserialize each Point
   }
 }
 
 // Convert Velocity to JSON
-void to_json(json &j, const Control::Velocity &v) {
-  j = json{{"vx", v.vx},
-           {"vy", v.vy},
-           {"omega", v.omega},
-           {"steer_ang", v.steer_ang}};
+inline void to_json(json &j, const Control::Velocity2D &v) {
+  j = json{{"vx", v.vx()},
+           {"vy", v.vy()},
+           {"omega", v.omega()},
+           {"steer_ang", v.steer_ang()}};
 }
 
 // Convert JSON to Velocity
-void from_json(const json &j, Control::Velocity &v) {
-  j.at("vx").get_to(v.vx);
-  j.at("vy").get_to(v.vy);
-  j.at("omega").get_to(v.omega);
-  j.at("steer_ang").get_to(v.steer_ang);
+inline void from_json(const json &j, Control::Velocity2D &v) {
+  v.setVx(j.at("vx"));
+  v.setVy(j.at("vy"));
+  v.setOmega(j.at("omega"));
+  v.setSteerAng(j.at("steer_ang"));
 }
 
 // Convert Trajectory to JSON
-void to_json(json &j, const std::vector<Control::Trajectory> &samples) {
+inline void to_json(json &j, const Control::TrajectorySamples2D &samples) {
   j["paths"] = json::array(); // Initialize as a JSON array
   for (const auto &traj : samples) {
     json j_p;
@@ -69,7 +78,7 @@ void to_json(json &j, const std::vector<Control::Trajectory> &samples) {
 }
 
 // Convert Trajectory & Costs to JSON
-void to_json(json &j, const std::vector<Control::Trajectory> &samples,
+inline void to_json(json &j, const Control::TrajectorySamples2D &samples,
              const std::vector<double> &costs) {
   j["paths"] = json::array(); // Initialize as a JSON array
   int idx{0};
@@ -82,17 +91,9 @@ void to_json(json &j, const std::vector<Control::Trajectory> &samples,
   }
 }
 
-// Convert JSON to Trajectory
-void from_json(const json &j, std::vector<Control::Trajectory> &samples) {
-  for (auto traj : samples) {
-    traj.path.points.clear();
-    from_json(j, traj.path);
-  }
-}
-
 // Save trajectories to a JSON file
-void saveTrajectoriesToJson(
-    const std::vector<Control::Trajectory> &trajectories,
+inline void saveTrajectoriesToJson(
+    const Control::TrajectorySamples2D &trajectories,
     const std::string &filename) {
   json j;
   to_json(j, trajectories);
@@ -106,7 +107,7 @@ void saveTrajectoriesToJson(
 }
 
 // Save one path to a JSON file
-void savePathToJson(const Path::Path &path, const std::string &filename) {
+inline void savePathToJson(const Path::Path &path, const std::string &filename) {
   json j;
   to_json(j, path);
   std::ofstream file(filename);

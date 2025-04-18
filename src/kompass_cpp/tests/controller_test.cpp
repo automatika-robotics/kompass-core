@@ -1,24 +1,27 @@
-#include "test.h"
 #include "controllers/dwa.h"
 #include "datatypes/trajectory.h"
+#include "test.h"
 #include "utils/cost_evaluator.h"
+#include <system_error>
 #define BOOST_TEST_MODULE KOMPASS TESTS
+#include "json_export.h"
+#include <boost/dll/runtime_symbol_info.hpp> // for program_location
+#include <boost/filesystem.hpp>
 #include <boost/test/included/unit_test.hpp>
 #include <cmath>
 #include <vector>
 
-
 using namespace Kompass;
 
-void applyControl(Path::State &robotState, const Control::Velocity control,
+void applyControl(Path::State &robotState, const Control::Velocity2D control,
                   const double timeStep) {
-  double dx = (control.vx * std::cos(robotState.yaw) -
-               control.vy * std::sin(robotState.yaw)) *
+  double dx = (control.vx() * std::cos(robotState.yaw) -
+               control.vy() * std::sin(robotState.yaw)) *
               timeStep;
-  double dy = (control.vx * std::sin(robotState.yaw) +
-               control.vy * std::cos(robotState.yaw)) *
+  double dy = (control.vx() * std::sin(robotState.yaw) +
+               control.vy() * std::cos(robotState.yaw)) *
               timeStep;
-  double dyaw = control.omega * timeStep;
+  double dyaw = control.omega() * timeStep;
   robotState.x += dx;
   robotState.y += dy;
   robotState.yaw += dyaw;
@@ -29,14 +32,14 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   Timer time;
 
   // Create a test path
-  std::vector<Path::Point> points{Path::Point(0.0, 0.0), Path::Point(1.0, 0.0),
-                                  Path::Point(2.0, 0.0)};
+  std::vector<Path::Point> points{Path::Point(0.0, 0.0, 0.0), Path::Point(1.0, 0.0, 0.0),
+                                  Path::Point(2.0, 0.0, 0.0)};
   Path::Path path(points);
 
   // Sampling configuration
   double timeStep = 0.1;
-  double predictionHorizon = 4.0;
-  double controlHorizon = 0.4;
+  double predictionHorizon = 1.0;
+  double controlHorizon = 0.2;
   int maxLinearSamples = 20;
   int maxAngularSamples = 20;
   int maxNumThreads = 10;
@@ -48,35 +51,39 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   Control::CostEvaluator::TrajectoryCostsWeights costWeights;
   costWeights.setParameter("reference_path_distance_weight", 1.0);
   costWeights.setParameter("goal_distance_weight", 3.0);
+  costWeights.setParameter("obstacles_distance_weight", 0.0);
+  costWeights.setParameter("smoothness_weight", 0.0);
+  costWeights.setParameter("jerk_weight", 0.0);
 
   // Robot configuration
-  Control::LinearVelocityControlParams x_params(1, 3, 5);
+  Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0);
   Control::LinearVelocityControlParams y_params(1, 3, 5);
-  Control::AngularVelocityControlParams angular_params(3.14, 3, 5, 8);
+  Control::AngularVelocityControlParams angular_params(3.14, 2.0, 3.0, 3.0);
   Control::ControlLimitsParams controlLimits(x_params, y_params,
                                              angular_params);
   auto controlType = Control::ControlType::ACKERMANN;
-  auto robotShapeType = Kompass::CollisionChecker::ShapeType::BOX;
-  std::vector<float> robotDimensions{0.3, 0.3, 1.0};
+  auto robotShapeType = Kompass::CollisionChecker::ShapeType::CYLINDER;
+  std::vector<float> robotDimensions{0.1, 0.4};
   // std::array<float, 3> sensorPositionWRTbody {0.0, 0.0, 1.0};
-  const std::array<float, 3> sensor_position_body{0.0, 0.0, 0.5};
+  const std::array<float, 3> sensor_position_body{0.0, 0.0, 0.0};
   const std::array<float, 4> sensor_rotation_body{0, 0, 0, 1};
 
   // Robot start state (pose)
-  Path::State robotState(0.0, 0.0, 0.0, 0.0);
+  Path::State robotState(-0.51731912, 0.0, 0.0, 0.0);
 
   // Robot initial velocity control
-  Control::Velocity robotControl;
+  Control::Velocity2D robotControl;
 
   // Robot laserscan value (empty)
-  Control::LaserScan robotScan({1.0, 0.5, 10.0}, {0, 0.1, 0.2});
+  Control::LaserScan robotScan({0.4, 0.3}, {10, 10.1});
 
   LOG_INFO("Setting up DWA planner");
 
   Control::DWA planner(controlLimits, controlType, timeStep, predictionHorizon,
                        controlHorizon, maxLinearSamples, maxAngularSamples,
                        robotShapeType, robotDimensions, sensor_position_body,
-                       sensor_rotation_body, octreeRes, costWeights, maxNumThreads);
+                       sensor_rotation_body, octreeRes, costWeights,
+                       maxNumThreads);
 
   LOG_INFO("Simulating one step of DWA planner");
 
@@ -84,6 +91,33 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   planner.setCurrentPath(path);
 
   int counter = 0;
+
+  planner.setCurrentState(robotState);
+
+  planner.debugVelocitySearch(robotControl, robotScan, true);
+
+  Control::TrajectorySamples2D samples_ = planner.getDebuggingSamplesPure();
+
+  // Plot the trajectories (Save to json then run python script for plotting)
+  boost::filesystem::path executablePath = boost::dll::program_location();
+  std::string file_location = executablePath.parent_path().string();
+
+  std::string trajectories_filename =
+      file_location + "/trajectories_controller_test";
+  std::string ref_path_filename = file_location + "/ref_path";
+
+  saveTrajectoriesToJson(samples_, trajectories_filename + ".json");
+  savePathToJson(path, ref_path_filename + ".json");
+
+  std::string command =
+      "python3 " + file_location + "/trajectory_sampler_plt.py --samples \"" +
+      trajectories_filename + "\" --reference \"" + ref_path_filename + "\"";
+
+  // Execute the Python script
+  int res = system(command.c_str());
+  if (res != 0)
+      throw std::system_error(res, std::generic_category(),
+                              "Python script failed with error code");
 
   while (!planner.isGoalReached() and counter < 100) {
     counter++;
@@ -116,7 +150,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
                 BOLD(FGRN(", Vy: ")), KGRN, vy, RST, BOLD(FGRN(", Omega: ")),
                 KGRN, omega, RST, BOLD(FGRN("}")));
 
-      applyControl(robotState, Control::Velocity(vx, vy, omega), timeStep);
+      applyControl(robotState, Control::Velocity2D(vx, vy, omega), timeStep);
     } else {
       LOG_ERROR(BOLD(FRED("DWA Planner failed with robot at: {x: ")), KRED,
                 robotState.x, RST, BOLD(FRED(", y: ")), KRED, robotState.y, RST,
@@ -126,65 +160,5 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   }
 
   BOOST_TEST(planner.isGoalReached(),
-             "Goal Reached in " << counter << " steps");
-}
-
-BOOST_AUTO_TEST_CASE(test_FCL) {
-  // Create timer
-  Timer time;
-
-  // Octomap resolution
-  double octreeRes = 0.1;
-
-  auto robotShapeType = CollisionChecker::ShapeType::BOX;
-  std::vector<float> robotDimensions{0.4, 0.4, 1.0};
-
-  const std::array<float, 3> sensor_position_body{0.0, 0.0, 1.0};
-  const std::array<float, 4> sensor_rotation_body{0, 0, 0, 1};
-
-  // Robot start state (pose)
-  Path::State robotState(0.0, 0.0, 0.0, 0.0);
-
-  // Robot laserscan value (empty)
-  std::vector<double> scan_angles{0, 0.1, 0.2};
-  std::vector<double> scan_ranges{1.0, 1.0, 1.0};
-
-  CollisionChecker collChecker(robotShapeType, robotDimensions,
-                               sensor_position_body, sensor_rotation_body,
-                               octreeRes);
-
-  LOG_INFO("Testing collision checker using Laserscan data");
-
-  collChecker.updateState(robotState);
-
-  LOG_INFO("Testing collision between: \nRobot at {x: ", robotState.x,
-           ", y: ", robotState.y, "}\n",
-           "and Laserscan with: ranges {1.0, 1.0, 1.0, 1.0} at angles {0, 0.1, "
-           "0.2, 3.14}");
-
-  bool res_false = collChecker.checkCollisions(scan_ranges, scan_angles);
-  BOOST_TEST(!res_false, "Non Collision Result: " << res_false);
-
-  robotState.x = 3.0;
-  robotState.y = 5.0;
-  collChecker.updateState(robotState);
-  scan_ranges = {0.16, 0.5, 0.5};
-
-  LOG_INFO("Testing collision between: \nRobot at {x: ", robotState.x,
-           ", y: ", robotState.y, "}\n",
-           "and Laserscan with: ranges {0.2, 0.5, 0.5} at angles {0, 0.1, "
-           "0.2, 3.14}");
-
-  bool res_true = collChecker.checkCollisions(scan_ranges, scan_angles);
-  BOOST_TEST(res_true, "Collision Result: " << res_true);
-
-  LOG_INFO("Testing collision between: \nRobot at {x: ", robotState.x,
-           ", y: ", robotState.y, "}\n", "and Pointcloud");
-  std::vector<Control::Point3D> cloud;
-  cloud.push_back(Control::Point3D(2.8, 4.8, 0.0));
-  collChecker.updatePointCloud(cloud);
-  bool res = collChecker.checkCollisions();
-  float dist = collChecker.getMinDistance();
-  LOG_INFO("Min distance is: ", dist);
-  BOOST_TEST(res, "Collision Result: " << res);
+             "Goal not reached in " << counter << " steps");
 }

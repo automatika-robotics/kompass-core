@@ -1,16 +1,3 @@
-/**
- * *********************************************************
- *
- * @file follower.h
- * @author Based on the implementation of Alexander Buchegger
- * @brief
- * @version 0.1
- * @date 2024-06-20
- *
- * @copyright Copyright (c) 2024. ARTI - Autonomous Robot Technology GmbH. All
- * rights reserved.
- *
- */
 #pragma once
 
 #include "controller.h"
@@ -18,6 +5,7 @@
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
 #include <cmath>
+#include <memory>
 
 namespace Kompass {
 namespace Control {
@@ -27,31 +15,41 @@ public:
   // Nested class for follower parameters
   class FollowerParameters : public Controller::ControllerParameters {
   public:
-
     FollowerParameters() : Controller::ControllerParameters() {
-      addParameter("max_point_interpolation_distance",
-                   Parameter(0.01, 0.0001,
-                             1000.0)); // [m] distance used for path interpolation
+      addParameter(
+          "max_point_interpolation_distance",
+          Parameter(0.01, 0.0001,
+                    1000.0)); // [m] distance used for path interpolation
+      addParameter(
+          "max_path_length",
+          Parameter(10.0, 1.0,
+                    1e9)); // Maximum allowed length of the global path (meters)
+      // NOTE: Currently the maximum path length is a configuration parameter to
+      // limit the maximum number of interpolated path points. In future updates
+      // the path length limit should be removed and a partial interpolation
+      // should be implemented instead (i.e. save all reference points and
+      // interpolate smaller parts gradually).
       addParameter(
           "lookahead_distance",
           Parameter(1.0, 0.0,
                     1000.0)); // [m] Lookahead distance used to find the next
-                            // point to reach (normally be same as wheelbase)
+                              // point to reach (normally be same as wheelbase)
       addParameter(
           "goal_dist_tolerance",
           Parameter(0.1, 0.001, 1000.0)); // [m] Tolerance to consider the robot
-                                        // reached the goal point
+                                          // reached the goal point
       addParameter(
           "path_segment_length",
           Parameter(1.0, 0.001,
                     1000.0)); // [m] Length of one segment of the path to follow
       addParameter(
           "goal_orientation_tolerance",
-          Parameter(0.1, 0.001, 2 * M_PI)); // [rad] Tolerance to consider the robot
-                                       // reached the goal point
-      addParameter("loosing_goal_distance",
-                   Parameter(0.1, 0.001, 1000.0)); // [m] If driving past the goal
-                                                 // we stop after this distance
+          Parameter(0.1, 0.001, 2 * M_PI)); // [rad] Tolerance to consider the
+                                            // robot reached the goal point
+      addParameter(
+          "loosing_goal_distance",
+          Parameter(0.1, 0.001, 1000.0)); // [m] If driving past the goal
+                                          // we stop after this distance
     }
   };
 
@@ -75,7 +73,7 @@ public:
   Follower(FollowerParameters config);
 
   // Destructor
-  virtual ~Follower();
+  virtual ~Follower() = default;
 
   /**
    * @brief Sets the global path to be followed
@@ -85,6 +83,8 @@ public:
    * @param path Global path to be followed
    */
   void setCurrentPath(const Path::Path &path);
+
+  void clearCurrentPath();
 
   /**
    * @brief Checks if the currenState reached end of the path and returns a
@@ -96,7 +96,8 @@ public:
   bool isGoalReached();
 
   /**
-   * @brief Set the Interpolation type used for interpolating the follower's path
+   * @brief Set the Interpolation type used for interpolating the follower's
+   * path
    *
    * @param type
    */
@@ -191,9 +192,9 @@ public:
                                  const Path::State &state2) const;
 
 protected:
-  Path::Path *currentPath = new Path::Path();
-  Path::Path *refPath = new Path::Path();
-  Path::PathPosition *closestPosition = new Path::PathPosition();
+  std::unique_ptr<Path::Path> currentPath = nullptr;
+  std::unique_ptr<Path::Path> refPath = nullptr;
+  std::unique_ptr<Path::PathPosition> closestPosition = std::make_unique<Path::PathPosition>();
   double goal_dist_tolerance{0.0};
   double goal_orientation_tolerance{0.0};
   double loosing_goal_distance{0.0};
@@ -202,6 +203,7 @@ protected:
   bool enable_reverse_driving{false};
   double path_segment_length{0.0};
   double maxDist{0.0};
+  size_t maxSegmentSize;
   Path::InterpolationType interpolationType = Path::InterpolationType::LINEAR;
 
   FollowerParameters config;
@@ -224,7 +226,7 @@ protected:
   void determineTarget();
 
   bool path_processing_{false};
-  Target *currentTrackedTarget_ = new Target();
+  std::unique_ptr<Target> currentTrackedTarget_ = std::make_unique<Target>();
 
   size_t current_segment_index_{0};
   double current_position_in_segment_{0.0};
@@ -233,13 +235,12 @@ protected:
   double goal_distance_{std::numeric_limits<double>::max()};
   double goal_orientation_{std::numeric_limits<double>::max()};
 
-  Control::Velocity latest_velocity_command_{0.0, 0.0, 0.0};
+  Control::Velocity2D latest_velocity_command_{0.0, 0.0, 0.0};
 
   bool reached_goal_{false};
   bool reached_yaw_{false};
 
 private:
-
   /**
    * @brief Finds the index of the closest segment on the path to the
    * currentState between two given segment indices
@@ -269,6 +270,12 @@ private:
    */
   Path::State projectPointOnSegment(const Path::Point &a, const Path::Point &b,
                                     double &segment_length);
+
+  /**
+   * @brief Get max segment size
+   * @return size_t Number of points in the biggest segment possible
+   */
+  size_t getMaxSegmentSize() const;
 };
 
 } // namespace Control

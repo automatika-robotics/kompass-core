@@ -1,21 +1,21 @@
-cmake_minimum_required(VERSION 3.5)
-set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ version selection")
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# find required packages
+find_package(Eigen3 3.4 REQUIRED NO_MODULE)
+find_package(PCL COMPONENTS common io REQUIRED)
+find_package(fcl REQUIRED)
 
-# set build type to release if not defined
-if (NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
+# find sycl
+find_package(AdaptiveCpp)
+
+# Build static lib for kompass cpp
+add_subdirectory(kompass_cpp)
+
+# Add kompass cpp tests if building with cmake
+if (NOT SKBUILD)
+  enable_testing()
+  add_subdirectory(tests)
 endif()
-message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 
-# project statement
-project(
-  kompass_cpp
-  LANGUAGES C CXX)
-
-set(PKG_DESC "KOMPASS CPP Robot Motion Control and Planning Library")
-
-enable_testing()
-
-add_subdirectory(${PROJECT_NAME})
-add_subdirectory(tests)
+# Add bindings if skbuild
+if (SKBUILD OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_subdirectory(bindings)
+endif()

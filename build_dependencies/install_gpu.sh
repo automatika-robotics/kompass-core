@@ -191,17 +191,17 @@ if [ $FOUND_LLVM_VERSION -eq 0 ]; then
         set +x
     fi
 
-    # Install required packages
-    $SUDO apt install -y \
-        "libclang-${LLVM_VERSION}-dev" "clang-tools-${LLVM_VERSION}" \
-        "libomp-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-dev" "lld-${LLVM_VERSION}"
-
     # Cleanup
     rm -f llvm.sh
 else
     LLVM_VERSION=$FOUND_LLVM_VERSION
     log INFO "Found LLVM/Clang version $FOUND_LLVM_VERSION. Skipping LLVM/Clang installation."
 fi
+
+# Install required packages for acpp
+$SUDO apt install -y \
+    "libclang-${LLVM_VERSION}-dev" "clang-tools-${LLVM_VERSION}" \
+    "libomp-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-dev" "lld-${LLVM_VERSION}"
 
 # Get LLVM/Clang paths
 LLVM_DIR=$(llvm-config-${LLVM_VERSION} --cmakedir)
@@ -232,7 +232,7 @@ mkdir -p build && cd build
 log INFO "Configuring build with CMake..."
 CXX=$CLANG_EXECUTABLE_PATH cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" -DLLVM_DIR="$LLVM_DIR" -DCLANG_EXECUTABLE_PATH="$CLANG_EXECUTABLE_PATH" ..
 log INFO "Building and installing AdaptiveCpp to $INSTALL_PREFIX..."
-$SUDO make install
+$SUDO make install -j8
 
 # Back to main pwd
 cd ../..
@@ -246,12 +246,11 @@ fi
 
 # Install kompass core dependencies
 log INFO "Installing kompass-core dependencies..."
-$SUDO apt install -y libpcl-dev libode-dev
 
 # Clone and build kompass-core
 if [[ ! -d "kompass-core" ]]; then
     log INFO "Cloning kompass-core repository..."
-    git clone --depth 1 --branch fix/backward_compatibility "$KOMPASS_CORE_URL"
+    git clone --depth 1 --branch feature/emergency_stop "$KOMPASS_CORE_URL"
 else
     log WARN "kompass-core directory already exists. Skipping download."
 fi
@@ -262,6 +261,7 @@ cd kompass-core
 if [[ $(echo "$UBUNTU_VERSION <= 20.04" | bc -l) == 1 ]]; then
     log WARN "Installing vcpkg for Ubuntu version <= 20.04..."
     export VCPKG_ROOT=$PWD/.vcpkg
+    export CMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
     # If vcpkg folder exists, assume vcpkg was already downloaded
     if [[ ! -d $VCPKG_ROOT ]]; then
         mkdir -p $VCPKG_ROOT
@@ -275,21 +275,25 @@ if [[ $(echo "$UBUNTU_VERSION <= 20.04" | bc -l) == 1 ]]; then
     if [ "$(uname -m)" != "x86_64" ]
     then
         export VCPKG_FORCE_SYSTEM_BINARIES=1
-        export LD_LIBRARY_PATH="$VCPKG_ROOT/installed/arm64-linux/lib:$LD_LIBRARY_PATH"
+        export VCPKG_TARGET_TRIPLET="arm64-linux-release"
     else
-        export LD_LIBRARY_PATH="$VCPKG_ROOT/installed/x64-linux/lib:$LD_LIBRARY_PATH"
+        export VCPKG_TARGET_TRIPLET="x64-linux-release"
     fi
+
+    # Set LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH="$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib:$LD_LIBRARY_PATH"
 
     # install vcpkg
     $VCPKG_ROOT/bootstrap-vcpkg.sh -disableMetrics
 
     # install dependencies
     log WARN "Installing ompl and fcl with vcpkg for latest version..."
-    $VCPKG_ROOT/vcpkg install ompl
-    $VCPKG_ROOT/vcpkg install fcl
+    $VCPKG_ROOT/vcpkg install fcl --triplet=$VCPKG_TARGET_TRIPLET
+    $VCPKG_ROOT/vcpkg install pcl[core] --triplet=$VCPKG_TARGET_TRIPLET
+    $VCPKG_ROOT/vcpkg install ompl --triplet=$VCPKG_TARGET_TRIPLET
 else
-    log INFO "Installing ompl from apt..."
-    $SUDO apt install -y libompl-dev libfcl-dev
+    log INFO "Installing ompl and fcl from apt..."
+    $SUDO apt install -y libompl-dev libfcl-dev libpcl-dev libode-dev
 fi
 
 log INFO "Installing kompass-core with pip"
@@ -309,7 +313,7 @@ if python3 -c "import kompass_cpp" 2>/dev/null; then
     if [[ $(echo "$UBUNTU_VERSION <= 20.04" | bc -l) == 1 ]]; then
         log WARN "In order to use kompass-core on Ubuntu <= 20.04, you will have to set LD_LIBRARY_PATH in your environment as follows:
 
-        export LD_LIBRARY_PATH=$VCPKG_ROOT/installed/arm64-linux/lib:\$LD_LIBRARY_PATH
+        export LD_LIBRARY_PATH=$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib:\$LD_LIBRARY_PATH
 
         You can make this change permanent by adding it to your .bashrc file.
         "

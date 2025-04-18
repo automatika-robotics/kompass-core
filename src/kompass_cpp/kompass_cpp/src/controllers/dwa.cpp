@@ -2,10 +2,13 @@
 #include "controllers/follower.h"
 #include "datatypes/control.h"
 #include "datatypes/path.h"
+#include "datatypes/trajectory.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <stdexcept>
+#include <tuple>
 
 namespace Kompass {
 namespace Control {
@@ -17,16 +20,14 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
          const std::array<float, 3> &sensor_position_body,
          const std::array<float, 4> &sensor_rotation_body,
          const double octreeRes,
-         CostEvaluator::TrajectoryCostsWeights costWeights, const int maxNumThreads)
+         CostEvaluator::TrajectoryCostsWeights costWeights,
+         const int maxNumThreads)
     : Follower() {
-  // Setup the trajectory sampler
-  trajSampler = new TrajectorySampler(
-      controlLimits, controlType, timeStep, predictionHorizon, controlHorizon,
-      maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
-      sensor_position_body, sensor_rotation_body, octreeRes, maxNumThreads);
-
-  trajCostEvaluator = new CostEvaluator(costWeights, sensor_position_body,
-                                        sensor_rotation_body);
+  // Setup the trajectory sampler and cost evaluator
+  configure(controlLimits, controlType, timeStep, predictionHorizon,
+            controlHorizon, maxLinearSamples, maxAngularSamples,
+            robotShapeType, robotDimensions, sensor_position_body,
+            sensor_rotation_body, octreeRes, costWeights, maxNumThreads);
 
   // Update the max forward distance the robot can make
   if (controlType == ControlType::OMNI) {
@@ -36,7 +37,6 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
   } else {
     max_forward_distance_ = controlLimits.velXParams.maxVel * predictionHorizon;
   }
-  this->maxNumThreads = maxNumThreads;
 }
 
 DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
@@ -45,18 +45,16 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
          const std::vector<float> robotDimensions,
          const std::array<float, 3> &sensor_position_body,
          const std::array<float, 4> &sensor_rotation_body,
-         CostEvaluator::TrajectoryCostsWeights costWeights, const int maxNumThreads)
+         CostEvaluator::TrajectoryCostsWeights costWeights,
+         const int maxNumThreads)
     : Follower() {
-  // Setup the trajectory sampler
-  trajSampler = new TrajectorySampler(
-      config, controlLimits, controlType, robotShapeType, robotDimensions,
-      sensor_position_body, sensor_rotation_body, maxNumThreads);
-
-  trajCostEvaluator = new CostEvaluator(costWeights, sensor_position_body,
-                                        sensor_rotation_body);
+  // Setup the trajectory sampler and cost evaluator
+  configure(config, controlLimits, controlType, robotShapeType,
+            robotDimensions, sensor_position_body, sensor_rotation_body,
+            costWeights, maxNumThreads);
 
   // Update the max forward distance the robot can make
-  double timeHorizon = config.getParameter<double>("time_horizon");
+  double timeHorizon = config.getParameter<double>("control_horizon");
   if (controlType == ControlType::OMNI) {
     max_forward_distance_ = std::max(controlLimits.velXParams.maxVel,
                                      controlLimits.velYParams.maxVel) *
@@ -64,15 +62,9 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
   } else {
     max_forward_distance_ = controlLimits.velXParams.maxVel * timeHorizon;
   }
-  this->maxNumThreads = maxNumThreads;
 }
 
-DWA::~DWA() {
-  delete trajSampler;
-  delete trajCostEvaluator;
-}
-
-void DWA::reconfigure(ControlLimitsParams controlLimits,
+void DWA::configure(ControlLimitsParams controlLimits,
                       ControlType controlType, double timeStep,
                       double predictionHorizon, double controlHorizon,
                       int maxLinearSamples, int maxAngularSamples,
@@ -81,37 +73,47 @@ void DWA::reconfigure(ControlLimitsParams controlLimits,
                       const std::array<float, 3> &sensor_position_body,
                       const std::array<float, 4> &sensor_rotation_body,
                       const double octreeRes,
-                      CostEvaluator::TrajectoryCostsWeights costWeights, const int maxNumThreads) {
-  delete trajSampler;
-  trajSampler = new TrajectorySampler(
+                      CostEvaluator::TrajectoryCostsWeights costWeights,
+                      const int maxNumThreads) {
+  trajSampler = std::make_unique<TrajectorySampler>(
       controlLimits, controlType, timeStep, predictionHorizon, controlHorizon,
       maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
       sensor_position_body, sensor_rotation_body, octreeRes, maxNumThreads);
 
-  delete trajCostEvaluator;
-  trajCostEvaluator = new CostEvaluator(costWeights);
+  trajCostEvaluator = std::make_unique<CostEvaluator>(
+      costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
+      trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
+      maxSegmentSize);
   this->maxNumThreads = maxNumThreads;
 }
 
-void DWA::reconfigure(TrajectorySampler::TrajectorySamplerParameters config,
+void DWA::configure(TrajectorySampler::TrajectorySamplerParameters config,
                       ControlLimitsParams controlLimits,
                       ControlType controlType,
                       const CollisionChecker::ShapeType robotShapeType,
                       const std::vector<float> robotDimensions,
                       const std::array<float, 3> &sensor_position_body,
                       const std::array<float, 4> &sensor_rotation_body,
-                      CostEvaluator::TrajectoryCostsWeights costWeights, const int maxNumThreads) {
-  delete trajSampler;
-  trajSampler = new TrajectorySampler(
+                      CostEvaluator::TrajectoryCostsWeights costWeights,
+                      const int maxNumThreads) {
+  trajSampler = std::make_unique<TrajectorySampler>(
       config, controlLimits, controlType, robotShapeType, robotDimensions,
       sensor_position_body, sensor_rotation_body, maxNumThreads);
 
-  delete trajCostEvaluator;
-  trajCostEvaluator = new CostEvaluator(costWeights);
+  trajCostEvaluator = std::make_unique<CostEvaluator>(
+      costWeights, sensor_position_body, sensor_rotation_body, controlLimits,
+      trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
+      maxSegmentSize);
   this->maxNumThreads = maxNumThreads;
 }
 
-void DWA::resetOctreeResolution(const double octreeRes) { trajSampler->resetOctreeResolution(octreeRes);}
+void DWA::resetOctreeResolution(const double octreeRes) {
+  trajSampler->resetOctreeResolution(octreeRes);
+}
+
+void DWA::setSensorMaxRange(const float max_range) {
+  maxLocalRange_ = max_range;
+}
 
 void DWA::addCustomCost(
     double weight, CostEvaluator::CustomCostFunction custom_cost_function) {
@@ -119,7 +121,7 @@ void DWA::addCustomCost(
 }
 
 Path::Path DWA::findTrackedPathSegment() {
-  Path::Path trackedPathSegment;
+  std::vector<Path::Point> trackedPoints;
   size_t segment_index{current_segment_index_ + 1};
   Path::Path currentSegment = currentPath->segments[current_segment_index_];
 
@@ -127,23 +129,27 @@ Path::Path DWA::findTrackedPathSegment() {
   // take the next segment
   if (closestPosition->index > currentSegment.points.size() - 1 and
       current_segment_index_ < max_segment_index_) {
-    trackedPathSegment = currentPath->segments[current_segment_index_ + 1];
+    trackedPoints = currentPath->segments[current_segment_index_ + 1].points;
     segment_index = current_segment_index_ + 1;
   }
   // Else take the segment points from the current point onwards
   else {
-    trackedPathSegment.points = {currentSegment.points.begin() +
-                                     closestPosition->index,
-                                 currentSegment.points.end()};
+    trackedPoints = {currentSegment.points.begin() + closestPosition->index,
+                     currentSegment.points.end()};
   }
   size_t point_index{0};
 
-  double segment_length = trackedPathSegment.totalPathLength();
+  float segment_length = 0.0;
+  for (size_t i = 1; i < trackedPoints.size(); ++i) {
+    segment_length +=
+        Path::Path::distance(trackedPoints[i - 1], trackedPoints[i]);
+  }
 
   // If the segment does not have the required number of points add more points
   // from next path segment
-  while (segment_length <= max_forward_distance_ and
-         segment_index <= max_segment_index_) {
+  while (segment_length < max_forward_distance_ and
+         segment_index <= max_segment_index_ and
+         trackedPoints.size() < maxSegmentSize) {
     if (point_index >= currentPath->segments[segment_index].points.size()) {
       point_index = 0;
       segment_index++;
@@ -152,65 +158,19 @@ Path::Path DWA::findTrackedPathSegment() {
       }
     }
     // Add distance between last point and new point
-    Path::Point back_point = trackedPathSegment.points.back();
+    Path::Point back_point = trackedPoints.back();
     segment_length += calculateDistance(
         back_point, currentPath->segments[segment_index].points[point_index]);
-    trackedPathSegment.points.push_back(
+    trackedPoints.push_back(
         currentPath->segments[segment_index].points[point_index]);
     point_index++;
   }
 
-  return trackedPathSegment;
-}
-
-TrajSearchResult DWA::findBestSegment(const std::vector<Trajectory> &samples) {
-  double minCost = std::numeric_limits<double>::max();
-  Trajectory minCostTraj;
-  bool traj_found = false;
-  Path::Path trackedRefPathSegment = findTrackedPathSegment();
-
-  if (maxNumThreads > 1) {
-    ThreadPool pool(maxNumThreads);
-    // Mutex for locking updates to minCost and minCostTraj
-    std::mutex mtx;
-
-    for (const auto &sample : samples) {
-      pool.enqueue([this, &sample, &trackedRefPathSegment, &minCost,
-                    &minCostTraj, &traj_found, &mtx](void) {
-        double traj_cost = trajCostEvaluator->getTrajectoryCost(
-            sample, *currentPath, trackedRefPathSegment,
-            current_segment_index_);
-        // Lock to update the minimum cost and trajectory
-        {
-          std::lock_guard<std::mutex> lock(mtx);
-          if (traj_cost < minCost) {
-            minCost = traj_cost;
-            minCostTraj = sample;
-            traj_found = true;
-          }
-        }
-      });
-    }
-
-  } else {
-    // Evaluate the samples and get the sample with the minimum cost
-    for (const auto &sample : samples) {
-      double traj_cost = trajCostEvaluator->getTrajectoryCost(
-          sample, *currentPath, trackedRefPathSegment, current_segment_index_);
-
-      if (traj_cost < minCost) {
-        minCost = traj_cost;
-        minCostTraj = sample;
-        traj_found = true;
-      }
-    }
-  }
-
-  return {traj_found, minCost, minCostTraj};
+  return Path::Path(trackedPoints);
 }
 
 template <typename T>
-TrajSearchResult DWA::findBestPath(const Velocity &global_vel,
+TrajSearchResult DWA::findBestPath(const Velocity2D &global_vel,
                                    const T &scan_points) {
   // Throw an error if the global path is not set
   if (!currentPath) {
@@ -222,23 +182,30 @@ TrajSearchResult DWA::findBestPath(const Velocity &global_vel,
   determineTarget();
 
   // Generate set of valid trajectories in the DW
-  std::vector<Trajectory> samples_ =
+  std::unique_ptr<TrajectorySamples2D> samples_ =
       trajSampler->generateTrajectories(global_vel, currentState, scan_points);
+  if (samples_->size() == 0) {
+    return TrajSearchResult();
+  }
 
-  trajCostEvaluator->setPointScan(scan_points, currentState);
+  trajCostEvaluator->setPointScan(scan_points, currentState, maxLocalRange_);
 
-  return findBestSegment(samples_);
+  Path::Path trackedRefPathSegment = findTrackedPathSegment();
+
+  // Evaluate the samples and get the sample with the minimum cost
+  return trajCostEvaluator->getMinTrajectoryCost(samples_, *currentPath,
+                                                 trackedRefPathSegment);
 }
 
 template <typename T>
-Controller::Result DWA::computeVelocityCommand(const Velocity &global_vel,
+Controller::Result DWA::computeVelocityCommand(const Velocity2D &global_vel,
                                                const T &scan_points) {
   TrajSearchResult searchRes = findBestPath(global_vel, scan_points);
   Controller::Result finalResult;
   if (searchRes.isTrajFound) {
     finalResult.status = Controller::Result::Status::COMMAND_FOUND;
     // Get the first command to be applied
-    finalResult.velocity_command = searchRes.trajectory.velocity.front();
+    finalResult.velocity_command = searchRes.trajectory.velocities.getFront();
     latest_velocity_command_ = finalResult.velocity_command;
   } else {
     finalResult.status = Controller::Result::Status::NO_COMMAND_POSSIBLE;
@@ -246,26 +213,43 @@ Controller::Result DWA::computeVelocityCommand(const Velocity &global_vel,
   return finalResult;
 }
 
-TrajSearchResult DWA::computeVelocityCommandsSet(const Velocity &global_vel,
+TrajSearchResult DWA::computeVelocityCommandsSet(const Velocity2D &global_vel,
                                                  const LaserScan &scan) {
   TrajSearchResult searchRes = findBestPath(global_vel, scan);
   // Update latest velocity command
   if (searchRes.isTrajFound) {
-    latest_velocity_command_ = searchRes.trajectory.velocity.front();
+    latest_velocity_command_ = searchRes.trajectory.velocities.getFront();
   }
   return searchRes;
 }
 
 TrajSearchResult
-DWA::computeVelocityCommandsSet(const Velocity &global_vel,
-                                const std::vector<Point3D> &cloud) {
+DWA::computeVelocityCommandsSet(const Velocity2D &global_vel,
+                                const std::vector<Path::Point> &cloud) {
 
   TrajSearchResult searchRes = findBestPath(global_vel, cloud);
   // Update latest velocity command
   if (searchRes.isTrajFound) {
-    latest_velocity_command_ = searchRes.trajectory.velocity.front();
+    latest_velocity_command_ = searchRes.trajectory.velocities.getFront();
   }
   return searchRes;
+}
+
+std::tuple<MatrixXfR, MatrixXfR> DWA::getDebuggingSamples() const {
+  if (debuggingSamples_ == nullptr) {
+    throw std::invalid_argument("No debugging samples are available");
+  }
+  size_t paths_size = debuggingSamples_->paths.size();
+  auto paths_x = debuggingSamples_->paths.x.topRows(paths_size).eval();
+  auto paths_y = debuggingSamples_->paths.y.topRows(paths_size).eval();
+  return std::tie(paths_x, paths_y);
+}
+
+Control::TrajectorySamples2D DWA::getDebuggingSamplesPure() const {
+  if (debuggingSamples_ == nullptr) {
+    throw std::invalid_argument("No debugging samples are available");
+  }
+  return *debuggingSamples_;
 }
 
 }; // namespace Control

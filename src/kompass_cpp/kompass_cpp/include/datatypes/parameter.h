@@ -75,20 +75,54 @@ public:
       minValue = other.minValue;
       maxValue = other.maxValue;
       currentValue = other.currentValue;
+      description = other.description;
     }
     return *this;
   }
 
   /**
-   * @brief Friend function for the overloaded << operator
+   * @brief Get Parameter type as string
    *
-   * @param os
-   * @param obj
-   * @return std::ostream&
+   * @return typeName
    */
-  friend std::ostream &operator<<(std::ostream &os, const Parameter &obj) {
-    os << "Parameter:" << obj.description << "\n";
-    return os;
+  std::string getTypeName() const {
+    std::string typeName = "unknown";
+    std::visit(
+        [&typeName](auto &&arg) {
+          using T = std::decay_t<decltype(arg)>;
+          if constexpr (std::is_same_v<T, int>)
+            typeName = "int";
+          else if constexpr (std::is_same_v<T, double>)
+            typeName = "double";
+          else if constexpr (std::is_same_v<T, std::string>)
+            typeName = "string";
+          else if constexpr (std::is_same_v<T, bool>)
+            typeName = "bool";
+        },
+        currentValue);
+    return typeName;
+  }
+
+  /**
+   * @brief Prints the current value of the parameter to the given stream.
+   * Handles different types stored in the variant, printing bools as
+   * true/false.
+   * @param os The output stream (e.g., std::cout).
+   */
+  void printValue(std::ostream &os) const {
+    std::visit(
+        [&os](auto &&arg) {
+          // Use using to get the underlying type held by the variant
+          using T = std::decay_t<decltype(arg)>;
+          if constexpr (std::is_same_v<T, bool>) {
+            // Explicitly print bools as true/false
+            os << (arg ? "true" : "false");
+          } else {
+            // Use the default stream operator for int, double, std::string
+            os << arg;
+          }
+        },
+        currentValue); // Apply the visitor lambda to currentValue
   }
 
   /**
@@ -121,13 +155,6 @@ public:
   /**
    * @brief Get the Value object
    *
-   * @return auto
-   */
-  auto getValue() const { return currentValue; }
-
-  /**
-   * @brief Get the Value object
-   *
    * @tparam T
    * @return T
    */
@@ -135,7 +162,8 @@ public:
     if (std::holds_alternative<T>(currentValue)) {
       return std::get<T>(currentValue);
     } else {
-      throw std::invalid_argument("Type mismatch");
+      throw std::invalid_argument(
+          "Requested type does not match parameter value type");
     }
   }
 
@@ -170,8 +198,9 @@ public:
    * @param defaultValue
    */
   template <typename T>
-  void addParameter(const std::string &name, T defaultValue) {
-    parameters[name] = Parameter(defaultValue);
+  void addParameter(const std::string &name, T defaultValue,
+                    const std::string &description = "Parameter") {
+    parameters[name] = Parameter(defaultValue, description);
   }
 
   /**
@@ -185,27 +214,8 @@ public:
    */
   template <typename T>
   void addParameter(const std::string &name, T defaultValue, T minValue,
-                    T maxValue) {
-    parameters[name] = Parameter(defaultValue, minValue, maxValue);
-  }
-
-  // Overloads for specific types
-  void addParameter(const std::string &name, const char *defaultValue) {
-    parameters[name] = Parameter(std::string(defaultValue));
-  }
-
-  void addParameter(const std::string &name, bool defaultValue) {
-    parameters[name] = Parameter(defaultValue);
-  }
-
-  void addParameter(const std::string &name, int defaultValue, int minValue,
-                    int maxValue) {
-    parameters[name] = Parameter(defaultValue, minValue, maxValue);
-  }
-
-  void addParameter(const std::string &name, double defaultValue,
-                    double minValue, double maxValue) {
-    parameters[name] = Parameter(defaultValue, minValue, maxValue);
+                    T maxValue, const std::string &description = "Parameter") {
+    parameters[name] = Parameter(defaultValue, minValue, maxValue, description);
   }
 
   /**
@@ -274,4 +284,34 @@ public:
   }
 
   std::map<std::string, Parameter> parameters;
+  // Friend declaration for the stream insertion operator
+  friend std::ostream &operator<<(std::ostream &os, const Parameters &params);
 };
+
+/**
+ * @brief Overload for the stream insertion operator<< to print Parameters
+ * content.
+ *
+ * @param os The output stream (e.g., std::cout).
+ * @param params The Parameters object to print (passed by const reference).
+ * @return std::ostream& Reference to the output stream for chaining.
+ */
+inline std::ostream &operator<<(std::ostream &os, const Parameters &params) {
+  os << "Parameters Content:\n";
+  os << "--------------------\n";
+  if (params.parameters.empty()) {
+    os << "(No parameters defined)\n";
+  } else {
+    for (const auto &pair : params.parameters) {
+      const std::string &name = pair.first;
+      const Parameter &param = pair.second;
+
+      os << "- " << name << ": ";
+      param.printValue(os);
+      os << " (Type: " << param.getTypeName();
+      os << ", Info: \"" << param.getInfo() << "\")\n";
+    }
+  }
+  os << "--------------------";
+  return os;
+}

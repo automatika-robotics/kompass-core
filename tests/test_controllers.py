@@ -1,13 +1,14 @@
 import json
 import logging
 import os
-from typing import Union
+from typing import Union, List
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-from geometry_msgs.msg import PoseStamped
-from nav_msgs.msg import Path
+from attrs import define, field, Factory
+
+import kompass_cpp
 from kompass_cpp.types import PathInterpolationType, Path as PathCpp
 
 from kompass_core.datatypes.laserscan import LaserScanData
@@ -29,10 +30,48 @@ from kompass_core.models import (
 )
 
 logger = logging.getLogger(__name__)
+os.makedirs("logs", exist_ok=True)
 
 dir_name = os.path.dirname(os.path.abspath(__file__))
 control_resources = os.path.join(dir_name, "resources/control")
 EPSILON = 1e-3
+
+
+# Data Classes similar to ROS geometry_msgs.msg.PoseStamped and nav_msgs.msg.Path for testing
+@define
+class Vector4:
+    """Class that replaces ROS Point and Quaternion classes for testing"""
+
+    x: float = field(default=0.0)
+    y: float = field(default=0.0)
+    z: float = field(default=0.0)
+    w: float = field(default=1.0)
+
+
+@define
+class Pose:
+    """Class that replaces ROS geometry_msgs/Pose class for testing"""
+
+    position: Vector4 = field(default=Factory(Vector4))
+    orientation: Vector4 = field(default=Factory(Vector4))
+
+
+@define
+class PoseStamped:
+    """Class that replaces ROS geometry_msgs/PoseStamped class for testing
+    Discards the 'Header' part as it is not required for testing
+    """
+
+    pose: Pose = field(default=Factory(Pose))
+
+
+@define
+class Path:
+    """Class that replaces ROS nav_msgs/Path class for testing
+    Discards the 'Header' part as it is not required for testing
+    """
+
+    poses: List[PoseStamped] = field()
 
 
 def plot_path(
@@ -69,7 +108,7 @@ def plot_path(
     plt.title(figure_tag)
     plt.grid(True)
     plt.legend()
-    plt.savefig(f"{control_resources}/{figure_name}.png")
+    plt.savefig(f"logs/{figure_name}.png")
 
 
 def json_to_ros_path(json_file: str) -> Union[Path, None]:
@@ -85,16 +124,10 @@ def json_to_ros_path(json_file: str) -> Union[Path, None]:
         with open(json_file, "r") as f:
             path_dict = json.load(f)
 
-        path = Path()
-        path.header.stamp.sec = path_dict["header"]["stamp"]["sec"]
-        path.header.stamp.nanosec = path_dict["header"]["stamp"]["nanosec"]
-        path.header.frame_id = path_dict["header"]["frame_id"]
+        poses: List[PoseStamped] = []
 
         for pose_dict in path_dict["poses"]:
             pose_stamped = PoseStamped()
-            pose_stamped.header.stamp.sec = pose_dict["header"]["stamp"]["sec"]
-            pose_stamped.header.stamp.nanosec = pose_dict["header"]["stamp"]["nanosec"]
-            pose_stamped.header.frame_id = pose_dict["header"]["frame_id"]
 
             pose_stamped.pose.position.x = pose_dict["pose"]["position"]["x"]
             pose_stamped.pose.position.y = pose_dict["pose"]["position"]["y"]
@@ -105,7 +138,9 @@ def json_to_ros_path(json_file: str) -> Union[Path, None]:
             pose_stamped.pose.orientation.z = pose_dict["pose"]["orientation"]["z"]
             pose_stamped.pose.orientation.w = pose_dict["pose"]["orientation"]["w"]
 
-            path.poses.append(pose_stamped)
+            poses.append(pose_stamped)
+
+        path = Path(poses=poses)
 
         return path
     # File not found or format is not compatible
@@ -145,8 +180,8 @@ def run_control(
     interpolation_x = []
     interpolation_y = []
     for point in interpolated_path.points:
-        interpolation_x.append(point.x)
-        interpolation_y.append(point.y)
+        interpolation_x.append(point[0])
+        interpolation_y.append(point[1])
 
     i = 0
     x_robot = []
@@ -162,7 +197,13 @@ def run_control(
     # laser_scan.ranges = np.array([0.4, 0.3])
 
     while not end_reached and i < 100:
-        controller.loop_step(current_state=robot.state, laser_scan=laser_scan)
+        ctrl_found = controller.loop_step(
+            current_state=robot.state, laser_scan=laser_scan
+        )
+        if not ctrl_found or not controller.path:
+            end_reached = controller.reached_end()
+            break
+
         tracked_state = controller.tracked_state
         tracked_point_x.append(tracked_state.x)
         tracked_point_y.append(tracked_state.y)
@@ -182,6 +223,8 @@ def run_control(
             robot.get_state(dt=control_time_step)
             i += 1
             end_reached = controller.reached_end()
+
+    print(f"End reached in: {i}")
 
     if plot_results:
         plot_path(
@@ -221,8 +264,7 @@ def test_path_interpolation(plot: bool = False):
 
     follower.set_interpolation_type(PathInterpolationType.HERMITE_SPLINE)
     follower.set_path(ref_path)
-    hermite_spline_interpolation = follower.interpolated_path(
-    )
+    hermite_spline_interpolation = follower.interpolated_path()
 
     follower.set_interpolation_type(PathInterpolationType.CUBIC_SPLINE)
     follower.set_path(ref_path)
@@ -233,14 +275,15 @@ def test_path_interpolation(plot: bool = False):
         x_ref = [pose.pose.position.x for pose in ref_path.poses]
         y_ref = [pose.pose.position.y for pose in ref_path.poses]
 
-        x_inter_lin = [pose.x for pose in linear_interpolation.points]
-        y_inter_lin = [pose.y for pose in linear_interpolation.points]
+        x_inter_lin = [point[0] for point in linear_interpolation.points]
+        y_inter_lin = [point[1] for point in linear_interpolation.points]
 
-        x_inter_her = [pose.x for pose in hermite_spline_interpolation.points]
-        y_inter_her = [pose.y for pose in hermite_spline_interpolation.points]
+        x_inter_her = [point[0] for point in hermite_spline_interpolation.points]
+        y_inter_her = [point[1] for point in hermite_spline_interpolation.points]
 
-        x_inter_cub = [pose.x for pose in cubic_spline_interpolation.points]
-        y_inter_cub = [pose.y for pose in cubic_spline_interpolation.points]
+        x_inter_cub = [point[0] for point in cubic_spline_interpolation.points]
+        y_inter_cub = [point[1] for point in cubic_spline_interpolation.points]
+
         # Plot the path
         plt.figure()
         plt.plot(
@@ -264,9 +307,9 @@ def test_path_interpolation(plot: bool = False):
         plt.ylabel("Y")
         plt.grid(True)
         plt.legend()
-        plt.savefig(f"{control_resources}/interpolation_test.png")
+        plt.savefig("logs/interpolation_test.png")
 
-    def path_length(path: Path) -> float:
+    def path_length(path: Union[Path, PathCpp]) -> float:
         """Computes the length of a path
 
         :param path: Path
@@ -277,19 +320,19 @@ def test_path_interpolation(plot: bool = False):
         length = 0.0
         if isinstance(path, Path):
             for idx in range(len(path.poses) - 1):
-                d_x = path.poses[idx + 1].pose.position.x - path.poses[idx].pose.position.x
-                d_y = path.poses[idx + 1].pose.position.y - path.poses[idx].pose.position.y
+                d_x = (
+                    path.poses[idx + 1].pose.position.x
+                    - path.poses[idx].pose.position.x
+                )
+                d_y = (
+                    path.poses[idx + 1].pose.position.y
+                    - path.poses[idx].pose.position.y
+                )
                 length += np.sqrt(d_x**2 + d_y**2)
         elif isinstance(path, PathCpp):
             for idx in range(len(path.points) - 1):
-                d_x = (
-                    path.points[idx + 1].x
-                    - path.points[idx].x
-                )
-                d_y = (
-                    path.points[idx + 1].y
-                    - path.points[idx].y
-                )
+                d_x = path.points[idx + 1][0] - path.points[idx][0]
+                d_y = path.points[idx + 1][1] - path.points[idx][1]
                 length += np.sqrt(d_x**2 + d_y**2)
         return length
 
@@ -361,14 +404,14 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
         obstacles_distance_weight=1.0,
     )
     config = DWAConfig(
-        max_linear_samples=20,
-        max_angular_samples=20,
+        max_linear_samples=4,
+        max_angular_samples=4,
         octree_resolution=0.1,
         costs_weights=cost_weights,
         prediction_horizon=1.0,
         control_horizon=0.2,
         control_time_step=control_time_step,
-        max_num_threads=10,
+        max_num_threads=1,
     )
 
     dwa = DWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
@@ -386,6 +429,72 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
     assert reached_end is True
 
 
+def test_dwa_debug():
+    global global_path, my_robot, robot_ctr_limits, control_time_step
+
+    cost_weights = TrajectoryCostsWeights(
+        reference_path_distance_weight=3.0,
+        goal_distance_weight=1.0,
+        smoothness_weight=0.0,
+        jerk_weight=0.0,
+        obstacles_distance_weight=1.0,
+    )
+    config = DWAConfig(
+        max_linear_samples=21,
+        max_angular_samples=21,
+        octree_resolution=0.1,
+        costs_weights=cost_weights,
+        prediction_horizon=1.0,
+        control_horizon=0.2,
+        control_time_step=control_time_step,
+        max_num_threads=1,
+    )
+
+    dwa = DWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
+
+    dwa.set_path(global_path)
+
+    my_robot.state.x = -0.51731912
+    my_robot.state.y = 0.0
+    my_robot.state.yaw = 0.0
+
+    laser_scan = LaserScanData()
+    laser_scan.angles = np.array([0.0, 0.1])
+    laser_scan.ranges = np.array([0.4, 0.3])
+    dwa.planner.set_current_state(
+        my_robot.state.x, my_robot.state.y, my_robot.state.yaw, my_robot.state.speed
+    )
+
+    dwa.planner.set_resolution(0.1)
+
+    current_velocity = kompass_cpp.types.ControlCmd(
+        vx=my_robot.state.vx, vy=my_robot.state.vy, omega=my_robot.state.omega
+    )
+
+    sensor_data = kompass_cpp.types.LaserScan(
+        ranges=laser_scan.ranges, angles=laser_scan.angles
+    )
+
+    dwa.planner.debug_velocity_search(current_velocity, sensor_data, False)
+    (paths_x, paths_y) = dwa.planner.get_debugging_samples()
+    _, ax = plt.subplots()
+    # Add the two laserscan obstacles
+    obstacle_1 = plt.Circle((-0.117319, 0), 0.1, color="black", label="obstacle")
+    obstacle_2 = plt.Circle((-0.218818, 0.02995), 0.1, color="black")
+    for idx in range(paths_x.shape[0] - 1):
+        path_i_x = paths_x[idx, :]
+        path_i_y = paths_y[idx, :]
+        plt.plot(path_i_x, path_i_y)
+    ax.add_patch(obstacle_1)
+    ax.add_patch(obstacle_2)
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.title("Trajectory Samples")
+    plt.grid(True)
+    plt.legend()
+    plt.savefig("logs/trajectory_samples_debug.png")
+
+
 @pytest.fixture(autouse=True)
 def run_before_and_after_tests():
     """Fixture to execute asserts before and after a test is run"""
@@ -398,7 +507,7 @@ def run_before_and_after_tests():
         raise ValueError("Global path file not found")
 
     my_robot = Robot(
-        robot_type=RobotType.DIFFERENTIAL_DRIVE,
+        robot_type=RobotType.ACKERMANN,
         geometry_type=RobotGeometry.Type.CYLINDER,
         geometry_params=np.array([0.1, 0.4]),
     )
@@ -406,7 +515,7 @@ def run_before_and_after_tests():
     robot_ctr_limits = RobotCtrlLimits(
         vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
         omega_limits=AngularCtrlLimits(
-            max_vel=10.0, max_acc=30.0, max_decel=20.0, max_steer=np.pi
+            max_vel=3.0, max_acc=5.0, max_decel=10.0, max_steer=np.pi
         ),
     )
 
@@ -447,9 +556,13 @@ def main():
         plot=True, figure_name="stanley", figure_tag="Stanley Controller Test Results"
     )
 
-    # TESTING DVZ ##
+    ## TESTING DVZ ##
     print("RUNNING DVZ CONTROLLER TEST")
     test_dvz(plot=True, figure_name="dvz", figure_tag="DVZ Controller Test Results")
+
+    ## TESTING DWA DEBUG MODE ##
+    print("RUNNING ONE DWA CONTROLLER DEBUG STEP TEST")
+    test_dwa_debug()
 
     ## TESTING DWA ##
     print("RUNNING DWA CONTROLLER TEST")

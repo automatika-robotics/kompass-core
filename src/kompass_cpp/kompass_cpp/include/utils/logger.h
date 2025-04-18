@@ -6,6 +6,10 @@
 #include <sstream>
 #include <string>
 
+#ifdef GPU
+#include <sycl/sycl.hpp>
+#endif  //!GPU
+
 namespace Kompass {
 
 enum class LogLevel { DEBUG, INFO, WARNING, ERROR };
@@ -118,5 +122,20 @@ inline void setLogFile(const std::string &filename) {
   Kompass::Logger::getInstance().log(Kompass::LogLevel::WARNING, __VA_ARGS__)
 #define LOG_ERROR(...)                                                         \
   Kompass::Logger::getInstance().log(Kompass::LogLevel::ERROR, __VA_ARGS__)
+
+// add a printf command for sycl
+#ifdef GPU
+#ifndef NDEBUG
+#define KERNEL_DEBUG(...)                                                      \
+  namespace jit = sycl::AdaptiveCpp_jit;                                       \
+  __acpp_if_target_sscp(                                                       \
+      jit::compile_if(                                                         \
+          jit::reflect<jit::reflection_query::compiler_backend>() ==           \
+              jit::compiler_backend::host,                                     \
+          [&]() { printf(__VA_ARGS__); }););
+#else
+#define KERNEL_DEBUG(...)
+#endif
+#endif  // !GPU
 
 } // namespace Kompass

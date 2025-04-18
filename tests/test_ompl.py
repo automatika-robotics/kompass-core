@@ -5,9 +5,8 @@ import timeit
 from typing import Dict
 import numpy as np
 import pandas as pd
-from nav_msgs.msg import MapMetaData
 
-import ompl
+import omplpy as ompl
 from kompass_core.models import Robot, RobotGeometry, RobotType
 from kompass_core.third_party.ompl.config import create_config_class, initializePlanners
 from kompass_core.third_party.ompl.planner import OMPLGeometric
@@ -43,7 +42,7 @@ def generate_all_geometric_planners_configs():
 
 
 def ompl_solve_once(
-    ompl_planner: OMPLGeometric, map_data: MapMetaData, map_numpy: np.ndarray
+    ompl_planner: OMPLGeometric, map_data: Dict, map_numpy: np.ndarray
 ):
     """
     Setup and solve OMPL planning problem with given map and map metadata
@@ -145,7 +144,7 @@ def ompl_geometric_testing(test_repetitions: int = 1):
 
     map_file = os.path.join(ompl_resources, "map_meta.json")
 
-    map_data: MapMetaData = load_map_meta(map_file)
+    map_data: Dict = load_map_meta(map_file)
 
     config_file = os.path.join(ompl_resources, "testing_params.yaml")
 
@@ -200,7 +199,8 @@ def ompl_geometric_testing(test_repetitions: int = 1):
             "simplification_time": simplify_time / test_repetitions,
         }
 
-    ompl_df.to_csv(f"{ompl_resources}/test_results.csv", index=False)
+    os.makedirs("logs", exist_ok=True)
+    ompl_df.to_csv("logs/ompl_test_results.csv", index=False)
     return ompl_df
 
 

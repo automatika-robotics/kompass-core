@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=61.0.0", "wheel", "pybind11>=2.10.0"]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core", "nanobind"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "kompass_core"
-dynamic = ["version"]
-description = "Navigation Algorithms for Kompass"
+version = "0.4.2"
+description = "Navigation Algorithms Library for Kompass"
 authors = [{ name = "Automatika Robotics", email = "contact@automatikarobotics.com" }]
 readme = "README.md"
 classifiers = [
@@ -17,13 +17,12 @@ classifiers = [
     "Programming Language :: Python :: 3.12"]
 license = { text = "MIT" }
 
-keywords = ["robotics", "robots", "navigation", "control", "planning", "mapping"]
+keywords = ["robotics", "gpgpu", "navigation", "control", "planning", "mapping"]
 
 dependencies = [
     "numpy<=1.26.4",
     "numpy-quaternion>=2023.0.3",
     "python-fcl-fork",
-    "pybind11",
     "omegaconf",
     "attrs>=23.2.0",
     "pyyaml",
@@ -35,13 +34,26 @@ dependencies = [
 requires-python = ">=3.8.4,<3.13"
 
 [project.optional-dependencies]
-dev = ["pip-tools", "pytest==8.0.0", "pre-commit"]
+dev = ["pip-tools", "pytest==8.0.0", "pre-commit", "opencv-python"]
 
 [project.urls]
 Homepage = "https://github.com/automatika-robotics/kompass-core"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.scikit-build]
+# Protect the configuration against future changes in scikit-build-core
+minimum-version = "0.8"
+# Setuptools-style build caching in a local directory
+build-dir = "build/{wheel_tag}"
+# Build stable ABI wheels for CPython 3.12+
+wheel.py-api = "cp312"
+# Min cmake version
+cmake.version = ">=3.5.0"
+# Fast build
+build.tool-args = ["-j8"]
+# For vcpkg based builds
+[tool.scikit-build.cmake.define]
+CMAKE_TOOLCHAIN_FILE = {env="CMAKE_TOOLCHAIN_FILE"}
+VCPKG_TARGET_TRIPLET = {env="VCPKG_TARGET_TRIPLET"}
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -98,17 +110,31 @@ tag = true
 push = true
 
 [tool.bumpver.file_patterns]
-"setup.py" = [
-    "{version}",
+"pyproject.toml" = [
+    'version = "{version}"',
 ]
 
 [tool.cibuildwheel]
+build-verbosity = 1
 skip = ["pp*", "*musllinux*"]
-test-requires = "pytest"
-test-command = "pytest {package}/tests/test_fcl.py"
+test-requires = ["pytest", "opencv-python"]
+test-command = "cd {package}/tests && pytest"
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
 
 [tool.cibuildwheel.linux]
-environment = {VCPKG_ROOT="/project/deps/vcpkg", LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/x64-linux/lib:$VCPKG_ROOT/installed/arm64-linux/lib"}
+environment = {VCPKG_ROOT="/project/deps/vcpkg", CMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"}
 before-all = "bash build_dependencies/install_linux.sh"
+
+[[tool.cibuildwheel.overrides]]
+select = "*-manylinux_x86_64"
+inherit.environment = "append"
+environment.VCPKG_TARGET_TRIPLET = "x64-linux-release"
+environment.LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib"
+
+[[tool.cibuildwheel.overrides]]
+select = "*-manylinux_aarch64"
+inherit.environment = "append"
+environment.VCPKG_TARGET_TRIPLET = "arm64-linux-release"
+environment.LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib"
+

@@ -1,17 +1,19 @@
-#include <pybind11/eigen.h>
-#include <pybind11/functional.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <nanobind/eigen/dense.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/array.h>
+#include <nanobind/stl/function.h>
+#include <nanobind/stl/tuple.h>
+#include <nanobind/stl/vector.h>
 
+#include "controllers/dwa.h"
 #include "controllers/follower.h"
-#include "datatypes/control.h"
-#include "datatypes/trajectory.h"
-#include "controllers/vision_follower.h"
 #include "controllers/pid.h"
 #include "controllers/stanley.h"
-#include "controllers/dwa.h"
+#include "controllers/vision_follower.h"
+#include "datatypes/control.h"
+#include "datatypes/trajectory.h"
 
-namespace py = pybind11;
+namespace py = nanobind;
 using namespace Kompass;
 
 // Control bindings submodule
@@ -28,25 +30,22 @@ void bindings_control(py::module_ &m) {
       m_control, "LinearVelocityControlParams")
       .def(py::init<double, double, double>(), py::arg("max_vel") = 0.0,
            py::arg("max_acc") = 0.0, py::arg("max_decel") = 0.0)
-      .def_readwrite("max_vel", &Control::LinearVelocityControlParams::maxVel)
-      .def_readwrite("max_acc",
-                     &Control::LinearVelocityControlParams::maxAcceleration)
-      .def_readwrite("max_decel",
-                     &Control::LinearVelocityControlParams::maxDeceleration);
+      .def_rw("max_vel", &Control::LinearVelocityControlParams::maxVel)
+      .def_rw("max_acc", &Control::LinearVelocityControlParams::maxAcceleration)
+      .def_rw("max_decel",
+              &Control::LinearVelocityControlParams::maxDeceleration);
 
   py::class_<Control::AngularVelocityControlParams>(
       m_control, "AngularVelocityControlParams")
       .def(py::init<double, double, double, double>(),
            py::arg("max_ang") = M_PI, py::arg("max_omega") = 0.0,
            py::arg("max_acc") = 0.0, py::arg("max_decel") = 0.0)
-      .def_readwrite("max_steer_ang",
-                     &Control::AngularVelocityControlParams::maxAngle)
-      .def_readwrite("max_omega",
-                     &Control::AngularVelocityControlParams::maxOmega)
-      .def_readwrite("max_acc",
-                     &Control::AngularVelocityControlParams::maxAcceleration)
-      .def_readwrite("max_decel",
-                     &Control::AngularVelocityControlParams::maxDeceleration);
+      .def_rw("max_steer_ang", &Control::AngularVelocityControlParams::maxAngle)
+      .def_rw("max_omega", &Control::AngularVelocityControlParams::maxOmega)
+      .def_rw("max_acc",
+              &Control::AngularVelocityControlParams::maxAcceleration)
+      .def_rw("max_decel",
+              &Control::AngularVelocityControlParams::maxDeceleration);
 
   py::class_<Control::ControlLimitsParams>(m_control, "ControlLimitsParams")
       .def(py::init<Control::LinearVelocityControlParams,
@@ -56,12 +55,9 @@ void bindings_control(py::module_ &m) {
            py::arg("vel_y_ctr_params") = Control::LinearVelocityControlParams(),
            py::arg("omega_ctr_params") =
                Control::AngularVelocityControlParams())
-      .def_readwrite("linear_x_limits",
-                     &Control::ControlLimitsParams::velXParams)
-      .def_readwrite("linear_y_limits",
-                     &Control::ControlLimitsParams::velYParams)
-      .def_readwrite("angular_limits",
-                     &Control::ControlLimitsParams::omegaParams);
+      .def_rw("linear_x_limits", &Control::ControlLimitsParams::velXParams)
+      .def_rw("linear_y_limits", &Control::ControlLimitsParams::velYParams)
+      .def_rw("angular_limits", &Control::ControlLimitsParams::omegaParams);
 
   py::class_<Control::Controller>(m_control, "Controller")
       .def(py::init<>())
@@ -93,15 +89,16 @@ void bindings_control(py::module_ &m) {
       .def(py::init<Control::Follower::FollowerParameters>())
       .def("set_interpolation_type", &Control::Follower::setInterpolationType)
       .def("set_current_path", &Control::Follower::setCurrentPath)
+      .def("clear_current_path", &Control::Follower::clearCurrentPath)
       .def("is_goal_reached", &Control::Follower::isGoalReached)
       .def("get_vx_cmd", &Control::Follower::getLinearVelocityCmdX)
       .def("get_vy_cmd", &Control::Follower::getLinearVelocityCmdY)
       .def("get_omega_cmd", &Control::Follower::getAngularVelocityCmd)
       .def("get_steer_cmd", &Control::Follower::getSteeringAngleCmd)
       .def("get_tracked_target", &Control::Follower::getTrackedTarget,
-           py::return_value_policy::reference_internal)
+           py::rv_policy::reference_internal)
       .def("get_current_path", &Control::Follower::getCurrentPath,
-           py::return_value_policy::reference_internal)
+           py::rv_policy::reference_internal)
       .def("get_path_length", &Control::Follower::getPathLength)
       .def("has_path", &Control::Follower::hasPath);
 
@@ -115,38 +112,34 @@ void bindings_control(py::module_ &m) {
 
   py::class_<Control::Controller::Result>(m_control, "FollowingResult")
       .def(py::init<>())
-      .def_readwrite("status", &Control::Controller::Result::status)
-      .def_readwrite("velocity_command",
-                     &Control::Controller::Result::velocity_command);
+      .def_rw("status", &Control::Controller::Result::status)
+      .def_rw("velocity_command",
+              &Control::Controller::Result::velocity_command);
 
   py::class_<Control::Follower::Target>(m_control, "FollowingTarget")
       .def(py::init<>())
-      .def_readwrite("segment_index", &Control::Follower::Target::segment_index)
-      .def_readwrite("position_in_segment",
-                     &Control::Follower::Target::position_in_segment)
-      .def_readwrite("movement", &Control::Follower::Target::movement)
-      .def_readwrite("reverse", &Control::Follower::Target::reverse)
-      .def_readwrite("lookahead", &Control::Follower::Target::lookahead)
-      .def_readwrite("crosstrack_error",
-                     &Control::Follower::Target::crosstrack_error)
-      .def_readwrite("heading_error",
-                     &Control::Follower::Target::heading_error);
+      .def_rw("segment_index", &Control::Follower::Target::segment_index)
+      .def_rw("position_in_segment",
+              &Control::Follower::Target::position_in_segment)
+      .def_rw("movement", &Control::Follower::Target::movement)
+      .def_rw("reverse", &Control::Follower::Target::reverse)
+      .def_rw("lookahead", &Control::Follower::Target::lookahead)
+      .def_rw("crosstrack_error", &Control::Follower::Target::crosstrack_error)
+      .def_rw("heading_error", &Control::Follower::Target::heading_error);
 
   // CONTROL SUBMODULES
   py::class_<Control::Stanley::StanleyParameters,
-             Control::Follower::FollowerParameters,
-             Control::Controller::ControllerParameters>(m_control,
-                                                        "StanleyParameters")
+             Control::Follower::FollowerParameters>(m_control,
+                                                    "StanleyParameters")
       .def(py::init<>());
 
-  py::class_<Control::Stanley, Control::Follower, Control::Controller>(
-      m_control, "Stanley")
+  py::class_<Control::Stanley, Control::Follower>(m_control, "Stanley")
       .def(py::init<>(), "Init Stanley follower with default parameters")
       .def(py::init<Control::Stanley::StanleyParameters>(),
            "Init Stanley follower with custom config")
       .def("compute_velocity_commands",
            &Control::Stanley::computeVelocityCommand,
-           py::return_value_policy::reference_internal)
+           py::rv_policy::reference_internal)
       .def("execute", &Control::Stanley::execute)
       .def("set_robot_wheelbase", &Control::Stanley::setWheelBase);
 
@@ -160,81 +153,81 @@ void bindings_control(py::module_ &m) {
   // Trajectory sampler control result
   py::class_<Control::TrajSearchResult>(m_control, "SamplingControlResult")
       .def(py::init<>())
-      .def_readwrite("is_found", &Control::TrajSearchResult::isTrajFound)
-      .def_readwrite("cost", &Control::TrajSearchResult::trajCost)
-      .def_readwrite("trajectory", &Control::TrajSearchResult::trajectory);
+      .def_rw("is_found", &Control::TrajSearchResult::isTrajFound)
+      .def_rw("cost", &Control::TrajSearchResult::trajCost)
+      .def_rw("trajectory", &Control::TrajSearchResult::trajectory);
 
   // Dynamic Window Local Planner
   py::class_<Control::CostEvaluator::TrajectoryCostsWeights, Parameters>(
       m_control, "TrajectoryCostWeights")
       .def(py::init<>());
 
-  // Custom cost function for DWA planner
-  py::class_<Control::CostEvaluator::CustomCostFunction>(
-      m_control, "TrajectoryCustomCostFunction")
-      .def(py::init<std::function<double(const Control::Trajectory &,
-                                         const Path::Path &)>>());
-
-  py::class_<Control::DWA, Control::Follower, Control::Controller>(m_control,
-                                                                   "DWA")
-      .def(py::init(
-               [](Control::ControlLimitsParams control_limits,
-                  Control::ControlType control_type, double time_step,
-                  double prediction_horizon, double control_horizon,
-                  int max_linear_samples, int max_angular_samples,
-                  const CollisionChecker::ShapeType robot_shape_type,
-                  const std::vector<float> robot_dimensions,
-                  const std::array<float, 3> &sensor_position_robot,
-                  const std::array<float, 4> &sensor_rotation_robot,
-                  const double octree_resolution,
-                  Control::CostEvaluator::TrajectoryCostsWeights cost_weights,
-                  const int max_num_threads) {
-                 return new Control::DWA(
-                     control_limits, control_type, time_step,
-                     prediction_horizon, control_horizon, max_linear_samples,
-                     max_angular_samples, robot_shape_type, robot_dimensions,
-                     sensor_position_robot, sensor_rotation_robot,
-                     octree_resolution, cost_weights, max_num_threads);
-               }),
+  py::class_<Control::DWA, Control::Follower>(m_control, "DWA")
+      .def(py::init<Control::ControlLimitsParams, Control::ControlType, double,
+                    double, double, int, int, CollisionChecker::ShapeType,
+                    std::vector<float>, const std::array<float, 3> &,
+                    const std::array<float, 4> &, double,
+                    Control::CostEvaluator::TrajectoryCostsWeights, int>(),
            py::arg("control_limits"), py::arg("control_type"),
            py::arg("time_step"), py::arg("prediction_horizon"),
            py::arg("control_horizon"), py::arg("max_linear_samples"),
            py::arg("max_angular_samples"), py::arg("robot_shape_type"),
            py::arg("robot_dimensions"), py::arg("sensor_position_robot"),
-           py::arg("sensor_rotation_robot"), py::arg("octree_resolution") = 0.1,
+           py::arg("sensor_rotation_robot"), py::arg("octree_resolution"),
            py::arg("cost_weights"), py::arg("max_num_threads") = 1)
 
+      .def(py::init<Control::TrajectorySampler::TrajectorySamplerParameters,
+                    Control::ControlLimitsParams, Control::ControlType,
+                    CollisionChecker::ShapeType, std::vector<float>,
+                    const std::array<float, 3> &, const std::array<float, 4> &,
+                    Control::CostEvaluator::TrajectoryCostsWeights, int>(),
+           py::arg("config"), py::arg("control_limits"),
+           py::arg("control_type"), py::arg("robot_shape_type"),
+           py::arg("robot_dimensions"), py::arg("sensor_position_robot"),
+           py::arg("sensor_rotation_robot"), py::arg("cost_weights"),
+           py::arg("max_num_threads") = 1)
       .def("compute_velocity_commands",
-           py::overload_cast<const Control::Velocity &,
+           py::overload_cast<const Control::Velocity2D &,
                              const Control::LaserScan &>(
                &Control::DWA::computeVelocityCommandsSet),
-           py::return_value_policy::reference_internal)
+           py::rv_policy::reference_internal)
       .def("compute_velocity_commands",
-           py::overload_cast<const Control::Velocity &,
-                             const std::vector<Control::Point3D> &>(
+           py::overload_cast<const Control::Velocity2D &,
+                             const std::vector<Path::Point> &>(
                &Control::DWA::computeVelocityCommandsSet),
-           py::return_value_policy::reference_internal)
-      .def("add_custom_cost", &Control::DWA::addCustomCost)
+           py::rv_policy::reference_internal)
+      .def("add_custom_cost",
+           &Control::DWA::addCustomCost) // Custom cost function for DWA planner
+                                         // of type (f(Trajectory2D, Path::Path)
+                                         // -> double)
+      .def("get_debugging_samples", &Control::DWA::getDebuggingSamples)
+      .def("debug_velocity_search",
+           // Overload for std::vector<Path::Point>
+           py::overload_cast<const Control::Velocity2D &,
+                             const std::vector<Path::Point> &, const bool &>(
+               &Control::DWA::debugVelocitySearch<std::vector<Path::Point>>),
+           py::call_guard<py::gil_scoped_release>())
+      .def("debug_velocity_search",
+           // Overload for LaserScan
+           py::overload_cast<const Control::Velocity2D &,
+                             const Control::LaserScan &, const bool &>(
+               &Control::DWA::debugVelocitySearch<Control::LaserScan>),
+           py::call_guard<py::gil_scoped_release>())
       .def("set_resolution", &Control::DWA::resetOctreeResolution);
 
   // Vision Follower
   py::class_<Control::VisionFollower::VisionFollowerConfig,
-             Control::Controller::ControllerParameters, Parameters>(
+             Control::Controller::ControllerParameters>(
       m_control, "VisionFollowerParameters")
       .def(py::init<>());
 
   py::class_<Control::VisionFollower, Control::Controller>(m_control,
                                                            "VisionFollower")
-      .def(py::init(
-               [](const Control::ControlType control_type,
-                  const Control::ControlLimitsParams control_limits,
-                  const Control::VisionFollower::VisionFollowerConfig config) {
-                 return new Control::VisionFollower(control_type,
-                                                    control_limits, config);
-               }),
+      .def(py::init<const Control::ControlType,
+                    const Control::ControlLimitsParams,
+                    const Control::VisionFollower::VisionFollowerConfig>(),
            py::arg("control_type"), py::arg("control_limits"),
            py::arg("config"))
-
       .def("reset_target", &Control::VisionFollower::resetTarget)
       .def("get_ctrl", &Control::VisionFollower::getCtrl)
       .def("run", &Control::VisionFollower::run);

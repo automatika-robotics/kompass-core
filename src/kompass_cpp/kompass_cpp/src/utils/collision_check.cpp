@@ -1,12 +1,16 @@
 #include "utils/collision_check.h"
-#include "datatypes/trajectory.h"
 #include "utils/logger.h"
 #include "utils/transformation.h"
 #include <Eigen/src/Core/Matrix.h>
+#include <Eigen/src/Geometry/Transform.h>
 #include <algorithm>
+#include <cmath>
 #include <fcl/broadphase/default_broadphase_callbacks.h>
 #include <fcl/common/types.h>
+#include <fcl/geometry/octree/octree.h>
+#include <fcl/geometry/shape/sphere.h>
 #include <fcl/narrowphase/collision_object.h>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
@@ -19,12 +23,13 @@ CollisionChecker::CollisionChecker(
     const std::array<float, 4> &sensor_rotation_body,
     const double octree_resolution) {
 
-  collManager = new fcl::DynamicAABBTreeCollisionManagerf();
+  collManager_ = std::make_unique<fcl::DynamicAABBTreeCollisionManagerf>();
 
   body = std::make_shared<Body>();
 
   octree_resolution_ = octree_resolution;
-  octTree = new octomap::OcTree(octree_resolution_);
+  octTree_ = std::make_shared<octomap::OcTree>(octree_resolution_);
+  fclTree_ = std::make_unique<fcl::OcTreef>(octTree_);
 
   body->shapeType = robot_shape_type;
 
@@ -32,38 +37,42 @@ CollisionChecker::CollisionChecker(
 
   // Construct  a geometry object based on the robot shape
   if (body->shapeType == ShapeType::CYLINDER) {
-    bodyGeometry = std::make_shared<fcl::Cylinderf>(body->dimensions.at(0),
-                                                    body->dimensions.at(1));
+    bodyGeometry_ = std::make_shared<fcl::Cylinderf>(body->dimensions.at(0),
+                                                     body->dimensions.at(1));
+
     robotHeight_ = body->dimensions.at(1);
+    robotRadius_ = body->dimensions.at(0);
   } else if (body->shapeType == ShapeType::BOX) {
-    bodyGeometry = std::make_shared<fcl::Boxf>(
+    bodyGeometry_ = std::make_shared<fcl::Boxf>(
         body->dimensions.at(0), body->dimensions.at(1), body->dimensions.at(2));
     robotHeight_ = body->dimensions.at(2);
+    robotRadius_ = std::sqrt(pow(body->dimensions.at(0), 2) +
+                             pow(body->dimensions.at(1), 2)) /
+                   2;
+  } else if (body->shapeType == ShapeType::SPHERE) {
+    bodyGeometry_ = std::make_shared<fcl::Spheref>(body->dimensions.at(0));
+    robotRadius_ = body->dimensions.at(0);
+    robotHeight_ = 2 * body->dimensions.at(0);
+    ;
   } else {
     throw std::invalid_argument("Invalid robot geometry type");
   }
 
   // Set the body collision object pointer
-  bodyObjPtr = new fcl::CollisionObjectf(bodyGeometry);
+  bodyObjPtr_ = std::make_shared<fcl::CollisionObjectf>(bodyGeometry_);
 
   // Init the sensor position w.r.t body
-  sensor_tf_body_ = Control::getTransformation(
-      Eigen::Quaternionf(sensor_rotation_body.data()),
-      Eigen::Vector3f(sensor_position_body.data()));
+  sensor_tf_body_ =
+      getTransformation(Eigen::Quaternionf(sensor_rotation_body.data()),
+                        Eigen::Vector3f(sensor_position_body.data()));
 
   sensor_tf_world_ = sensor_tf_body_;
 }
 
-CollisionChecker::~CollisionChecker() {
-  delete octTree;
-  delete bodyObjPtr;
-  delete collManager;
-}
-
 void CollisionChecker::resetOctreeResolution(const double resolution) {
-  if (resolution != octree_resolution_){
+  if (resolution != octree_resolution_) {
     octree_resolution_ = resolution;
-    octTree = new octomap::OcTree(octree_resolution_);
+    octTree_->setResolution(octree_resolution_);
   }
 }
 
@@ -103,24 +112,36 @@ void CollisionChecker::generateBoxesFromOctomap(
 
 void CollisionChecker::updateOctreePtr() {
   // Create fcl::OcTree from octomap::OcTree
-  tree = new fcl::OcTreef(std::shared_ptr<const octomap::OcTree>(octTree));
+  // fclTree_ = new fcl::OcTreef(octTree_);
+  fclTree_.reset(new fcl::OcTreef(octTree_));
 
   // Transform the tree into a set of boxes and generate collision objects in
   // OctreeBoxes
-  generateBoxesFromOctomap(OctreeBoxes, *tree);
+  generateBoxesFromOctomap(OctreeBoxes, *fclTree_);
 }
 
 void CollisionChecker::updateState(const Path::State current_state) {
 
   // Get the body tf matrix from euler angles / new position
-  Eigen::Matrix3f rotation =
-      Control::eulerToRotationMatrix(0.0, 0.0, current_state.yaw);
+  Eigen::Matrix3f rotation = eulerToRotationMatrix(0.0, 0.0, current_state.yaw);
 
-  body->tf = Control::getTransformation(
+  body->tf = getTransformation(
       rotation, Eigen::Vector3f(current_state.x, current_state.y, 0.0));
 
-  bodyObjPtr->setTransform(body->tf);
-  bodyObjPtr->computeAABB();
+  bodyObjPtr_->setTransform(body->tf);
+  bodyObjPtr_->computeAABB();
+}
+
+void CollisionChecker::updateState(const double x, const double y,
+                                   const double yaw) {
+
+  // Get the body tf matrix from euler angles / new position
+  Eigen::Matrix3f rotation = eulerToRotationMatrix(0.0, 0.0, yaw);
+
+  body->tf = getTransformation(rotation, Eigen::Vector3f(x, y, 0.0));
+
+  bodyObjPtr_->setTransform(body->tf);
+  bodyObjPtr_->computeAABB();
 }
 
 void CollisionChecker::updateScan(const std::vector<double> &ranges,
@@ -129,50 +150,60 @@ void CollisionChecker::updateScan(const std::vector<double> &ranges,
 }
 
 void CollisionChecker::updatePointCloud(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud) {
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, const bool global_frame) {
   convertPointCloudToOctomap(cloud);
 }
 
-void CollisionChecker::updatePointCloud(
-    const std::vector<Control::Point3D> &cloud) {
+void CollisionChecker::updatePointCloud(const std::vector<Path::Point> &cloud,
+                                        const bool global_frame) {
   convertPointCloudToOctomap(cloud);
 }
 
 void CollisionChecker::convertPointCloudToOctomap(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud) {
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, const bool global_frame) {
 
-  // Transform the sensor position to the world frame
-  sensor_tf_world_ = sensor_tf_body_ * body->tf;
-
-  // Clear old data
-  octTree->clear();
-
-  octomap::Pointcloud octomapCloud;
-  for (const auto &point : cloud->points) {
-    octomapCloud.push_back(point.x, point.y, point.z);
+  if (global_frame) {
+    sensor_tf_world_ = Eigen::Isometry3f::Identity();
+  } else {
+    // Transform the sensor position to the world frame
+    sensor_tf_world_ = sensor_tf_body_ * body->tf;
   }
 
-  octTree->insertPointCloud(octomapCloud, octomap::point3d(0, 0, 0));
+  // Clear old data
+  octTree_->clear();
+
+  octomapCloud_.clear();
+  for (const auto &point : cloud->points) {
+    octomapCloud_.push_back(point.x, point.y, point.z);
+  }
+
+  octTree_->insertPointCloud(octomapCloud_, octomap::point3d(0, 0, 0));
 
   updateOctreePtr();
 }
 
 void CollisionChecker::convertPointCloudToOctomap(
-    const std::vector<Control::Point3D> &cloud) {
+    const std::vector<Path::Point> &cloud, const bool global_frame) {
 
   // Transform the sensor position to the world frame
-  // sensor_tf_world_ = sensor_tf_body_ * body->tf;
-  sensor_tf_world_ = Eigen::Isometry3f::Identity();
-
-  // Clear old data
-  octTree->clear();
-
-  octomap::Pointcloud octomapCloud;
-  for (const auto &point : cloud) {
-    octomapCloud.push_back(point.x, point.y, point.z);
+  // NOTE: Transformation will be applied to the points when generating the
+  // collision boxes
+  if (global_frame) {
+    sensor_tf_world_ = Eigen::Isometry3f::Identity();
+  } else {
+    // Transform the sensor position to the world frame
+    sensor_tf_world_ = sensor_tf_body_ * body->tf;
   }
 
-  octTree->insertPointCloud(octomapCloud, octomap::point3d(0, 0, 0));
+  // Clear old data
+  octTree_->clear();
+
+  octomapCloud_.clear();
+  for (const auto &point : cloud) {
+    octomapCloud_.push_back(point.x(), point.y(), point.z());
+  }
+
+  octTree_->insertPointCloud(octomapCloud_, octomap::point3d(0, 0, 0));
 
   updateOctreePtr();
 }
@@ -182,25 +213,28 @@ void CollisionChecker::convertLaserScanToOctomap(
     double height) {
 
   // Transform the sensor position to the world frame
+  // NOTE: Transformation will be applied to the points when generating the
+  // collision boxes
   sensor_tf_world_ = sensor_tf_body_ * body->tf;
 
   // Clear old data
-  octTree->clear();
+  octTree_->clear();
 
   // Transform height to sensor frame
-  float height_in_sensor = height - sensor_tf_body_.translation()[2];
+  float height_in_sensor = -sensor_tf_body_.translation()[2] / 2;
+  float x, y, z, angle;
+  octomapCloud_.clear();
 
-  octomap::Pointcloud octomapCloud;
   for (size_t i = 0; i < ranges.size(); ++i) {
-    float angle = angle_min + i * angle_increment;
-    float x = ranges[i] * cos(angle);
-    float y = ranges[i] * sin(angle);
-    float z = height_in_sensor;
+    angle = angle_min + i * angle_increment;
+    x = ranges[i] * cos(angle);
+    y = ranges[i] * sin(angle);
+    z = height_in_sensor;
 
-    octomapCloud.push_back(x, y, z);
+    octomapCloud_.push_back(x, y, z);
   }
 
-  octTree->insertPointCloud(octomapCloud, octomap::point3d(0, 0, 0));
+  octTree_->insertPointCloud(octomapCloud_, octomap::point3d(0, 0, 0));
 
   updateOctreePtr();
 }
@@ -210,22 +244,26 @@ void CollisionChecker::convertLaserScanToOctomap(
     double height) {
 
   // Transform the sensor position to the world frame
+  // NOTE: Transformation will be applied to the points when generating the
+  // collision boxes
   sensor_tf_world_ = sensor_tf_body_ * body->tf;
 
   // Clear old data
-  octTree->clear();
+  octTree_->clear();
 
   // Transform height to sensor frame
-  float height_in_sensor = height - sensor_tf_body_.translation()[2];
+  float height_in_sensor = -sensor_tf_body_.translation()[2] / 2;
 
-  octomap::Pointcloud octomapCloud;
+  float x, y, z;
+  octomapCloud_.clear();
+
   for (size_t i = 0; i < ranges.size(); ++i) {
-    float x = ranges[i] * cos(angles[i]);
-    float y = ranges[i] * sin(angles[i]);
-    float z = height_in_sensor;
-    octomapCloud.push_back(x, y, z);
+    x = ranges[i] * cos(angles[i]);
+    y = ranges[i] * sin(angles[i]);
+    z = height_in_sensor;
+    octomapCloud_.push_back(x, y, z);
   }
-  octTree->insertPointCloud(octomapCloud, octomap::point3d(0, 0, 0));
+  octTree_->insertPointCloud(octomapCloud_, octomap::point3d(0, 0, 0));
 
   updateOctreePtr();
 }
@@ -234,14 +272,14 @@ bool CollisionChecker::checkCollisionsOctree() {
 
   fcl::DefaultCollisionData<float> collisionData;
 
-  collManager->clear();
+  collManager_->clear();
 
-  collManager->registerObjects(OctreeBoxes);
+  collManager_->registerObjects(OctreeBoxes);
 
-  collManager->setup();
+  collManager_->setup();
 
-  collManager->collide(bodyObjPtr, &collisionData,
-                       fcl::DefaultCollisionFunction);
+  collManager_->collide(bodyObjPtr_.get(), &collisionData,
+                        fcl::DefaultCollisionFunction);
 
   return collisionData.result.isCollision();
 
@@ -284,14 +322,14 @@ bool CollisionChecker::checkCollisionsOctree() {
 float CollisionChecker::getMinDistance() {
   fcl::DefaultDistanceData<float> distanceData;
 
-  collManager->clear();
+  collManager_->clear();
 
-  collManager->registerObjects(OctreeBoxes);
+  collManager_->registerObjects(OctreeBoxes);
 
-  collManager->setup();
+  collManager_->setup();
 
-  collManager->distance(bodyObjPtr, &distanceData,
-                        fcl::DefaultDistanceFunction);
+  collManager_->distance(bodyObjPtr_.get(), &distanceData,
+                         fcl::DefaultDistanceFunction);
 
   return std::max<float>(0.0, distanceData.result.min_distance);
 }
@@ -340,27 +378,24 @@ bool CollisionChecker::checkCollisions(const std::vector<double> &ranges,
 bool CollisionChecker::checkCollisions() { return checkCollisionsOctree(); }
 
 bool CollisionChecker::checkCollisions(const Path::State current_state) {
-  auto m_stateObjPtr = new fcl::CollisionObjectf(bodyGeometry);
+  auto m_stateObjPtr = std::make_unique<fcl::CollisionObjectf>(bodyGeometry_);
   // Get the body tf matrix from euler angles / new position
-  Eigen::Matrix3f rotation =
-      Control::eulerToRotationMatrix(0.0, 0.0, current_state.yaw);
+  Eigen::Matrix3f rotation = eulerToRotationMatrix(0.0, 0.0, current_state.yaw);
 
-  m_stateObjPtr->setTransform(Control::getTransformation(
+  m_stateObjPtr->setTransform(getTransformation(
       rotation, Eigen::Vector3f(current_state.x, current_state.y, 0.0)));
   m_stateObjPtr->computeAABB();
 
   // Setup a new collision manager and give it the state object
   fcl::DefaultCollisionData<float> collisionData;
-  auto m_collManager = new fcl::DynamicAABBTreeCollisionManagerf();
+  auto m_collManager =
+      std::make_unique<fcl::DynamicAABBTreeCollisionManagerf>();
 
   m_collManager->clear();
   m_collManager->registerObjects(OctreeBoxes);
   m_collManager->setup();
-  m_collManager->collide(m_stateObjPtr, &collisionData,
-                       fcl::DefaultCollisionFunction);
-
-  delete m_stateObjPtr;
-  delete m_collManager;
+  m_collManager->collide(m_stateObjPtr.get(), &collisionData,
+                         fcl::DefaultCollisionFunction);
 
   return collisionData.result.isCollision();
 }

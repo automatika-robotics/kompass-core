@@ -1,9 +1,9 @@
-#include "test.h"
 #include "controllers/controller.h"
 #include "controllers/follower.h"
 #include "datatypes/control.h"
 #include "datatypes/path.h"
-#include "json_export.cpp"
+#include "json_export.h"
+#include "test.h"
 #include "utils/logger.h"
 #include "utils/trajectory_sampler.h"
 #include <boost/dll/runtime_symbol_info.hpp> // for program_location
@@ -21,8 +21,9 @@ void testTrajSampler() {
 
   // Create a test path
   // ------------------------------------------------------------------------------
-  std::vector<Path::Point> points{Path::Point(0.0, 0.0), Path::Point(1.0, 0.0),
-                                  Path::Point(2.0, 0.0)};
+  std::vector<Path::Point> points{Path::Point(0.0, 0.0, 0.0),
+                                  Path::Point(1.0, 0.0, 0.0),
+                                  Path::Point(2.0, 0.0, 0.0)};
   Path::Path raw_path(points);
 
   // Generic follower to use for raw path interpolation and segmentation
@@ -40,8 +41,9 @@ void testTrajSampler() {
   double timeStep = 0.1;
   double predictionHorizon = 1.0;
   double controlHorizon = 0.2;
-  int maxLinearSamples = 4;
-  int maxAngularSamples = 4;
+  int maxLinearSamples = 20;
+  int maxAngularSamples = 20;
+  int numThreads = 10;
 
   // Octomap resolution
   double octreeRes = 0.1;
@@ -56,7 +58,6 @@ void testTrajSampler() {
   Control::AngularVelocityControlParams angular_params(3.14, 3, 5, 8);
   Control::ControlLimitsParams controlLimits(x_params, y_params,
                                              angular_params);
-  auto controlType = Control::ControlType::ACKERMANN;
   auto robotShapeType = Kompass::CollisionChecker::ShapeType::BOX;
   std::vector<float> robotDimensions{0.3, 0.3, 1.0};
   // std::array<float, 3> sensorPositionWRTbody {0.0, 0.0, 1.0};
@@ -81,14 +82,15 @@ void testTrajSampler() {
     Control::TrajectorySampler trajSampler(
         controlLimits, robot_types[j], timeStep, predictionHorizon,
         controlHorizon, maxLinearSamples, maxAngularSamples, robotShapeType,
-        robotDimensions, sensor_position_body, sensor_rotation_body, octreeRes);
+        robotDimensions, sensor_position_body, sensor_rotation_body, octreeRes,
+        numThreads);
 
     // Robot initial velocity control
-    Control::Velocity robotControl;
+    Control::Velocity2D robotControl;
+    std::unique_ptr<Control::TrajectorySamples2D> samples;
 
     LOG_INFO("TESTING ", Control::controlTypeToString(robot_types[j]));
 
-    std::vector<Control::Trajectory> samples;
     {
       Timer time;
       samples =
@@ -104,15 +106,18 @@ void testTrajSampler() {
         Control::controlTypeToString(robot_types[j]);
     std::string ref_path_filename = file_location + "/ref_path";
 
-    saveTrajectoriesToJson(samples, trajectories_filename + ".json");
+    saveTrajectoriesToJson(*samples, trajectories_filename + ".json");
     savePathToJson(path, ref_path_filename + ".json");
 
     std::string command =
-        "python3 " + file_location + "/trajectory_sampler_plt --samples \"" +
+        "python3 " + file_location + "/trajectory_sampler_plt.py --samples \"" +
         trajectories_filename + "\" --reference \"" + ref_path_filename + "\"";
 
     // Execute the Python script
     int res = system(command.c_str());
+    if (res != 0)
+      throw std::system_error(res, std::generic_category(),
+                              "Python script failed with error code");
   }
 }
 
