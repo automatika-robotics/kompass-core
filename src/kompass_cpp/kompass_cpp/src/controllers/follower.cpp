@@ -1,6 +1,5 @@
 #include <Eigen/Dense>
 #include <cmath>
-#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -90,15 +89,12 @@ void Follower::setCurrentPath(const Path::Path &path, const bool interpolate) {
 
   if (interpolate) {
     currentPath->interpolate(maxDist, interpolationType);
-
-    // Segment path
-    currentPath->segment(path_segment_length);
-
-    // Get max number of segments in the path
-    max_segment_index_ = currentPath->getMaxNumSegments();
-  } else {
-    max_segment_index_ = 0;
   }
+  // Segment path
+  currentPath->segment(path_segment_length);
+
+  // Get max number of segments in the path
+  max_segment_index_ = currentPath->getMaxNumSegments();
 
   path_processing_ = true;
   current_segment_index_ = 0;

@@ -62,7 +62,7 @@ struct VisionDWATestConfig {
                       const float maxVel = 1.0, const float maxOmega = 2.0,
                       const int maxNumThreads = 1,
                       const double reference_path_distance_weight = 1.0,
-                      const double goal_distance_weight = 1.0,
+                      const double goal_distance_weight = 0.0,
                       const double obstacles_distance_weight = 0.5)
       : timeStep(timeStep), predictionHorizon(predictionHorizon),
         controlHorizon(controlHorizon), maxLinearSamples(maxLinearSamples),
@@ -82,7 +82,7 @@ struct VisionDWATestConfig {
     costWeights.setParameter("goal_distance_weight", goal_distance_weight);
     costWeights.setParameter("obstacles_distance_weight",
                              obstacles_distance_weight);
-    costWeights.setParameter("smoothness_weight", 0.0);
+    costWeights.setParameter("smoothness_weight", 1.0);
     costWeights.setParameter("jerk_weight", 0.0);
     controller = std::make_unique<Control::VisionDWA>(
         controlType, controlLimits, maxLinearSamples, maxAngularSamples,
@@ -113,7 +113,13 @@ struct VisionDWATestConfig {
       if (result.isTrajFound) {
         LOG_INFO(FMAG("STEP: "), step,
                  FMAG(", Found best trajectory with cost: "), result.trajCost);
-
+        if (controller->getLinearVelocityCmdX() > controlLimits.velXParams.maxVel) {
+          LOG_ERROR(BOLD(FRED("Vx is larger than max vel: ")),
+                    KRED, controller->getLinearVelocityCmdX(), RST,
+                    BOLD(FRED(", Vx: ")), KRED, controlLimits.velXParams.maxVel,
+                    RST);
+          return false;
+        }
         cmd.setVx(controller->getLinearVelocityCmdX());
         cmd.setVy(controller->getLinearVelocityCmdY());
         cmd.setOmega(controller->getAngularVelocityCmd());
@@ -172,7 +178,7 @@ BOOST_AUTO_TEST_CASE(test_VisionDWA_obstacle_free) {
 
   // Sampling configuration
   double timeStep = 0.1;
-  double predictionHorizon =1.0;
+  double predictionHorizon =0.5;
   double controlHorizon = 0.2;
   int maxLinearSamples = 20;
   int maxAngularSamples = 20;

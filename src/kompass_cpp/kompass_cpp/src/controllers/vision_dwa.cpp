@@ -4,6 +4,7 @@
 #include "datatypes/trajectory.h"
 #include "utils/angles.h"
 #include "utils/logger.h"
+#include <algorithm>
 #include <cmath>
 #include <tuple>
 #include <vector>
@@ -58,9 +59,9 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
   Velocity2D followingVel;
   if (abs(distance_error) > distance_tolerance or
       abs(angle_error) > angle_tolerance) {
-    float v = (tracking_pose.v() * cos(gamma - psi) - _config.K_v() * tanh(distance_error)) / cos(psi);
+    double v = (tracking_pose.v() * cos(gamma - psi) - _config.K_v() * tanh(distance_error)) / cos(psi);
     followingVel.setVx(v);
-    float omega = -tracking_pose.omega() +
+    double omega = -tracking_pose.omega() +
                       2 * (v * sin(psi) / distance +
                            tracking_pose.v() * sin(gamma - psi) / distance -
                            _config.K_omega() * tanh(angle_error));
@@ -129,7 +130,8 @@ TrajSearchResult VisionDWA::getTrackingCtrl(const TrackedPose2D &tracking_pose,
     Path::Path ref_tracking_path(ref_traj.path.x, ref_traj.path.y,
                                  ref_traj.path.z);
     // Set the tracking segment as the reference path
-    this->setCurrentPath(ref_tracking_path);
+    // Interpolation of the path is not required as the reference is already created using the robot control time step
+    this->setCurrentPath(ref_tracking_path, false);
     return this->computeVelocityCommandsSet(current_vel, sensor_points);
   }
 }
