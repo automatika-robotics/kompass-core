@@ -500,6 +500,10 @@ void TrajectorySampler::UpdateReachableVelocityRange(
       std::max((max_omega_ - min_omega_) / (ang_samples_max_ - 1), 0.001);
 }
 
+void TrajectorySampler::updateState(const Path::State &current_state) {
+  collChecker->updateState(current_state);
+}
+
 template <>
 bool TrajectorySampler::checkStatesFeasibility<LaserScan>(
     const std::vector<Path::State> &states, const LaserScan &scan) {

@@ -7,6 +7,7 @@
 #include "follower.h"
 #include "utils/cost_evaluator.h"
 #include "utils/trajectory_sampler.h"
+#include <memory>
 #include <vector>
 
 namespace Kompass {
@@ -160,7 +161,7 @@ protected:
 private:
   double max_forward_distance_ = 0.0;
   int maxNumThreads;
-  TrajectorySamples2D *debuggingSamples_ = nullptr;
+  std::unique_ptr<TrajectorySamples2D> debuggingSamples_ = nullptr;
   float maxLocalRange_ =
       10.0; // Max range of the robot sensor or local map in meters. Used to
             // calculate the cost of coming close to obstacles

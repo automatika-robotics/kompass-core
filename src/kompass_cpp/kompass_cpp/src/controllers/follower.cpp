@@ -81,7 +81,7 @@ void Follower::clearCurrentPath() {
   return;
 }
 
-void Follower::setCurrentPath(const Path::Path &path) {
+void Follower::setCurrentPath(const Path::Path &path, const bool interpolate) {
   currentPath = std::make_unique<Path::Path>(path.points);
   refPath = std::make_unique<Path::Path>(path.points);
 

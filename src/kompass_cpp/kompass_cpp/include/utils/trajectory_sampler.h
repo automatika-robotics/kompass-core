@@ -99,10 +99,6 @@ public:
 
   void updateState(const Path::State &current_state);
 
-
-  void updateState(const Path::State &current_state);
-
-
   void setSampleDroppingMode(const bool drop_samples);
 
   /**
