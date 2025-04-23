@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstddef>
 #include <memory>
 #include <stdexcept>
 #include <tuple>
@@ -127,52 +126,48 @@ void DWA::setCurrentState(const Path::State &position) {
 }
 
 Path::Path DWA::findTrackedPathSegment() {
-  std::vector<Path::Point> trackedPoints;
+
   size_t segment_index{current_segment_index_ + 1};
   Path::Path currentSegment = currentPath->segments[current_segment_index_];
 
   // If we reached end of the current segment and a new segment is available ->
   // take the next segment
-  if (closestPosition->index > currentSegment.points.size() - 1 and
+  if (closestPosition->index >= currentSegment.getSize() - 1 and
       current_segment_index_ < max_segment_index_) {
-    trackedPoints = currentPath->segments[current_segment_index_ + 1].points;
     segment_index = current_segment_index_ + 1;
+    return currentPath->segments[current_segment_index_ + 1];
   }
   // Else take the segment points from the current point onwards
   else {
-    trackedPoints = {currentSegment.points.begin() + closestPosition->index,
-                     currentSegment.points.end()};
-  }
-  size_t point_index{0};
+    auto trackedPath = currentSegment.getPart(closestPosition->index, currentSegment.getSize() - 1, this->maxSegmentSize);
+    size_t point_index{0};
 
-  float segment_length = 0.0;
-  for (size_t i = 1; i < trackedPoints.size(); ++i) {
-    segment_length +=
-        Path::Path::distance(trackedPoints[i - 1], trackedPoints[i]);
-  }
+    float segment_length = trackedPath.totalPathLength();
 
-  // If the segment does not have the required number of points add more points
-  // from next path segment
-  while (segment_length < max_forward_distance_ and
-         segment_index <= max_segment_index_ and
-         trackedPoints.size() < maxSegmentSize) {
-    if (point_index >= currentPath->segments[segment_index].points.size()) {
-      point_index = 0;
-      segment_index++;
-      if (segment_index > max_segment_index_) {
-        break;
+    // If the segment does not have the required number of points add more
+    // points from next path segment
+    while (segment_length < max_forward_distance_ and
+           segment_index <= max_segment_index_ and
+           trackedPath.getSize() < maxSegmentSize - 1) {
+      if (point_index >= currentPath->segments[segment_index].getSize()) {
+        point_index = 0;
+        segment_index++;
+        if (segment_index > max_segment_index_) {
+          break;
+        }
       }
+      // Add distance between last point and new point
+      Path::Point back_point = trackedPath.getEnd();
+      segment_length += calculateDistance(
+          back_point,
+          currentPath->segments[segment_index].getIndex(point_index));
+      trackedPath.pushPoint(
+          currentPath->segments[segment_index].getIndex(point_index));
+      point_index++;
     }
-    // Add distance between last point and new point
-    Path::Point back_point = trackedPoints.back();
-    segment_length += calculateDistance(
-        back_point, currentPath->segments[segment_index].points[point_index]);
-    trackedPoints.push_back(
-        currentPath->segments[segment_index].points[point_index]);
-    point_index++;
-  }
 
-  return Path::Path(trackedPoints);
+    return trackedPath;
+  }
 }
 
 template <typename T>
@@ -199,7 +194,7 @@ TrajSearchResult DWA::findBestPath(const Velocity2D &global_vel,
   Path::Path trackedRefPathSegment = findTrackedPathSegment();
 
   // Evaluate the samples and get the sample with the minimum cost
-  return trajCostEvaluator->getMinTrajectoryCost(samples_, *currentPath,
+  return trajCostEvaluator->getMinTrajectoryCost(samples_, currentPath.get(),
                                                  trackedRefPathSegment);
 }
 

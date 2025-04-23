@@ -105,7 +105,7 @@ public:
    */
   TrajSearchResult
   getMinTrajectoryCost(const std::unique_ptr<TrajectorySamples2D> &trajs,
-                       const Path::Path &reference_path,
+                       const Path::Path* reference_path,
                        const Path::Path &tracked_segment);
 
   /**
@@ -209,6 +209,7 @@ private:
   float *m_devicePtrTempCosts = nullptr;
   LowestCost *m_minCost;
   sycl::queue m_q;
+  sycl::vec<float, 3> m_deviceRefPathEnd;
   void initializeGPUMemory();
   /**
    * @brief Trajectory cost based on the distance to a given reference path
@@ -229,7 +230,6 @@ private:
    * @param reference_path
    */
   sycl::event goalCostFunc(const size_t trajs_size,
-                           const Path::Point &last_ref_point,
                            const float ref_path_length,
                            const double cost_weight);
 
@@ -283,7 +283,7 @@ private:
    * @return float
    */
   float goalCostFunc(const Trajectory2D &trajectory,
-                     const Path::Path &reference_path,
+                     const Path::Point &reference_path_end_point,
                      const float ref_path_length);
 
   /**

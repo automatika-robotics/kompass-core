@@ -49,7 +49,10 @@ py::class_<Path::Path>(m_types, "Path")
          py::arg("points") = std::vector<Path::Point>())
     .def("reached_end", &Path::Path::endReached)
     .def("get_total_length", &Path::Path::totalPathLength)
-    .def_rw("points", &Path::Path::points);
+    .def("size", &Path::Path::getSize)
+    .def("getIndex", &Path::Path::getIndex, py::arg("index"))
+    .def("x", &Path::Path::getX)
+    .def("y", &Path::Path::getY);
 
 // Velocity control command
 py::class_<Control::Velocity2D>(m_types, "ControlCmd")

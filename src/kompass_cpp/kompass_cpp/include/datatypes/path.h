@@ -4,7 +4,6 @@
 #include "utils/spline.h"
 #include <Eigen/Dense>
 #include <cmath>
-#include <cstddef>
 #include <math.h>
 #include <vector>
 
@@ -37,35 +36,46 @@ typedef Eigen::Vector3f Point;
 
 // Structure for Path Control parameters
 struct Path {
-  std::vector<Point> points;  // Vector of points defining the path
   std::vector<Path> segments; // List of path segments
-  tk::spline *_spline;
   // get all x values from points
-  const std::vector<float>& getX() const;
+  const Eigen::VectorXf getX() const;
   // get all y values from points
-  const std::vector<float>& getY() const;
+  const Eigen::VectorXf getY() const;
   // get all z values from points
-  const std::vector<float>& getZ() const;
-  // Max interpolation distance and total path distance are updated from user
-  // config
-  double _max_interpolation_dist{0.0}, _max_path_length{10.0};
+  const Eigen::VectorXf getZ() const;
   // Max segment size and max total path points size is calculated after
   // interpolation
   int max_segment_size{10};
-  size_t max_size{10};
-  size_t max_interpolation_iterations{500}; // Max number of iterations for interpolation between two path points
 
-  Path(const std::vector<Point> &points = {});
+  Path(const Path& other) = default;
+
+  Path(const std::vector<Point> &points = {}, const size_t new_max_size = 10);
+
+  Path(const Eigen::VectorXf &x_points, const Eigen::VectorXf &y_points,
+       const Eigen::VectorXf &z_points, const size_t new_max_size = 10);
 
   size_t getMaxNumSegments();
 
   void setMaxLength(double max_length);
+
+  void resize(const size_t max_new_size);
 
   bool endReached(State currentState, double minDist);
 
   Point getEnd() const;
 
   Point getStart() const;
+
+  Point getIndex(const size_t index) const;
+
+  Path getPart(const size_t start, const size_t end,
+               const size_t max_part_size = 0) const;
+
+  void pushPoint(const Point& point);
+
+  size_t getSize() const;
+
+  size_t getMaxSize() const;
 
   float getEndOrientation() const;
 
@@ -93,10 +103,46 @@ struct Path {
   // Segment using a segment points number
   void segmentByPointsNumber(int segmentLength);
 
+  struct Iterator {
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = Point;
+    using difference_type = std::ptrdiff_t;
+
+    Iterator(const Path &p, size_t idx) : path(p), index(idx) {}
+
+    Point operator*() const {
+      return path.getIndex(index);
+    }
+
+    Iterator &operator++() {
+      ++index;
+      return *this;
+    }
+
+    bool operator!=(const Iterator &other) const {
+      return index != other.index;
+    }
+
+  private:
+    const Path &path;
+    size_t index;
+  };
+
+  Iterator begin() const { return Iterator(*this, 0); }
+  Iterator end() const { return Iterator(*this, current_size_); }
+
 private:
-  std::vector<float> X_; // Vector of X coordinates
-  std::vector<float> Y_; // Vector of Y coordinates
-  std::vector<float> Z_; // Vector of Z coordinates
+  Eigen::VectorXf X_; // Vector of X coordinates
+  Eigen::VectorXf Y_; // Vector of Y coordinates
+  Eigen::VectorXf Z_; // Vector of Z coordinates
+  size_t current_size_{0}; // Current size of the path
+  size_t max_interpolation_iterations_; // Max number of iterations for
+                                        // interpolation between two path points
+  // Max interpolation distance and total path distance are updated from user
+  // config
+  float max_path_length_{10.0}, max_interpolation_dist_{0.0};
+  tk::spline *spline_;
+  size_t max_size_{10};
 };
 
 struct PathPosition {

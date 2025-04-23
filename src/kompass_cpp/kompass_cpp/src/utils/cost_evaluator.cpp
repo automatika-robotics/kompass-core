@@ -52,7 +52,7 @@ CostEvaluator::~CostEvaluator() {
 
 TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     const std::unique_ptr<TrajectorySamples2D> &trajs,
-    const Path::Path &reference_path,
+    const Path::Path* reference_path,
     const Path::Path &tracked_segment) {
   double weight;
   float total_cost;
@@ -63,10 +63,10 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
 
   for (const auto &traj : *trajs) {
     total_cost = 0.0;
-    if ((ref_path_length = reference_path.totalPathLength()) > 0.0) {
+    if ((ref_path_length = reference_path->totalPathLength()) > 0.0) {
       if ((weight = costWeights->getParameter<double>("goal_distance_weight")) >
           0.0) {
-        float goalCost = goalCostFunc(traj, reference_path, ref_path_length);
+        float goalCost = goalCostFunc(traj, reference_path->getEnd(), ref_path_length);
         total_cost += weight * goalCost;
       }
       if ((weight = costWeights->getParameter<double>(
@@ -99,7 +99,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     for (const auto &custom_cost : customTrajCostsPtrs_) {
       // custom cost functions takes in the trajectory and the reference path
       total_cost +=
-          custom_cost->weight * custom_cost->evaluator_(traj, reference_path);
+          custom_cost->weight * custom_cost->evaluator_(traj, *reference_path);
     }
 
     if (total_cost < minCost) {
@@ -123,8 +123,8 @@ float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
     // infinity
     distError = DEFAULT_MIN_DIST;
     // Get minimum distance to the reference
-    for (size_t j = 0; j < tracked_segment.points.size(); ++j) {
-      dist = Path::Path::distance(tracked_segment.points[j],
+    for (size_t j = 0; j < tracked_segment.getSize(); ++j) {
+      dist = Path::Path::distance(tracked_segment.getIndex(j),
                                   trajectory.path.getIndex(i));
       if (dist < distError) {
         distError = dist;
@@ -146,11 +146,11 @@ float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
 
 // Compute the cost of a trajectory based on distance to a given reference path
 float CostEvaluator::goalCostFunc(const Trajectory2D &trajectory,
-                                  const Path::Path &reference_path,
+                                  const Path::Point &reference_path_end_point,
                                   const float ref_path_length) {
   // end point distance normalized to range [0, 1]
   return Path::Path::distance(trajectory.path.getEnd(),
-                              reference_path.getEnd()) /
+                              reference_path_end_point) /
          ref_path_length;
 }
 

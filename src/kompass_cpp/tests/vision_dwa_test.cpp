@@ -63,7 +63,7 @@ struct VisionDWATestConfig {
                       const int maxNumThreads = 1,
                       const double reference_path_distance_weight = 1.0,
                       const double goal_distance_weight = 1.0,
-                      const double obstacles_distance_weight = 1.0)
+                      const double obstacles_distance_weight = 0.5)
       : timeStep(timeStep), predictionHorizon(predictionHorizon),
         controlHorizon(controlHorizon), maxLinearSamples(maxLinearSamples),
         maxAngularSamples(maxAngularSamples), maxNumThreads(maxNumThreads),
@@ -172,7 +172,7 @@ BOOST_AUTO_TEST_CASE(test_VisionDWA_obstacle_free) {
 
   // Sampling configuration
   double timeStep = 0.1;
-  double predictionHorizon =0.5;
+  double predictionHorizon =1.0;
   double controlHorizon = 0.2;
   int maxLinearSamples = 20;
   int maxAngularSamples = 20;

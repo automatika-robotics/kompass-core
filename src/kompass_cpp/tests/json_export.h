@@ -25,7 +25,7 @@ inline void from_json(const json &j, Path::Point &p) {
 // Convert Path to JSON
 inline void to_json(json &j, const Path::Path &p) {
   j["points"] = json::array(); // Initialize as a JSON array
-  for (const auto &point : p.points) {
+  for (const auto &point : p) {
     j["points"].push_back(
         json{{"x", point.x()}, {"y", point.y()}}); // Serialize each Point
   }
@@ -42,13 +42,14 @@ inline void to_json(json &j, const Control::TrajectoryPath &p) {
 
 // Convert JSON to Path
 inline void from_json(const json &j, Path::Path &p) {
-  p.points.clear(); // Clear existing points
+  std::vector<Path::Point> points;
   for (const auto &item : j.at("points")) {
     Path::Point point;
     point.x() = item.at("x");
     point.y() = item.at("y");
-    p.points.push_back(point); // Deserialize each Point
+    points.push_back(point); // Deserialize each Point
   }
+  p = Path::Path(points, points.size());
 }
 
 // Convert Velocity to JSON

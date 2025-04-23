@@ -128,7 +128,7 @@ Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
   }
 
   TrajSearchResult result =
-      costEval.getMinTrajectoryCost(samples, reference_path, reference_path.segments[current_segment_index]);
+      costEval.getMinTrajectoryCost(samples, &reference_path, reference_path.segments[current_segment_index]);
 
   BOOST_TEST(result.isTrajFound,
              "Minimum reference path cost trajectory is not found!");
@@ -183,7 +183,7 @@ struct TestConfig {
   TestConfig()
       : points{Path::Point(0.0, 0.0, 0.0), Path::Point(1.0, 0.0, 0.0),
                Path::Point(2.0, 0.0, 0.0)},
-        reference_path(points), max_path_length(10.0),
+        reference_path(points, 500), max_path_length(10.0),
         max_interpolation_point_dist(0.01), current_segment_index(0),
         timeStep(0.1), predictionHorizon(1.0), maxNumThreads(10),
         x_params(1, 3, 5), y_params(1, 3, 5), angular_params(3.14, 3, 5, 8),

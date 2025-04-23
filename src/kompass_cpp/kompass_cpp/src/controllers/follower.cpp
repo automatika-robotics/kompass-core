@@ -82,8 +82,8 @@ void Follower::clearCurrentPath() {
 }
 
 void Follower::setCurrentPath(const Path::Path &path, const bool interpolate) {
-  currentPath = std::make_unique<Path::Path>(path.points);
-  refPath = std::make_unique<Path::Path>(path.points);
+  currentPath = std::make_unique<Path::Path>(path);
+  refPath = std::make_unique<Path::Path>(path);
 
   currentPath->setMaxLength(
       this->config.getParameter<double>("max_path_length"));
@@ -224,8 +224,8 @@ Path::State Follower::projectPointOnSegment(const Path::Point &a,
 
 Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 
-  const std::vector<Path::Point> &segment_points =
-      currentPath->segments[segment_index].points;
+  const Path::Path &segment_path =
+      currentPath->segments[segment_index];
   double min_distance = std::numeric_limits<double>::max();
   Path::State closest_point;
   double segment_position = 0.0; // in [0, 1]
@@ -236,22 +236,21 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 
   double segment_heading = std::atan2(end.y() - start.y(), end.x() - start.x());
 
-  for (size_t i = 0; i < segment_points.size(); ++i) {
-
-    Path::Point projected_point = segment_points[i];
+  for (auto projected_point : segment_path) {
     double distance = calculateDistance(currentState, projected_point);
 
     if (distance < min_distance) {
       min_distance = distance;
       closest_point = {projected_point.x(), projected_point.y(),
                        segment_heading};
-      segment_position = static_cast<double>(i) / (segment_points.size() - 1);
-      point_index = i;
+      segment_position =
+          static_cast<double>(point_index) / (segment_path.getSize() - 1);
+      point_index++;
     }
   }
 
   Path::PathPosition closest_position;
-  closest_position.index = point_index;
+  closest_position.index = point_index - 1;
   closest_position.segment_index = segment_index;
   closest_position.segment_length = segment_position;
   closest_position.state = closest_point;
@@ -283,7 +282,7 @@ void Follower::determineTarget() {
   // closest position is never updated
   // OR If we reached end of segment or end of path -> Find new point
   if ((closestPosition->segment_length <= 0.0) ||
-      (closestPosition->segment_index >= currentPath->points.size() - 1) ||
+      (closestPosition->segment_index >= currentPath->getSize() - 1) ||
       (closestPosition->segment_length >= 1.0)) {
     *closestPosition = findClosestPathPoint();
   }

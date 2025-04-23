@@ -34,7 +34,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   // Create a test path
   std::vector<Path::Point> points{Path::Point(0.0, 0.0, 0.0), Path::Point(1.0, 0.0, 0.0),
                                   Path::Point(2.0, 0.0, 0.0)};
-  Path::Path path(points);
+  Path::Path path(points, 500);
 
   // Sampling configuration
   double timeStep = 0.1;

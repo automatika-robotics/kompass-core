@@ -48,7 +48,7 @@ public:
                                             // robot reached the goal point
       addParameter(
           "loosing_goal_distance",
-          Parameter(0.1, 0.001, 1000.0)); // [m] If driving past the goal
+          Parameter(0.5, 0.001, 1000.0)); // [m] If driving past the goal
                                           // we stop after this distance
     }
   };

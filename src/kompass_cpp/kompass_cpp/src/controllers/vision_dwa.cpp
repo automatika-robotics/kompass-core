@@ -126,10 +126,8 @@ TrajSearchResult VisionDWA::getTrackingCtrl(const TrackedPose2D &tracking_pose,
   else{
     LOG_INFO("USING DWA SAMPLING");
     // The tracking sample has collisions -> use DWA-like sampling and control
-    Path::Path ref_tracking_path;
-    for (int idx=0; idx < _config.prediction_horizon(); ++idx){
-      ref_tracking_path.points.push_back(ref_traj.path.getIndex(idx));
-    }
+    Path::Path ref_tracking_path(ref_traj.path.x, ref_traj.path.y,
+                                 ref_traj.path.z);
     // Set the tracking segment as the reference path
     this->setCurrentPath(ref_tracking_path);
     return this->computeVelocityCommandsSet(current_vel, sensor_points);

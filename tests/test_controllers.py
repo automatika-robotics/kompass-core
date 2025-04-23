@@ -177,11 +177,8 @@ def run_control(
 
     # Interpolated path for visualization
     interpolated_path = controller.interpolated_path()
-    interpolation_x = []
-    interpolation_y = []
-    for point in interpolated_path.points:
-        interpolation_x.append(point[0])
-        interpolation_y.append(point[1])
+    interpolation_x = interpolated_path.x()
+    interpolation_y = interpolated_path.y()
 
     i = 0
     x_robot = []
@@ -275,14 +272,14 @@ def test_path_interpolation(plot: bool = False):
         x_ref = [pose.pose.position.x for pose in ref_path.poses]
         y_ref = [pose.pose.position.y for pose in ref_path.poses]
 
-        x_inter_lin = [point[0] for point in linear_interpolation.points]
-        y_inter_lin = [point[1] for point in linear_interpolation.points]
+        x_inter_lin = linear_interpolation.x()
+        y_inter_lin = linear_interpolation.y()
 
-        x_inter_her = [point[0] for point in hermite_spline_interpolation.points]
-        y_inter_her = [point[1] for point in hermite_spline_interpolation.points]
+        x_inter_her = hermite_spline_interpolation.x()
+        y_inter_her = hermite_spline_interpolation.y()
 
-        x_inter_cub = [point[0] for point in cubic_spline_interpolation.points]
-        y_inter_cub = [point[1] for point in cubic_spline_interpolation.points]
+        x_inter_cub = cubic_spline_interpolation.x()
+        y_inter_cub = cubic_spline_interpolation.y()
 
         # Plot the path
         plt.figure()
@@ -330,9 +327,9 @@ def test_path_interpolation(plot: bool = False):
                 )
                 length += np.sqrt(d_x**2 + d_y**2)
         elif isinstance(path, PathCpp):
-            for idx in range(len(path.points) - 1):
-                d_x = path.points[idx + 1][0] - path.points[idx][0]
-                d_y = path.points[idx + 1][1] - path.points[idx][1]
+            for idx in range(path.size() - 1):
+                d_x = path.getIndex(idx + 1)[0] - path.getIndex(idx)[0]
+                d_y = path.getIndex(idx + 1)[1] - path.getIndex(idx)[1]
                 length += np.sqrt(d_x**2 + d_y**2)
         return length
 
