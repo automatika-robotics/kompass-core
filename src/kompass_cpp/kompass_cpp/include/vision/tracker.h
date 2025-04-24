@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 #include "datatypes/tracking.h"
+#include "datatypes/control.h"
 #include "utils/kalman_filter.h"
 
 namespace  Kompass{
@@ -23,17 +24,20 @@ class FeatureBasedBboxTracker{
       bool setInitialTracking(const int &pose_x_img, const int &pose_y_img,
                               const std::vector<Bbox3D> &detected_boxes);
 
+      bool trackerInitialized() const;
+
       bool updateTracking(const std::vector<Bbox3D> &detected_boxes);
 
       std::optional<TrackedBbox3D> getRawTracking() const;
 
       std::optional<Eigen::MatrixXf> getTrackedState() const;
 
+      std::optional<Control::TrackedPose2D> getFilteredTrackedPose2D() const;
+
     private:
       float timeStep_, minAcceptedSimilarityScore_ = 0.0;
       std::unique_ptr<TrackedBbox3D> trackedBox_;
       std::unique_ptr<LinearSSKalmanFilter> stateKalmanFilter_;
-      bool tracking_started_ = false;
 
       FeaturesVector extractFeatures(const TrackedBbox3D &bBox) const;
 

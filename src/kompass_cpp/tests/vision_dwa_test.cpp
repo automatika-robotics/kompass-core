@@ -5,6 +5,8 @@
 #include "test.h"
 #include "utils/cost_evaluator.h"
 #include "utils/logger.h"
+#include <Eigen/src/Core/Matrix.h>
+#include <iostream>
 #include <memory>
 #define BOOST_TEST_MODULE KOMPASS TESTS
 #include "json_export.h"
@@ -19,11 +21,17 @@ using namespace Kompass;
 struct VisionDWATestConfig {
   // Sampling configuration
   double timeStep;
-  double predictionHorizon;
-  double controlHorizon;
+  int predictionHorizon;
+  int controlHorizon;
   int maxLinearSamples;
   int maxAngularSamples;
   int maxNumThreads;
+
+  // Detected Boxes
+  std::vector<Bbox3D> detected_boxes;
+  int num_test_boxes = 3;
+  Eigen::Vector2i ref_point_img{150, 150};
+  float boxes_ori = 0.0f;
 
   // Octomap resolution
   double octreeRes;
@@ -55,10 +63,11 @@ struct VisionDWATestConfig {
   std::unique_ptr<Control::VisionDWA> controller;
 
   // Constructor to initialize the struct
-  VisionDWATestConfig(const float timeStep, const float predictionHorizon,
-                      const float controlHorizon, const int maxLinearSamples,
+  VisionDWATestConfig(const double timeStep, const int predictionHorizon,
+                      const int controlHorizon, const int maxLinearSamples,
                       const int maxAngularSamples,
                       const std::vector<Path::Point> sensor_points,
+                      const bool use_tracker = true,
                       const float maxVel = 1.0, const float maxOmega = 4.0,
                       const int maxNumThreads = 1,
                       const double reference_path_distance_weight = 5.0,
@@ -84,19 +93,56 @@ struct VisionDWATestConfig {
                              obstacles_distance_weight);
     costWeights.setParameter("smoothness_weight", 0.0);
     costWeights.setParameter("jerk_weight", 0.0);
+    auto config = Control::VisionDWA::VisionDWAConfig();
+    config.setParameter("control_time_step", timeStep);
+    config.setParameter("control_horizon", controlHorizon);
+    config.setParameter("prediction_horizon", predictionHorizon);
     controller = std::make_unique<Control::VisionDWA>(
         controlType, controlLimits, maxLinearSamples, maxAngularSamples,
         robotShapeType, robotDimensions, sensorPositionWRTbody,
-        sensorRotationWRTbody, octreeRes, costWeights);
+        sensorRotationWRTbody, octreeRes, costWeights, maxNumThreads, config,
+        use_tracker);
+
+    // Initialize the detected boxes
+    Bbox3D new_box;
+    new_box.size = {0.5f, 0.5f, 1.0f};
+    detected_boxes.resize(num_test_boxes - 1);
+    for (int i = 0; i < num_test_boxes - 1; ++i) {
+      auto new_box_shift =
+          Eigen::Vector3f({float(0.7 * i), float(0.7 * i), 0.0f});
+      auto img_frame_shift =
+          Eigen::Vector2i({float(50 * i), float(50 * i)});
+      new_box.center = new_box_shift;
+      new_box.center_img_frame = img_frame_shift + ref_point_img;
+      new_box.size_img_frame = {25, 25};
+      detected_boxes[i] = new_box;
+    }
   }
 
-  bool run_test(const int numPointsPerTrajectory, std::string pltFileName) {
+  void moveDetectedBoxes() {
+    // Update the detected boxes using the velocity command
+    Eigen::Vector3f target_ref_vel = {float(tracked_vel.vx() * cos(boxes_ori)),
+                                      float(tracked_vel.vx() * sin(boxes_ori)),
+                                      0.0f};
+    boxes_ori += tracked_vel.omega() * timeStep;
+    for (auto &box : detected_boxes) {
+      box.center += target_ref_vel * timeStep;
+    }
+  };
+
+  bool run_test(const int numPointsPerTrajectory, std::string pltFileName, bool with_tracker) {
     Control::TrajectorySamples2D samples(2, numPointsPerTrajectory);
     Control::TrajectoryVelocities2D simulated_velocities(
         numPointsPerTrajectory);
     Control::TrajectoryPath robot_path(numPointsPerTrajectory),
         tracked_path(numPointsPerTrajectory);
     Control::Velocity2D cmd;
+    Control::TrajSearchResult result;
+
+    if(with_tracker){
+      controller->setInitialTracking(
+          ref_point_img(0), ref_point_img(1), detected_boxes);
+    }
 
     int step = 0;
     while (step < numPointsPerTrajectory) {
@@ -105,10 +151,12 @@ struct VisionDWATestConfig {
       tracked_path.add(step, {tracked_pose.x(), tracked_pose.y(), 0.0});
       controller->setCurrentState(robotState);
 
-      Control::TrajSearchResult result =
-          controller->getTrackingCtrl(tracked_pose, cmd, cloud);
-      // cmd = controller.getPureTrackingCtrl(tracked_pose);
-      // robotState.update(cmd, timeStep);
+      if(with_tracker){
+        result =
+            controller->getTrackingCtrl(detected_boxes, cmd, cloud);
+      }else{
+        result = controller->getTrackingCtrl(tracked_pose, cmd, cloud);
+      }
 
       if (result.isTrajFound) {
         LOG_INFO(FMAG("STEP: "), step,
@@ -144,6 +192,9 @@ struct VisionDWATestConfig {
       }
 
       tracked_pose.update(timeStep);
+      if(with_tracker){
+        moveDetectedBoxes();
+      }
       step++;
     }
     samples.push_back(simulated_velocities, robot_path);
@@ -178,19 +229,20 @@ BOOST_AUTO_TEST_CASE(test_VisionDWA_obstacle_free) {
 
   // Sampling configuration
   double timeStep = 0.1;
-  double predictionHorizon =0.5;
-  double controlHorizon = 0.2;
+  int predictionHorizon = 10;
+  int controlHorizon = 2;
   int maxLinearSamples = 20;
   int maxAngularSamples = 20;
 
   // Robot pointcloud values (global frame)
   std::vector<Path::Point> cloud = {{10.0, 10.0, 0.1}};
 
-  VisionDWATestConfig testConfig(timeStep, predictionHorizon, controlHorizon, maxLinearSamples, maxAngularSamples, cloud);
+  VisionDWATestConfig testConfig(timeStep, predictionHorizon, controlHorizon, maxLinearSamples, maxAngularSamples, cloud, false);
 
   int numPointsPerTrajectory = 100;
 
-  bool test_passed = testConfig.run_test(numPointsPerTrajectory, std::string("vision_follower_obstacle_free"));
+  bool test_passed = testConfig.run_test(
+      numPointsPerTrajectory, std::string("vision_follower_obstacle_free"), false);
   BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
 }
 
@@ -200,8 +252,8 @@ BOOST_AUTO_TEST_CASE(test_VisionDWA_with_obstacle) {
 
   // Sampling configuration
   double timeStep = 0.1;
-  double predictionHorizon = 0.5;
-  double controlHorizon = 0.4;
+  int predictionHorizon = 10;
+  int controlHorizon = 2;
   int maxLinearSamples = 20;
   int maxAngularSamples = 20;
 
@@ -209,11 +261,61 @@ BOOST_AUTO_TEST_CASE(test_VisionDWA_with_obstacle) {
   std::vector<Path::Point> cloud = {{0.3, 0.27, 0.1}};
 
   VisionDWATestConfig testConfig(timeStep, predictionHorizon, controlHorizon,
-                                 maxLinearSamples, maxAngularSamples, cloud);
+                                 maxLinearSamples, maxAngularSamples, cloud, false);
 
   int numPointsPerTrajectory = 100;
 
   bool test_passed = testConfig.run_test(
-      numPointsPerTrajectory, std::string("vision_follower_with_obstacle"));
+      numPointsPerTrajectory, std::string("vision_follower_with_obstacle"), false);
+  BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
+}
+
+BOOST_AUTO_TEST_CASE(test_VisionDWA_with_tracker_obs_free) {
+  // Create timer
+  Timer time;
+
+  // Sampling configuration
+  double timeStep = 0.1;
+  int predictionHorizon = 10;
+  int controlHorizon = 2;
+  int maxLinearSamples = 20;
+  int maxAngularSamples = 20;
+
+  // Robot pointcloud values (global frame)
+  std::vector<Path::Point> cloud = {{10.0, 10.0, 0.1}};
+
+  VisionDWATestConfig testConfig(timeStep, predictionHorizon, controlHorizon,
+                                 maxLinearSamples, maxAngularSamples, cloud,
+                                 true);
+
+  int numPointsPerTrajectory = 100;
+
+  bool test_passed = testConfig.run_test(
+      numPointsPerTrajectory, std::string("vision_follower_with_tracker"), true);
+  BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
+}
+
+BOOST_AUTO_TEST_CASE(test_VisionDWA_with_tracker_and_obstacle) {
+  // Create timer
+  Timer time;
+
+  // Sampling configuration
+  double timeStep = 0.1;
+  int predictionHorizon = 10;
+  int controlHorizon = 2;
+  int maxLinearSamples = 20;
+  int maxAngularSamples = 20;
+
+  // Robot pointcloud values (global frame)
+  std::vector<Path::Point> cloud = {{0.3, 0.27, 0.1}};
+
+  VisionDWATestConfig testConfig(timeStep, predictionHorizon, controlHorizon,
+                                 maxLinearSamples, maxAngularSamples, cloud,
+                                 true);
+
+  int numPointsPerTrajectory = 100;
+
+  bool test_passed = testConfig.run_test(
+      numPointsPerTrajectory, std::string("vision_follower_with_tracker_and_obstacle"), true);
   BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
 }

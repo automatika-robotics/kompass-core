@@ -6,6 +6,7 @@
 #include "utils/logger.h"
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 #include <tuple>
 #include <vector>
 
@@ -21,7 +22,8 @@ VisionDWA::VisionDWA(const ControlType robotCtrlType,
                      const std::array<float, 4> &sensor_rotation_body,
                      const double octreeRes,
                      CostEvaluator::TrajectoryCostsWeights costWeights,
-                     const int maxNumThreads, const VisionDWAConfig config)
+                     const int maxNumThreads, const VisionDWAConfig config,
+                     const bool use_tracker)
     : DWA(ctrlLimits, robotCtrlType, config.control_time_step(),
           config.prediction_horizon(), config.control_horizon(),
           maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
@@ -29,6 +31,12 @@ VisionDWA::VisionDWA(const ControlType robotCtrlType,
           maxNumThreads) {
   ctrl_limits_ = ctrlLimits;
   config_ = config;
+  if (use_tracker) {
+    // Initialize the bounding box tracker
+    tracker_ = std::make_unique<FeatureBasedBboxTracker>(
+        config.control_time_step(), config.e_pose(), config.e_vel(),
+        config.e_acc());
+  }
 }
 
 Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
@@ -45,25 +53,24 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
       Angle::normalizeToMinusPiPlusPi(config_.target_orientation() - psi);
 
   float distance_tolerance = config_.tolerance() * config_.target_distance();
-  float angle_tolerance = std::max(0.001, config_.tolerance() * config_.target_orientation());
-
-  // LOG_DEBUG("Current distance: ", distance, ", Distance_error=", distance_error,
-  //           ", Angle_error=", angle_error, ", tolerance_dist=", distance_tolerance, ", an=", angle_tolerance);
+  float angle_tolerance =
+      std::max(0.001, config_.tolerance() * config_.target_orientation());
 
   Velocity2D followingVel;
   if (abs(distance_error) > distance_tolerance or
       abs(angle_error) > angle_tolerance) {
     double v = ((tracking_pose.v() * cos(gamma - psi)) -
-                (config_.K_v() * tanh(distance_error))) / cos(psi);
+                (config_.K_v() * tanh(distance_error))) /
+               cos(psi);
     v = std::clamp(v, -ctrl_limits_.velXParams.maxVel,
-                  ctrl_limits_.velXParams.maxVel);
+                   ctrl_limits_.velXParams.maxVel);
     followingVel.setVx(v);
     double omega = -tracking_pose.omega() +
                    2.0 * (v * sin(psi) / distance +
-                        tracking_pose.v() * sin(gamma - psi) / distance -
-                        config_.K_omega() * tanh(angle_error));
+                          tracking_pose.v() * sin(gamma - psi) / distance -
+                          config_.K_omega() * tanh(angle_error));
     omega = std::clamp(omega, -ctrl_limits_.omegaParams.maxOmega,
-                      ctrl_limits_.omegaParams.maxOmega);
+                       ctrl_limits_.omegaParams.maxOmega);
     followingVel.setOmega(omega);
   }
   return followingVel;
@@ -82,7 +89,8 @@ VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose,
   TrackedPose2D simulated_track = tracking_pose;
   Velocity2D cmd;
 
-  // Simulate following the tracked target for the period til prediction_horizon assuming the target moves with its same current velocity
+  // Simulate following the tracked target for the period til prediction_horizon
+  // assuming the target moves with its same current velocity
   while (step < config_.prediction_horizon()) {
     states.push_back(simulated_state);
     ref_traj.path.add(step,
@@ -91,15 +99,16 @@ VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose,
     cmd = this->getPureTrackingCtrl(simulated_track);
     simulated_state.update(cmd, config_.control_time_step());
     simulated_track.update(config_.control_time_step());
-    if(step < config_.prediction_horizon() -1){
-      ref_traj.velocities.add(step,cmd);
+    if (step < config_.prediction_horizon() - 1) {
+      ref_traj.velocities.add(step, cmd);
     }
 
     step++;
   }
   this->setCurrentState(original_state);
 
-  bool has_collisions = trajSampler->checkStatesFeasibility(states, sensor_points);
+  bool has_collisions =
+      trajSampler->checkStatesFeasibility(states, sensor_points);
 
   LOG_INFO("Found reference traj with collisions: ", has_collisions);
 
@@ -108,13 +117,13 @@ VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose,
 
 template <typename T>
 TrajSearchResult VisionDWA::getTrackingCtrl(const TrackedPose2D &tracking_pose,
-                                          const Velocity2D &current_vel,
-                                          const T &sensor_points) {
+                                            const Velocity2D &current_vel,
+                                            const T &sensor_points) {
   Trajectory2D ref_traj;
   bool has_collisions;
   std::tie(ref_traj, has_collisions) =
       this->getTrackingReferenceSegment(tracking_pose, sensor_points);
-  if(!has_collisions){
+  if (!has_collisions) {
     // The tracking sample is collision free -> No need to explore other samples
     TrajSearchResult result;
     result.isTrajFound = true;
@@ -122,28 +131,84 @@ TrajSearchResult VisionDWA::getTrackingCtrl(const TrackedPose2D &tracking_pose,
     result.trajectory = ref_traj;
     latest_velocity_command_ = ref_traj.velocities.getFront();
     return result;
-  }
-  else{
+  } else {
     LOG_INFO("USING DWA SAMPLING");
     // The tracking sample has collisions -> use DWA-like sampling and control
     Path::Path ref_tracking_path(ref_traj.path.x, ref_traj.path.y,
-                                 ref_traj.path.z);
+                                 ref_traj.path.z, config_.prediction_horizon());
     // Set the tracking segment as the reference path
-    // Interpolation of the path is not required as the reference is already created using the robot control time step
+    // Interpolation of the path is not required as the reference is already
+    // created using the robot control time step
     this->setCurrentPath(ref_tracking_path, false);
     return this->computeVelocityCommandsSet(current_vel, sensor_points);
   }
 }
 
+template <typename T>
+Control::TrajSearchResult
+VisionDWA::getTrackingCtrl(const std::vector<Bbox3D> &detected_boxes,
+                           const Velocity2D &current_vel,
+                           const T &sensor_points) {
+  if (!tracker_) {
+    throw std::invalid_argument(
+        "Tracker is not initialized. Cannot use 'VisionDWA::getTrackingCtrl' "
+        "directly with "
+        "'std::vector<Bbox3D> &detected_boxes' input. Initialize VisionDWA "
+        "with 'use_tracker' = true");
+  }
+  TrajSearchResult result;
+  if (tracker_->trackerInitialized()) {
+    // Update the tracker with the detected boxes
+    tracker_->updateTracking(detected_boxes);
+    auto tracked_state = tracker_->getFilteredTrackedPose2D();
+    if (tracked_state) {
+      // Get the tracking control command
+      return getTrackingCtrl(tracked_state.value(), current_vel, sensor_points);
+    } else {
+      LOG_WARNING("Tracker failed to find target");
+      result.isTrajFound = false;
+      return result;
+    }
+  } else {
+    throw std::runtime_error(
+        "Tracker is not initialized with an initial tracking target. Call "
+        "'VisionDWA::setInitialTracking' first");
+  }
+}
+
+bool VisionDWA::setInitialTracking(const int &pose_x_img, const int &pose_y_img,
+                                   const std::vector<Bbox3D> &detected_boxes) {
+  if (!tracker_) {
+    LOG_ERROR("Tracker is not initialized. Cannot use "
+              "'VisionDWA::setInitialTracking'. Initialize VisionDWA "
+              "with 'use_tracker' = true");
+    return false;
+  }
+  return tracker_->setInitialTracking(pose_x_img, pose_y_img, detected_boxes);
+}
+
 // Explicit instantiation for LaserScan
-template Control::TrajSearchResult VisionDWA::getTrackingCtrl<LaserScan>(
-    const TrackedPose2D &tracking_pose, const Velocity2D &current_vel,
-    const LaserScan &sensor_points);
+template Control::TrajSearchResult
+VisionDWA::getTrackingCtrl<LaserScan>(const TrackedPose2D &tracking_pose,
+                                      const Velocity2D &current_vel,
+                                      const LaserScan &sensor_points);
 
 // Explicit instantiation for PointCloud
 template Control::TrajSearchResult
 VisionDWA::getTrackingCtrl<std::vector<Path::Point>>(
     const TrackedPose2D &tracking_pose, const Velocity2D &current_vel,
+    const std::vector<Path::Point> &sensor_points);
+
+// Explicit instantiation for LaserScan
+template Control::TrajSearchResult
+VisionDWA::getTrackingCtrl<LaserScan>(const std::vector<Bbox3D> &detected_boxes,
+                                      const Velocity2D &current_vel,
+                                      const LaserScan &sensor_points);
+
+// Explicit instantiation for PointCloud
+template Control::TrajSearchResult
+VisionDWA::getTrackingCtrl<std::vector<Path::Point>>(
+    const std::vector<Bbox3D> &detected_boxes, const Velocity2D &current_vel,
     const std::vector<Path::Point> &sensor_points);
 
 } // namespace Control

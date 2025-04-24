@@ -1,5 +1,7 @@
 #include "vision/tracker.h"
+#include "datatypes/control.h"
 #include "datatypes/tracking.h"
+#include <cmath>
 #include <math.h>
 
 namespace Kompass {
@@ -42,7 +44,6 @@ bool FeatureBasedBboxTracker::setInitialTracking(const TrackedBbox3D &bBox) {
   state_vec(4) = bBox.acc[0];
   state_vec(5) = bBox.acc[1];
   stateKalmanFilter_->setInitialState(state_vec);
-  this->tracking_started_ = true;
   return true;
 }
 
@@ -52,7 +53,6 @@ bool FeatureBasedBboxTracker::setInitialTracking(const Bbox3D &bBox) {
   state_vec(0) = bBox.center[0];
   state_vec(1) = bBox.center[1];
   stateKalmanFilter_->setInitialState(state_vec);
-  this->tracking_started_ = false;
   return true;
 }
 
@@ -78,9 +78,14 @@ bool FeatureBasedBboxTracker::setInitialTracking(const int& pose_x_img, const in
     state_vec(0) = target_box->center[0];
     state_vec(1) = target_box->center[1];
     stateKalmanFilter_->setInitialState(state_vec);
-    // Target velocity is still unknown
-    this->tracking_started_ = false;
     return true;
+}
+
+bool FeatureBasedBboxTracker::trackerInitialized() const{
+  if(trackedBox_){
+    return true;
+  }
+  return false;
 }
 
 void FeatureBasedBboxTracker::updateTrackedBoxState(){
@@ -158,6 +163,18 @@ std::optional<Eigen::MatrixXf>
 FeatureBasedBboxTracker::getTrackedState() const {
   if (trackedBox_) {
     return stateKalmanFilter_->getState();
+  }
+  return std::nullopt;
+}
+
+std::optional<Control::TrackedPose2D>
+FeatureBasedBboxTracker::getFilteredTrackedPose2D() const {
+  if (trackedBox_) {
+    auto state_vec = stateKalmanFilter_->getState().value();
+    // yaw = atan2(vy, vx)
+    auto yaw = atan2(state_vec(3), state_vec(2));
+    return Control::TrackedPose2D(state_vec(0), state_vec(1),
+        yaw, state_vec(2), state_vec(3), trackedBox_->omega());
   }
   return std::nullopt;
 }
