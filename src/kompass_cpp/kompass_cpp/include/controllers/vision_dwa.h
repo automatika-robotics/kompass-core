@@ -3,11 +3,8 @@
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
 #include "dwa.h"
-#include <Eigen/src/Core/Matrix.h>
-#include <Eigen/src/Geometry/Quaternion.h>
+#include <Eigen/Dense>
 #include <cmath>
-#include <memory>
-#include <queue>
 #include <tuple>
 #include <vector>
 
@@ -16,14 +13,6 @@ namespace Control {
 
 class VisionDWA : public DWA {
 public:
-  struct TrackingImgData {
-    std::array<double, 2> size_xy; // width and height of the bounding box
-    int img_width;
-    int img_height;
-    std::array<double, 2>
-        center_xy; // x, y coordinates of the object center in image frame
-    double depth;  // -1 is equivalent to none
-  };
 
   class VisionDWAConfig : public ControllerParameters {
   public:
@@ -120,13 +109,8 @@ public:
                                             const T &sensor_points);
 
 private:
-  ControlType _ctrlType;
-  ControlLimitsParams _ctrl_limits;
-  VisionDWAConfig _config;
-
-  bool _rotate_in_place;
-  Velocities _out_vel;
-  std::unique_ptr<TrackingImgData> _last_tracking = nullptr;
+  ControlLimitsParams ctrl_limits_;
+  VisionDWAConfig config_;
 
   /**
    * @brief Get the Tracking Reference Trajectory Segment and if this segment is has collision

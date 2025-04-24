@@ -1,11 +1,8 @@
 #pragma once
 
 #include <Eigen/Dense>
-#include <Eigen/src/Core/Matrix.h>
-#include <Eigen/src/Geometry/Quaternion.h>
 #include <cmath>
 #include <stdexcept>
-#include <string>
 #include <vector>
 
 // Namespace for Control Types

@@ -27,14 +27,8 @@ VisionDWA::VisionDWA(const ControlType robotCtrlType,
           maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
           sensor_position_body, sensor_rotation_body, octreeRes, costWeights,
           maxNumThreads) {
-  _ctrlType = robotCtrlType;
-  _ctrl_limits = ctrlLimits;
-  _config = config;
-  // Initialize time steps
-  int num_steps = _config.control_horizon();
-  // Initialize control vectors
-  _out_vel = Velocities(num_steps);
-  _rotate_in_place = _ctrlType != ControlType::ACKERMANN;
+  ctrl_limits_ = ctrlLimits;
+  config_ = config;
 }
 
 Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
@@ -46,12 +40,12 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
                  tracking_pose.x() - currentState.x) -
       currentState.yaw);
 
-  float distance_error = _config.target_distance() - distance;
+  float distance_error = config_.target_distance() - distance;
   float angle_error =
-      Angle::normalizeToMinusPiPlusPi(_config.target_orientation() - psi);
+      Angle::normalizeToMinusPiPlusPi(config_.target_orientation() - psi);
 
-  float distance_tolerance = _config.tolerance() * _config.target_distance();
-  float angle_tolerance = std::max(0.001, _config.tolerance() * _config.target_orientation());
+  float distance_tolerance = config_.tolerance() * config_.target_distance();
+  float angle_tolerance = std::max(0.001, config_.tolerance() * config_.target_orientation());
 
   // LOG_DEBUG("Current distance: ", distance, ", Distance_error=", distance_error,
   //           ", Angle_error=", angle_error, ", tolerance_dist=", distance_tolerance, ", an=", angle_tolerance);
@@ -59,12 +53,17 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
   Velocity2D followingVel;
   if (abs(distance_error) > distance_tolerance or
       abs(angle_error) > angle_tolerance) {
-    double v = (tracking_pose.v() * cos(gamma - psi) - _config.K_v() * tanh(distance_error)) / cos(psi);
+    double v = ((tracking_pose.v() * cos(gamma - psi)) -
+                (config_.K_v() * tanh(distance_error))) / cos(psi);
+    v = std::clamp(v, -ctrl_limits_.velXParams.maxVel,
+                  ctrl_limits_.velXParams.maxVel);
     followingVel.setVx(v);
     double omega = -tracking_pose.omega() +
-                      2 * (v * sin(psi) / distance +
-                           tracking_pose.v() * sin(gamma - psi) / distance -
-                           _config.K_omega() * tanh(angle_error));
+                   2.0 * (v * sin(psi) / distance +
+                        tracking_pose.v() * sin(gamma - psi) / distance -
+                        config_.K_omega() * tanh(angle_error));
+    omega = std::clamp(omega, -ctrl_limits_.omegaParams.maxOmega,
+                      ctrl_limits_.omegaParams.maxOmega);
     followingVel.setOmega(omega);
   }
   return followingVel;
@@ -76,7 +75,7 @@ VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose,
                                        const T &sensor_points) {
   int step = 0;
 
-  Trajectory2D ref_traj(_config.prediction_horizon());
+  Trajectory2D ref_traj(config_.prediction_horizon());
   std::vector<Path::State> states;
   Path::State simulated_state = currentState;
   Path::State original_state = currentState;
@@ -84,15 +83,15 @@ VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose,
   Velocity2D cmd;
 
   // Simulate following the tracked target for the period til prediction_horizon assuming the target moves with its same current velocity
-  while (step < _config.prediction_horizon()) {
+  while (step < config_.prediction_horizon()) {
     states.push_back(simulated_state);
     ref_traj.path.add(step,
                       Path::Point(simulated_state.x, simulated_state.y, 0.0));
     this->setCurrentState(simulated_state);
     cmd = this->getPureTrackingCtrl(simulated_track);
-    simulated_state.update(cmd, _config.control_time_step());
-    simulated_track.update(_config.control_time_step());
-    if(step < _config.prediction_horizon() -1){
+    simulated_state.update(cmd, config_.control_time_step());
+    simulated_track.update(config_.control_time_step());
+    if(step < config_.prediction_horizon() -1){
       ref_traj.velocities.add(step,cmd);
     }
 

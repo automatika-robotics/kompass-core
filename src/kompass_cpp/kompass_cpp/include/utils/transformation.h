@@ -3,8 +3,6 @@
 #include "datatypes/path.h"
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
-#include <Eigen/src/Core/Matrix.h>
-#include <Eigen/src/Geometry/Transform.h>
 
 namespace Kompass {
 

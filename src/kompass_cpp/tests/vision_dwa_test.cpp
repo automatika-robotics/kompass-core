@@ -59,11 +59,11 @@ struct VisionDWATestConfig {
                       const float controlHorizon, const int maxLinearSamples,
                       const int maxAngularSamples,
                       const std::vector<Path::Point> sensor_points,
-                      const float maxVel = 1.0, const float maxOmega = 2.0,
+                      const float maxVel = 1.0, const float maxOmega = 4.0,
                       const int maxNumThreads = 1,
-                      const double reference_path_distance_weight = 1.0,
-                      const double goal_distance_weight = 0.0,
-                      const double obstacles_distance_weight = 0.5)
+                      const double reference_path_distance_weight = 5.0,
+                      const double goal_distance_weight = 1.0,
+                      const double obstacles_distance_weight = 0.1)
       : timeStep(timeStep), predictionHorizon(predictionHorizon),
         controlHorizon(controlHorizon), maxLinearSamples(maxLinearSamples),
         maxAngularSamples(maxAngularSamples), maxNumThreads(maxNumThreads),
@@ -82,7 +82,7 @@ struct VisionDWATestConfig {
     costWeights.setParameter("goal_distance_weight", goal_distance_weight);
     costWeights.setParameter("obstacles_distance_weight",
                              obstacles_distance_weight);
-    costWeights.setParameter("smoothness_weight", 1.0);
+    costWeights.setParameter("smoothness_weight", 0.0);
     costWeights.setParameter("jerk_weight", 0.0);
     controller = std::make_unique<Control::VisionDWA>(
         controlType, controlLimits, maxLinearSamples, maxAngularSamples,
@@ -201,7 +201,7 @@ BOOST_AUTO_TEST_CASE(test_VisionDWA_with_obstacle) {
   // Sampling configuration
   double timeStep = 0.1;
   double predictionHorizon = 0.5;
-  double controlHorizon = 0.2;
+  double controlHorizon = 0.4;
   int maxLinearSamples = 20;
   int maxAngularSamples = 20;
 
