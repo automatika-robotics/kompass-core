@@ -11,8 +11,6 @@
 #include <boost/filesystem.hpp>
 #include <boost/test/included/unit_test.hpp>
 #include <memory>
-#include <opencv2/opencv.hpp>
-#include <opencv4/opencv2/imgcodecs.hpp>
 #include <random>
 
 using namespace Kompass;
