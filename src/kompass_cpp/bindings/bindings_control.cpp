@@ -8,6 +8,7 @@
 #include "controllers/dwa.h"
 #include "controllers/follower.h"
 #include "controllers/pid.h"
+#include "controllers/vision_dwa.h"
 #include "controllers/stanley.h"
 #include "controllers/vision_follower.h"
 #include "datatypes/control.h"
@@ -232,4 +233,30 @@ void bindings_control(py::module_ &m) {
       .def("reset_target", &Control::VisionFollower::resetTarget)
       .def("get_ctrl", &Control::VisionFollower::getCtrl)
       .def("run", &Control::VisionFollower::run);
+
+  // Vision DWA
+  py::class_<Control::VisionDWA::VisionDWAConfig,
+             Control::Controller::ControllerParameters>(
+      m_control, "VisionDWAParameters")
+      .def(py::init<>());
+
+  py::class_<Control::VisionDWA, Control::DWA>(m_control, "VisionDWA")
+      .def(
+          py::init<const Control::ControlType&, const Control::ControlLimitsParams&, const int, const int,
+                   const CollisionChecker::ShapeType&, const std::vector<float> &,
+                   const std::array<float, 3> &, const std::array<float, 4> &,
+                   const double, const Control::CostEvaluator::TrajectoryCostsWeights&, const int,
+                   const Control::VisionDWA::VisionDWAConfig &, const bool>())
+      .def("get_pure_tracking_ctrl", &Control::VisionDWA::getPureTrackingCtrl)
+      .def("get_tracking_ctrl",
+           py::overload_cast<const std::vector<Bbox3D> &,
+                             const Control::Velocity2D &,
+                             const std::vector<Eigen::Vector3f> &>(
+               &Control::VisionDWA::getTrackingCtrl<
+                   std::vector<Eigen::Vector3f>>))
+    .def("get_tracking_ctrl",
+        py::overload_cast<const std::vector<Bbox3D> &,
+                            const Control::Velocity2D &,
+                            const Control::LaserScan &>(
+            &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>));
 }

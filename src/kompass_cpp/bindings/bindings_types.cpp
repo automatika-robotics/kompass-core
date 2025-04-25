@@ -4,11 +4,13 @@
 #include <nanobind/stl/array.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/string.h>
+#include <vector>
 
 #include "controllers/vision_follower.h"
 #include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
+#include "datatypes/tracking.h"
 #include "utils/collision_check.h"
 
 namespace py = nanobind;
@@ -24,6 +26,7 @@ std::string printControlCmd(const Control::Velocity2D &velocity_command) {
 void bindings_types(py::module_ &m) {
   auto m_types = m.def_submodule("types", "KOMPASS CPP data types module");
 
+  // Path types
   py::enum_<Path::InterpolationType>(m_types, "PathInterpolationType")
       .value("LINEAR", Path::InterpolationType::LINEAR)
       .value("CUBIC_SPLINE", Path::InterpolationType::CUBIC_SPLINE)
@@ -128,4 +131,25 @@ py::class_<Control::VisionFollower::TrackingData>(m_types, "TrackingData")
     .def_rw("img_height", &Control::VisionFollower::TrackingData::img_height)
     .def_rw("center_xy", &Control::VisionFollower::TrackingData::center_xy)
     .def_rw("depth", &Control::VisionFollower::TrackingData::depth);
+
+py::class_<Bbox3D>(m_types, "Bbox3D")
+    .def(py::init<>())
+    .def(py::init<const Bbox3D &>())
+    .def(py::init<Eigen::Vector3f &, Eigen::Vector3f &, Eigen::Vector2i &,
+                  Eigen::Vector2i &, std::vector<Eigen::Vector3f> &>(),
+         py::arg("center"), py::arg("size"), py::arg("center_img_frame"),
+         py::arg("size_img_frame"), py::arg("pc_points") = py::list())
+    .def_rw("center", &Bbox3D::center)
+    .def_rw("size", &Bbox3D::size)
+    .def_rw("center_img_frame", &Bbox3D::center_img_frame)
+    .def_rw("size_img_frame", &Bbox3D::size_img_frame)
+    .def_rw("pc_points", &Bbox3D::pc_points);
+
+py::class_<TrackedBbox3D>(m_types, "TrackedBbox3D")
+    .def(py::init<const Bbox3D &>())
+    .def_rw("box", &TrackedBbox3D::box)
+    .def_rw("vel", &TrackedBbox3D::vel)
+    .def_rw("acc", &TrackedBbox3D::acc)
+    .def_rw("unique_id", &TrackedBbox3D::unique_id)
+    .def("updateFromNewDetection", &TrackedBbox3D::updateFromNewDetection);
 }
