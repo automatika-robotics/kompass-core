@@ -109,13 +109,30 @@ public:
 
   template <typename T>
   Controller::Result computeVelocityCommand(const Velocity2D &global_vel,
-                                            const T &scan_points);
+                                            const T &scan_points){
+    TrajSearchResult searchRes = findBestPath(global_vel, scan_points);
+    Controller::Result finalResult;
+    if (searchRes.isTrajFound) {
+      finalResult.status = Controller::Result::Status::COMMAND_FOUND;
+      // Get the first command to be applied
+      finalResult.velocity_command = searchRes.trajectory.velocities.getFront();
+      latest_velocity_command_ = finalResult.velocity_command;
+    } else {
+      finalResult.status = Controller::Result::Status::NO_COMMAND_POSSIBLE;
+    }
+    return finalResult;
+                                            };
 
+  template <typename T>
   TrajSearchResult computeVelocityCommandsSet(const Velocity2D &global_vel,
-                                              const LaserScan &scan);
-  TrajSearchResult
-  computeVelocityCommandsSet(const Velocity2D &global_vel,
-                             const std::vector<Path::Point> &cloud);
+                                              const T &scan_points){
+    TrajSearchResult searchRes = findBestPath(global_vel, scan_points);
+    // Update latest velocity command
+    if (searchRes.isTrajFound) {
+      latest_velocity_command_ = searchRes.trajectory.velocities.getFront();
+    }
+    return searchRes;
+                                              };
 
   std::tuple<MatrixXfR, MatrixXfR> getDebuggingSamples() const;
 
@@ -156,7 +173,32 @@ protected:
    */
   template <typename T>
   TrajSearchResult findBestPath(const Velocity2D &global_vel,
-                                const T &scan_points);
+                                const T &scan_points){
+    // Throw an error if the global path is not set
+    if (!currentPath) {
+      throw std::invalid_argument("Pointer to global path is NULL. Cannot use "
+                                  "DWA local planner without "
+                                  "setting a global path");
+    }
+    // find closest segment to use in cost computation
+    determineTarget();
+
+    // Generate set of valid trajectories in the DW
+    std::unique_ptr<TrajectorySamples2D> samples_ =
+        trajSampler->generateTrajectories(global_vel, currentState,
+                                          scan_points);
+    if (samples_->size() == 0) {
+      return TrajSearchResult();
+    }
+
+    trajCostEvaluator->setPointScan(scan_points, currentState, maxLocalRange_);
+
+    Path::Path trackedRefPathSegment = findTrackedPathSegment();
+
+    // Evaluate the samples and get the sample with the minimum cost
+    return trajCostEvaluator->getMinTrajectoryCost(samples_, currentPath.get(),
+                                                   trackedRefPathSegment);
+                                };
 
 private:
   double max_forward_distance_ = 0.0;
