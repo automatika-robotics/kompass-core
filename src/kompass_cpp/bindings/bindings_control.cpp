@@ -8,8 +8,8 @@
 #include "controllers/dwa.h"
 #include "controllers/follower.h"
 #include "controllers/pid.h"
-#include "controllers/vision_dwa.h"
 #include "controllers/stanley.h"
+#include "controllers/vision_dwa.h"
 #include "controllers/vision_follower.h"
 #include "datatypes/control.h"
 #include "datatypes/trajectory.h"
@@ -89,8 +89,8 @@ void bindings_control(py::module_ &m) {
       .def(py::init<>())
       .def(py::init<Control::Follower::FollowerParameters>())
       .def("set_interpolation_type", &Control::Follower::setInterpolationType)
-      .def("set_current_path", &Control::Follower::setCurrentPath, py::arg("path"),
-           py::arg("interpolate") = true)
+      .def("set_current_path", &Control::Follower::setCurrentPath,
+           py::arg("path"), py::arg("interpolate") = true)
       .def("clear_current_path", &Control::Follower::clearCurrentPath)
       .def("is_goal_reached", &Control::Follower::isGoalReached)
       .def("get_vx_cmd", &Control::Follower::getLinearVelocityCmdX)
@@ -191,12 +191,13 @@ void bindings_control(py::module_ &m) {
       .def("compute_velocity_commands",
            py::overload_cast<const Control::Velocity2D &,
                              const Control::LaserScan &>(
-               &Control::DWA::computeVelocityCommandsSet),
+               &Control::DWA::computeVelocityCommandsSet<Control::LaserScan>),
            py::rv_policy::reference_internal)
       .def("compute_velocity_commands",
            py::overload_cast<const Control::Velocity2D &,
                              const std::vector<Path::Point> &>(
-               &Control::DWA::computeVelocityCommandsSet),
+               &Control::DWA::computeVelocityCommandsSet<
+                   std::vector<Path::Point>>),
            py::rv_policy::reference_internal)
       .def("add_custom_cost",
            &Control::DWA::addCustomCost) // Custom cost function for DWA planner
@@ -236,27 +237,38 @@ void bindings_control(py::module_ &m) {
 
   // Vision DWA
   py::class_<Control::VisionDWA::VisionDWAConfig,
-             Control::Controller::ControllerParameters>(
-      m_control, "VisionDWAParameters")
+             Control::Controller::ControllerParameters>(m_control,
+                                                        "VisionDWAParameters")
       .def(py::init<>());
 
   py::class_<Control::VisionDWA, Control::DWA>(m_control, "VisionDWA")
-      .def(
-          py::init<const Control::ControlType&, const Control::ControlLimitsParams&, const int, const int,
-                   const CollisionChecker::ShapeType&, const std::vector<float> &,
-                   const std::array<float, 3> &, const std::array<float, 4> &,
-                   const double, const Control::CostEvaluator::TrajectoryCostsWeights&, const int,
-                   const Control::VisionDWA::VisionDWAConfig &, const bool>())
+      .def(py::init<const Control::ControlType &,
+                    const Control::ControlLimitsParams &, const int, const int,
+                    const CollisionChecker::ShapeType &,
+                    const std::vector<float> &, const std::array<float, 3> &,
+                    const std::array<float, 4> &, const double,
+                    const Control::CostEvaluator::TrajectoryCostsWeights &,
+                    const int, const Control::VisionDWA::VisionDWAConfig &,
+                    const bool>(),
+           py::arg("control_type"), py::arg("control_limits"),
+           py::arg("max_linear_samples"), py::arg("max_angular_samples"),
+           py::arg("robot_shape_type"), py::arg("robot_dimensions"),
+           py::arg("sensor_position_wrt_body"),
+           py::arg("sensor_rotation_wrt_body"), py::arg("octree_res"),
+           py::arg("cost_weights"), py::arg("max_num_threads") = 1,
+           py::arg("config") = Control::VisionDWA::VisionDWAConfig(),
+           py::arg("use_tracker") = true)
       .def("get_pure_tracking_ctrl", &Control::VisionDWA::getPureTrackingCtrl)
+      .def("set_inital_tracking", &Control::VisionDWA::setInitialTracking)
       .def("get_tracking_ctrl",
            py::overload_cast<const std::vector<Bbox3D> &,
                              const Control::Velocity2D &,
                              const std::vector<Eigen::Vector3f> &>(
                &Control::VisionDWA::getTrackingCtrl<
                    std::vector<Eigen::Vector3f>>))
-    .def("get_tracking_ctrl",
-        py::overload_cast<const std::vector<Bbox3D> &,
-                            const Control::Velocity2D &,
-                            const Control::LaserScan &>(
-            &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>));
+      .def("get_tracking_ctrl",
+           py::overload_cast<const std::vector<Bbox3D> &,
+                             const Control::Velocity2D &,
+                             const Control::LaserScan &>(
+               &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>));
 }

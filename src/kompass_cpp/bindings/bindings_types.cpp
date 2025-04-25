@@ -152,4 +152,18 @@ py::class_<TrackedBbox3D>(m_types, "TrackedBbox3D")
     .def_rw("acc", &TrackedBbox3D::acc)
     .def_rw("unique_id", &TrackedBbox3D::unique_id)
     .def("updateFromNewDetection", &TrackedBbox3D::updateFromNewDetection);
+
+py::class_<Control::Pose3D>(m_types, "Pose3D");
+
+py::class_<Control::TrackedPose2D, Control::Pose3D>(m_types, "TrackedPose2D")
+    .def(py::init<const float &, const float &, const float &, const float &,
+                  const float &, const float &>(),
+         py::arg("x"), py::arg("y"), py::arg("yaw"), py::arg("vx"),
+         py::arg("vy"), py::arg("omega"))
+    .def("x", &Control::TrackedPose2D::x)
+    .def("y", &Control::TrackedPose2D::y)
+    .def("yaw", &Control::TrackedPose2D::yaw)
+    .def("v", &Control::TrackedPose2D::v)
+    .def("omega", &Control::TrackedPose2D::omega)
+    .def("update", &Control::TrackedPose2D::update);
 }

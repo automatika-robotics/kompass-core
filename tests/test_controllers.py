@@ -19,6 +19,10 @@ from kompass_core.control import (
     DWA,
     StanleyConfig,
     Stanley,
+    VisionDWA,
+    VisionDWAConfig,
+    TrackedPose2D,
+    Bbox3D
 )
 from kompass_core.models import (
     AngularCtrlLimits,
@@ -426,6 +430,142 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
     assert reached_end is True
 
 
+def test_vision_dwa(
+    figure_name: str = "vision_dwa", figure_tag: str = "vision_dwa"
+):
+    """Run DWA pytest and assert reaching end"""
+    global global_path, my_robot, robot_ctr_limits, control_time_step
+
+    control_horizon = 2
+    prediction_horizon = 10
+
+    # Simulate tracked pose and vel
+    tracked_vel_lin = 0.1
+    tracked_vel_ang = 0.3
+    tracked_pose = TrackedPose2D(0.0, 0.0, 0.0, tracked_vel_lin, 0.0, tracked_vel_ang)
+
+    # To plot
+    robot_x = []
+    robot_y = []
+    tracked_x = []
+    tracked_y = []
+    my_robot.state.x = -0.5
+
+    cost_weights = TrajectoryCostsWeights(
+        reference_path_distance_weight=5.0,
+        goal_distance_weight=1.0,
+        smoothness_weight=0.0,
+        jerk_weight=0.0,
+        obstacles_distance_weight=0.0,
+    )
+    config = VisionDWAConfig(
+        control_time_step=control_time_step,
+        control_horizon=control_horizon,
+        prediction_horizon=prediction_horizon,
+        speed_gain=1.0,
+        rotation_gain=0.5,
+    )
+
+    controller = VisionDWA(
+        control_type=RobotType.to_kompass_cpp_lib(my_robot.robot_type),
+        control_limits=robot_ctr_limits.to_kompass_cpp_lib(),
+        max_linear_samples=20,
+        max_angular_samples=20,
+        robot_shape_type=RobotGeometry.Type.to_kompass_cpp_lib(my_robot.geometry_type),
+        robot_dimensions=my_robot.geometry_params,
+        sensor_position_wrt_body=[0.0, 0.0, 0.0],
+        sensor_rotation_wrt_body=[0.0, 0.0, 0.0, 1.0],
+        octree_res=0.1,
+        cost_weights=cost_weights.to_kompass_cpp(),
+        max_num_threads=1,
+        config=config.to_kompass_cpp(),
+        use_tracker=True,
+    )
+
+    steps = 0
+
+    # Robot point cloud
+    point_cloud = [np.array([10.3, 10.5, 0.2])]
+
+    # Detected Boxes
+    ref_point_img = [150, 150]
+    detected_boxes = []
+    boxes_ori = 0.0
+    for i in range(3):
+        new_box = Bbox3D(center=np.array([0.0, 0.0, 0.0], dtype=np.float32), size=np.array([0.5, 0.5, 1.0], dtype=np.float32), center_img_frame=np.array([150, 150], dtype=np.int32), size_img_frame=np.array([25, 25], dtype=np.int32))
+        new_box_shift = np.array([0.7 * i, 0.7 * i, 0.0], dtype=np.float32)
+        img_frame_shift = np.array([50 * i, 50 * i], dtype=np.int32)
+        new_box.center = new_box_shift
+        new_box.center_img_frame = img_frame_shift + ref_point_img
+        detected_boxes.append(new_box)
+
+    def moveBoxes(boxes_orientation, boxes) -> float:
+        """Move boxes in the direction of the tracked pose"""
+        for box in boxes:
+            box.center[0] += (
+                tracked_vel_lin * np.cos(boxes_orientation) * control_time_step
+            )
+            box.center[1] += (
+                tracked_vel_lin * np.sin(boxes_orientation) * control_time_step
+            )
+        boxes_orientation += tracked_vel_ang * control_time_step
+        return boxes_orientation
+
+    controller.set_inital_tracking(150, 150, detected_boxes)
+
+    while steps < 100:
+        robot_x.append(my_robot.state.x)
+        robot_y.append(my_robot.state.y)
+        tracked_x.append(tracked_pose.x())
+        tracked_y.append(tracked_pose.y())
+        controller.set_current_state(
+            my_robot.state.x, my_robot.state.y, my_robot.state.yaw, my_robot.state.speed
+        )
+        current_velocity = kompass_cpp.types.ControlCmd(
+            vx=my_robot.state.vx, vy=my_robot.state.vy, omega=my_robot.state.omega
+        )
+        res = controller.get_tracking_ctrl(detected_boxes, current_velocity, point_cloud)
+        if not res.is_found:
+            print("No control found")
+            break
+        print(f"Found trajectory with cost {res.cost}")
+        velocities = res.trajectory.velocities
+        print(
+            f"Found Control {velocities.vx[0]}, {velocities.vy[0]}, {velocities.omega[0]}"
+        )
+        my_robot.set_control(
+            velocity_x=velocities.vx[0],
+            velocity_y=velocities.vy[0],
+            omega=velocities.omega[0],
+        )
+        my_robot.get_state(dt=control_time_step)
+        tracked_pose.update(control_time_step)
+        boxes_ori = moveBoxes(boxes_ori, detected_boxes)
+        print(f"boxes orientation: {boxes_ori}")
+        steps += 1
+
+    plt.figure()
+    plt.plot(
+        robot_x, robot_y, marker="o", linestyle="-", color="b", label="Robot Path"
+    )
+    plt.plot(
+        tracked_x,
+        tracked_y,
+        label="Tracked Object",
+        marker="*",
+        linestyle="-",
+        color="g",
+    )
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.title(figure_tag)
+    plt.grid(True)
+    plt.legend()
+    plt.savefig(f"logs/{figure_name}.png")
+
+    assert steps == 100
+
+
 def test_dwa_debug():
     global global_path, my_robot, robot_ctr_limits, control_time_step
 
@@ -538,32 +678,36 @@ def main():
     robot_ctr_limits = RobotCtrlLimits(
         vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
         omega_limits=AngularCtrlLimits(
-            max_vel=2.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
+            max_vel=4.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
         ),
     )
 
     control_time_step = 0.1
 
-    print("RUNNING PATH INTERPOLATION TEST")
-    test_path_interpolation(plot=True)
+    # print("RUNNING PATH INTERPOLATION TEST")
+    # test_path_interpolation(plot=True)
 
-    ## TESTING STANLEY ##
-    print("RUNNING STANLEY CONTROLLER TEST")
-    test_stanley(
-        plot=True, figure_name="stanley", figure_tag="Stanley Controller Test Results"
-    )
+    # ## TESTING STANLEY ##
+    # print("RUNNING STANLEY CONTROLLER TEST")
+    # test_stanley(
+    #     plot=True, figure_name="stanley", figure_tag="Stanley Controller Test Results"
+    # )
 
-    ## TESTING DVZ ##
-    print("RUNNING DVZ CONTROLLER TEST")
-    test_dvz(plot=True, figure_name="dvz", figure_tag="DVZ Controller Test Results")
+    # ## TESTING DVZ ##
+    # print("RUNNING DVZ CONTROLLER TEST")
+    # test_dvz(plot=True, figure_name="dvz", figure_tag="DVZ Controller Test Results")
 
-    ## TESTING DWA DEBUG MODE ##
-    print("RUNNING ONE DWA CONTROLLER DEBUG STEP TEST")
-    test_dwa_debug()
+    # ## TESTING DWA DEBUG MODE ##
+    # print("RUNNING ONE DWA CONTROLLER DEBUG STEP TEST")
+    # test_dwa_debug()
 
-    ## TESTING DWA ##
-    print("RUNNING DWA CONTROLLER TEST")
-    test_dwa(plot=True, figure_name="dwa", figure_tag="DWA Controller Test Results")
+    # ## TESTING DWA ##
+    # print("RUNNING DWA CONTROLLER TEST")
+    # test_dwa(plot=True, figure_name="dwa", figure_tag="DWA Controller Test Results")
+
+    ## TESTING VISION DWA ##
+    print("RUNNING VISION DWA CONTROLLER TEST")
+    test_vision_dwa(figure_tag="VisionDWA Controller Test Results")
 
 
 if __name__ == "__main__":

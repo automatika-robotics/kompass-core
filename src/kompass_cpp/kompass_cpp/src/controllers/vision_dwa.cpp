@@ -63,10 +63,17 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
     v = std::clamp(v, -ctrl_limits_.velXParams.maxVel,
                    ctrl_limits_.velXParams.maxVel);
     followingVel.setVx(v);
-    double omega = -tracking_pose.omega() +
-                   2.0 * (v * sin(psi) / distance +
-                          tracking_pose.v() * sin(gamma - psi) / distance -
-                          config_.K_omega() * tanh(angle_error));
+    double omega;
+    if (distance > 0.0){
+      omega = -tracking_pose.omega() +
+              2.0 * (v * sin(psi) / distance +
+                     tracking_pose.v() * sin(gamma - psi) / distance -
+                     config_.K_omega() * tanh(angle_error));
+    }
+    else{
+      omega = -tracking_pose.omega() -
+              2.0 * config_.K_omega() * tanh(angle_error);
+    }
     omega = std::clamp(omega, -ctrl_limits_.omegaParams.maxOmega,
                        ctrl_limits_.omegaParams.maxOmega);
     followingVel.setOmega(omega);
