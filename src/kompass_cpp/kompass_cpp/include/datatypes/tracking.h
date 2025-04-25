@@ -19,6 +19,14 @@ struct Bbox3D {
   Bbox3D(const Bbox3D &box)
       : center(box.center), size(box.size), center_img_frame(box.center_img_frame), size_img_frame(box.size_img_frame), pc_points(box.pc_points){};
 
+  Bbox3D(const Eigen::Vector3f &center, const Eigen::Vector3f &size,
+         const Eigen::Vector2i center_img_frame,
+         const Eigen::Vector2i size_img_frame,
+         std::vector<Eigen::Vector3f> pc_points = {})
+      : center(center), size(size),
+        center_img_frame(center_img_frame),
+        size_img_frame(size_img_frame), pc_points(pc_points){};
+
   Eigen::Vector2f getXLimitsImg() const {
     return {
       center_img_frame.x() - (size_img_frame.x() / 2),
@@ -37,7 +45,7 @@ struct TrackedBbox3D {
   Eigen::Vector3f vel = {0.0, 0.0, 0.0};
   Eigen::Vector3f acc = {0.0, 0.0, 0.0};
   int unique_id = 0;
-  Eigen::Vector2f yaw_yaw_diff = {0.0, 0.0};
+  Eigen::Vector3f yaw_vec = {0.0, 0.0, 0.0}; // To track yaw, omega and angular acc
 
   TrackedBbox3D(const Bbox3D& box): box(box) {};
 
@@ -62,8 +70,10 @@ struct TrackedBbox3D {
     this->acc = {state_vector(4), state_vector(5), 0.0f};
     auto new_yaw = std::atan2(this->vel(1), this->vel(0));
     // Orientation difference
-    this->yaw_yaw_diff(1) = (this->yaw_yaw_diff(0) - new_yaw) / time_step;
-    this->yaw_yaw_diff(0) = new_yaw;
+    auto new_omega = (this->yaw_vec(0) - new_yaw) / time_step;
+    this->yaw_vec(2) = (this->yaw_vec(1) - new_omega) / time_step;
+    this->yaw_vec(1) = new_omega;
+    this->yaw_vec(0) = new_yaw;
   };
 
   void updateFromNewDetection(const Bbox3D& new_box, const float time_step){
@@ -75,8 +85,10 @@ struct TrackedBbox3D {
     // New orientation (yaw) based on new velocity
     auto new_yaw = std::atan2(new_vel(1), new_vel(0));
     // Orientation difference
-    this->yaw_yaw_diff(1) = (this->yaw_yaw_diff(0) - new_yaw) / time_step;
-    this->yaw_yaw_diff(0) = new_yaw;
+    auto new_omega = (this->yaw_vec(0) - new_yaw) / time_step;
+    this->yaw_vec(2) = (this->yaw_vec(1) - new_omega) / time_step;
+    this->yaw_vec(1) = new_omega;
+    this->yaw_vec(0) = new_yaw;
     this->vel = new_vel;
     this->acc = new_acc;
   }
@@ -102,14 +114,14 @@ struct TrackedBbox3D {
 
   float y() const { return box.center.y(); };
 
-  float yaw() const { return this->yaw_yaw_diff(0); };
+  float yaw() const { return this->yaw_vec(0); };
 
-  float omega() const { return yaw_yaw_diff(1); };
+  float omega() const { return yaw_vec(1); };
 
   void update(const float timeStep) {
     box.center(0) += vel.x() * timeStep;
     box.center(1) += vel.y() * timeStep;
-    this->yaw_yaw_diff(0) += this->yaw_yaw_diff(1) * timeStep;
+    this->yaw_vec(0) += this->yaw_vec(1) * timeStep;
   }
 
   float distance(const float x, const float y, const float z = 0.0) const {

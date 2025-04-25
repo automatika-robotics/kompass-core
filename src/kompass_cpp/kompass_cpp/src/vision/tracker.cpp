@@ -13,43 +13,56 @@ FeatureBasedBboxTracker::FeatureBasedBboxTracker(
   timeStep_ = time_step;
   // Setup Kalman filter matrices
   Eigen::MatrixXf A;
-  A.resize(6, 6);
+  A.resize(StateSize, StateSize);
 
-  A << 1, 0, time_step, 0, 0.5 * pow(time_step, 2), 0, 0, 1, 0, time_step, 0,
-      0.5 * pow(time_step, 2), 0, 0, 1, 0, time_step, 0, 0, 0, 0, 1, 0,
-      time_step, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1;
+  A << 1, 0, 0, time_step, 0, 0, 0.5 * pow(time_step, 2), 0, 0,
+       0, 1, 0, 0, time_step, 0, 0, 0.5 * pow(time_step, 2), 0,
+       0, 0, 1, 0, 0, time_step, 0, 0, 0.5 * pow(time_step, 2),
+       0, 0, 0, 1, 0, 0, time_step, 0, 0,
+       0, 0, 0, 0, 1, 0, 0, time_step, 0,
+       0, 0, 0, 0, 0, 1, 0, 0, time_step,
+       0, 0, 0, 0, 0, 0, 1, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 1, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0;
 
-  Eigen::MatrixXf B = Eigen::MatrixXf::Zero(6, 1);
-  Eigen::MatrixXf H = Eigen::MatrixXf::Identity(6, 6);
-  Eigen::MatrixXf Err = Eigen::MatrixXf::Identity(6, 6);
+  Eigen::MatrixXf B = Eigen::MatrixXf::Zero(StateSize, 1);
+  Eigen::MatrixXf H = Eigen::MatrixXf::Identity(StateSize, StateSize);
+  Eigen::MatrixXf Err = Eigen::MatrixXf::Identity(StateSize, StateSize);
   Err(0, 0) *= e_pos;
   Err(1, 1) *= e_pos;
-  Err(2, 2) *= e_vel;
+  Err(2, 2) *= e_pos;
   Err(3, 3) *= e_vel;
-  Err(4, 4) *= e_acc;
-  Err(5, 5) *= e_acc;
+  Err(4, 4) *= e_vel;
+  Err(5, 5) *= e_vel;
+  Err(6, 6) *= e_acc;
+  Err(7, 7) *= e_acc;
+  Err(8, 8) *= e_acc;
 
-  stateKalmanFilter_ = std::make_unique<LinearSSKalmanFilter>(6, 1);
+  stateKalmanFilter_ = std::make_unique<LinearSSKalmanFilter>(StateSize, 1);
   stateKalmanFilter_->setup(A, B, Err, H, Err);
 }
 
 bool FeatureBasedBboxTracker::setInitialTracking(const TrackedBbox3D &bBox) {
   trackedBox_ = std::make_unique<TrackedBbox3D>(bBox);
   Eigen::VectorXf state_vec;
-  state_vec.resize(6);
-  state_vec(0) = bBox.box.center[0];
-  state_vec(1) = bBox.box.center[1];
-  state_vec(2) = bBox.vel[0];
-  state_vec(3) = bBox.vel[1];
-  state_vec(4) = bBox.acc[0];
-  state_vec(5) = bBox.acc[1];
+  state_vec.resize(StateSize);
+  state_vec(0) = bBox.box.center[0];  // x
+  state_vec(1) = bBox.box.center[1];  // y
+  state_vec(2) = bBox.yaw_vec(0);  // yaw
+  state_vec(3) = bBox.vel[0];   // vx
+  state_vec(4) = bBox.vel[1];  // vy
+  state_vec(5) = bBox.yaw_vec(1);  // omega
+  state_vec(6) = bBox.acc[0];   // ax
+  state_vec(7) = bBox.acc[1];   // ay
+  state_vec(8) = bBox.yaw_vec(2);   // a_yaw
   stateKalmanFilter_->setInitialState(state_vec);
   return true;
 }
 
 bool FeatureBasedBboxTracker::setInitialTracking(const Bbox3D &bBox) {
   trackedBox_ = std::make_unique<TrackedBbox3D>(bBox);
-  Eigen::Matrix<float, 6, 1> state_vec = Eigen::Matrix<float, 6, 1>::Zero();
+  Eigen::Matrix<float, StateSize, 1> state_vec =
+      Eigen::Matrix<float, StateSize, 1>::Zero();
   state_vec(0) = bBox.center[0];
   state_vec(1) = bBox.center[1];
   stateKalmanFilter_->setInitialState(state_vec);
@@ -74,7 +87,8 @@ bool FeatureBasedBboxTracker::setInitialTracking(const int& pose_x_img, const in
       return false;
     }
     trackedBox_ = std::make_unique<TrackedBbox3D>(*target_box);
-    Eigen::Vector<float, 6> state_vec = Eigen::Vector<float, 6>::Zero();
+    Eigen::Vector<float, StateSize> state_vec =
+        Eigen::Vector<float, StateSize>::Zero();
     state_vec(0) = target_box->center[0];
     state_vec(1) = target_box->center[1];
     stateKalmanFilter_->setInitialState(state_vec);
@@ -90,13 +104,16 @@ bool FeatureBasedBboxTracker::trackerInitialized() const{
 
 void FeatureBasedBboxTracker::updateTrackedBoxState(){
   Eigen::MatrixXf measurement;
-  measurement.resize(6, 1);
+  measurement.resize(StateSize, 1);
   measurement(0) = trackedBox_->box.center.x();
   measurement(1) = trackedBox_->box.center.y();
-  measurement(2) = trackedBox_->vel.x();
-  measurement(3) = trackedBox_->vel.y();
-  measurement(4) = trackedBox_->acc.x();
-  measurement(5) = trackedBox_->acc.y();
+  measurement(2) = trackedBox_->yaw_vec(0);
+  measurement(3) = trackedBox_->vel.x();
+  measurement(4) = trackedBox_->vel.y();
+  measurement(5) = trackedBox_->yaw_vec(1);
+  measurement(6) = trackedBox_->acc.x();
+  measurement(7) = trackedBox_->acc.y();
+  measurement(8) = trackedBox_->yaw_vec(2);
   stateKalmanFilter_->estimate(measurement);
 }
 
@@ -171,10 +188,8 @@ std::optional<Control::TrackedPose2D>
 FeatureBasedBboxTracker::getFilteredTrackedPose2D() const {
   if (trackedBox_) {
     auto state_vec = stateKalmanFilter_->getState().value();
-    // yaw = atan2(vy, vx)
-    auto yaw = atan2(state_vec(3), state_vec(2));
     return Control::TrackedPose2D(state_vec(0), state_vec(1),
-        yaw, state_vec(2), state_vec(3), trackedBox_->omega());
+        state_vec(2), state_vec(3), state_vec(4), state_vec(5));
   }
   return std::nullopt;
 }

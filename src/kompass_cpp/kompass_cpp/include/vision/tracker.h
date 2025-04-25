@@ -15,6 +15,8 @@ class FeatureBasedBboxTracker{
     public:
       FeatureBasedBboxTracker(const float& time_step, const float& e_pos, const float& e_vel, const float& e_acc);
 
+      static constexpr int StateSize = 9;
+
       using FeaturesVector = Eigen::Vector<float, 9>;
 
       bool setInitialTracking(const TrackedBbox3D& bBox);
