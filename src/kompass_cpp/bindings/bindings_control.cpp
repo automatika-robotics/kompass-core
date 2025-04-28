@@ -258,8 +258,7 @@ void bindings_control(py::module_ &m) {
            py::arg("cost_weights"), py::arg("max_num_threads") = 1,
            py::arg("config") = Control::VisionDWA::VisionDWAConfig(),
            py::arg("use_tracker") = true)
-      .def("get_pure_tracking_ctrl", &Control::VisionDWA::getPureTrackingCtrl)
-      .def("set_inital_tracking", &Control::VisionDWA::setInitialTracking)
+      .def("set_initial_tracking", &Control::VisionDWA::setInitialTracking)
       .def("get_tracking_ctrl",
            py::overload_cast<const std::vector<Bbox3D> &,
                              const Control::Velocity2D &,
@@ -268,6 +267,17 @@ void bindings_control(py::module_ &m) {
                    std::vector<Eigen::Vector3f>>))
       .def("get_tracking_ctrl",
            py::overload_cast<const std::vector<Bbox3D> &,
+                             const Control::Velocity2D &,
+                             const Control::LaserScan &>(
+               &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>))
+      .def("get_tracking_ctrl",
+           py::overload_cast<const Control::TrackedPose2D &,
+                             const Control::Velocity2D &,
+                             const std::vector<Eigen::Vector3f> &>(
+               &Control::VisionDWA::getTrackingCtrl<
+                   std::vector<Eigen::Vector3f>>))
+      .def("get_tracking_ctrl",
+           py::overload_cast<const Control::TrackedPose2D &,
                              const Control::Velocity2D &,
                              const Control::LaserScan &>(
                &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>));

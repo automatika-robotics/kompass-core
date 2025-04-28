@@ -246,7 +246,7 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
   }
 
   Path::PathPosition closest_position;
-  closest_position.index = point_index - 1;
+  closest_position.index = point_index;
   closest_position.segment_index = segment_index;
   closest_position.segment_length = segment_position;
   closest_position.state = closest_point;
@@ -273,12 +273,14 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 void Follower::determineTarget() {
 
   currentTrackedTarget_ = std::make_unique<Target>();
-  // closestPosition = new Path::PathPosition();
-
-  // closest position is never updated
-  // OR If we reached end of segment or end of path -> Find new point
+  LOG_DEBUG("Closest point index on segment ", closestPosition->index,
+           " max index on segment is",
+           currentPath->segments[current_segment_index_].getSize() - 1,
+           " its segment length = ", closestPosition->segment_length);
+  // If closest position is never updated
+  // OR If we reached end of a segment or end of the path -> Find new segment then new point on segment
   if ((closestPosition->segment_length <= 0.0) ||
-      (closestPosition->segment_index >= currentPath->getSize() - 1) ||
+      (closestPosition->index >= currentPath->segments[current_segment_index_].getSize() - 1) ||
       (closestPosition->segment_length >= 1.0)) {
     *closestPosition = findClosestPathPoint();
   }
@@ -287,7 +289,7 @@ void Follower::determineTarget() {
     *closestPosition =
         findClosestPointOnSegment(closestPosition->segment_index);
   }
-  currentTrackedTarget_->segment_index = closestPosition->segment_index;
+  currentTrackedTarget_->segment_index = current_segment_index_;
   currentTrackedTarget_->position_in_segment = closestPosition->segment_length;
 
   currentTrackedTarget_->movement = closestPosition->state;

@@ -351,7 +351,7 @@ class DWA(FollowerTemplate):
     @property
     def control_till_horizon(
         self,
-    ) -> Optional[List[kompass_cpp.types.TrajectoryVelocities2D]]:
+    ) -> Optional[kompass_cpp.types.TrajectoryVelocities2D]:
         """
         Getter of the planner control result until the control horizon
 

@@ -11,9 +11,7 @@ from .dvz import DVZ, DVZConfig
 from .dwa import DWA, DWAConfig
 from .stanley import StanleyConfig, Stanley
 from .vision_follower import VisionFollower, VisionFollowerConfig
-from .vision_dwa import VisionDWAConfig
-from kompass_cpp.types import TrackedPose2D, Bbox3D
-from kompass_cpp.control import VisionDWA
+from .vision_dwa import VisionDWAConfig, VisionDWA
 
 ControllerType = FollowerTemplate
 
@@ -107,6 +105,4 @@ __all__ = [
     "VisionFollowerConfig",
     "VisionDWAConfig",
     "VisionDWA",
-    "TrackedPose2D",
-    "Bbox3D",
 ]
