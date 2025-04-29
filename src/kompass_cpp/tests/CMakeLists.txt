@@ -2,7 +2,10 @@
 set(MODULE_NAME kompass)
 
 find_package(nlohmann_json 3.2.0 REQUIRED)
+find_package(OpenCV REQUIRED)
 find_package(Boost COMPONENTS unit_test_framework REQUIRED)
+
+include_directories( ${OpenCV_INCLUDE_DIRS} )
 
 # Specify the location of the Python script
 set(PYTHON_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/trajectory_sampler_plt.py)
@@ -36,13 +39,18 @@ add_test(collisions_tests collisions_test)
 
 # Vision DWA test
 add_executable(vision_dwa_test vision_dwa_test.cpp)
-target_link_libraries(vision_dwa_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework)
-add_test(vision_dwa_tests vision_dwa_test)
+target_link_libraries(vision_dwa_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework ${OpenCV_LIBS})
+add_test(vision_tests vision_dwa_test)
 
 # Set path to the test image
 add_executable(vision_tracking_test vision_tracking_test.cpp)
 target_link_libraries(vision_tracking_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework nlohmann_json::nlohmann_json)
-add_test(vision_tracking_tests vision_tracking_test)
+add_test(vision_tests vision_tracking_test)
+
+# Set path to the test image
+add_executable(vision_detector_test vision_detector_test.cpp)
+target_link_libraries(vision_detector_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework ${OpenCV_LIBS})
+add_test(vision_tests vision_detector_test)
 
 # find sycl
 find_package(AdaptiveCpp)
