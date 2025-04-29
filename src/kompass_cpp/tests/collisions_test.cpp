@@ -1,4 +1,7 @@
 #include "test.h"
+#include <Eigen/Dense>
+#include <Eigen/src/Geometry/Quaternion.h>
+#include <array>
 #define BOOST_TEST_MODULE KOMPASS TESTS
 #include "utils/angles.h"
 #include "utils/collision_check.h"
@@ -63,8 +66,8 @@ BOOST_AUTO_TEST_CASE(test_FCL) {
   auto robotShapeType = CollisionChecker::ShapeType::BOX;
   std::vector<float> robotDimensions{0.4, 0.4, 1.0};
 
-  const std::array<float, 3> sensor_position_body{0.0, 0.0, 1.0};
-  const std::array<float, 4> sensor_rotation_body{0, 0, 0, 1};
+  const Eigen::Vector3f sensor_position_body{0.0, 0.0, 1.0};
+  const Eigen::Quaternionf sensor_rotation_body{0, 0, 0, 1};
 
   // Robot start state (pose)
   Path::State robotState(0.0, 0.0, 0.0, 0.0);
@@ -78,30 +81,26 @@ BOOST_AUTO_TEST_CASE(test_FCL) {
                                octreeRes);
 
   LOG_INFO("Testing collision checker using Laserscan data");
-
+  LOG_INFO("Running test with robot at ", robotState.x, ", ", robotState.y);
+  LOG_INFO("Scan Ranges ", scan_ranges[0], ", ", scan_ranges[1], ", ",
+           scan_ranges[2]);
   collChecker.updateState(robotState);
 
   bool res_false = collChecker.checkCollisions(scan_ranges, scan_angles);
-  LOG_INFO("Testing collision between: \nRobot at {x: ", robotState.x,
-           ", y: ", robotState.y, "}\n",
-           "and Laserscan with: ranges {1.0, 1.0, 1.0, 1.0} at angles {0, 0.1, "
-           "0.2, 3.14}, Collision: ",
-           res_false);
   BOOST_TEST(!res_false, "Collision Result should be FALSE Got: " << res_false);
+  std::cout << std::endl;
 
   robotState.x = 3.0;
   robotState.y = 5.0;
+  scan_ranges = {0.25, 0.5, 0.5};
+  LOG_INFO("Running test with robot at ", robotState.x, ", ", robotState.y);
+  LOG_INFO("Scan Ranges ", scan_ranges[0], ", ", scan_ranges[1], ", ",
+           scan_ranges[2]);
   collChecker.updateState(robotState);
 
-  scan_ranges = {0.25, 0.5, 0.5};
-
   bool res_true = collChecker.checkCollisions(scan_ranges, scan_angles);
-  LOG_INFO("Testing collision between: \nRobot at {x: ", robotState.x,
-           ", y: ", robotState.y, "}\n",
-           "and Laserscan with: ranges {0.2, 0.5, 0.5} at angles {0, 0.1, "
-           "0.2, 3.14} -> Collision: ",
-           res_true);
   BOOST_TEST(res_true, "Collision Result should be TRUE got: " << res_true);
+  std::cout << std::endl;
 
   LOG_INFO("Testing collision between: \nRobot at {x: ", robotState.x,
            ", y: ", robotState.y, "}\n", "and Pointcloud");
@@ -123,8 +122,8 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
   auto robotShapeType = CollisionChecker::ShapeType::BOX;
   std::vector<float> robotDimensions{0.51, 0.27, 0.4};
 
-  const std::array<float, 3> sensor_position_body{0.22, 0.0, 0.4};
-  const std::array<float, 4> sensor_rotation_body{0, 0, 0.99, 0.0};
+  const Eigen::Vector3f sensor_position_body{0.22, 0.0, 0.4};
+  const Eigen::Quaternionf sensor_rotation_body{0, 0, 0.99, 0.0};
 
   // Robot laserscan value
   std::vector<double> scan_angles;

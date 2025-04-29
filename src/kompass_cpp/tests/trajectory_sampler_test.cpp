@@ -6,10 +6,9 @@
 #include "test.h"
 #include "utils/logger.h"
 #include "utils/trajectory_sampler.h"
+#include <Eigen/Dense>
 #include <boost/dll/runtime_symbol_info.hpp> // for program_location
 #include <boost/filesystem.hpp>
-#include <cstddef>
-#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -61,8 +60,8 @@ void testTrajSampler() {
   auto robotShapeType = Kompass::CollisionChecker::ShapeType::BOX;
   std::vector<float> robotDimensions{0.3, 0.3, 1.0};
   // std::array<float, 3> sensorPositionWRTbody {0.0, 0.0, 1.0};
-  const std::array<float, 3> sensor_position_body{0.0, 0.0, 0.5};
-  const std::array<float, 4> sensor_rotation_body{0, 0, 0, 1};
+  const Eigen::Vector3f sensor_position_body{0.0, 0.0, 0.5};
+  const Eigen::Quaternionf sensor_rotation_body{0, 0, 0, 1};
 
   // Robot start state (pose)
   Path::State robotState(0.0, 0.0, 0.0, 0.0);

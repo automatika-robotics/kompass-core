@@ -1,6 +1,7 @@
 #include "vision/tracker.h"
 #include "datatypes/control.h"
 #include "datatypes/tracking.h"
+#include "utils/logger.h"
 #include <cmath>
 #include <math.h>
 
@@ -60,11 +61,12 @@ bool FeatureBasedBboxTracker::setInitialTracking(const TrackedBbox3D &bBox) {
 }
 
 bool FeatureBasedBboxTracker::setInitialTracking(const Bbox3D &bBox) {
+  LOG_DEBUG("Setting initial tracked box");
   trackedBox_ = std::make_unique<TrackedBbox3D>(bBox);
   Eigen::Matrix<float, StateSize, 1> state_vec =
       Eigen::Matrix<float, StateSize, 1>::Zero();
-  state_vec(0) = bBox.center[0];
-  state_vec(1) = bBox.center[1];
+  state_vec(0) = bBox.center.x();
+  state_vec(1) = bBox.center.y();
   stateKalmanFilter_->setInitialState(state_vec);
   return true;
 }

@@ -2,13 +2,13 @@
 
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
-#include "datatypes/path.h"
 #include "datatypes/tracking.h"
-#include "datatypes/trajectory.h"
 #include "dwa.h"
 #include "utils/logger.h"
+#include "vision/depth_detector.h"
 #include "vision/tracker.h"
 #include <Eigen/Dense>
+#include <Eigen/src/Core/Matrix.h>
 #include <cmath>
 #include <memory>
 #include <tuple>
@@ -58,6 +58,17 @@ public:
       addParameter("error_pose", Parameter(0.05, 1e-9, 1e9));
       addParameter("error_vel", Parameter(0.05, 1e-9, 1e9));
       addParameter("error_acc", Parameter(0.05, 1e-9, 1e9));
+
+      // Depth parameters
+      addParameter("depth_conversion_factor",
+                   Parameter(1e-3, 1e-9, 1e9,
+                             "Factor to convert depth image values to meters"));
+      addParameter(
+          "min_depth",
+          Parameter(0.0, 0.0, 1e3, "Range of interest minimum depth value"));
+      addParameter(
+          "max_depth",
+          Parameter(1e3, 1e-3, 1e9, "Range of interest minimum depth value"));
     }
     bool enable_search() const { return getParameter<bool>("enable_search"); }
     double control_time_step() const {
@@ -96,6 +107,13 @@ public:
     double e_pose() const { return getParameter<double>("error_pose"); }
     double e_vel() const { return getParameter<double>("error_vel"); }
     double e_acc() const { return getParameter<double>("error_acc"); }
+    double depth_conversion_factor() const {
+      return getParameter<double>("depth_conversion_factor");
+    }
+    Eigen::Vector2f depth_range() const {
+      return Eigen::Vector2f{getParameter<double>("min_depth"),
+                             getParameter<double>("max_depth")};
+    }
   };
 
   VisionDWA(const ControlType &robotCtrlType,
@@ -103,16 +121,22 @@ public:
             const int maxAngularSamples,
             const CollisionChecker::ShapeType &robotShapeType,
             const std::vector<float> &robotDimensions,
-            const std::array<float, 3> &sensor_position_body,
-            const std::array<float, 4> &sensor_rotation_body,
+            const Eigen::Vector3f &proximity_sensor_position_body,
+            const Eigen::Quaternionf &proximity_sensor_rotation_body,
+            const Eigen::Vector3f &vision_sensor_position_body,
+            const Eigen::Quaternionf &vision_sensor_rotation_body,
             const double octreeRes,
             const CostEvaluator::TrajectoryCostsWeights &costWeights,
             const int maxNumThreads = 1,
-            const VisionDWAConfig &config = VisionDWAConfig(),
-            const bool use_tracker = true);
+            const VisionDWAConfig &config = VisionDWAConfig());
 
   // Default Destructor
   ~VisionDWA() = default;
+
+  void setCameraIntrinsics(const float focal_length_x,
+                           const float focal_length_y,
+                           const float principal_point_x,
+                           const float principal_point_y);
 
   /**
    * @brief Get the Pure Tracking Control Command
@@ -136,8 +160,8 @@ public:
   Control::TrajSearchResult getTrackingCtrl(const TrackedPose2D &tracked_pose,
                                             const Velocity2D &current_vel,
                                             const T &sensor_points) {
-    LOG_INFO("Tracked pose: ", tracked_pose.x(),
-             tracked_pose.y(), tracked_pose.yaw());
+    LOG_DEBUG("Tracked pose: ", tracked_pose.x(), tracked_pose.y(),
+              tracked_pose.yaw());
     Trajectory2D ref_traj;
     bool has_collisions;
     std::tie(ref_traj, has_collisions) =
@@ -152,7 +176,7 @@ public:
       latest_velocity_command_ = ref_traj.velocities.getFront();
       return result;
     } else {
-      LOG_INFO("USING DWA SAMPLING");
+      LOG_DEBUG("USING DWA SAMPLING");
       // The tracking sample has collisions -> use DWA-like sampling and control
       Path::Path ref_tracking_path(ref_traj.path.x, ref_traj.path.y,
                                    ref_traj.path.z,
@@ -179,21 +203,13 @@ public:
   Control::TrajSearchResult
   getTrackingCtrl(const std::vector<Bbox3D> &detected_boxes,
                   const Velocity2D &current_vel, const T &sensor_points) {
-    if (!tracker_) {
-      throw std::invalid_argument(
-          "Tracker is not initialized. Cannot use "
-          "'VisionDWA::getTrackingCtrl' "
-          "directly with "
-          "'std::vector<Bbox3D> &detected_boxes' input. Initialize VisionDWA "
-          "with 'use_tracker' = true");
-    }
     if (tracker_->trackerInitialized()) {
       // Update the tracker with the detected boxes
       tracker_->updateTracking(detected_boxes);
       auto tracked_pose = tracker_->getFilteredTrackedPose2D();
       if (tracked_pose) {
         return this->getTrackingCtrl<T>(tracked_pose.value(), current_vel,
-                                     sensor_points);
+                                        sensor_points);
       } else {
         LOG_WARNING("Tracker failed to find the target");
         // Return false for trajectory found
@@ -206,6 +222,46 @@ public:
     }
   };
 
+  template <typename T>
+  Control::TrajSearchResult
+  getTrackingCtrl(const Eigen::MatrixXi &aligned_depth_img,
+                  const std::vector<Bbox2D> &detected_boxes_2d,
+                  const Velocity2D &current_vel, const T &sensor_points) {
+    if (!detector_) {
+      throw std::runtime_error(
+          "DepthDetector is not initialized with the camera intrinsics. Call "
+          "'VisionDWA::setCameraIntrinsics' first");
+    }
+    if (!tracker_->trackerInitialized()) {
+      throw std::runtime_error(
+          "Tracker is not initialized with an initial tracking target. Call "
+          "'VisionDWA::setInitialTracking' first");
+    }
+    // Send current state to the detector
+    detector_->updateState(currentState);
+    detector_->updateBoxes(aligned_depth_img, detected_boxes_2d);
+    auto boxes_3d = detector_->get3dDetections();
+
+    if (boxes_3d) {
+      LOG_DEBUG("Got 3D boxes from 2d");
+      // Update the tracker with the detected boxes
+      tracker_->updateTracking(boxes_3d.value());
+      auto tracked_pose = tracker_->getFilteredTrackedPose2D();
+      if (tracked_pose) {
+        return this->getTrackingCtrl<T>(tracked_pose.value(), current_vel,
+                                        sensor_points);
+      } else {
+        LOG_WARNING("Tracker failed to find the target");
+        // Return false for trajectory found
+        return TrajSearchResult();
+      }
+    }else{
+      LOG_WARNING("Detector failed to find 3D boxes");
+      // Return false for trajectory found
+      return TrajSearchResult();
+    }
+  };
+
   /**
    * @brief Set the initial image position of the target to be tracked
    *
@@ -215,13 +271,29 @@ public:
    * @return true
    * @return false
    */
-  bool setInitialTracking(const int &pose_x_img, const int &pose_y_img,
+  bool setInitialTracking(const int pose_x_img, const int pose_y_img,
                           const std::vector<Bbox3D> &detected_boxes);
+
+  /**
+   * @brief  Set the initial image position of the target to be tracked using 2D
+   * detections
+   *
+   * @param pose_x_img
+   * @param pose_y_img
+   * @param detected_boxes_2d
+   * @return true
+   * @return false
+   */
+  bool setInitialTracking(const int pose_x_img, const int pose_y_img,
+                          const Eigen::MatrixXi &aligned_depth_image,
+                          const std::vector<Bbox2D> &detected_boxes_2d);
 
 private:
   ControlLimitsParams ctrl_limits_;
   VisionDWAConfig config_;
   std::unique_ptr<FeatureBasedBboxTracker> tracker_;
+  std::unique_ptr<DepthDetector> detector_;
+  Eigen::Isometry3f vision_sensor_tf_;
 
   /**
    * @brief Get the Tracking Reference Trajectory Segment and if this segment is
@@ -235,7 +307,7 @@ private:
   template <typename T>
   std::tuple<Trajectory2D, bool>
   getTrackingReferenceSegment(const TrackedPose2D &tracking_pose,
-                              const T &sensor_points){
+                              const T &sensor_points) {
     int step = 0;
 
     Trajectory2D ref_traj(config_.prediction_horizon());
@@ -267,10 +339,10 @@ private:
     bool has_collisions =
         trajSampler->checkStatesFeasibility(states, sensor_points);
 
-    LOG_INFO("Found reference traj with collisions: ", has_collisions);
+    LOG_DEBUG("Found reference traj with collisions: ", has_collisions);
 
     return std::make_tuple(ref_traj, has_collisions);
-                              };
+  };
   //
 };
 

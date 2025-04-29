@@ -7,6 +7,27 @@
 
 namespace Kompass {
 
+
+struct Bbox2D {
+  Eigen::Vector2i top_corner = {0, 0};
+  Eigen::Vector2i size = {0, 0};
+
+  Bbox2D() {};
+
+  Bbox2D(const Bbox2D &box) : top_corner(box.top_corner), size(box.size){};
+
+  Bbox2D(const Eigen::Vector2i top_corner, Eigen::Vector2i size)
+      : top_corner(top_corner), size(size){};
+
+  Eigen::Vector2i getXLimits() const {
+    return {top_corner.x(), top_corner.x() + size.x()};
+  };
+
+  Eigen::Vector2i getYLimits() const {
+    return {top_corner.y(), top_corner.y() + size.y()};
+  };
+};
+
 struct Bbox3D {
   Eigen::Vector3f center = {0.0, 0.0, 0.0};
   Eigen::Vector3f size = {0.0, 0.0, 0.0};
@@ -26,6 +47,17 @@ struct Bbox3D {
       : center(center), size(size),
         center_img_frame(center_img_frame),
         size_img_frame(size_img_frame), pc_points(pc_points){};
+
+  Bbox3D(const Eigen::Vector3f &center, const Eigen::Vector3f &size,
+         const Bbox2D &box2d, std::vector<Eigen::Vector3f> pc_points = {})
+      : center(center), size(size), center_img_frame(box2d.top_corner + Eigen::Vector2i{box2d.size.x() / 2, box2d.size.y() / 2}),
+        size_img_frame(box2d.size), pc_points(pc_points){};
+
+  Bbox3D(const Bbox2D &box2d)
+      : center_img_frame(
+            box2d.top_corner +
+            Eigen::Vector2i{box2d.size.x() / 2, box2d.size.y() / 2}),
+        size_img_frame(box2d.size) {};
 
   Eigen::Vector2f getXLimitsImg() const {
     return {

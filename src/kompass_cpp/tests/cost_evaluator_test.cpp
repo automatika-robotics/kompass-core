@@ -175,8 +175,8 @@ struct TestConfig {
   ControlLimitsParams controlLimits;
   CollisionChecker::ShapeType robotShapeType;
   std::vector<float> robotDimensions;
-  std::array<float, 3> sensor_position_body;
-  std::array<float, 4> sensor_rotation_body;
+  Eigen::Vector3f sensor_position_body;
+  Eigen::Quaternionf sensor_rotation_body;
   CostEvaluator::TrajectoryCostsWeights costWeights;
   CostEvaluator costEval;
 

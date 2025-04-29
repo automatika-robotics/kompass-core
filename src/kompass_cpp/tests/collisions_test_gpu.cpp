@@ -1,4 +1,5 @@
 #include "test.h"
+#include <Eigen/Dense>
 #define BOOST_TEST_MODULE KOMPASS TESTS
 #include "collisions_test.cpp"
 #include "utils/collision_check.h"
@@ -15,8 +16,8 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
   auto robotShapeType = CollisionChecker::ShapeType::BOX;
   std::vector<float> robotDimensions{0.51, 0.27, 0.4};
 
-  const std::array<float, 3> sensor_position_body{0.22, 0.0, 0.4};
-  const std::array<float, 4> sensor_rotation_body{0, 0, 0.99, 0.0};
+  const Eigen::Vector3f sensor_position_body{0.22, 0.0, 0.4};
+  const Eigen::Quaternionf sensor_rotation_body{0, 0, 0.99, 0.0};
 
   // Robot laserscan value
   std::vector<double> scan_angles;
