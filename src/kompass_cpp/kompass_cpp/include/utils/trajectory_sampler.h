@@ -7,7 +7,6 @@
 #include "datatypes/trajectory.h"
 #include <array>
 #include <cmath>
-#include <functional>
 #include <memory>
 #include <vector>
 
@@ -79,16 +78,16 @@ public:
                     int maxAngularSamples,
                     const CollisionChecker::ShapeType robotShapeType,
                     const std::vector<float> robotDimensions,
-                    const std::array<float, 3> &sensor_position_body,
-                    const std::array<float, 4> &sensor_rotation_body,
+                    const Eigen::Vector3f &sensor_position_body,
+                    const Eigen::Quaternionf &sensor_rotation_body,
                     const double octreeRes, const int maxNumThreads = 1);
 
   TrajectorySampler(TrajectorySamplerParameters config,
                     ControlLimitsParams controlLimits, ControlType controlType,
                     const CollisionChecker::ShapeType robotShapeType,
                     const std::vector<float> robotDimensions,
-                    const std::array<float, 3> &sensor_position_body,
-                    const std::array<float, 4> &sensor_rotation_body,
+                    const Eigen::Vector3f &sensor_position_body,
+                    const Eigen::Quaternionf &sensor_rotation_body,
                     const int maxNumThreads = 1);
 
   /**

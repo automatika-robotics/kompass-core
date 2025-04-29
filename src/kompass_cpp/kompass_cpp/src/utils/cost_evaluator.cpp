@@ -2,16 +2,13 @@
 #include "utils/cost_evaluator.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
-#include <Eigen/src/Core/Matrix.h>
-#include <Eigen/src/Geometry/Transform.h>
-#include <cstddef>
-#include <cstdlib>
+#include <Eigen/Dense>
 #include <vector>
 
 namespace Kompass {
 
 namespace Control {
-CostEvaluator::CostEvaluator(TrajectoryCostsWeights& costsWeights,
+CostEvaluator::CostEvaluator(TrajectoryCostsWeights &costsWeights,
                              ControlLimitsParams ctrLimits,
                              size_t maxNumTrajectories,
                              size_t numPointsPerTrajectory,
@@ -23,37 +20,35 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights& costsWeights,
                 static_cast<float>(ctrLimits.omegaParams.maxAcceleration)};
 }
 
-CostEvaluator::CostEvaluator(TrajectoryCostsWeights& costsWeights,
-                             const std::array<float, 3> &sensor_position_body,
-                             const std::array<float, 4> &sensor_rotation_body,
+CostEvaluator::CostEvaluator(TrajectoryCostsWeights &costsWeights,
+                             const Eigen::Vector3f &sensor_position_body,
+                             const Eigen::Quaternionf &sensor_rotation_body,
                              ControlLimitsParams ctrLimits,
                              size_t maxNumTrajectories,
                              size_t numPointsPerTrajectory,
                              size_t maxRefPathSegmentSize) {
 
   sensor_tf_body_ =
-      getTransformation(Eigen::Quaternionf(sensor_rotation_body.data()),
-                        Eigen::Vector3f(sensor_position_body.data()));
+      getTransformation(sensor_rotation_body, sensor_position_body);
   this->costWeights = std::make_unique<TrajectoryCostsWeights>(costsWeights);
   accLimits_ = {static_cast<float>(ctrLimits.velXParams.maxAcceleration),
                 static_cast<float>(ctrLimits.velYParams.maxAcceleration),
                 static_cast<float>(ctrLimits.omegaParams.maxAcceleration)};
 }
 
-void CostEvaluator::updateCostWeights(TrajectoryCostsWeights& costsWeights) {
+void CostEvaluator::updateCostWeights(TrajectoryCostsWeights &costsWeights) {
   this->costWeights = std::make_unique<TrajectoryCostsWeights>(costsWeights);
 }
 
 CostEvaluator::~CostEvaluator() {
 
-  //Clear custom cost pointers
+  // Clear custom cost pointers
   customTrajCostsPtrs_.clear();
 };
 
 TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     const std::unique_ptr<TrajectorySamples2D> &trajs,
-    const Path::Path* reference_path,
-    const Path::Path &tracked_segment) {
+    const Path::Path *reference_path, const Path::Path &tracked_segment) {
   double weight;
   float total_cost;
   float ref_path_length;
@@ -66,12 +61,14 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     if ((ref_path_length = reference_path->totalPathLength()) > 0.0) {
       if ((weight = costWeights->getParameter<double>("goal_distance_weight")) >
           0.0) {
-        float goalCost = goalCostFunc(traj, reference_path->getEnd(), ref_path_length);
+        float goalCost =
+            goalCostFunc(traj, reference_path->getEnd(), ref_path_length);
         total_cost += weight * goalCost;
       }
       if ((weight = costWeights->getParameter<double>(
                "reference_path_distance_weight")) > 0.0) {
-        float refPathCost = pathCostFunc(traj, tracked_segment, tracked_segment.totalPathLength());
+        float refPathCost = pathCostFunc(traj, tracked_segment,
+                                         tracked_segment.totalPathLength());
         total_cost += weight * refPathCost;
       }
     }

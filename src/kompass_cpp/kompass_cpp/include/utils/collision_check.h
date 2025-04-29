@@ -2,8 +2,6 @@
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
-#include <Eigen/src/Core/Matrix.h>
-#include <Eigen/src/Geometry/Transform.h>
 #include <memory>
 #include <vector>
 
@@ -50,8 +48,8 @@ public:
    */
   CollisionChecker(const ShapeType robot_shape_type,
                    const std::vector<float> &robot_dimensions,
-                   const std::array<float, 3> &sensor_position_body,
-                   const std::array<float, 4> &sensor_rotation_body,
+                   const Eigen::Vector3f &sensor_position_body,
+                   const Eigen::Quaternionf &sensor_rotation_body,
                    const double octree_resolution = 0.01);
 
   /**

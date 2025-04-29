@@ -4,7 +4,6 @@
 #include "utils/spline.h"
 #include <Eigen/Dense>
 #include <cmath>
-#include <math.h>
 #include <vector>
 
 namespace Path {

@@ -63,8 +63,8 @@ public:
                 ControlLimitsParams ctrLimits, size_t maxNumTrajectories,
                 size_t numPointsPerTrajectory, size_t maxRefPathSegmentSize);
   CostEvaluator(TrajectoryCostsWeights &costsWeights,
-                const std::array<float, 3> &sensor_position_body,
-                const std::array<float, 4> &sensor_rotation_body,
+                const Eigen::Vector3f &sensor_position_body,
+                const Eigen::Quaternionf &sensor_rotation_body,
                 ControlLimitsParams ctrLimits, size_t maxNumTrajectories,
                 size_t numPointsPerTrajectory, size_t maxRefPathSegmentSize);
 

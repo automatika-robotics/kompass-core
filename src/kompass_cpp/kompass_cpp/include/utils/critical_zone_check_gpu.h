@@ -18,8 +18,8 @@ public:
   // Constructor
   CriticalZoneCheckerGPU(const CollisionChecker::ShapeType robot_shape_type,
                          const std::vector<float> &robot_dimensions,
-                         const std::array<float, 3> &sensor_position_body,
-                         const std::array<float, 4> &sensor_rotation_body,
+                         const Eigen::Vector3f &sensor_position_body,
+                         const Eigen::Quaternionf &sensor_rotation_body,
                          const float critical_angle,
                          const float critical_distance,
                          const std::vector<double> &angles)
@@ -44,9 +44,11 @@ public:
     m_devicePtrBackward =
         sycl::malloc_device<size_t>(indicies_backward_.size(), m_q);
     m_q.memcpy(m_devicePtrForward, indicies_forward_.data(),
-               sizeof(size_t) * indicies_forward_.size()).wait();
+               sizeof(size_t) * indicies_forward_.size())
+        .wait();
     m_q.memcpy(m_devicePtrBackward, indicies_backward_.data(),
-               sizeof(size_t) * indicies_backward_.size()).wait();
+               sizeof(size_t) * indicies_backward_.size())
+        .wait();
 
     m_scan_in_zone =
         std::max(indicies_forward_.size(), indicies_backward_.size());

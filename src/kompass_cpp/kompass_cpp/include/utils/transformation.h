@@ -23,11 +23,11 @@ getTransformation(const RotationType &rotation_src_to_goal,
   // Create a transformation matrix
   Eigen::Isometry3f transform_src_to_goal = Eigen::Isometry3f::Identity();
 
+  // Set translation
+  transform_src_to_goal.translate(translation_src_to_goal);
+
   // Set rotation based on the type of RotationType
   transform_src_to_goal.rotate(rotation_src_to_goal);
-
-  // Set translation
-  transform_src_to_goal.pretranslate(translation_src_to_goal);
 
   return transform_src_to_goal;
 }

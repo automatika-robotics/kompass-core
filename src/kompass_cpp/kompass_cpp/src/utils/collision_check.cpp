@@ -1,8 +1,7 @@
 #include "utils/collision_check.h"
 #include "utils/logger.h"
 #include "utils/transformation.h"
-#include <Eigen/src/Core/Matrix.h>
-#include <Eigen/src/Geometry/Transform.h>
+#include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
 #include <fcl/broadphase/default_broadphase_callbacks.h>
@@ -19,8 +18,8 @@ namespace Kompass {
 CollisionChecker::CollisionChecker(
     const ShapeType robot_shape_type,
     const std::vector<float> &robot_dimensions,
-    const std::array<float, 3> &sensor_position_body,
-    const std::array<float, 4> &sensor_rotation_body,
+    const Eigen::Vector3f &sensor_position_body,
+    const Eigen::Quaternionf &sensor_rotation_body,
     const double octree_resolution) {
 
   collManager_ = std::make_unique<fcl::DynamicAABBTreeCollisionManagerf>();
@@ -63,8 +62,7 @@ CollisionChecker::CollisionChecker(
 
   // Init the sensor position w.r.t body
   sensor_tf_body_ =
-      getTransformation(Eigen::Quaternionf(sensor_rotation_body.data()),
-                        Eigen::Vector3f(sensor_position_body.data()));
+      getTransformation(sensor_rotation_body, sensor_position_body);
 
   sensor_tf_world_ = sensor_tf_body_;
 }
@@ -104,6 +102,9 @@ void CollisionChecker::generateBoxesFromOctomap(
                                   sensor_tf_world_.translation() +
                                       Eigen::Vector3f(x, y, z)); // translation
     obj->computeAABB();
+    // Uncomment for debug
+    // auto trans = obj->getTransform();
+    // std::cout << "Adding box with translation " << trans.translation() << std::endl;
     boxes.push_back(obj);
   }
 
@@ -111,8 +112,6 @@ void CollisionChecker::generateBoxesFromOctomap(
 }
 
 void CollisionChecker::updateOctreePtr() {
-  // Create fcl::OcTree from octomap::OcTree
-  // fclTree_ = new fcl::OcTreef(octTree_);
   fclTree_.reset(new fcl::OcTreef(octTree_));
 
   // Transform the tree into a set of boxes and generate collision objects in
@@ -166,7 +165,7 @@ void CollisionChecker::convertPointCloudToOctomap(
     sensor_tf_world_ = Eigen::Isometry3f::Identity();
   } else {
     // Transform the sensor position to the world frame
-    sensor_tf_world_ = sensor_tf_body_ * body->tf;
+    sensor_tf_world_ = body->tf * sensor_tf_body_;
   }
 
   // Clear old data
@@ -192,7 +191,7 @@ void CollisionChecker::convertPointCloudToOctomap(
     sensor_tf_world_ = Eigen::Isometry3f::Identity();
   } else {
     // Transform the sensor position to the world frame
-    sensor_tf_world_ = sensor_tf_body_ * body->tf;
+    sensor_tf_world_ = body->tf * sensor_tf_body_;
   }
 
   // Clear old data
@@ -215,7 +214,7 @@ void CollisionChecker::convertLaserScanToOctomap(
   // Transform the sensor position to the world frame
   // NOTE: Transformation will be applied to the points when generating the
   // collision boxes
-  sensor_tf_world_ = sensor_tf_body_ * body->tf;
+  sensor_tf_world_ = body->tf * sensor_tf_body_;
 
   // Clear old data
   octTree_->clear();
@@ -230,7 +229,6 @@ void CollisionChecker::convertLaserScanToOctomap(
     x = ranges[i] * cos(angle);
     y = ranges[i] * sin(angle);
     z = height_in_sensor;
-
     octomapCloud_.push_back(x, y, z);
   }
 
@@ -246,7 +244,7 @@ void CollisionChecker::convertLaserScanToOctomap(
   // Transform the sensor position to the world frame
   // NOTE: Transformation will be applied to the points when generating the
   // collision boxes
-  sensor_tf_world_ = sensor_tf_body_ * body->tf;
+  sensor_tf_world_ = body->tf * sensor_tf_body_;
 
   // Clear old data
   octTree_->clear();

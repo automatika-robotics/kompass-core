@@ -3,10 +3,8 @@
 #include "datatypes/trajectory.h"
 #include "utils/cost_evaluator.h"
 #include "utils/logger.h"
-#include <Eigen/src/Core/Matrix.h>
-#include <Eigen/src/Geometry/Transform.h>
-#include <cstddef>
-#include <cstdlib>
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
 #include <limits>
 #include <sycl/sycl.hpp>
 #include <vector>
@@ -33,16 +31,15 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights &costsWeights,
 }
 
 CostEvaluator::CostEvaluator(TrajectoryCostsWeights &costsWeights,
-                             const std::array<float, 3> &sensor_position_body,
-                             const std::array<float, 4> &sensor_rotation_body,
+                             const Eigen::Vector3f &sensor_position_body,
+                             const Eigen::Quaternionf &sensor_rotation_body,
                              ControlLimitsParams ctrLimits,
                              size_t maxNumTrajectories,
                              size_t numPointsPerTrajectory,
                              size_t maxRefPathSegmentSize) {
 
   sensor_tf_body_ =
-      getTransformation(Eigen::Quaternionf(sensor_rotation_body.data()),
-                        Eigen::Vector3f(sensor_position_body.data()));
+      getTransformation(sensor_rotation_body, sensor_position_body);
   this->costWeights = std::make_unique<TrajectoryCostsWeights>(costsWeights);
 
   accLimits_ = {static_cast<float>(ctrLimits.velXParams.maxAcceleration),
@@ -193,7 +190,7 @@ CostEvaluator::~CostEvaluator() {
 
 TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     const std::unique_ptr<TrajectorySamples2D> &trajs,
-    const Path::Path* reference_path, const Path::Path &tracked_segment) {
+    const Path::Path *reference_path, const Path::Path &tracked_segment) {
 
   try {
     double weight;
@@ -228,11 +225,9 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
       if ((weight = costWeights->getParameter<double>("goal_distance_weight")) >
           0.0) {
         auto last_point = reference_path->getEnd();
-        m_deviceRefPathEnd = sycl::vec(last_point.x(),
-                                       last_point.y(),
-                                       last_point.z());
-        events.push_back(goalCostFunc(trajs_size,
-                                      ref_path_length, weight));
+        m_deviceRefPathEnd =
+            sycl::vec(last_point.x(), last_point.y(), last_point.z());
+        events.push_back(goalCostFunc(trajs_size, ref_path_length, weight));
       }
       if ((weight = costWeights->getParameter<double>(
                "reference_path_distance_weight")) > 0.0) {

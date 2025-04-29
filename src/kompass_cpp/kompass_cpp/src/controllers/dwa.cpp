@@ -3,8 +3,6 @@
 #include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
-#include <algorithm>
-#include <array>
 #include <cmath>
 #include <memory>
 #include <stdexcept>
@@ -17,9 +15,8 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
          int maxLinearSamples, int maxAngularSamples,
          const CollisionChecker::ShapeType robotShapeType,
          const std::vector<float> robotDimensions,
-         const std::array<float, 3> &sensor_position_body,
-         const std::array<float, 4> &sensor_rotation_body,
-         const double octreeRes,
+         const Eigen::Vector3f &sensor_position_body,
+         const Eigen::Quaternionf &sensor_rotation_body, const double octreeRes,
          CostEvaluator::TrajectoryCostsWeights costWeights,
          const int maxNumThreads)
     : Follower() {
@@ -43,8 +40,8 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
          ControlLimitsParams controlLimits, ControlType controlType,
          const CollisionChecker::ShapeType robotShapeType,
          const std::vector<float> robotDimensions,
-         const std::array<float, 3> &sensor_position_body,
-         const std::array<float, 4> &sensor_rotation_body,
+         const Eigen::Vector3f &sensor_position_body,
+         const Eigen::Quaternionf &sensor_rotation_body,
          CostEvaluator::TrajectoryCostsWeights costWeights,
          const int maxNumThreads)
     : Follower() {
@@ -64,17 +61,17 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
   }
 }
 
-void DWA::configure(ControlLimitsParams controlLimits,
-                      ControlType controlType, double timeStep,
-                      double predictionHorizon, double controlHorizon,
-                      int maxLinearSamples, int maxAngularSamples,
-                      const CollisionChecker::ShapeType robotShapeType,
-                      const std::vector<float> robotDimensions,
-                      const std::array<float, 3> &sensor_position_body,
-                      const std::array<float, 4> &sensor_rotation_body,
-                      const double octreeRes,
-                      CostEvaluator::TrajectoryCostsWeights costWeights,
-                      const int maxNumThreads) {
+void DWA::configure(ControlLimitsParams controlLimits, ControlType controlType,
+                    double timeStep, double predictionHorizon,
+                    double controlHorizon, int maxLinearSamples,
+                    int maxAngularSamples,
+                    const CollisionChecker::ShapeType robotShapeType,
+                    const std::vector<float> robotDimensions,
+                    const Eigen::Vector3f &sensor_position_body,
+                    const Eigen::Quaternionf &sensor_rotation_body,
+                    const double octreeRes,
+                    CostEvaluator::TrajectoryCostsWeights costWeights,
+                    const int maxNumThreads) {
   trajSampler = std::make_unique<TrajectorySampler>(
       controlLimits, controlType, timeStep, predictionHorizon, controlHorizon,
       maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
@@ -88,14 +85,13 @@ void DWA::configure(ControlLimitsParams controlLimits,
 }
 
 void DWA::configure(TrajectorySampler::TrajectorySamplerParameters config,
-                      ControlLimitsParams controlLimits,
-                      ControlType controlType,
-                      const CollisionChecker::ShapeType robotShapeType,
-                      const std::vector<float> robotDimensions,
-                      const std::array<float, 3> &sensor_position_body,
-                      const std::array<float, 4> &sensor_rotation_body,
-                      CostEvaluator::TrajectoryCostsWeights costWeights,
-                      const int maxNumThreads) {
+                    ControlLimitsParams controlLimits, ControlType controlType,
+                    const CollisionChecker::ShapeType robotShapeType,
+                    const std::vector<float> robotDimensions,
+                    const Eigen::Vector3f &sensor_position_body,
+                    const Eigen::Quaternionf &sensor_rotation_body,
+                    CostEvaluator::TrajectoryCostsWeights costWeights,
+                    const int maxNumThreads) {
   trajSampler = std::make_unique<TrajectorySampler>(
       config, controlLimits, controlType, robotShapeType, robotDimensions,
       sensor_position_body, sensor_rotation_body, maxNumThreads);

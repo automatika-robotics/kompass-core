@@ -7,6 +7,7 @@
 #include "follower.h"
 #include "utils/cost_evaluator.h"
 #include "utils/trajectory_sampler.h"
+#include <Eigen/Dense>
 #include <memory>
 #include <vector>
 
@@ -23,8 +24,8 @@ public:
       int maxLinearSamples, int maxAngularSamples,
       const CollisionChecker::ShapeType robotShapeType,
       const std::vector<float> robotDimensions,
-      const std::array<float, 3> &sensor_position_body,
-      const std::array<float, 4> &sensor_rotation_body, const double octreeRes,
+      const Eigen::Vector3f &sensor_position_body,
+      const Eigen::Quaternionf &sensor_rotation_body, const double octreeRes,
       CostEvaluator::TrajectoryCostsWeights costWeights,
       const int maxNumThreads = 1);
 
@@ -32,8 +33,8 @@ public:
       ControlLimitsParams controlLimits, ControlType controlType,
       const CollisionChecker::ShapeType robotShapeType,
       const std::vector<float> robotDimensions,
-      const std::array<float, 3> &sensor_position_body,
-      const std::array<float, 4> &sensor_rotation_body,
+      const Eigen::Vector3f &sensor_position_body,
+      const Eigen::Quaternionf &sensor_rotation_body,
       CostEvaluator::TrajectoryCostsWeights costWeights,
       const int maxNumThreads = 1);
 
@@ -49,25 +50,25 @@ public:
    */
   // void reconfigure(DWAConfig &cfg);
   void configure(ControlLimitsParams controlLimits, ControlType controlType,
-                   double timeStep, double predictionHorizon,
-                   double controlHorizon, int maxLinearSamples,
-                   int maxAngularSamples,
-                   const CollisionChecker::ShapeType robotShapeType,
-                   const std::vector<float> robotDimensions,
-                   const std::array<float, 3> &sensor_position_body,
-                   const std::array<float, 4> &sensor_rotation_body,
-                   const double octreeRes,
-                   CostEvaluator::TrajectoryCostsWeights costWeights,
-                   const int maxNumThreads = 1);
+                 double timeStep, double predictionHorizon,
+                 double controlHorizon, int maxLinearSamples,
+                 int maxAngularSamples,
+                 const CollisionChecker::ShapeType robotShapeType,
+                 const std::vector<float> robotDimensions,
+                 const Eigen::Vector3f &sensor_position_body,
+                 const Eigen::Quaternionf &sensor_rotation_body,
+                 const double octreeRes,
+                 CostEvaluator::TrajectoryCostsWeights costWeights,
+                 const int maxNumThreads = 1);
 
   void configure(TrajectorySampler::TrajectorySamplerParameters config,
-                   ControlLimitsParams controlLimits, ControlType controlType,
-                   const CollisionChecker::ShapeType robotShapeType,
-                   const std::vector<float> robotDimensions,
-                   const std::array<float, 3> &sensor_position_body,
-                   const std::array<float, 4> &sensor_rotation_body,
-                   CostEvaluator::TrajectoryCostsWeights costWeights,
-                   const int maxNumThreads = 1);
+                 ControlLimitsParams controlLimits, ControlType controlType,
+                 const CollisionChecker::ShapeType robotShapeType,
+                 const std::vector<float> robotDimensions,
+                 const Eigen::Vector3f &sensor_position_body,
+                 const Eigen::Quaternionf &sensor_rotation_body,
+                 CostEvaluator::TrajectoryCostsWeights costWeights,
+                 const int maxNumThreads = 1);
 
   /**
    * @brief Reset the resolution of the robot's local map, this is equivalent to the box size representing each obstacle after conversion

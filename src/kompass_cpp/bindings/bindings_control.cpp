@@ -1,6 +1,5 @@
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
-#include <nanobind/stl/array.h>
 #include <nanobind/stl/function.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
@@ -167,8 +166,8 @@ void bindings_control(py::module_ &m) {
   py::class_<Control::DWA, Control::Follower>(m_control, "DWA")
       .def(py::init<Control::ControlLimitsParams, Control::ControlType, double,
                     double, double, int, int, CollisionChecker::ShapeType,
-                    std::vector<float>, const std::array<float, 3> &,
-                    const std::array<float, 4> &, double,
+                    std::vector<float>, const Eigen::Vector3f &,
+                    const Eigen::Quaternionf &, double,
                     Control::CostEvaluator::TrajectoryCostsWeights, int>(),
            py::arg("control_limits"), py::arg("control_type"),
            py::arg("time_step"), py::arg("prediction_horizon"),
@@ -181,7 +180,7 @@ void bindings_control(py::module_ &m) {
       .def(py::init<Control::TrajectorySampler::TrajectorySamplerParameters,
                     Control::ControlLimitsParams, Control::ControlType,
                     CollisionChecker::ShapeType, std::vector<float>,
-                    const std::array<float, 3> &, const std::array<float, 4> &,
+                    const Eigen::Vector3f &, const Eigen::Quaternionf &,
                     Control::CostEvaluator::TrajectoryCostsWeights, int>(),
            py::arg("config"), py::arg("control_limits"),
            py::arg("control_type"), py::arg("robot_shape_type"),
@@ -245,20 +244,24 @@ void bindings_control(py::module_ &m) {
       .def(py::init<const Control::ControlType &,
                     const Control::ControlLimitsParams &, const int, const int,
                     const CollisionChecker::ShapeType &,
-                    const std::vector<float> &, const std::array<float, 3> &,
-                    const std::array<float, 4> &, const double,
+                    const std::vector<float> &, const Eigen::Vector3f &,
+                    const Eigen::Quaternionf &, const Eigen::Vector3f &,
+                    const Eigen::Quaternionf &, const double,
                     const Control::CostEvaluator::TrajectoryCostsWeights &,
-                    const int, const Control::VisionDWA::VisionDWAConfig &,
-                    const bool>(),
+                    const int, const Control::VisionDWA::VisionDWAConfig &>(),
            py::arg("control_type"), py::arg("control_limits"),
            py::arg("max_linear_samples"), py::arg("max_angular_samples"),
            py::arg("robot_shape_type"), py::arg("robot_dimensions"),
-           py::arg("sensor_position_wrt_body"),
-           py::arg("sensor_rotation_wrt_body"), py::arg("octree_res"),
+           py::arg("proximity_sensor_position_wrt_body"),
+           py::arg("proximity_sensor_rotation_wrt_body"),
+           py::arg("vision_sensor_position_wrt_body"),
+           py::arg("vision_sensor_rotation_wrt_body"), py::arg("octree_res"),
            py::arg("cost_weights"), py::arg("max_num_threads") = 1,
-           py::arg("config") = Control::VisionDWA::VisionDWAConfig(),
-           py::arg("use_tracker") = true)
-      .def("set_initial_tracking", &Control::VisionDWA::setInitialTracking)
+           py::arg("config") = Control::VisionDWA::VisionDWAConfig())
+      .def("set_initial_tracking",
+           py::overload_cast<const int, const int,
+                             const std::vector<Bbox3D> &>(
+               &Control::VisionDWA::setInitialTracking))
       .def("get_tracking_ctrl",
            py::overload_cast<const std::vector<Bbox3D> &,
                              const Control::Velocity2D &,

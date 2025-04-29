@@ -13,9 +13,9 @@ namespace Kompass {
 CriticalZoneChecker::CriticalZoneChecker(
     const CollisionChecker::ShapeType robot_shape_type,
     const std::vector<float> &robot_dimensions,
-    const std::array<float, 3> &sensor_position_body,
-    const std::array<float, 4> &sensor_rotation_body,
-    const float critical_angle, const float critical_distance) {
+    const Eigen::Vector3f &sensor_position_body,
+    const Eigen::Quaternionf &sensor_rotation_body, const float critical_angle,
+    const float critical_distance) {
   // Construct  a geometry object based on the robot shape
   if (robot_shape_type == CollisionChecker::ShapeType::CYLINDER) {
     robotHeight_ = robot_dimensions.at(1);
@@ -31,8 +31,7 @@ CriticalZoneChecker::CriticalZoneChecker(
 
   // Init the sensor position w.r.t body
   sensor_tf_body_ =
-      getTransformation(Eigen::Quaternionf(sensor_rotation_body.data()),
-                        Eigen::Vector3f(sensor_position_body.data()));
+      getTransformation(sensor_rotation_body, sensor_position_body);
   // Compute the critical zone angles min,max
   float angle_rad = critical_angle * M_PI / 180.0;
   angle_right_forward_ = angle_rad / 2;
@@ -40,7 +39,8 @@ CriticalZoneChecker::CriticalZoneChecker(
   angle_right_backward_ = Angle::normalizeTo0Pi(M_PI + angle_right_forward_);
   angle_left_backward_ = Angle::normalizeTo0Pi(M_PI + angle_left_forward_);
 
-  LOG_DEBUG("Critical zone forward angles: [", angle_right_forward_, ", ", angle_left_forward_, "]");
+  LOG_DEBUG("Critical zone forward angles: [", angle_right_forward_, ", ",
+            angle_left_forward_, "]");
   LOG_DEBUG("Critical zone backward angles: [", angle_right_backward_, ", ",
             angle_left_backward_, "]");
 
