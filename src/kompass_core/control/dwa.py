@@ -96,13 +96,15 @@ class DWAConfig(FollowerConfig):
         default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
 
-    prediction_horizon: float = field(
-        default=1.0, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
+    control_horizon: int = field(
+        default=2, validator=base_validators.in_range(min_value=1, max_value=1000)
     )
+    # Number of steps for applying the control
 
-    control_horizon: float = field(
-        default=0.2, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
+    prediction_horizon: int = field(
+        default=10, validator=base_validators.in_range(min_value=1, max_value=1000)
     )
+    # Number of steps for future prediction
 
     max_linear_samples: int = field(
         default=20, validator=base_validators.in_range(min_value=1, max_value=1e3)
@@ -112,9 +114,13 @@ class DWAConfig(FollowerConfig):
         default=20, validator=base_validators.in_range(min_value=1, max_value=1e3)
     )
 
-    sensor_position_to_robot: List[float] = field(default=[0.0, 0.0, 0.0])
+    proximity_sensor_position_to_robot: np.ndarray = field(
+        default=np.array([0.0, 0.0, 0.0], dtype=np.float32)
+    )
 
-    sensor_rotation_to_robot: List[float] = field(default=[0.0, 0.0, 0.0, 1.0])
+    proximity_sensor_rotation_to_robot: np.ndarray = field(
+        default=np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+    )
 
     octree_resolution: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-9, max_value=1e3)
@@ -221,14 +227,14 @@ class DWA(FollowerTemplate):
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
             time_step=config.control_time_step,
-            prediction_horizon=config.prediction_horizon,
-            control_horizon=config.control_horizon,
+            prediction_horizon=config.prediction_horizon * config.control_time_step,
+            control_horizon=config.control_horizon * config.control_time_step,
             max_linear_samples=config.max_linear_samples,
             max_angular_samples=config.max_angular_samples,
             robot_shape_type=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
             robot_dimensions=robot.geometry_params,
-            sensor_position_robot=config.sensor_position_to_robot,
-            sensor_rotation_robot=config.sensor_rotation_to_robot,
+            sensor_position_robot=config.proximity_sensor_position_to_robot,
+            sensor_rotation_robot=config.proximity_sensor_rotation_to_robot,
             octree_resolution=config.octree_resolution,
             cost_weights=config.costs_weights.to_kompass_cpp(),
             max_num_threads=config.max_num_threads,

@@ -25,7 +25,7 @@ public:
       const CollisionChecker::ShapeType robotShapeType,
       const std::vector<float> robotDimensions,
       const Eigen::Vector3f &sensor_position_body,
-      const Eigen::Quaternionf &sensor_rotation_body, const double octreeRes,
+      const Eigen::Vector4f &sensor_rotation_body, const double octreeRes,
       CostEvaluator::TrajectoryCostsWeights costWeights,
       const int maxNumThreads = 1);
 
@@ -34,7 +34,7 @@ public:
       const CollisionChecker::ShapeType robotShapeType,
       const std::vector<float> robotDimensions,
       const Eigen::Vector3f &sensor_position_body,
-      const Eigen::Quaternionf &sensor_rotation_body,
+      const Eigen::Vector4f &sensor_rotation_body,
       CostEvaluator::TrajectoryCostsWeights costWeights,
       const int maxNumThreads = 1);
 
@@ -56,7 +56,7 @@ public:
                  const CollisionChecker::ShapeType robotShapeType,
                  const std::vector<float> robotDimensions,
                  const Eigen::Vector3f &sensor_position_body,
-                 const Eigen::Quaternionf &sensor_rotation_body,
+                 const Eigen::Vector4f &sensor_rotation_body,
                  const double octreeRes,
                  CostEvaluator::TrajectoryCostsWeights costWeights,
                  const int maxNumThreads = 1);
@@ -66,7 +66,7 @@ public:
                  const CollisionChecker::ShapeType robotShapeType,
                  const std::vector<float> robotDimensions,
                  const Eigen::Vector3f &sensor_position_body,
-                 const Eigen::Quaternionf &sensor_rotation_body,
+                 const Eigen::Vector4f &sensor_rotation_body,
                  CostEvaluator::TrajectoryCostsWeights costWeights,
                  const int maxNumThreads = 1);
 

@@ -7,6 +7,7 @@ from kompass_cpp.control import (
 )
 from kompass_cpp.types import (
     Bbox3D,
+    Bbox2D,
     ControlCmd,
     LaserScan,
     TrajectoryVelocities2D,
@@ -25,20 +26,6 @@ from .dwa import DWAConfig
 
 @define
 class VisionDWAConfig(DWAConfig):
-
-    use_tracker: bool = field(
-        default=True
-    )  # Use the tracker to get the target position and velocity from the detections
-
-    control_horizon: int = field(
-        default=2, validator=base_validators.in_range(min_value=1, max_value=1000)
-    )
-    # Number of steps for applying the control
-
-    prediction_horizon: int = field(
-        default=10, validator=base_validators.in_range(min_value=1, max_value=1000)
-    )
-    # Number of steps for future prediction
 
     tolerance: float = field(
         default=0.01, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
@@ -97,6 +84,26 @@ class VisionDWAConfig(DWAConfig):
         default=0.05, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )  # Error in acceleration estimation (m/s^2)
 
+    depth_conversion_factor: float = field(
+        default=1e-3, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
+    )  # Factor to convert depth image values to meters
+
+    min_depth: float = field(
+        default=0.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
+    )  # Range of interest minimum depth value (m)
+
+    max_depth: float = field(
+        default=1e3, validator=base_validators.in_range(min_value=1e-3, max_value=1e9)
+    )  # Range of interest maximum depth value (m)
+
+    camera_position_to_robot: np.ndarray = field(
+        default=np.array([0.0, 0.0, 0.0], dtype=np.float32)
+    )
+
+    camera_rotation_to_robot: np.ndarray = field(
+        default=np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+    )
+
     def to_kompass_cpp(self) -> VisionDWAParameters:
         """
         Convert to kompass_cpp lib config format
@@ -108,7 +115,7 @@ class VisionDWAConfig(DWAConfig):
 
         # Special handling for None values that are represented by -1 in C++
         params_dict = self.asdict()
-        print(f"as dict {params_dict}")
+
         if params_dict["target_distance"] is None:
             params_dict["target_distance"] = -1.0
 
@@ -125,6 +132,8 @@ class VisionDWA(ControllerTemplate):
         config_file: Optional[str] = None,
         config_yaml_root_name: Optional[str] = None,
         control_time_step: Optional[float] = None,
+        camera_focal_length: Optional[List[float]] = None,
+        camera_principal_point: Optional[List[float]] = None,
         **_,
     ):
         """
@@ -144,7 +153,7 @@ class VisionDWA(ControllerTemplate):
 
         if control_time_step:
             self._config.control_time_step = control_time_step
-        logging.info(f"use_tracker: {self._config.use_tracker}")
+
         self._planner = VisionDWACpp(
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
@@ -152,14 +161,18 @@ class VisionDWA(ControllerTemplate):
             max_angular_samples=self._config.max_angular_samples,
             robot_shape_type=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
             robot_dimensions=robot.geometry_params,
-            sensor_position_wrt_body=self._config.sensor_position_to_robot,
-            sensor_rotation_wrt_body=self._config.sensor_rotation_to_robot,
+            proximity_sensor_position_wrt_body=self._config.proximity_sensor_position_to_robot,
+            proximity_sensor_rotation_wrt_body=self._config.proximity_sensor_rotation_to_robot,
+            vision_sensor_position_wrt_body=self._config.camera_position_to_robot,
+            vision_sensor_rotation_wrt_body=self._config.camera_rotation_to_robot,
             octree_res=self._config.octree_resolution,
             cost_weights=self._config.costs_weights.to_kompass_cpp(),
             max_num_threads=self._config.max_num_threads,
             config=self._config.to_kompass_cpp(),
-            use_tracker=self._config.use_tracker,
         )
+        if camera_focal_length and camera_principal_point:
+            self._planner.set_camera_intrinsics(camera_focal_length[0], camera_focal_length[1], camera_principal_point[0], camera_principal_point[1])
+
         # Init the following result
         self._result = SamplingControlResult()
         self._end_of_ctrl_horizon: int = max(
@@ -167,7 +180,15 @@ class VisionDWA(ControllerTemplate):
         )
         logging.info("VisionDWA CONTROLLER IS READY")
 
-    def set_initial_tracking(self, pose_x_img: int, pose_y_img: int, detected_boxes: List[Bbox3D]) -> bool:
+    def set_camera_intrinsics(self, fx: float, fy: float, cx: float, cy: float) -> None:
+        self._planner.set_camera_intrinsics(fx, fy, cx, cy)
+
+    def set_initial_tracking_3d(
+        self,
+        pose_x_img: int,
+        pose_y_img: int,
+        detected_boxes: List[Bbox3D],
+    ) -> bool:
         """
         Set initial tracking state
 
@@ -175,17 +196,43 @@ class VisionDWA(ControllerTemplate):
         :type detected_boxes: List[Bbox3D]
         """
         try:
-            self._planner.set_initial_tracking(pose_x_img, pose_y_img, detected_boxes)
+            return self._planner.set_initial_tracking(pose_x_img, pose_y_img, detected_boxes)
         except Exception as e:
             logging.error(f"Could not set initial tracking state: {e}")
             return False
-        return True
+
+    def set_initial_tracking_depth(
+        self,
+        current_state: RobotState,
+        pose_x_img: int,
+        pose_y_img: int,
+        detected_boxes: List[Bbox2D],
+        aligned_depth_image: np.ndarray,
+    ) -> bool:
+        """
+        Set initial tracking state
+
+        :param detected_boxes: Detected boxes
+        :type detected_boxes: List[Bbox3D]
+        """
+        try:
+            self._planner.set_current_state(
+            current_state.x, current_state.y, current_state.yaw, current_state.speed)
+
+            return self._planner.set_initial_tracking(
+                pose_x_img, pose_y_img, aligned_depth_image, detected_boxes
+            )
+        except Exception as e:
+            logging.error(f"Could not set initial tracking state: {e}")
+            return False
 
     def loop_step(
         self,
         *,
         current_state: RobotState,
-        detections: Optional[List[Bbox3D]] = None,
+        detections_3d: Optional[List[Bbox3D]] = None,
+        detections_2d: Optional[List[Bbox2D]] = None,
+        depth_image: Optional[np.ndarray] = None,
         tracked_pose: Optional[TrackedPose2D] = None,
         laser_scan: Optional[LaserScanData] = None,
         point_cloud: Optional[List[np.ndarray]] = None,
@@ -230,9 +277,14 @@ class VisionDWA(ControllerTemplate):
             return False
 
         try:
-            self._result = self._planner.get_tracking_ctrl(
-                tracked_pose or detections, current_velocity, sensor_data
-            )
+            if (detections_3d or tracked_pose) is not None:
+                self._result = self._planner.get_tracking_ctrl(
+                    tracked_pose or detections_3d, current_velocity, sensor_data
+                )
+            else:
+                self._result = self._planner.get_tracking_ctrl(
+                    depth_image, detections_2d, current_velocity, sensor_data
+                )
 
         except Exception as e:
             logging.error(f"Could not find velocity command: {e}")

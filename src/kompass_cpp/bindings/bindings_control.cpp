@@ -167,7 +167,7 @@ void bindings_control(py::module_ &m) {
       .def(py::init<Control::ControlLimitsParams, Control::ControlType, double,
                     double, double, int, int, CollisionChecker::ShapeType,
                     std::vector<float>, const Eigen::Vector3f &,
-                    const Eigen::Quaternionf &, double,
+                    const  Eigen::Vector4f &, double,
                     Control::CostEvaluator::TrajectoryCostsWeights, int>(),
            py::arg("control_limits"), py::arg("control_type"),
            py::arg("time_step"), py::arg("prediction_horizon"),
@@ -180,7 +180,7 @@ void bindings_control(py::module_ &m) {
       .def(py::init<Control::TrajectorySampler::TrajectorySamplerParameters,
                     Control::ControlLimitsParams, Control::ControlType,
                     CollisionChecker::ShapeType, std::vector<float>,
-                    const Eigen::Vector3f &, const Eigen::Quaternionf &,
+                    const Eigen::Vector3f &, const  Eigen::Vector4f &,
                     Control::CostEvaluator::TrajectoryCostsWeights, int>(),
            py::arg("config"), py::arg("control_limits"),
            py::arg("control_type"), py::arg("robot_shape_type"),
@@ -245,8 +245,8 @@ void bindings_control(py::module_ &m) {
                     const Control::ControlLimitsParams &, const int, const int,
                     const CollisionChecker::ShapeType &,
                     const std::vector<float> &, const Eigen::Vector3f &,
-                    const Eigen::Quaternionf &, const Eigen::Vector3f &,
-                    const Eigen::Quaternionf &, const double,
+                    const Eigen::Vector4f &, const Eigen::Vector3f &,
+                    const Eigen::Vector4f &, const double,
                     const Control::CostEvaluator::TrajectoryCostsWeights &,
                     const int, const Control::VisionDWA::VisionDWAConfig &>(),
            py::arg("control_type"), py::arg("control_limits"),
@@ -258,30 +258,67 @@ void bindings_control(py::module_ &m) {
            py::arg("vision_sensor_rotation_wrt_body"), py::arg("octree_res"),
            py::arg("cost_weights"), py::arg("max_num_threads") = 1,
            py::arg("config") = Control::VisionDWA::VisionDWAConfig())
+      .def("set_camera_intrinsics", &Control::VisionDWA::setCameraIntrinsics,
+           py::arg("focal_length_x"), py::arg("focal_length_y"),
+           py::arg("principal_point_x"), py::arg("principal_point_y"))
       .def("set_initial_tracking",
            py::overload_cast<const int, const int,
                              const std::vector<Bbox3D> &>(
-               &Control::VisionDWA::setInitialTracking))
+               &Control::VisionDWA::setInitialTracking),
+           py::arg("pixel_x"), py::arg("pixel_y"),
+           py::arg("detected_boxes_3d"))
+      .def("set_initial_tracking",
+           py::overload_cast<const int, const int,
+                             const Eigen::MatrixX<unsigned short> &,
+                             const std::vector<Bbox2D> &>(
+               &Control::VisionDWA::setInitialTracking),
+           py::arg("pixel_x"), py::arg("pixel_y"),
+           py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"))
       .def("get_tracking_ctrl",
            py::overload_cast<const std::vector<Bbox3D> &,
                              const Control::Velocity2D &,
                              const std::vector<Eigen::Vector3f> &>(
                &Control::VisionDWA::getTrackingCtrl<
-                   std::vector<Eigen::Vector3f>>))
+                   std::vector<Eigen::Vector3f>>),
+           py::arg("detected_boxes"), py::arg("robot_velocity"),
+           py::arg("sensor_data"))
       .def("get_tracking_ctrl",
            py::overload_cast<const std::vector<Bbox3D> &,
                              const Control::Velocity2D &,
                              const Control::LaserScan &>(
-               &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>))
+               &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>),
+           py::arg("detected_boxes"), py::arg("robot_velocity"),
+           py::arg("sensor_data"))
       .def("get_tracking_ctrl",
            py::overload_cast<const Control::TrackedPose2D &,
                              const Control::Velocity2D &,
                              const std::vector<Eigen::Vector3f> &>(
                &Control::VisionDWA::getTrackingCtrl<
-                   std::vector<Eigen::Vector3f>>))
+                   std::vector<Eigen::Vector3f>>),
+           py::arg("tracked_pose"), py::arg("robot_velocity"),
+           py::arg("sensor_data"))
       .def("get_tracking_ctrl",
            py::overload_cast<const Control::TrackedPose2D &,
                              const Control::Velocity2D &,
                              const Control::LaserScan &>(
-               &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>));
+               &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>),
+           py::arg("tracked_pose"), py::arg("robot_velocity"),
+           py::arg("sensor_data"))
+      .def("get_tracking_ctrl",
+           py::overload_cast<const Eigen::MatrixX<unsigned short> &,
+                             const std::vector<Bbox2D> &,
+                             const Control::Velocity2D &,
+                             const std::vector<Eigen::Vector3f> &>(
+               &Control::VisionDWA::getTrackingCtrl<
+                   std::vector<Eigen::Vector3f>>),
+           py::arg("aligned_depth_image"), py::arg("detected_boxes"),
+           py::arg("robot_velocity"), py::arg("sensor_data"))
+      .def("get_tracking_ctrl",
+           py::overload_cast<const Eigen::MatrixX<unsigned short> &,
+                             const std::vector<Bbox2D> &,
+                             const Control::Velocity2D &,
+                             const Control::LaserScan &>(
+               &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>),
+           py::arg("aligned_depth_image"), py::arg("detected_boxes"),
+           py::arg("robot_velocity"), py::arg("sensor_data"));
 }

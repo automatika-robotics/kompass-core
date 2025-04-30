@@ -132,6 +132,14 @@ py::class_<Control::VisionFollower::TrackingData>(m_types, "TrackingData")
     .def_rw("center_xy", &Control::VisionFollower::TrackingData::center_xy)
     .def_rw("depth", &Control::VisionFollower::TrackingData::depth);
 
+py::class_<Bbox2D>(m_types, "Bbox2D")
+    .def(py::init<>())
+    .def(py::init<const Bbox2D &>())
+    .def(py::init<Eigen::Vector2i &, Eigen::Vector2i &>(),
+         py::arg("top_left_corner"), py::arg("size"))
+    .def_rw("top_left_corner", &Bbox2D::top_corner)
+    .def_rw("size", &Bbox2D::size);
+
 py::class_<Bbox3D>(m_types, "Bbox3D")
     .def(py::init<>())
     .def(py::init<const Bbox3D &>())

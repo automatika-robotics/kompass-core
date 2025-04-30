@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import cv2
 from typing import Union, List
 
 import matplotlib.pyplot as plt
@@ -12,7 +13,7 @@ import kompass_cpp
 from kompass_cpp.types import PathInterpolationType, Path as PathCpp
 
 from kompass_core.datatypes.laserscan import LaserScanData
-from kompass_core.datatypes import TrackedPose2D, Bbox3D
+from kompass_core.datatypes import TrackedPose2D, Bbox3D, Bbox2D
 from kompass_core.control import (
     DVZ,
     DWAConfig,
@@ -408,8 +409,8 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
         max_angular_samples=4,
         octree_resolution=0.1,
         costs_weights=cost_weights,
-        prediction_horizon=1.0,
-        control_horizon=0.2,
+        prediction_horizon=10,
+        control_horizon=2,
         control_time_step=control_time_step,
         max_num_threads=1,
     )
@@ -429,11 +430,106 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
     assert reached_end is True
 
 
+def test_vision_dwa_with_depth_img():
+    """Run DWA pytest and assert reaching end"""
+    global global_path, my_robot, robot_ctr_limits, control_time_step
+
+    from kompass_core import set_logging_level
+
+    set_logging_level("DEBUG")
+
+    my_robot.state.x = -0.5
+
+    image_file_path = f"{control_resources}/bag_image_depth.tif"
+    # clicked point on image to track target
+    clicked_point = [610, 200]
+    # Detected 2D box
+    box = Bbox2D(top_left_corner=np.array([410, 0]), size=np.array([410, 390]))
+    detections = [box]
+
+    point_cloud = [np.array([10.3, 10.5, 0.2], dtype=np.float32)]
+
+    control_horizon = 2
+    prediction_horizon = 10
+
+    focal_length = [911.71, 910.288]
+    principal_point = [643.06, 366.72]
+
+    cost_weights = TrajectoryCostsWeights(
+        reference_path_distance_weight=1.0,
+        goal_distance_weight=0.0,
+        smoothness_weight=0.0,
+        jerk_weight=0.0,
+        obstacles_distance_weight=0.0,
+    )
+    config = VisionDWAConfig(
+        control_time_step=control_time_step,
+        control_horizon=control_horizon,
+        prediction_horizon=prediction_horizon,
+        speed_gain=1.0,
+        rotation_gain=1.0,
+        costs_weights=cost_weights,
+        max_linear_samples=20,
+        max_angular_samples=20,
+        octree_resolution=0.1,
+        max_num_threads=1,
+        min_vel=0.05,
+        min_depth=0.001,
+        max_depth=5.0,
+        depth_conversion_factor=0.001,
+        camera_position_to_robot=np.array([0.32, 0.02089, 0.2999]),
+        camera_rotation_to_robot=np.array([-0.5846, 0.595, -0.395, 0.385])
+    )
+
+    controller = VisionDWA(
+        robot=my_robot,
+        ctrl_limits=robot_ctr_limits,
+        config=config,
+        camera_focal_length=focal_length,
+        camera_principal_point=principal_point,
+    )
+
+    # Get image
+    cv_img = cv2.imread(image_file_path, cv2.IMREAD_UNCHANGED)
+
+    if cv_img is None:
+        logging.error("Could not open or find the image")
+        return
+
+    # Create a NumPy array from the OpenCV Mat
+    depth_image = np.array(cv_img, dtype=np.ushort, order="F")
+
+    found_target = controller.set_initial_tracking_depth(
+        my_robot.state, clicked_point[0], clicked_point[1], detections, depth_image
+    )
+
+    if not found_target:
+        print("Point not found on image")
+        return
+    else:
+        print("Point found on image ...")
+
+    res = controller.loop_step(
+        current_state=my_robot.state,
+        detections_2d=detections,
+        depth_image=depth_image,
+        point_cloud=point_cloud,
+    )
+    if not res:
+        print("No control found")
+
+    assert res
+
+    velocities = controller.control_till_horizon
+    (vx, vy, omega) = velocities.vx[0], velocities.vy[0], velocities.omega[0]
+    print(f"Found Control {vx}, {vy}, {omega}")
+
+
 @pytest.mark.parametrize("use_tracker", [False, True])
-@pytest.mark.parametrize("point_cloud", [[np.array([10.3, 10.5, 0.2])], [np.array([0.3, 0.27, 0.1])]])
-def test_vision_dwa(
-    use_tracker: bool, point_cloud: List[np.ndarray]
-):
+@pytest.mark.parametrize(
+    "point_cloud", [[np.array([10.3, 10.5, 0.2])], [np.array([0.3, 0.27, 0.1])]]
+)
+def test_vision_dwa(use_tracker: bool, point_cloud: List[np.ndarray]):
     """Run DWA pytest and assert reaching end"""
     global global_path, my_robot, robot_ctr_limits, control_time_step
 
@@ -473,7 +569,6 @@ def test_vision_dwa(
         octree_resolution=0.1,
         max_num_threads=1,
         min_vel=0.05,
-        use_tracker=use_tracker
     )
 
     controller = VisionDWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
@@ -485,7 +580,12 @@ def test_vision_dwa(
     detected_boxes = []
     boxes_ori = 0.0
     for i in range(3):
-        new_box = Bbox3D(center=np.array([0.0, 0.0, 0.0], dtype=np.float32), size=np.array([0.5, 0.5, 1.0], dtype=np.float32), center_img_frame=np.array([150, 150], dtype=np.int32), size_img_frame=np.array([25, 25], dtype=np.int32))
+        new_box = Bbox3D(
+            center=np.array([0.0, 0.0, 0.0], dtype=np.float32),
+            size=np.array([0.5, 0.5, 1.0], dtype=np.float32),
+            center_img_frame=np.array([150, 150], dtype=np.int32),
+            size_img_frame=np.array([25, 25], dtype=np.int32),
+        )
         new_box_shift = np.array([0.7 * i, 0.7 * i, 0.0], dtype=np.float32)
         img_frame_shift = np.array([50 * i, 50 * i], dtype=np.int32)
         new_box.center = new_box_shift
@@ -505,7 +605,7 @@ def test_vision_dwa(
         return boxes_orientation
 
     if use_tracker:
-        controller.set_initial_tracking(150, 150, detected_boxes)
+        controller.set_initial_tracking_3d(150, 150, detected_boxes)
 
     while steps < 100:
         robot_x.append(my_robot.state.x)
@@ -514,7 +614,11 @@ def test_vision_dwa(
         tracked_y.append(tracked_pose.y())
 
         if use_tracker:
-            res = controller.loop_step(current_state=my_robot.state, detections=detected_boxes, point_cloud=point_cloud)
+            res = controller.loop_step(
+                current_state=my_robot.state,
+                detections_3d=detected_boxes,
+                point_cloud=point_cloud,
+            )
         else:
             res = controller.loop_step(
                 current_state=my_robot.state,
@@ -527,9 +631,7 @@ def test_vision_dwa(
         # print(f"Found trajectory with cost {controller.result_cost}")
         velocities = controller.control_till_horizon
         (vx, vy, omega) = velocities.vx[0], velocities.vy[0], velocities.omega[0]
-        print(
-                f"Found Control {vx}, {vy}, {omega}"
-            )
+        print(f"Found Control {vx}, {vy}, {omega}")
         my_robot.set_control(
             velocity_x=vx,
             velocity_y=vy,
@@ -549,9 +651,7 @@ def test_vision_dwa(
 
     figure_name += f"{point_cloud[0]}"
     plt.figure()
-    plt.plot(
-        robot_x, robot_y, marker="o", linestyle="-", color="b", label="Robot Path"
-    )
+    plt.plot(robot_x, robot_y, marker="o", linestyle="-", color="b", label="Robot Path")
     plt.plot(
         tracked_x,
         tracked_y,
@@ -585,8 +685,8 @@ def test_dwa_debug():
         max_angular_samples=21,
         octree_resolution=0.1,
         costs_weights=cost_weights,
-        prediction_horizon=1.0,
-        control_horizon=0.2,
+        prediction_horizon=10,
+        control_horizon=2,
         control_time_step=control_time_step,
         max_num_threads=1,
     )
@@ -688,30 +788,31 @@ def main():
 
     control_time_step = 0.1
 
-    print("RUNNING PATH INTERPOLATION TEST")
-    test_path_interpolation(plot=True)
+    # print("RUNNING PATH INTERPOLATION TEST")
+    # test_path_interpolation(plot=True)
 
-    ## TESTING STANLEY ##
-    print("RUNNING STANLEY CONTROLLER TEST")
-    test_stanley(
-        plot=True, figure_name="stanley", figure_tag="Stanley Controller Test Results"
-    )
+    # ## TESTING STANLEY ##
+    # print("RUNNING STANLEY CONTROLLER TEST")
+    # test_stanley(
+    #     plot=True, figure_name="stanley", figure_tag="Stanley Controller Test Results"
+    # )
 
-    ## TESTING DVZ ##
-    print("RUNNING DVZ CONTROLLER TEST")
-    test_dvz(plot=True, figure_name="dvz", figure_tag="DVZ Controller Test Results")
+    # ## TESTING DVZ ##
+    # print("RUNNING DVZ CONTROLLER TEST")
+    # test_dvz(plot=True, figure_name="dvz", figure_tag="DVZ Controller Test Results")
 
-    ## TESTING DWA DEBUG MODE ##
-    print("RUNNING ONE DWA CONTROLLER DEBUG STEP TEST")
-    test_dwa_debug()
+    # ## TESTING DWA DEBUG MODE ##
+    # print("RUNNING ONE DWA CONTROLLER DEBUG STEP TEST")
+    # test_dwa_debug()
 
-    ## TESTING DWA ##
-    print("RUNNING DWA CONTROLLER TEST")
-    test_dwa(plot=True, figure_name="dwa", figure_tag="DWA Controller Test Results")
+    # ## TESTING DWA ##
+    # print("RUNNING DWA CONTROLLER TEST")
+    # test_dwa(plot=True, figure_name="dwa", figure_tag="DWA Controller Test Results")
 
-    ## TESTING VISION DWA ##
-    print("RUNNING VISION DWA CONTROLLER TEST")
-    test_vision_dwa(use_tracker=True, point_cloud=[np.array([0.3, 0.27, 0.1])])
+    # ## TESTING VISION DWA ##
+    # print("RUNNING VISION DWA CONTROLLER TEST")
+    # test_vision_dwa(use_tracker=True, point_cloud=[np.array([0.3, 0.27, 0.1])])
+    test_vision_dwa_with_depth_img()
 
 
 if __name__ == "__main__":

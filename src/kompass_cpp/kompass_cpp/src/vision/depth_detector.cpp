@@ -9,21 +9,21 @@
 namespace Kompass {
 
 DepthDetector::DepthDetector(const Eigen::Vector2f &depth_range,
-                             const Eigen::Vector3f &body_to_camera_translation,
-                             const Eigen::Quaternionf &body_to_camera_rotation,
+                             const Eigen::Vector3f &camera_in_body_translation,
+                             const Eigen::Quaternionf &camera_in_body_rotation,
                              const Eigen::Vector2f &focal_length,
                              const Eigen::Vector2f &principal_point,
                              const float depth_conversion_factor) {
   // Set camera tf
   auto body_to_camera_tf =
-      getTransformation(body_to_camera_rotation, body_to_camera_translation);
+      getTransformation(camera_in_body_rotation, camera_in_body_translation);
   DepthDetector(depth_range, body_to_camera_tf, focal_length, principal_point,
                 depth_conversion_factor);
 }
 
 DepthDetector::DepthDetector(
     const Eigen::Vector2f &depth_range,
-    const Eigen::Isometry3f &body_to_camera_tf,
+    const Eigen::Isometry3f &camera_in_body_tf,
     const Eigen::Vector2f &focal_length, const Eigen::Vector2f &principal_point,
     const float depth_conversion_factor) { // Range of interest for depth values
                                            // in meters
@@ -33,8 +33,8 @@ DepthDetector::DepthDetector(
   // depthConversionFactor = 1e-3)
   depthConversionFactor_ = depth_conversion_factor;
   // Set camera tf
-  body_to_camera_tf_ = body_to_camera_tf;
-  world_to_body_tf_ = Eigen::Isometry3f::Identity();
+  camera_in_body_tf_ = camera_in_body_tf;
+  body_in_world_tf_ = Eigen::Isometry3f::Identity();
 
   // Set camera  intrinsic parameters
   fx_ = focal_length.x();
@@ -52,15 +52,16 @@ std::optional<std::vector<Bbox3D>> DepthDetector::get3dDetections() const {
 
 void DepthDetector::updateState(const Path::State &current_state) {
 
-  world_to_body_tf_ = getTransformation(current_state);
+  body_in_world_tf_ = getTransformation(current_state);
 }
 
 void DepthDetector::updateState(const Eigen::Isometry3f &robot_tf) {
-  world_to_body_tf_ = robot_tf;
+  body_in_world_tf_ = robot_tf;
 }
 
-void DepthDetector::updateBoxes(const Eigen::MatrixXi aligned_depth_img,
-                                const std::vector<Bbox2D> &detections) {
+void DepthDetector::updateBoxes(
+    const Eigen::MatrixX<unsigned short> aligned_depth_img,
+    const std::vector<Bbox2D> &detections) {
   alignedDepthImg_ = aligned_depth_img;
   boxes_ = std::make_unique<std::vector<Bbox3D>>();
   for (auto box2d : detections) {
@@ -108,40 +109,39 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
 
   // Convert from 2D box center in the pixel frame to the 3D box center in the
   // camera frame
-  Eigen::Vector3f center_img_frame, size_img_frame;
-  LOG_DEBUG("Got detected box in 2D pixel frame at :", box2d.top_corner.x(),
-           ", ", box2d.top_corner.y(), ", size = ", box2d.size.x(), ", ",
-           box2d.size.y());
-  center_img_frame(0) = (box2d.top_corner.x() + 0.5 * box2d.size.x() - cx_) *
-                        medianDepth / this->fx_;
-  center_img_frame(1) = (box2d.top_corner.y() + 0.5 * box2d.size.y() - cy_) *
-                        medianDepth / this->fy_;
-  center_img_frame(2) = medianDepth;
+  Eigen::Vector3f center_in_camera_frame, size_camera_frame;
 
-  LOG_DEBUG("Got detected box in 3D camera frame at :", center_img_frame.x(),
-           ", ", center_img_frame.y(), ", ", center_img_frame.z());
+  center_in_camera_frame(0) =
+      (box2d.top_corner.x() + 0.5 * box2d.size.x() - cx_) * medianDepth /
+      this->fx_;
+  center_in_camera_frame(1) =
+      (box2d.top_corner.y() + 0.5 * box2d.size.y() - cy_) * medianDepth /
+      this->fy_;
+  center_in_camera_frame(2) = medianDepth;
 
-  LOG_DEBUG("Median depth = ", medianDepth);
+  LOG_DEBUG("Median depth = ", medianDepth, ", min=", minimum_d, ", max=", maximum_d);
 
   // Size in meters
-  size_img_frame(0) = box2d.size.x() * medianDepth / this->fx_;
-  size_img_frame(1) = box2d.size.y() * medianDepth / this->fy_;
-  size_img_frame(2) = maximum_d - minimum_d;
+  size_camera_frame(0) = box2d.size.x() * medianDepth / this->fx_;
+  size_camera_frame(1) = box2d.size.y() * medianDepth / this->fy_;
+  size_camera_frame(2) = maximum_d - minimum_d;
+
+  LOG_DEBUG("Box size in camera frame :", size_camera_frame.x(), ", ",
+            size_camera_frame.y(), ", ", size_camera_frame.z());
+
+  Eigen::Isometry3f camera_in_world = body_in_world_tf_ * camera_in_body_tf_;
 
   // Register center in the world frame
-  box3d.center = world_to_body_tf_ * body_to_camera_tf_ * center_img_frame;
+  box3d.center = camera_in_world * center_in_camera_frame;
+
+  LOG_DEBUG("Got detected box in 3D world frame at :", box3d.center.x(), ", ",
+            box3d.center.y(), ", ", box3d.center.z());
 
   // Transform size from camera frame to world frame
-  box3d.size(0) = (world_to_body_tf_ * body_to_camera_tf_ *
-                   Eigen::Vector3f(size_img_frame(0), 0, 0))
-                      .norm();
-  box3d.size(1) = (world_to_body_tf_ * body_to_camera_tf_ *
-                   Eigen::Vector3f(0, size_img_frame(1), 0))
-                      .norm();
-  box3d.size(2) = (world_to_body_tf_ * body_to_camera_tf_ *
-                   Eigen::Vector3f(0, 0, size_img_frame(2)))
-                      .norm();
-
+  Eigen::Matrix3f abs_rotation = camera_in_world.linear().cwiseAbs();
+  box3d.size = abs_rotation * size_camera_frame;
+  LOG_DEBUG("3D box size :", box3d.size.x(), ", ", box3d.size.y(), ", ",
+            box3d.size.z());
   return box3d;
 }
 

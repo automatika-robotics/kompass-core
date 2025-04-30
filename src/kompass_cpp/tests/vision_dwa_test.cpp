@@ -6,8 +6,6 @@
 #include "test.h"
 #include "utils/cost_evaluator.h"
 #include "utils/logger.h"
-#include <Eigen/Geometry>
-#include <Eigen/src/Core/Matrix.h>
 #include <memory>
 #include <opencv2/opencv.hpp>
 #define BOOST_TEST_MODULE KOMPASS TESTS
@@ -50,7 +48,7 @@ struct VisionDWATestConfig {
   Kompass::CollisionChecker::ShapeType robotShapeType;
   std::vector<float> robotDimensions;
   Eigen::Vector3f prox_sensor_position_body;
-  Eigen::Quaternionf prox_sensor_rotation_body;
+  Eigen::Vector4f prox_sensor_rotation_body;
 
   // Depth detector
   Eigen::Vector2f focal_length = {911.71, 910.288};
@@ -126,7 +124,9 @@ struct VisionDWATestConfig {
         body_to_link_tf * link_to_cam_tf * cam_to_cam_opt_tf;
 
     Eigen::Vector3f translation = body_to_cam_tf.translation();
-    Eigen::Quaternionf rotation = Eigen::Quaternionf(body_to_cam_tf.rotation());
+    Eigen::Vector4f rotation = {
+        -0.5846, 0.595, -0.395,
+        0.385}; // Eigen::Vector4f(body_to_cam_tf.rotation().data());
 
     controller = std::make_unique<Control::VisionDWA>(
         controlType, controlLimits, maxLinearSamples, maxAngularSamples,
@@ -160,18 +160,21 @@ struct VisionDWATestConfig {
     }
   };
 
-  bool test_one_cmd_depth(const std::string image_file_path, const std::vector<Bbox2D> &detections, const Eigen::Vector2i &clicked_point, std::vector<Path::Point> cloud){
+  bool test_one_cmd_depth(const std::string image_file_path,
+                          const std::vector<Bbox2D> &detections,
+                          const Eigen::Vector2i &clicked_point,
+                          std::vector<Path::Point> cloud) {
     // robot velocity
     Control::Velocity2D cmd;
     // Get image
-    cv::Mat cv_img = cv::imread(image_file_path, cv::IMREAD_GRAYSCALE);
+    cv::Mat cv_img = cv::imread(image_file_path, cv::IMREAD_UNCHANGED);
 
     if (cv_img.empty()) {
       LOG_ERROR("Could not open or find the image");
     }
 
     // Create an Eigen matrix of type int from the OpenCV Mat
-    auto depth_image = Eigen::MatrixXi(cv_img.rows, cv_img.cols);
+    auto depth_image = Eigen::MatrixX<unsigned short>(cv_img.rows, cv_img.cols);
     for (int i = 0; i < cv_img.rows; ++i) {
       for (int j = 0; j < cv_img.cols; ++j) {
         depth_image(i, j) = cv_img.at<unsigned short>(i, j);
@@ -181,18 +184,20 @@ struct VisionDWATestConfig {
     controller->setCameraIntrinsics(focal_length.x(), focal_length.y(),
                                     principal_point.x(), principal_point.y());
 
+    controller->setCurrentState(robotState);
     auto found_target = controller->setInitialTracking(
         clicked_point(0), clicked_point(1), depth_image, detections);
-    if(!found_target){
+    if (!found_target) {
       LOG_WARNING("Point not found on image");
       return false;
-    }
-    else{
+    } else {
       LOG_INFO("Point found on image ...");
     }
+
     auto res = controller->getTrackingCtrl(depth_image, detections, cmd, cloud);
-    if(res.isTrajFound){
-      LOG_INFO("Got control (vx, vy, omega) = (", res.trajectory.velocities.vx[0], ", ",
+    if (res.isTrajFound) {
+      LOG_INFO("Got control (vx, vy, omega) = (",
+               res.trajectory.velocities.vx[0], ", ",
                res.trajectory.velocities.vy[0], ", ",
                res.trajectory.velocities.omega[0], ")");
     }
@@ -210,8 +215,8 @@ struct VisionDWATestConfig {
     Control::TrajSearchResult result;
 
     if (with_tracker) {
-      controller->setInitialTracking(ref_point_img(0), ref_point_img(1),
-                                     detected_boxes);
+      controller->setInitialTracking(ref_point_img(0),
+                                     ref_point_img(1), detected_boxes);
     }
 
     int step = 0;
@@ -377,7 +382,8 @@ BOOST_AUTO_TEST_CASE(test_VisionDWA_with_depth_image) {
   Timer time;
 
   std::string filename =
-      "/home/ahr/kompass/uvmap_code/resources/bag_image_depth.tif";
+      "/home/ahr/kompass/kompass-navigation/tests/resources/control/"
+      "bag_image_depth.tif";
   Bbox2D box({410, 0}, {410, 390});
   std::vector<Bbox2D> detections_2d{box};
 
@@ -388,9 +394,8 @@ BOOST_AUTO_TEST_CASE(test_VisionDWA_with_depth_image) {
 
   VisionDWATestConfig testConfig(cloud);
 
-  auto test_passed = testConfig.test_one_cmd_depth(filename, detections_2d, initial_point, cloud);
+  auto test_passed = testConfig.test_one_cmd_depth(filename, detections_2d,
+                                                   initial_point, cloud);
 
   BOOST_TEST(test_passed, "VisionDWA Failed To Find Control Using Depth Image");
 }
-
-

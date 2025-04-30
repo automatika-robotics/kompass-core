@@ -66,7 +66,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   std::vector<float> robotDimensions{0.1, 0.4};
   // std::array<float, 3> sensorPositionWRTbody {0.0, 0.0, 1.0};
   const Eigen::Vector3f sensor_position_body{0.0, 0.0, 0.0};
-  const Eigen::Quaternionf sensor_rotation_body{0, 0, 0, 1};
+  const Eigen::Vector4f sensor_rotation_body{0, 0, 0, 1};
 
   // Robot start state (pose)
   Path::State robotState(-0.51731912, 0.0, 0.0, 0.0);

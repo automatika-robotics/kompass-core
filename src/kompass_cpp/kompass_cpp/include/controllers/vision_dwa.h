@@ -8,7 +8,6 @@
 #include "vision/depth_detector.h"
 #include "vision/tracker.h"
 #include <Eigen/Dense>
-#include <Eigen/src/Core/Matrix.h>
 #include <cmath>
 #include <memory>
 #include <tuple>
@@ -122,9 +121,9 @@ public:
             const CollisionChecker::ShapeType &robotShapeType,
             const std::vector<float> &robotDimensions,
             const Eigen::Vector3f &proximity_sensor_position_body,
-            const Eigen::Quaternionf &proximity_sensor_rotation_body,
+            const Eigen::Vector4f &proximity_sensor_rotation_body,
             const Eigen::Vector3f &vision_sensor_position_body,
-            const Eigen::Quaternionf &vision_sensor_rotation_body,
+            const Eigen::Vector4f &vision_sensor_rotation_body,
             const double octreeRes,
             const CostEvaluator::TrajectoryCostsWeights &costWeights,
             const int maxNumThreads = 1,
@@ -224,7 +223,7 @@ public:
 
   template <typename T>
   Control::TrajSearchResult
-  getTrackingCtrl(const Eigen::MatrixXi &aligned_depth_img,
+  getTrackingCtrl(const Eigen::MatrixX<unsigned short> &aligned_depth_img,
                   const std::vector<Bbox2D> &detected_boxes_2d,
                   const Velocity2D &current_vel, const T &sensor_points) {
     if (!detector_) {
@@ -255,7 +254,7 @@ public:
         // Return false for trajectory found
         return TrajSearchResult();
       }
-    }else{
+    } else {
       LOG_WARNING("Detector failed to find 3D boxes");
       // Return false for trajectory found
       return TrajSearchResult();
@@ -284,9 +283,11 @@ public:
    * @return true
    * @return false
    */
-  bool setInitialTracking(const int pose_x_img, const int pose_y_img,
-                          const Eigen::MatrixXi &aligned_depth_image,
-                          const std::vector<Bbox2D> &detected_boxes_2d);
+  bool
+  setInitialTracking(const int pose_x_img,
+                     const int pose_y_img,
+                     const Eigen::MatrixX<unsigned short> &aligned_depth_image,
+                     const std::vector<Bbox2D> &detected_boxes_2d);
 
 private:
   ControlLimitsParams ctrl_limits_;

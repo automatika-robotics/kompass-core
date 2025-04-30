@@ -20,9 +20,9 @@ VisionDWA::VisionDWA(const ControlType &robotCtrlType,
                      const CollisionChecker::ShapeType &robotShapeType,
                      const std::vector<float> &robotDimensions,
                      const Eigen::Vector3f &proximity_sensor_position_body,
-                     const Eigen::Quaternionf &proximity_sensor_rotation_body,
+                     const Eigen::Vector4f &proximity_sensor_rotation_body,
                      const Eigen::Vector3f &vision_sensor_position_body,
-                     const Eigen::Quaternionf &vision_sensor_rotation_body,
+                     const Eigen::Vector4f &vision_sensor_rotation_body,
                      const double octreeRes,
                      const CostEvaluator::TrajectoryCostsWeights &costWeights,
                      const int maxNumThreads, const VisionDWAConfig &config)
@@ -100,9 +100,11 @@ bool VisionDWA::setInitialTracking(const int pose_x_img, const int pose_y_img,
   return tracker_->setInitialTracking(pose_x_img, pose_y_img, detected_boxes);
 }
 
-bool VisionDWA::setInitialTracking(const int pose_x_img, const int pose_y_img,
-                                   const Eigen::MatrixXi &aligned_depth_image,
-                                   const std::vector<Bbox2D> &detected_boxes) {
+bool VisionDWA::setInitialTracking(
+    const int pose_x_img,
+    const int pose_y_img,
+    const Eigen::MatrixX<unsigned short> &aligned_depth_image,
+    const std::vector<Bbox2D> &detected_boxes) {
   if (!detector_) {
     throw std::runtime_error(
         "DepthDetector is not initialized with the camera intrinsics. Call "

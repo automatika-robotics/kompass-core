@@ -24,7 +24,7 @@ struct DepthDetectorTestConfig {
   Eigen::Vector2f depth_range = {0.001, 5.0}; // 5cm to 5 meters
   float depth_conv_factor = 1e-3;             // convert from mm to m
   Eigen::Isometry3f camera_body_tf;
-  Eigen::MatrixXi depth_image;
+  Eigen::MatrixX<unsigned short> depth_image;
   cv::Mat cv_img;
   std::vector<Bbox2D> detections;
 
@@ -56,7 +56,7 @@ struct DepthDetectorTestConfig {
     }
 
     // Create an Eigen matrix of type int from the OpenCV Mat
-    depth_image = Eigen::MatrixXi(cv_img.rows, cv_img.cols);
+    depth_image = Eigen::MatrixX<unsigned short>(cv_img.rows, cv_img.cols);
     for (int i = 0; i < cv_img.rows; ++i) {
       for (int j = 0; j < cv_img.cols; ++j) {
         depth_image(i, j) = cv_img.at<unsigned short>(i, j);
