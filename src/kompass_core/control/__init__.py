@@ -71,7 +71,7 @@ class ControllersID(StrEnum):
     STANLEY = "Stanley"
     DWA = "DWA"
     DVZ = "DVZ"
-    VISION = "VisionFollower"
+    VISION = "VisionDWA"
 
 
 ControlClasses = {
