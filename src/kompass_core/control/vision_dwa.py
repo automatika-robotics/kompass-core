@@ -144,6 +144,8 @@ class VisionDWA(ControllerTemplate):
         :param params_file: Yaml file containing the parameters of the controller under 'dvz_controller'
         :type params_file: str
         """
+        import logging
+        logging.info("INIT VISION DWA")
         self._config = config or VisionDWAConfig()
 
         if config_file:
@@ -196,7 +198,10 @@ class VisionDWA(ControllerTemplate):
         :type detected_boxes: List[Bbox3D]
         """
         try:
-            return self._planner.set_initial_tracking(pose_x_img, pose_y_img, detected_boxes)
+            if any(detected_boxes):
+                return self._planner.set_initial_tracking(pose_x_img, pose_y_img, detected_boxes)
+            logging.error(f"Could not set initial tracking state: No detections are provided")
+            return False
         except Exception as e:
             logging.error(f"Could not set initial tracking state: {e}")
             return False
@@ -218,10 +223,13 @@ class VisionDWA(ControllerTemplate):
         try:
             self._planner.set_current_state(
             current_state.x, current_state.y, current_state.yaw, current_state.speed)
+            if any(detected_boxes):
+                return self._planner.set_initial_tracking(
+                    pose_x_img, pose_y_img, aligned_depth_image, detected_boxes
+                )
+            logging.error(f"Could not set initial tracking state: No detections are provided")
+            return False
 
-            return self._planner.set_initial_tracking(
-                pose_x_img, pose_y_img, aligned_depth_image, detected_boxes
-            )
         except Exception as e:
             logging.error(f"Could not set initial tracking state: {e}")
             return False
