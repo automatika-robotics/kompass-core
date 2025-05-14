@@ -16,7 +16,7 @@ void bindings_utils(py::module_ &m) {
 
   py::class_<CriticalZoneChecker>(m_utils, "CriticalZoneChecker")
       .def(py::init<CollisionChecker::ShapeType, const std::vector<float> &,
-                    const Eigen::Vector3f &, const Eigen::Quaternionf &, float,
+                    const Eigen::Vector3f &, const Eigen::Vector4f &, float,
                     float>(),
            py::arg("robot_shape"), py::arg("robot_dimensions"),
            py::arg("sensor_position_body"), py::arg("sensor_rotation_body"),

@@ -19,7 +19,7 @@ public:
   CriticalZoneCheckerGPU(const CollisionChecker::ShapeType robot_shape_type,
                          const std::vector<float> &robot_dimensions,
                          const Eigen::Vector3f &sensor_position_body,
-                         const Eigen::Quaternionf &sensor_rotation_body,
+                         const Eigen::Vector4f &sensor_rotation_body,
                          const float critical_angle,
                          const float critical_distance,
                          const std::vector<double> &angles)
