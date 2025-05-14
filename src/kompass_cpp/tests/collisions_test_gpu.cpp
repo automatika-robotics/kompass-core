@@ -17,7 +17,7 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
   std::vector<float> robotDimensions{0.51, 0.27, 0.4};
 
   const Eigen::Vector3f sensor_position_body{0.22, 0.0, 0.4};
-  const Eigen::Quaternionf sensor_rotation_body{0, 0, 0.99, 0.0};
+  const Eigen::Vector4f sensor_rotation_body{0, 0, 0.99, 0.0};
 
   // Robot laserscan value
   std::vector<double> scan_angles;

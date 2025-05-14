@@ -26,7 +26,7 @@ void bindings_utils_gpu(py::module_ &m) {
 
   py::class_<CriticalZoneCheckerGPU>(m, "CriticalZoneCheckerGPU")
       .def(py::init<CollisionChecker::ShapeType, const std::vector<float> &,
-                    const Eigen::Vector3f &, const Eigen::Quaternionf &, float,
+                    const Eigen::Vector3f &, const Eigen::Vector4f &, float,
                     float, const std::vector<double> &>(),
            py::arg("robot_shape"), py::arg("robot_dimensions"),
            py::arg("sensor_position_body"), py::arg("sensor_rotation_body"),
