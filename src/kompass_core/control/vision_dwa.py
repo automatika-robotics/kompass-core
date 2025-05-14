@@ -144,8 +144,6 @@ class VisionDWA(ControllerTemplate):
         :param params_file: Yaml file containing the parameters of the controller under 'dvz_controller'
         :type params_file: str
         """
-        import logging
-        logging.info("INIT VISION DWA")
         self._config = config or VisionDWAConfig()
 
         if config_file:
@@ -172,7 +170,7 @@ class VisionDWA(ControllerTemplate):
             max_num_threads=self._config.max_num_threads,
             config=self._config.to_kompass_cpp(),
         )
-        if camera_focal_length and camera_principal_point:
+        if camera_focal_length is not None and camera_principal_point is not None:
             self._planner.set_camera_intrinsics(camera_focal_length[0], camera_focal_length[1], camera_principal_point[0], camera_principal_point[1])
 
         # Init the following result
@@ -200,6 +198,7 @@ class VisionDWA(ControllerTemplate):
         try:
             if any(detected_boxes):
                 return self._planner.set_initial_tracking(pose_x_img, pose_y_img, detected_boxes)
+
             logging.error(f"Could not set initial tracking state: No detections are provided")
             return False
         except Exception as e:
@@ -298,7 +297,7 @@ class VisionDWA(ControllerTemplate):
             logging.error(f"Could not find velocity command: {e}")
             return False
 
-        return True
+        return self._result.is_found
 
     def has_result(self) -> None:
         """
