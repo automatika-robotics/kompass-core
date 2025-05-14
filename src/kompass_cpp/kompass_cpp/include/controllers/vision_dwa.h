@@ -163,8 +163,7 @@ public:
                                             const T &sensor_points) {
     LOG_DEBUG("Tracked pose: ", tracked_pose.x(), tracked_pose.y(),
               tracked_pose.yaw());
-    Trajectory2D ref_traj =
-        getTrackingReferenceSegment(tracked_pose, sensor_points);
+    Trajectory2D ref_traj = getTrackingReferenceSegment(tracked_pose);
     TrajSearchResult result;
     result.isTrajFound = true;
     result.trajCost = 0.0;
