@@ -478,7 +478,7 @@ def test_vision_dwa_with_depth_img():
         max_depth=5.0,
         depth_conversion_factor=0.001,
         camera_position_to_robot=np.array([0.32, 0.02089, 0.2999]),
-        camera_rotation_to_robot=np.array([-0.5846, 0.595, -0.395, 0.385])
+        camera_rotation_to_robot=np.array([0.385 , -0.5846, 0.595, -0.395]),
     )
 
     controller = VisionDWA(

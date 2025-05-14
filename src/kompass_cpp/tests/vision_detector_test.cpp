@@ -4,6 +4,7 @@
 #include "utils/transformation.h"
 #include "vision/depth_detector.h"
 #include <Eigen/Dense>
+#include <Eigen/src/Geometry/Quaternion.h>
 #include <opencv2/opencv.hpp>
 #include <stdexcept>
 #define BOOST_TEST_MODULE KOMPASS TESTS
@@ -30,23 +31,23 @@ struct DepthDetectorTestConfig {
 
   DepthDetectorTestConfig(const std::string image_filename, const Bbox2D &box) {
     // Body to camera tf from robot of test pictures
-    auto body_to_link_tf =
+    auto link_in_body =
         getTransformation(Eigen::Quaternionf{0.0f, 0.1987f, 0.0f, 0.98f},
                           Eigen::Vector3f{0.32f, 0.0209f, 0.3f});
 
-    auto link_to_cam_tf =
+    auto cam_in_link =
         getTransformation(Eigen::Quaternionf{0.01f, -0.00131f, 0.002f, 0.9999f},
                           Eigen::Vector3f{0.0f, 0.0105f, 0.0f});
 
-    auto cam_to_cam_opt_tf =
+    auto cam_opt_in_cam =
         getTransformation(Eigen::Quaternionf{-0.5f, 0.5f, -0.5f, 0.5f},
                           Eigen::Vector3f{0.0f, 0.0105f, 0.0f});
 
-    Eigen::Isometry3f body_to_cam_tf = body_to_link_tf * link_to_cam_tf * cam_to_cam_opt_tf;
+    Eigen::Isometry3f cam_in_body = link_in_body * cam_in_link * cam_opt_in_cam;
 
-    detector = std::make_unique<DepthDetector>(depth_range, body_to_cam_tf,
-                                               focal_length, principal_point,
-                                               depth_conv_factor);
+    detector =
+        std::make_unique<DepthDetector>(depth_range, cam_in_body, focal_length,
+                                        principal_point, depth_conv_factor);
 
     detector->updateState(current_state);
     cv_img = cv::imread(image_filename, cv::IMREAD_GRAYSCALE);
@@ -132,6 +133,8 @@ BOOST_AUTO_TEST_CASE(test_Depth_Detector_bag_image) {
   auto boxes = config.run(outputFilename);
 
   const float approx_actual_dist = 1.0;
-  BOOST_TEST(std::abs(boxes[0].center.x() - approx_actual_dist) <= 0.1 ,
+  LOG_INFO("Got distance = ", boxes[0].center.x(),
+           ",  boxes[0].center.y()=", boxes[0].center.y());
+  BOOST_TEST(std::abs(boxes[0].center.x() - approx_actual_dist) <= 0.1,
              "3D box distance is not equal to approximate measured distance");
 }

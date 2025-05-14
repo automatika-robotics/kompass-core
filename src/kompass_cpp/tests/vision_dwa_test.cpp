@@ -6,6 +6,7 @@
 #include "test.h"
 #include "utils/cost_evaluator.h"
 #include "utils/logger.h"
+#include <Eigen/src/Geometry/Quaternion.h>
 #include <memory>
 #include <opencv2/opencv.hpp>
 #define BOOST_TEST_MODULE KOMPASS TESTS
@@ -124,9 +125,8 @@ struct VisionDWATestConfig {
         body_to_link_tf * link_to_cam_tf * cam_to_cam_opt_tf;
 
     Eigen::Vector3f translation = body_to_cam_tf.translation();
-    Eigen::Vector4f rotation = {
-        -0.5846, 0.595, -0.395,
-        0.385}; // Eigen::Vector4f(body_to_cam_tf.rotation().data());
+    Eigen::Quaternionf rotation_quat = Eigen::Quaternionf(body_to_cam_tf.rotation());
+    Eigen::Vector4f rotation = {rotation_quat.w(), rotation_quat.x(), rotation_quat.y(), rotation_quat.z()};
 
     controller = std::make_unique<Control::VisionDWA>(
         controlType, controlLimits, maxLinearSamples, maxAngularSamples,
@@ -390,7 +390,7 @@ BOOST_AUTO_TEST_CASE(test_VisionDWA_with_depth_image) {
   auto initial_point = Eigen::Vector2i{610, 200};
 
   // Robot pointcloud values (global frame)
-  std::vector<Path::Point> cloud = {{0.3, 0.27, 0.1}};
+  std::vector<Path::Point> cloud = {{10.3, 10.5, 0.2}};
 
   VisionDWATestConfig testConfig(cloud);
 

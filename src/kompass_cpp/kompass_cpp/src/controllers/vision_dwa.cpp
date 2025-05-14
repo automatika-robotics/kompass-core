@@ -101,8 +101,7 @@ bool VisionDWA::setInitialTracking(const int pose_x_img, const int pose_y_img,
 }
 
 bool VisionDWA::setInitialTracking(
-    const int pose_x_img,
-    const int pose_y_img,
+    const int pose_x_img, const int pose_y_img,
     const Eigen::MatrixX<unsigned short> &aligned_depth_image,
     const std::vector<Bbox2D> &detected_boxes) {
   if (!detector_) {
@@ -135,6 +134,39 @@ bool VisionDWA::setInitialTracking(
   }
   return tracker_->setInitialTracking(boxes_3d.value()[0]);
 }
+
+Trajectory2D
+VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose) {
+  int step = 0;
+
+  Trajectory2D ref_traj(config_.prediction_horizon());
+  std::vector<Path::State> states;
+  Path::State simulated_state = currentState;
+  Path::State original_state = currentState;
+  TrackedPose2D simulated_track = tracking_pose;
+  Velocity2D cmd;
+
+  // Simulate following the tracked target for the period til
+  // prediction_horizon assuming the target moves with its same current
+  // velocity
+  while (step < config_.prediction_horizon()) {
+    states.push_back(simulated_state);
+    ref_traj.path.add(step,
+                      Path::Point(simulated_state.x, simulated_state.y, 0.0));
+    this->setCurrentState(simulated_state);
+    cmd = this->getPureTrackingCtrl(simulated_track);
+    simulated_state.update(cmd, config_.control_time_step());
+    simulated_track.update(config_.control_time_step());
+    if (step < config_.prediction_horizon() - 1) {
+      ref_traj.velocities.add(step, cmd);
+    }
+
+    step++;
+  }
+  this->setCurrentState(original_state);
+
+  return ref_traj;
+};
 
 } // namespace Control
 } // namespace Kompass

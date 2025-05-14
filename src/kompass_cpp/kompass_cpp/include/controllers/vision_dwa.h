@@ -2,15 +2,17 @@
 
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
+#include "datatypes/path.h"
 #include "datatypes/tracking.h"
+#include "datatypes/trajectory.h"
 #include "dwa.h"
 #include "utils/logger.h"
 #include "vision/depth_detector.h"
 #include "vision/tracker.h"
 #include <Eigen/Dense>
+#include <boost/filesystem/path.hpp>
 #include <cmath>
 #include <memory>
-#include <tuple>
 #include <vector>
 
 namespace Kompass {
@@ -161,31 +163,21 @@ public:
                                             const T &sensor_points) {
     LOG_DEBUG("Tracked pose: ", tracked_pose.x(), tracked_pose.y(),
               tracked_pose.yaw());
-    Trajectory2D ref_traj;
-    bool has_collisions;
-    std::tie(ref_traj, has_collisions) =
-        this->getTrackingReferenceSegment(tracked_pose, sensor_points);
-    if (!has_collisions) {
-      // The tracking sample is collision free -> No need to explore other
-      // samples
-      TrajSearchResult result;
-      result.isTrajFound = true;
-      result.trajCost = 0.0;
-      result.trajectory = ref_traj;
-      latest_velocity_command_ = ref_traj.velocities.getFront();
-      return result;
-    } else {
-      LOG_DEBUG("USING DWA SAMPLING");
-      // The tracking sample has collisions -> use DWA-like sampling and control
-      Path::Path ref_tracking_path(ref_traj.path.x, ref_traj.path.y,
-                                   ref_traj.path.z,
-                                   config_.prediction_horizon());
-      // Set the tracking segment as the reference path
-      // Interpolation of the path is not required as the reference is already
-      // created using the robot control time step
-      this->setCurrentPath(ref_tracking_path, false);
-      return this->computeVelocityCommandsSet(current_vel, sensor_points);
-    }
+    Trajectory2D ref_traj =
+        getTrackingReferenceSegment(tracked_pose, sensor_points);
+    TrajSearchResult result;
+    result.isTrajFound = true;
+    result.trajCost = 0.0;
+    result.trajectory = ref_traj;
+    latest_velocity_command_ = ref_traj.velocities.getFront();
+    // ---------------------------------------------------------------
+    // Update reference to use in case goal is lost
+    auto referenceToTarget =
+        Path::Path(ref_traj.path.x, ref_traj.path.y, ref_traj.path.z,
+                   config_.prediction_horizon());
+    this->setCurrentPath(referenceToTarget, false);
+    // ---------------------------------------------------------------
+    return result;
   };
 
   /**
@@ -236,27 +228,31 @@ public:
           "Tracker is not initialized with an initial tracking target. Call "
           "'VisionDWA::setInitialTracking' first");
     }
-    // Send current state to the detector
-    detector_->updateState(currentState);
-    detector_->updateBoxes(aligned_depth_img, detected_boxes_2d);
-    auto boxes_3d = detector_->get3dDetections();
-
-    if (boxes_3d) {
-      LOG_DEBUG("Got 3D boxes from 2d");
-      // Update the tracker with the detected boxes
-      tracker_->updateTracking(boxes_3d.value());
-      auto tracked_pose = tracker_->getFilteredTrackedPose2D();
-      if (tracked_pose) {
-        return this->getTrackingCtrl<T>(tracked_pose.value(), current_vel,
-                                        sensor_points);
+    if (!detected_boxes_2d.empty()) {
+      // Send current state to the detector
+      detector_->updateState(currentState);
+      detector_->updateBoxes(aligned_depth_img, detected_boxes_2d);
+      auto boxes_3d = detector_->get3dDetections();
+      if (boxes_3d) {
+        LOG_DEBUG("Got 3D boxes from 2d");
+        // Update the tracker with the detected boxes
+        tracker_->updateTracking(boxes_3d.value());
+        auto tracked_pose = tracker_->getFilteredTrackedPose2D();
+        if (tracked_pose) {
+          return this->getTrackingCtrl<T>(tracked_pose.value(), current_vel,
+                                          sensor_points);
+        }
       } else {
-        LOG_WARNING("Tracker failed to find the target");
-        // Return false for trajectory found
-        return TrajSearchResult();
+        LOG_WARNING("Detector failed to find 3D boxes");
       }
+    }
+    // IF TARGET IS LOST -> USE DWA TO LAST KNOWN LOCATION
+    if (!isGoalReached()) {
+      LOG_DEBUG("USING DWA SAMPLING TO GO TO LAST KNOWN LOCATION");
+      // The tracking sample has collisions -> use DWA-like sampling and control
+      return this->computeVelocityCommandsSet(current_vel, sensor_points);
     } else {
-      LOG_WARNING("Detector failed to find 3D boxes");
-      // Return false for trajectory found
+      LOG_WARNING("Target is Lost");
       return TrajSearchResult();
     }
   };
@@ -284,8 +280,7 @@ public:
    * @return false
    */
   bool
-  setInitialTracking(const int pose_x_img,
-                     const int pose_y_img,
+  setInitialTracking(const int pose_x_img, const int pose_y_img,
                      const Eigen::MatrixX<unsigned short> &aligned_depth_image,
                      const std::vector<Bbox2D> &detected_boxes_2d);
 
@@ -297,53 +292,13 @@ private:
   Eigen::Isometry3f vision_sensor_tf_;
 
   /**
-   * @brief Get the Tracking Reference Trajectory Segment and if this segment is
-   * has collision
+   * @brief Get the Tracking Reference Trajectory Segment
    *
    * @tparam T
    * @param tracking_pose
-   * @param sensor_points
    * @return std::tuple<Trajectory2D, bool>
    */
-  template <typename T>
-  std::tuple<Trajectory2D, bool>
-  getTrackingReferenceSegment(const TrackedPose2D &tracking_pose,
-                              const T &sensor_points) {
-    int step = 0;
-
-    Trajectory2D ref_traj(config_.prediction_horizon());
-    std::vector<Path::State> states;
-    Path::State simulated_state = currentState;
-    Path::State original_state = currentState;
-    TrackedPose2D simulated_track = tracking_pose;
-    Velocity2D cmd;
-
-    // Simulate following the tracked target for the period til
-    // prediction_horizon assuming the target moves with its same current
-    // velocity
-    while (step < config_.prediction_horizon()) {
-      states.push_back(simulated_state);
-      ref_traj.path.add(step,
-                        Path::Point(simulated_state.x, simulated_state.y, 0.0));
-      this->setCurrentState(simulated_state);
-      cmd = this->getPureTrackingCtrl(simulated_track);
-      simulated_state.update(cmd, config_.control_time_step());
-      simulated_track.update(config_.control_time_step());
-      if (step < config_.prediction_horizon() - 1) {
-        ref_traj.velocities.add(step, cmd);
-      }
-
-      step++;
-    }
-    this->setCurrentState(original_state);
-
-    bool has_collisions =
-        trajSampler->checkStatesFeasibility(states, sensor_points);
-
-    LOG_DEBUG("Found reference traj with collisions: ", has_collisions);
-
-    return std::make_tuple(ref_traj, has_collisions);
-  };
+  Trajectory2D getTrackingReferenceSegment(const TrackedPose2D &tracking_pose);
   //
 };
 
