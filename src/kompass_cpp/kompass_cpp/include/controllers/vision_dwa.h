@@ -193,22 +193,31 @@ public:
   Control::TrajSearchResult
   getTrackingCtrl(const std::vector<Bbox3D> &detected_boxes,
                   const Velocity2D &current_vel, const T &sensor_points) {
-    if (tracker_->trackerInitialized()) {
-      // Update the tracker with the detected boxes
-      tracker_->updateTracking(detected_boxes);
-      auto tracked_pose = tracker_->getFilteredTrackedPose2D();
-      if (tracked_pose) {
-        return this->getTrackingCtrl<T>(tracked_pose.value(), current_vel,
-                                        sensor_points);
+    if(!detected_boxes.empty()){
+      if (tracker_->trackerInitialized()) {
+        // Update the tracker with the detected boxes
+        tracker_->updateTracking(detected_boxes);
+        auto tracked_pose = tracker_->getFilteredTrackedPose2D();
+        if (tracked_pose) {
+          return this->getTrackingCtrl<T>(tracked_pose.value(), current_vel,
+                                          sensor_points);
+        } else {
+          LOG_WARNING("Tracker failed to find the target");
+        }
       } else {
-        LOG_WARNING("Tracker failed to find the target");
-        // Return false for trajectory found
-        return TrajSearchResult();
+        throw std::runtime_error(
+            "Tracker is not initialized with an initial tracking target. Call "
+            "'VisionDWA::setInitialTracking' first");
       }
+    }
+    // IF TARGET IS LOST -> USE DWA TO LAST KNOWN LOCATION
+    if (!isGoalReached()) {
+      LOG_DEBUG("USING DWA SAMPLING TO GO TO LAST KNOWN LOCATION");
+      // The tracking sample has collisions -> use DWA-like sampling and control
+      return this->computeVelocityCommandsSet(current_vel, sensor_points);
     } else {
-      throw std::runtime_error(
-          "Tracker is not initialized with an initial tracking target. Call "
-          "'VisionDWA::setInitialTracking' first");
+      LOG_WARNING("Target is Lost");
+      return TrajSearchResult();
     }
   };
 
@@ -298,7 +307,6 @@ private:
    * @return std::tuple<Trajectory2D, bool>
    */
   Trajectory2D getTrackingReferenceSegment(const TrackedPose2D &tracking_pose);
-  //
 };
 
 } // namespace Control

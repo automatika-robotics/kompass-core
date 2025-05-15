@@ -33,6 +33,8 @@ VisionDWA::VisionDWA(const ControlType &robotCtrlType,
           octreeRes, costWeights, maxNumThreads) {
   ctrl_limits_ = ctrlLimits;
   config_ = config;
+  // Set the reaching goal distance (used in the DWA mode when vision target is lost)
+  goal_dist_tolerance = config_.e_pose();
   // Initialize the bounding box tracker
   tracker_ = std::make_unique<FeatureBasedBboxTracker>(
       config.control_time_step(), config.e_pose(), config.e_vel(),
