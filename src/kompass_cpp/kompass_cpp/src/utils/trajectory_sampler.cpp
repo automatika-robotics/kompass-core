@@ -98,6 +98,10 @@ void TrajectorySampler::setSampleDroppingMode(const bool drop_samples) {
   this->drop_samples_ = drop_samples;
 }
 
+float TrajectorySampler::getRobotRadius() const{
+  return collChecker->getRadius();
+}
+
 void TrajectorySampler::updateParams(TrajectorySamplerParameters config) {
   time_step_ = config.getParameter<double>("time_step");
   max_time_ = config.getParameter<double>("prediction_horizon");

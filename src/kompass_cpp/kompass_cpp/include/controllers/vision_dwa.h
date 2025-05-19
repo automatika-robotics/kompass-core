@@ -161,8 +161,6 @@ public:
   Control::TrajSearchResult getTrackingCtrl(const TrackedPose2D &tracked_pose,
                                             const Velocity2D &current_vel,
                                             const T &sensor_points) {
-    LOG_DEBUG("Tracked pose: ", tracked_pose.x(), tracked_pose.y(),
-              tracked_pose.yaw());
     Trajectory2D ref_traj = getTrackingReferenceSegment(tracked_pose);
     TrajSearchResult result;
     result.isTrajFound = true;
@@ -212,7 +210,6 @@ public:
     }
     // IF TARGET IS LOST -> USE DWA TO LAST KNOWN LOCATION
     if (!isGoalReached()) {
-      LOG_DEBUG("USING DWA SAMPLING TO GO TO LAST KNOWN LOCATION");
       // The tracking sample has collisions -> use DWA-like sampling and control
       return this->computeVelocityCommandsSet(current_vel, sensor_points);
     } else {
@@ -242,7 +239,6 @@ public:
       detector_->updateBoxes(aligned_depth_img, detected_boxes_2d);
       auto boxes_3d = detector_->get3dDetections();
       if (boxes_3d) {
-        LOG_DEBUG("Got 3D boxes from 2d");
         // Update the tracker with the detected boxes
         tracker_->updateTracking(boxes_3d.value());
         auto tracked_pose = tracker_->getFilteredTrackedPose2D();
@@ -256,7 +252,6 @@ public:
     }
     // IF TARGET IS LOST -> USE DWA TO LAST KNOWN LOCATION
     if (!isGoalReached()) {
-      LOG_DEBUG("USING DWA SAMPLING TO GO TO LAST KNOWN LOCATION");
       // The tracking sample has collisions -> use DWA-like sampling and control
       return this->computeVelocityCommandsSet(current_vel, sensor_points);
     } else {
@@ -275,7 +270,7 @@ public:
    * @return false
    */
   bool setInitialTracking(const int pose_x_img, const int pose_y_img,
-                          const std::vector<Bbox3D> &detected_boxes);
+                          const std::vector<Bbox3D> &detected_boxes, const float yaw = 0.0);
 
   /**
    * @brief  Set the initial image position of the target to be tracked using 2D
@@ -290,7 +285,7 @@ public:
   bool
   setInitialTracking(const int pose_x_img, const int pose_y_img,
                      const Eigen::MatrixX<unsigned short> &aligned_depth_image,
-                     const std::vector<Bbox2D> &detected_boxes_2d);
+                     const std::vector<Bbox2D> &detected_boxes_2d, const float yaw = 0.0);
 
 private:
   ControlLimitsParams ctrl_limits_;

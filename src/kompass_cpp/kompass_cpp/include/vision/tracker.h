@@ -21,10 +21,10 @@ class FeatureBasedBboxTracker{
 
       bool setInitialTracking(const TrackedBbox3D& bBox);
 
-      bool setInitialTracking(const Bbox3D &bBox);
+      bool setInitialTracking(const Bbox3D &bBox, const float yaw = 0.0);
 
       bool setInitialTracking(const int &pose_x_img, const int &pose_y_img,
-                              const std::vector<Bbox3D> &detected_boxes);
+                              const std::vector<Bbox3D> &detected_boxes, const float yaw = 0.0);
 
       bool trackerInitialized() const;
 

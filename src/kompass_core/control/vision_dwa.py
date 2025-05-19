@@ -224,7 +224,7 @@ class VisionDWA(ControllerTemplate):
             current_state.x, current_state.y, current_state.yaw, current_state.speed)
             if any(detected_boxes):
                 return self._planner.set_initial_tracking(
-                    pose_x_img, pose_y_img, aligned_depth_image, detected_boxes
+                    pose_x_img, pose_y_img, aligned_depth_image, detected_boxes, current_state.yaw
                 )
             logging.error(f"Could not set initial tracking state: No detections are provided")
             return False

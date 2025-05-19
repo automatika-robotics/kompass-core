@@ -127,6 +127,8 @@ public:
    */
   void resetOctreeResolution(const double resolution);
 
+  float getRobotRadius() const;
+
   Trajectory2D
   generateSingleSampleFromVel(const Velocity2D &vel,
                               const Path::State &pose = Path::State());

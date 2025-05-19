@@ -74,6 +74,10 @@ void CollisionChecker::resetOctreeResolution(const double resolution) {
   }
 }
 
+float CollisionChecker::getRadius() const{
+  return robotRadius_;
+}
+
 void CollisionChecker::generateBoxesFromOctomap(
     std::vector<fcl::CollisionObjectf *> &boxes, fcl::OcTreef &tree) {
 

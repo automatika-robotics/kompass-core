@@ -219,6 +219,8 @@ public:
    */
   bool checkCollisions(const Path::State current_state);
 
+  float getRadius() const;
+
 protected:
   double robotHeight_{1.0}, robotRadius_;
   // sensor tf with respect to the world

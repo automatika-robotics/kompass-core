@@ -55,9 +55,9 @@ void VisionDWA::setCameraIntrinsics(const float focal_length_x,
 }
 
 Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
-  float distance = tracking_pose.distance(currentState.x, currentState.y, 0.0);
-  float gamma =
-      Angle::normalizeToMinusPiPlusPi(tracking_pose.yaw() - currentState.yaw);
+  float distance = tracking_pose.distance(currentState.x, currentState.y, 0.0) - trajSampler->getRobotRadius();
+  distance = std::max(distance, 0.0f);
+  float gamma = Angle::normalizeToMinusPiPlusPi(tracking_pose.yaw() - currentState.yaw);
   float psi = Angle::normalizeToMinusPiPlusPi(
       std::atan2(tracking_pose.y() - currentState.y,
                  tracking_pose.x() - currentState.x) -
@@ -66,6 +66,8 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
   float distance_error = config_.target_distance() - distance;
   float angle_error =
       Angle::normalizeToMinusPiPlusPi(config_.target_orientation() - psi);
+
+  LOG_DEBUG("Distance to target", distance, ", ang_error=", angle_error);
 
   float distance_tolerance = config_.tolerance() * config_.target_distance();
   float angle_tolerance =
@@ -82,10 +84,15 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
     followingVel.setVx(v);
     double omega;
     if (distance > 0.0) {
+      // TODO terms to be removed
+      auto term2 = 2.0 * (v * sin(psi) / distance);
+      auto term3 = 2.0 * tracking_pose.v() * sin(gamma - psi) / distance;
+      auto term4 = - 2.0 * config_.K_omega() * tanh(angle_error);
       omega = -tracking_pose.omega() +
               2.0 * (v * sin(psi) / distance +
                      tracking_pose.v() * sin(gamma - psi) / distance -
                      config_.K_omega() * tanh(angle_error));
+      LOG_DEBUG("-tracking_pose.omega()=", -tracking_pose.omega(), ", term2=", term2, ", term3=", term3, ", term4=", term4);
     } else {
       omega =
           -tracking_pose.omega() - 2.0 * config_.K_omega() * tanh(angle_error);
@@ -93,19 +100,20 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
     omega = std::clamp(omega, -ctrl_limits_.omegaParams.maxOmega,
                        ctrl_limits_.omegaParams.maxOmega);
     followingVel.setOmega(omega);
+    LOG_DEBUG("RETURNIN V=", v, " OMEGA=", omega);
   }
   return followingVel;
 }
 
 bool VisionDWA::setInitialTracking(const int pose_x_img, const int pose_y_img,
-                                   const std::vector<Bbox3D> &detected_boxes) {
-  return tracker_->setInitialTracking(pose_x_img, pose_y_img, detected_boxes);
+                                   const std::vector<Bbox3D> &detected_boxes, const float yaw) {
+  return tracker_->setInitialTracking(pose_x_img, pose_y_img, detected_boxes, yaw);
 }
 
 bool VisionDWA::setInitialTracking(
     const int pose_x_img, const int pose_y_img,
     const Eigen::MatrixX<unsigned short> &aligned_depth_image,
-    const std::vector<Bbox2D> &detected_boxes) {
+    const std::vector<Bbox2D> &detected_boxes, const float yaw) {
   if (!detector_) {
     throw std::runtime_error(
         "DepthDetector is not initialized with the camera intrinsics. Call "
@@ -134,7 +142,7 @@ bool VisionDWA::setInitialTracking(
     LOG_DEBUG("Failed to get 3D box from 2D target box");
     return false;
   }
-  return tracker_->setInitialTracking(boxes_3d.value()[0]);
+  return tracker_->setInitialTracking(boxes_3d.value()[0], yaw);
 }
 
 Trajectory2D

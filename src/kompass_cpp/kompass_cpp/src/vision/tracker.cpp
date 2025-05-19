@@ -60,18 +60,20 @@ bool FeatureBasedBboxTracker::setInitialTracking(const TrackedBbox3D &bBox) {
   return true;
 }
 
-bool FeatureBasedBboxTracker::setInitialTracking(const Bbox3D &bBox) {
+bool FeatureBasedBboxTracker::setInitialTracking(const Bbox3D &bBox, const float yaw) {
   LOG_DEBUG("Setting initial tracked box");
   trackedBox_ = std::make_unique<TrackedBbox3D>(bBox);
+  trackedBox_->yaw_vec(0) = yaw;
   Eigen::Matrix<float, StateSize, 1> state_vec =
       Eigen::Matrix<float, StateSize, 1>::Zero();
   state_vec(0) = bBox.center.x();
   state_vec(1) = bBox.center.y();
+  state_vec(2) = yaw;
   stateKalmanFilter_->setInitialState(state_vec);
   return true;
 }
 
-bool FeatureBasedBboxTracker::setInitialTracking(const int& pose_x_img, const int& pose_y_img, const std::vector<Bbox3D>& detected_boxes){
+bool FeatureBasedBboxTracker::setInitialTracking(const int& pose_x_img, const int& pose_y_img, const std::vector<Bbox3D>& detected_boxes, const float yaw){
     std::unique_ptr<Bbox3D> target_box;
     // Find a detected box containing the point
     for(auto box: detected_boxes){
@@ -88,13 +90,7 @@ bool FeatureBasedBboxTracker::setInitialTracking(const int& pose_x_img, const in
       // given position was not found inside any detected box
       return false;
     }
-    trackedBox_ = std::make_unique<TrackedBbox3D>(*target_box);
-    Eigen::Vector<float, StateSize> state_vec =
-        Eigen::Vector<float, StateSize>::Zero();
-    state_vec(0) = target_box->center[0];
-    state_vec(1) = target_box->center[1];
-    stateKalmanFilter_->setInitialState(state_vec);
-    return true;
+    return setInitialTracking(*target_box, yaw);
 }
 
 bool FeatureBasedBboxTracker::trackerInitialized() const{
@@ -120,7 +116,6 @@ void FeatureBasedBboxTracker::updateTrackedBoxState(){
 }
 
 bool FeatureBasedBboxTracker::updateTracking(const std::vector<Bbox3D> &detected_boxes){
-
     // Predicted the new location of the tracked box
     auto predicted_tracked_box = trackedBox_->predictConstantAcc(timeStep_);
 
@@ -146,6 +141,7 @@ bool FeatureBasedBboxTracker::updateTracking(const std::vector<Bbox3D> &detected
       trackedBox_->updateFromNewDetection(detected_boxes[similar_box_idx], timeStep_);
       // Update state by applying kalman filter on the raw measurement
       updateTrackedBoxState();
+      LOG_DEBUG("Box Now updated to: ", trackedBox_->box.center.x(), ", ", trackedBox_->box.center.y(), ", yaw=", trackedBox_->yaw_vec(0), ", omega=", trackedBox_->yaw_vec(1), ", v=", trackedBox_->v());
       return true;
     }
     return false;
