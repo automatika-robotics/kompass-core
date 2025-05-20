@@ -15,10 +15,10 @@ struct Bbox2D {
 
   Bbox2D(){};
 
-  Bbox2D(const Bbox2D &box) : top_corner(box.top_corner), size(box.size){};
+  Bbox2D(const Bbox2D &box) : top_corner(box.top_corner), size(box.size), timestamp(box.timestamp){};
 
-  Bbox2D(const Eigen::Vector2i top_corner, Eigen::Vector2i size)
-      : top_corner(top_corner), size(size){};
+  Bbox2D(const Eigen::Vector2i top_corner, const Eigen::Vector2i size, const float timestamp = 0.0)
+      : top_corner(top_corner), size(size), timestamp(timestamp){};
 
   Eigen::Vector2i getXLimits() const {
     return {top_corner.x(), top_corner.x() + size.x()};
@@ -48,7 +48,7 @@ struct Bbox3D {
   Bbox3D(const Eigen::Vector3f &center, const Eigen::Vector3f &size,
          const Eigen::Vector2i center_img_frame,
          const Eigen::Vector2i size_img_frame, const float timestamp = 0.0,
-         std::vector<Eigen::Vector3f> pc_points = {})
+         const std::vector<Eigen::Vector3f> pc_points = {})
       : center(center), size(size), center_img_frame(center_img_frame),
         size_img_frame(size_img_frame), pc_points(pc_points),
         timestamp(timestamp){};

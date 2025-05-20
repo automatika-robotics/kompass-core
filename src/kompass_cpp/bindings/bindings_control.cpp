@@ -1,6 +1,7 @@
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/function.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
@@ -262,18 +263,19 @@ void bindings_control(py::module_ &m) {
            py::arg("focal_length_x"), py::arg("focal_length_y"),
            py::arg("principal_point_x"), py::arg("principal_point_y"))
       .def("set_initial_tracking",
-           py::overload_cast<const int, const int,
-                             const std::vector<Bbox3D> &, const float>(
+           py::overload_cast<const int, const int, const std::vector<Bbox3D> &,
+                             const float>(
                &Control::VisionDWA::setInitialTracking),
-           py::arg("pixel_x"), py::arg("pixel_y"),
-           py::arg("detected_boxes_3d"), py::arg("robot_orientation") = 0.0)
+           py::arg("pixel_x"), py::arg("pixel_y"), py::arg("detected_boxes_3d"),
+           py::arg("robot_orientation") = 0.0)
       .def("set_initial_tracking",
            py::overload_cast<const int, const int,
                              const Eigen::MatrixX<unsigned short> &,
                              const std::vector<Bbox2D> &, const float>(
                &Control::VisionDWA::setInitialTracking),
            py::arg("pixel_x"), py::arg("pixel_y"),
-           py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"), py::arg("robot_orientation") = 0.0)
+           py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
+           py::arg("robot_orientation") = 0.0)
       .def("get_tracking_ctrl",
            py::overload_cast<const std::vector<Bbox3D> &,
                              const Control::Velocity2D &,
@@ -290,7 +292,7 @@ void bindings_control(py::module_ &m) {
            py::arg("detected_boxes"), py::arg("robot_velocity"),
            py::arg("sensor_data"))
       .def("get_tracking_ctrl",
-           py::overload_cast<const Control::TrackedPose2D &,
+           py::overload_cast<const std::optional<Control::TrackedPose2D> &,
                              const Control::Velocity2D &,
                              const std::vector<Eigen::Vector3f> &>(
                &Control::VisionDWA::getTrackingCtrl<
@@ -298,7 +300,7 @@ void bindings_control(py::module_ &m) {
            py::arg("tracked_pose"), py::arg("robot_velocity"),
            py::arg("sensor_data"))
       .def("get_tracking_ctrl",
-           py::overload_cast<const Control::TrackedPose2D &,
+           py::overload_cast<const std::optional<Control::TrackedPose2D> &,
                              const Control::Velocity2D &,
                              const Control::LaserScan &>(
                &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>),
