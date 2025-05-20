@@ -33,7 +33,9 @@ VisionDWA::VisionDWA(const ControlType &robotCtrlType,
           octreeRes, costWeights, maxNumThreads) {
   ctrl_limits_ = ctrlLimits;
   config_ = config;
-  // Set the reaching goal distance (used in the DWA mode when vision target is lost)
+  // Set the reaching goal distance (used in the DWA mode when vision target is
+  // lost)
+  track_velocity_ = config_.enable_vel_tracking();
   goal_dist_tolerance = config_.e_pose();
   // Initialize the bounding box tracker
   tracker_ = std::make_unique<FeatureBasedBboxTracker>(
@@ -55,9 +57,9 @@ void VisionDWA::setCameraIntrinsics(const float focal_length_x,
 }
 
 Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
-  float distance = tracking_pose.distance(currentState.x, currentState.y, 0.0) - trajSampler->getRobotRadius();
+  float distance = tracking_pose.distance(currentState.x, currentState.y, 0.0) -
+                   trajSampler->getRobotRadius();
   distance = std::max(distance, 0.0f);
-  float gamma = Angle::normalizeToMinusPiPlusPi(tracking_pose.yaw() - currentState.yaw);
   float psi = Angle::normalizeToMinusPiPlusPi(
       std::atan2(tracking_pose.y() - currentState.y,
                  tracking_pose.x() - currentState.x) -
@@ -67,7 +69,7 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
   float angle_error =
       Angle::normalizeToMinusPiPlusPi(config_.target_orientation() - psi);
 
-  LOG_DEBUG("Distance to target", distance, ", ang_error=", angle_error);
+  // LOG_DEBUG("Distance to target", distance, ", ang_error=", angle_error);
 
   float distance_tolerance = config_.tolerance() * config_.target_distance();
   float angle_tolerance =
@@ -76,7 +78,7 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
   Velocity2D followingVel;
   if (abs(distance_error) > distance_tolerance or
       abs(angle_error) > angle_tolerance) {
-    double v = ((tracking_pose.v() * cos(gamma - psi)) -
+    double v = ((track_velocity_ * tracking_pose.v() * cos(psi)) -
                 (config_.K_v() * tanh(distance_error))) /
                cos(psi);
     v = std::clamp(v, -ctrl_limits_.velXParams.maxVel,
@@ -85,29 +87,30 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
     double omega;
     if (distance > 0.0) {
       // TODO terms to be removed
-      auto term2 = 2.0 * (v * sin(psi) / distance);
-      auto term3 = 2.0 * tracking_pose.v() * sin(gamma - psi) / distance;
-      auto term4 = - 2.0 * config_.K_omega() * tanh(angle_error);
-      omega = -tracking_pose.omega() +
-              2.0 * (v * sin(psi) / distance +
-                     tracking_pose.v() * sin(gamma - psi) / distance -
+      // auto term2 = 2.0 * sin(psi) / distance * (v - tracking_pose.v());
+      // auto term3 = -2.0 * config_.K_omega() * tanh(angle_error);
+      omega = -track_velocity_ * tracking_pose.omega() +
+              2.0 * (sin(psi) / distance * (v - tracking_pose.v()) -
                      config_.K_omega() * tanh(angle_error));
-      LOG_DEBUG("-tracking_pose.omega()=", -tracking_pose.omega(), ", term2=", term2, ", term3=", term3, ", term4=", term4);
+      // LOG_DEBUG("-tracking_pose.omega()=", -tracking_pose.omega(),
+      //           ", term_psi=", term2, ", term_ang_err=", term3);
     } else {
-      omega =
-          -tracking_pose.omega() - 2.0 * config_.K_omega() * tanh(angle_error);
+      omega = -track_velocity_ * tracking_pose.omega() -
+              2.0 * config_.K_omega() * tanh(angle_error);
     }
     omega = std::clamp(omega, -ctrl_limits_.omegaParams.maxOmega,
                        ctrl_limits_.omegaParams.maxOmega);
     followingVel.setOmega(omega);
-    LOG_DEBUG("RETURNIN V=", v, " OMEGA=", omega);
+    // LOG_DEBUG("RETURNIN V=", v, " OMEGA=", omega);
   }
   return followingVel;
 }
 
 bool VisionDWA::setInitialTracking(const int pose_x_img, const int pose_y_img,
-                                   const std::vector<Bbox3D> &detected_boxes, const float yaw) {
-  return tracker_->setInitialTracking(pose_x_img, pose_y_img, detected_boxes, yaw);
+                                   const std::vector<Bbox3D> &detected_boxes,
+                                   const float yaw) {
+  return tracker_->setInitialTracking(pose_x_img, pose_y_img, detected_boxes,
+                                      yaw);
 }
 
 bool VisionDWA::setInitialTracking(

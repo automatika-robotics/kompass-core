@@ -1,7 +1,7 @@
-#define EIGEN_DONT_PARALLELIZE  // TODO: resolve error when enabling Eigen parallelization
+#define EIGEN_DONT_PARALLELIZE // TODO: resolve error when enabling Eigen
+                               // parallelization
 #include "utils/kalman_filter.h"
 #include "utils/logger.h"
-
 
 namespace Kompass {
 
@@ -44,11 +44,13 @@ bool LinearSSKalmanFilter::setup(const Eigen::MatrixXf &A,
   return true;
 }
 
-void LinearSSKalmanFilter::setInitialState(const Eigen::VectorXf& initial_state) {
-  if (initial_state.size() != this->state.size()){
-     LOG_ERROR("Cannot set initial state. Expected the "
-              "following sized: ", this->state.size());
-     throw std::length_error("Error Setting Initial State");
+void LinearSSKalmanFilter::setInitialState(
+    const Eigen::VectorXf &initial_state) {
+  if (initial_state.size() != this->state.size()) {
+    LOG_ERROR("Cannot set initial state. Expected the "
+              "following sized: ",
+              this->state.size());
+    throw std::length_error("Error Setting Initial State");
   }
   this->state = initial_state;
   this->state_initialized = true;
@@ -57,20 +59,23 @@ void LinearSSKalmanFilter::setInitialState(const Eigen::VectorXf& initial_state)
 void LinearSSKalmanFilter::setA(const Eigen::MatrixXf &A) { this->A = A; }
 
 void LinearSSKalmanFilter::estimate(const Eigen::MatrixXf &measurements,
-                                    const Eigen::MatrixXf &inputs) {
-  // predict a new state
-  Eigen::MatrixXf predicted_state = this->A * this->state + this->B * inputs;
-
-  // Covariance Extrapolation Equation
-  this->P = this->A * this->P * this->A.transpose() + this->Q;
+                                    const Eigen::MatrixXf &inputs,
+                                    const int numberSteps) {
+  Eigen::MatrixXf A_transpose = this->A.transpose();
+  Eigen::MatrixXf B_inputs = this->B * inputs;
+  Eigen::MatrixXf predicted_state = this->state;
+  // predict a new state after number of steps
+  for (int i = 0; i < numberSteps; i++) {
+    predicted_state = this->A * predicted_state + B_inputs;
+    // Covariance Extrapolation Equation
+    this->P = this->A * this->P * A_transpose + this->Q;
+  }
 
   // Innovation Matrix
-  Eigen::MatrixXf S =
-      this->R + this->H * this->P * this->H.transpose();
+  Eigen::MatrixXf S = this->R + this->H * this->P * this->H.transpose();
 
   // Kalman Gain Matrix
-  Eigen::MatrixXf K =
-      this->P * this->H.transpose() * S.inverse();
+  Eigen::MatrixXf K = this->P * this->H.transpose() * S.inverse();
 
   // Update the state
   this->state =
@@ -82,7 +87,8 @@ void LinearSSKalmanFilter::estimate(const Eigen::MatrixXf &measurements,
             this->P;
 }
 
-void LinearSSKalmanFilter::estimate(const Eigen::MatrixXf &measurements) {
+void LinearSSKalmanFilter::estimate(const Eigen::MatrixXf &measurements,
+                                    const int numberSteps) {
   // estimate with zero inputs
   auto size = this->B.cols();
   Eigen::MatrixXf inputs;
@@ -105,4 +111,4 @@ std::optional<Eigen::MatrixXf> LinearSSKalmanFilter::getState() {
   }
   return std::nullopt;
 }
-}
+} // namespace Kompass

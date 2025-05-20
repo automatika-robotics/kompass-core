@@ -7,24 +7,21 @@
 
 namespace Kompass {
 
-FeatureBasedBboxTracker::FeatureBasedBboxTracker(
-    const float& time_step, const float& e_pos,
-    const float& e_vel, const float& e_acc) {
+FeatureBasedBboxTracker::FeatureBasedBboxTracker(const float &time_step,
+                                                 const float &e_pos,
+                                                 const float &e_vel,
+                                                 const float &e_acc) {
 
   timeStep_ = time_step;
   // Setup Kalman filter matrices
   Eigen::MatrixXf A;
   A.resize(StateSize, StateSize);
 
-  A << 1, 0, 0, time_step, 0, 0, 0.5 * pow(time_step, 2), 0, 0,
-       0, 1, 0, 0, time_step, 0, 0, 0.5 * pow(time_step, 2), 0,
-       0, 0, 1, 0, 0, time_step, 0, 0, 0.5 * pow(time_step, 2),
-       0, 0, 0, 1, 0, 0, time_step, 0, 0,
-       0, 0, 0, 0, 1, 0, 0, time_step, 0,
-       0, 0, 0, 0, 0, 1, 0, 0, time_step,
-       0, 0, 0, 0, 0, 0, 1, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 1, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0;
+  A << 1, 0, 0, time_step, 0, 0, 0.5 * pow(time_step, 2), 0, 0, 0, 1, 0, 0,
+      time_step, 0, 0, 0.5 * pow(time_step, 2), 0, 0, 0, 1, 0, 0, time_step, 0,
+      0, 0.5 * pow(time_step, 2), 0, 0, 0, 1, 0, 0, time_step, 0, 0, 0, 0, 0, 0,
+      1, 0, 0, time_step, 0, 0, 0, 0, 0, 0, 1, 0, 0, time_step, 0, 0, 0, 0, 0,
+      0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
 
   Eigen::MatrixXf B = Eigen::MatrixXf::Zero(StateSize, 1);
   Eigen::MatrixXf H = Eigen::MatrixXf::Identity(StateSize, StateSize);
@@ -47,20 +44,21 @@ bool FeatureBasedBboxTracker::setInitialTracking(const TrackedBbox3D &bBox) {
   trackedBox_ = std::make_unique<TrackedBbox3D>(bBox);
   Eigen::VectorXf state_vec;
   state_vec.resize(StateSize);
-  state_vec(0) = bBox.box.center[0];  // x
-  state_vec(1) = bBox.box.center[1];  // y
-  state_vec(2) = bBox.yaw_vec(0);  // yaw
-  state_vec(3) = bBox.vel[0];   // vx
-  state_vec(4) = bBox.vel[1];  // vy
-  state_vec(5) = bBox.yaw_vec(1);  // omega
-  state_vec(6) = bBox.acc[0];   // ax
-  state_vec(7) = bBox.acc[1];   // ay
-  state_vec(8) = bBox.yaw_vec(2);   // a_yaw
+  state_vec(0) = bBox.box.center[0]; // x
+  state_vec(1) = bBox.box.center[1]; // y
+  state_vec(2) = bBox.yaw_vec(0);    // yaw
+  state_vec(3) = bBox.vel[0];        // vx
+  state_vec(4) = bBox.vel[1];        // vy
+  state_vec(5) = bBox.yaw_vec(1);    // omega
+  state_vec(6) = bBox.acc[0];        // ax
+  state_vec(7) = bBox.acc[1];        // ay
+  state_vec(8) = bBox.yaw_vec(2);    // a_yaw
   stateKalmanFilter_->setInitialState(state_vec);
   return true;
 }
 
-bool FeatureBasedBboxTracker::setInitialTracking(const Bbox3D &bBox, const float yaw) {
+bool FeatureBasedBboxTracker::setInitialTracking(const Bbox3D &bBox,
+                                                 const float yaw) {
   LOG_DEBUG("Setting initial tracked box");
   trackedBox_ = std::make_unique<TrackedBbox3D>(bBox);
   trackedBox_->yaw_vec(0) = yaw;
@@ -73,34 +71,36 @@ bool FeatureBasedBboxTracker::setInitialTracking(const Bbox3D &bBox, const float
   return true;
 }
 
-bool FeatureBasedBboxTracker::setInitialTracking(const int& pose_x_img, const int& pose_y_img, const std::vector<Bbox3D>& detected_boxes, const float yaw){
-    std::unique_ptr<Bbox3D> target_box;
-    // Find a detected box containing the point
-    for(auto box: detected_boxes){
-      auto limits_x = box.getXLimitsImg();
-      if(pose_x_img >= limits_x(0) and pose_x_img <= limits_x(1)){
-        auto limits_y = box.getYLimitsImg();
-        if (pose_y_img >= limits_y(0) and pose_y_img <= limits_y(1)) {
-          target_box = std::make_unique<Bbox3D>(box);
-          break;
-        }
+bool FeatureBasedBboxTracker::setInitialTracking(
+    const int &pose_x_img, const int &pose_y_img,
+    const std::vector<Bbox3D> &detected_boxes, const float yaw) {
+  std::unique_ptr<Bbox3D> target_box;
+  // Find a detected box containing the point
+  for (auto box : detected_boxes) {
+    auto limits_x = box.getXLimitsImg();
+    if (pose_x_img >= limits_x(0) and pose_x_img <= limits_x(1)) {
+      auto limits_y = box.getYLimitsImg();
+      if (pose_y_img >= limits_y(0) and pose_y_img <= limits_y(1)) {
+        target_box = std::make_unique<Bbox3D>(box);
+        break;
       }
     }
-    if(!target_box){
-      // given position was not found inside any detected box
-      return false;
-    }
-    return setInitialTracking(*target_box, yaw);
+  }
+  if (!target_box) {
+    // given position was not found inside any detected box
+    return false;
+  }
+  return setInitialTracking(*target_box, yaw);
 }
 
-bool FeatureBasedBboxTracker::trackerInitialized() const{
-  if(trackedBox_){
+bool FeatureBasedBboxTracker::trackerInitialized() const {
+  if (trackedBox_) {
     return true;
   }
   return false;
 }
 
-void FeatureBasedBboxTracker::updateTrackedBoxState(){
+void FeatureBasedBboxTracker::updateTrackedBoxState(const int numberSteps) {
   Eigen::MatrixXf measurement;
   measurement.resize(StateSize, 1);
   measurement(0) = trackedBox_->box.center.x();
@@ -112,39 +112,51 @@ void FeatureBasedBboxTracker::updateTrackedBoxState(){
   measurement(6) = trackedBox_->acc.x();
   measurement(7) = trackedBox_->acc.y();
   measurement(8) = trackedBox_->yaw_vec(2);
-  stateKalmanFilter_->estimate(measurement);
+  stateKalmanFilter_->estimate(measurement, numberSteps);
 }
 
-bool FeatureBasedBboxTracker::updateTracking(const std::vector<Bbox3D> &detected_boxes){
-    // Predicted the new location of the tracked box
-    auto predicted_tracked_box = trackedBox_->predictConstantAcc(timeStep_);
+bool FeatureBasedBboxTracker::updateTracking(
+    const std::vector<Bbox3D> &detected_boxes) {
+  float new_timestamp = detected_boxes[0].timestamp;
+  float dt = new_timestamp - trackedBox_->box.timestamp;
 
-    auto ref_box_features = extractFeatures(predicted_tracked_box);
+  // Predicted the new location of the tracked box
+  auto predicted_tracked_box = trackedBox_->predictConstantAcc(dt);
 
-    // Get the features of all the new detections
-    FeaturesVector detected_boxes_feature_vec;
-    float max_similarity_score = 0.0;  // Similarity score
-    size_t similar_box_idx = 0, count = 0;
-    for(auto box: detected_boxes){
-      detected_boxes_feature_vec = extractFeatures(box);
-      auto error_vec = detected_boxes_feature_vec - ref_box_features;
-      float similarity_score = std::exp(-std::pow(error_vec.norm(), 2));
+  auto ref_box_features = extractFeatures(predicted_tracked_box);
 
-      if (similarity_score > max_similarity_score){
-        max_similarity_score = similarity_score;
-        similar_box_idx = count;
-      }
-      count++;
+  // Get the features of all the new detections
+  FeaturesVector detected_boxes_feature_vec;
+  float max_similarity_score = 0.0; // Similarity score
+  size_t similar_box_idx = 0, count = 0;
+  for (auto box : detected_boxes) {
+    detected_boxes_feature_vec = extractFeatures(box);
+    auto error_vec = detected_boxes_feature_vec - ref_box_features;
+    float similarity_score = std::exp(-std::pow(error_vec.norm(), 2));
+
+    if (similarity_score > max_similarity_score) {
+      max_similarity_score = similarity_score;
+      similar_box_idx = count;
     }
-    if (max_similarity_score > minAcceptedSimilarityScore_){
-      // Update raw tracking
-      trackedBox_->updateFromNewDetection(detected_boxes[similar_box_idx], timeStep_);
-      // Update state by applying kalman filter on the raw measurement
-      updateTrackedBoxState();
-      LOG_DEBUG("Box Now updated to: ", trackedBox_->box.center.x(), ", ", trackedBox_->box.center.y(), ", yaw=", trackedBox_->yaw_vec(0), ", omega=", trackedBox_->yaw_vec(1), ", v=", trackedBox_->v());
-      return true;
-    }
-    return false;
+    count++;
+  }
+  if (max_similarity_score > minAcceptedSimilarityScore_) {
+    // Update raw tracking
+    int number_steps = std::max(static_cast<int>(dt / timeStep_), 1);
+
+    trackedBox_->updateFromNewDetection(detected_boxes[similar_box_idx]);
+
+    // Update state by applying kalman filter on the raw measurement
+    updateTrackedBoxState(number_steps);
+    LOG_DEBUG("Update after ", number_steps,
+              " timer steps, Box Now updated to: ", trackedBox_->box.center.x(),
+              ", ", trackedBox_->box.center.y(),
+              ", yaw=", trackedBox_->yaw_vec(0),
+              ", omega=", trackedBox_->yaw_vec(1), ", v=", trackedBox_->v());
+    return true;
+  }
+  LOG_DEBUG("Box not found");
+  return false;
 }
 
 FeatureBasedBboxTracker::FeaturesVector
@@ -155,9 +167,10 @@ FeatureBasedBboxTracker::extractFeatures(
 
 FeatureBasedBboxTracker::FeaturesVector
 FeatureBasedBboxTracker::extractFeatures(const Bbox3D &bBox) const {
-  FeatureBasedBboxTracker::FeaturesVector features_vec = Eigen::Vector<float, 9>::Zero();
+  FeatureBasedBboxTracker::FeaturesVector features_vec =
+      Eigen::Vector<float, 9>::Zero();
   features_vec.segment<2>(0) = bBox.center.segment<2>(0); // indices 0, 1
-  features_vec.segment<3>(2) = bBox.size; // indices 2, 3, 4
+  features_vec.segment<3>(2) = bBox.size;                 // indices 2, 3, 4
   features_vec(5) = bBox.pc_points.size();
   if (features_vec(5) > 0.0) {
     // Compute point cloud points standard deviation
@@ -169,7 +182,7 @@ FeatureBasedBboxTracker::extractFeatures(const Bbox3D &bBox) const {
 
 std::optional<TrackedBbox3D> FeatureBasedBboxTracker::getRawTracking() const {
   if (trackedBox_) {
-     return *trackedBox_;
+    return *trackedBox_;
   }
   return std::nullopt;
 }
@@ -186,8 +199,8 @@ std::optional<Control::TrackedPose2D>
 FeatureBasedBboxTracker::getFilteredTrackedPose2D() const {
   if (trackedBox_) {
     auto state_vec = stateKalmanFilter_->getState().value();
-    return Control::TrackedPose2D(state_vec(0), state_vec(1),
-        state_vec(2), state_vec(3), state_vec(4), state_vec(5));
+    return Control::TrackedPose2D(state_vec(0), state_vec(1), state_vec(2),
+                                  state_vec(3), state_vec(4), state_vec(5));
   }
   return std::nullopt;
 }
@@ -197,7 +210,7 @@ Eigen::Vector3f FeatureBasedBboxTracker::computePointsStdDev(
   // compute the mean in each direction
   auto size = std::max(int(pc_points.size() - 1), 1);
   Eigen::Vector3f mean = Eigen::Vector3f::Zero();
-  for (auto point: pc_points){
+  for (auto point : pc_points) {
     mean += point;
   }
   mean /= size;

@@ -12,7 +12,7 @@ from kompass_cpp.types import (
     LaserScan,
     TrajectoryVelocities2D,
     TrajectoryPath,
-    TrackedPose2D
+    TrackedPose2D,
 )
 from typing import Optional, List
 import numpy as np
@@ -26,7 +26,6 @@ from .dwa import DWAConfig
 
 @define
 class VisionDWAConfig(DWAConfig):
-
     tolerance: float = field(
         default=0.01, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
     )
@@ -71,6 +70,10 @@ class VisionDWAConfig(DWAConfig):
     )  # Minimum velocity to apply (m/s)
 
     enable_search: bool = field(default=False)  # Enable or disable the search mechanism
+
+    track_velocity: bool = field(
+        default=True
+    )  # Enable or disable tracking the linear/angular velocity of the moving target
 
     error_pose: float = field(
         default=0.05, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
@@ -171,13 +174,16 @@ class VisionDWA(ControllerTemplate):
             config=self._config.to_kompass_cpp(),
         )
         if camera_focal_length is not None and camera_principal_point is not None:
-            self._planner.set_camera_intrinsics(camera_focal_length[0], camera_focal_length[1], camera_principal_point[0], camera_principal_point[1])
+            self._planner.set_camera_intrinsics(
+                camera_focal_length[0],
+                camera_focal_length[1],
+                camera_principal_point[0],
+                camera_principal_point[1],
+            )
 
         # Init the following result
         self._result = SamplingControlResult()
-        self._end_of_ctrl_horizon: int = max(
-            self._config.control_horizon, 1
-        )
+        self._end_of_ctrl_horizon: int = max(self._config.control_horizon, 1)
         logging.info("VisionDWA CONTROLLER IS READY")
 
     def set_camera_intrinsics(self, fx: float, fy: float, cx: float, cy: float) -> None:
@@ -197,9 +203,13 @@ class VisionDWA(ControllerTemplate):
         """
         try:
             if any(detected_boxes):
-                return self._planner.set_initial_tracking(pose_x_img, pose_y_img, detected_boxes)
+                return self._planner.set_initial_tracking(
+                    pose_x_img, pose_y_img, detected_boxes
+                )
 
-            logging.error(f"Could not set initial tracking state: No detections are provided")
+            logging.error(
+                "Could not set initial tracking state: No detections are provided"
+            )
             return False
         except Exception as e:
             logging.error(f"Could not set initial tracking state: {e}")
@@ -221,12 +231,19 @@ class VisionDWA(ControllerTemplate):
         """
         try:
             self._planner.set_current_state(
-            current_state.x, current_state.y, current_state.yaw, current_state.speed)
+                current_state.x, current_state.y, current_state.yaw, current_state.speed
+            )
             if any(detected_boxes):
                 return self._planner.set_initial_tracking(
-                    pose_x_img, pose_y_img, aligned_depth_image, detected_boxes, current_state.yaw
+                    pose_x_img,
+                    pose_y_img,
+                    aligned_depth_image,
+                    detected_boxes,
+                    current_state.yaw,
                 )
-            logging.error(f"Could not set initial tracking state: No detections are provided")
+            logging.error(
+                "Could not set initial tracking state: No detections are provided"
+            )
             return False
 
         except Exception as e:
@@ -272,9 +289,7 @@ class VisionDWA(ControllerTemplate):
         if local_map is not None:
             sensor_data = PointCloudData.numpy_to_kompass_cpp(local_map)
         elif laser_scan:
-            sensor_data = LaserScan(
-                ranges=laser_scan.ranges, angles=laser_scan.angles
-            )
+            sensor_data = LaserScan(ranges=laser_scan.ranges, angles=laser_scan.angles)
         elif point_cloud is not None:
             sensor_data = point_cloud
         else:
@@ -311,7 +326,9 @@ class VisionDWA(ControllerTemplate):
     def logging_info(self) -> str:
         """logging_info."""
         if self._result.is_found:
-            return f"VisionDWA Controller found trajectory with cost: {self._result.cost}"
+            return (
+                f"VisionDWA Controller found trajectory with cost: {self._result.cost}"
+            )
         else:
             return "VisionDWA Controller Failed to find a valid trajectory"
 

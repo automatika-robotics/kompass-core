@@ -34,9 +34,10 @@ public:
   void setA(const Eigen::MatrixXf &A);
 
   // state estimate
-  void estimate(const Eigen::MatrixXf &z, const Eigen::MatrixXf &u);
+  void estimate(const Eigen::MatrixXf &z, const Eigen::MatrixXf &u,
+                const int numberSteps = 1);
 
-  void estimate(const Eigen::MatrixXf &z);
+  void estimate(const Eigen::MatrixXf &z, const int numberSteps = 1);
 
   // read output from the state
   double getState(const size_t state_index);
@@ -44,4 +45,4 @@ public:
   std::optional<Eigen::MatrixXf> getState();
 };
 
-}
+} // namespace Kompass

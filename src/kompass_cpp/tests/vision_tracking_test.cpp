@@ -41,6 +41,7 @@ struct VisionTrackingTestConfig {
     Bbox3D tracked_box;
     tracked_box.center = target_pose;
     tracked_box.size = target_box_size;
+    tracked_box.timestamp = 0.0f;
     tracker->setInitialTracking(tracked_box);
     reference_path = Control::TrajectoryPath(maxSteps);
     tracked_path = Control::TrajectoryPath(maxSteps);
@@ -53,6 +54,7 @@ struct VisionTrackingTestConfig {
     for(int i=1; i < num_test_boxes; ++i){
       auto new_box_shift = Eigen::Vector3f({float(0.7 * i), float(0.7 * i), 0.0f});
       new_box.center = new_box_shift + target_pose;
+      new_box.timestamp = 0.0f;
       detected_boxes[i] = new_box;
     }
 
@@ -70,6 +72,7 @@ struct VisionTrackingTestConfig {
     for(auto &box: detected_boxes){
       Eigen::Vector3f noise_vector(noise(gen), noise(gen), noise(gen));
       box.center += target_ref_vel * time_step + noise_vector;
+      box.timestamp += time_step;
     }
     // Update the reference state using same velocity command (real)
     reference_state.x += target_ref_vel.x() * time_step;
@@ -91,8 +94,6 @@ BOOST_AUTO_TEST_CASE(test_Vision_Tracker) {
   int step = 0;
   float tracking_error = 0.0;
   while (step < config.maxSteps) {
-    // Move the detected boxes one step using the reference velocity
-    config.moveDetectedBoxes(step);
     // Sed detected boxes and ask tracker to update
     config.tracker->updateTracking(config.detected_boxes);
     auto measured_track = config.tracker->getRawTracking();
@@ -115,6 +116,8 @@ BOOST_AUTO_TEST_CASE(test_Vision_Tracker) {
         LOG_ERROR("Lost tracked target at step: ", step);
         break;
     }
+    // Move the detected boxes one step using the reference velocity
+    config.moveDetectedBoxes(step);
     step++;
   }
 
@@ -146,4 +149,3 @@ BOOST_AUTO_TEST_CASE(test_Vision_Tracker) {
     throw std::system_error(res, std::generic_category(),
                             "Python script failed with error code");
 }
-

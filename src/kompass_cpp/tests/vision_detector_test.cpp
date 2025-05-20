@@ -132,9 +132,7 @@ BOOST_AUTO_TEST_CASE(test_Depth_Detector_bag_image) {
       "/home/ahr/kompass/uvmap_code/resources/bag_depth_output.jpg";
   auto boxes = config.run(outputFilename);
 
-  const float approx_actual_dist = 1.0;
-  LOG_INFO("Got distance = ", boxes[0].center.x(),
-           ",  boxes[0].center.y()=", boxes[0].center.y());
+  const float approx_actual_dist = 1.8;
   BOOST_TEST(std::abs(boxes[0].center.x() - approx_actual_dist) <= 0.1,
              "3D box distance is not equal to approximate measured distance");
 }

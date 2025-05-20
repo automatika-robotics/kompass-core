@@ -47,7 +47,7 @@ class FeatureBasedBboxTracker{
 
       Eigen::Vector3f computePointsStdDev(const std::vector<Eigen::Vector3f> &pc_points) const;
 
-      void updateTrackedBoxState();
+      void updateTrackedBoxState(const int numberSteps = 1);
 };
 
 }
