@@ -77,7 +77,9 @@ public:
           Parameter(1e3, 1e-3, 1e9, "Range of interest minimum depth value"));
     }
     bool enable_search() const { return getParameter<bool>("enable_search"); }
-    bool enable_vel_tracking() const { return getParameter<bool>("track_velocity"); }
+    bool enable_vel_tracking() const {
+      return getParameter<bool>("track_velocity");
+    }
     double control_time_step() const {
       return getParameter<double>("control_time_step");
     }
@@ -168,7 +170,14 @@ public:
   getTrackingCtrl(const std::optional<TrackedPose2D> &tracked_pose,
                   const Velocity2D &current_vel, const T &sensor_points) {
     if (tracked_pose.has_value()) {
-      Trajectory2D ref_traj = getTrackingReferenceSegment(tracked_pose.value());
+      Trajectory2D ref_traj;
+      if(is_diff_drive_){
+        ref_traj = getTrackingReferenceSegmentDiffDrive(tracked_pose.value());
+      }
+      else{
+        ref_traj = getTrackingReferenceSegment(tracked_pose.value());
+      }
+
       TrajSearchResult result;
       result.isTrajFound = true;
       result.trajCost = 0.0;
@@ -284,6 +293,7 @@ public:
 
 private:
   ControlLimitsParams ctrl_limits_;
+  bool is_diff_drive_;
   VisionDWAConfig config_;
   std::unique_ptr<FeatureBasedBboxTracker> tracker_;
   std::unique_ptr<DepthDetector> detector_;
@@ -298,6 +308,9 @@ private:
    * @return std::tuple<Trajectory2D, bool>
    */
   Trajectory2D getTrackingReferenceSegment(const TrackedPose2D &tracking_pose);
+
+  Trajectory2D
+  getTrackingReferenceSegmentDiffDrive(const TrackedPose2D &tracking_pose);
 };
 
 } // namespace Control

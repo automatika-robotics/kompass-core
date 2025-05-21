@@ -32,6 +32,7 @@ VisionDWA::VisionDWA(const ControlType &robotCtrlType,
           proximity_sensor_position_body, proximity_sensor_rotation_body,
           octreeRes, costWeights, maxNumThreads) {
   ctrl_limits_ = ctrlLimits;
+  is_diff_drive_ = robotCtrlType == ControlType::DIFFERENTIAL_DRIVE;
   config_ = config;
   // Set the reaching goal distance (used in the DWA mode when vision target is
   // lost)
@@ -80,20 +81,23 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
       abs(angle_error) > angle_tolerance) {
     double v = ((track_velocity_ * tracking_pose.v() * cos(psi)) -
                 (config_.K_v() * tanh(distance_error))) /
-               cos(psi);
+               cos(angle_error);
     v = std::clamp(v, -ctrl_limits_.velXParams.maxVel,
                    ctrl_limits_.velXParams.maxVel);
     followingVel.setVx(v);
     double omega;
     if (distance > 0.0) {
       // TODO terms to be removed
-      // auto term2 = 2.0 * sin(psi) / distance * (v - tracking_pose.v());
-      // auto term3 = -2.0 * config_.K_omega() * tanh(angle_error);
-      omega = -track_velocity_ * tracking_pose.omega() +
-              2.0 * (sin(psi) / distance * (v - tracking_pose.v()) -
-                     config_.K_omega() * tanh(angle_error));
-      // LOG_DEBUG("-tracking_pose.omega()=", -tracking_pose.omega(),
-      //           ", term_psi=", term2, ", term_ang_err=", term3);
+      auto term2 = -2.0 * sin(psi) / distance * tracking_pose.v();
+      auto term3 = -2.0 * sin(angle_error) / distance * v;
+      auto term4 = -2.0 * config_.K_omega() * tanh(angle_error);
+      omega = -track_velocity_ * tracking_pose.omega() -
+              2.0 * track_velocity_ * sin(psi) / distance * tracking_pose.v() +
+              -2.0 * sin(angle_error) / distance * v -
+              2.0 * config_.K_omega() * tanh(angle_error);
+      LOG_DEBUG("-tracking_pose.omega()=", -tracking_pose.omega(),
+                ", term_psi=", term2, ", term_ang_err_v=", term3,
+                ", term_ang_err=", term4);
     } else {
       omega = -track_velocity_ * tracking_pose.omega() -
               2.0 * config_.K_omega() * tanh(angle_error);
@@ -175,6 +179,55 @@ VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose) {
     }
 
     step++;
+  }
+  this->setCurrentState(original_state);
+
+  return ref_traj;
+};
+
+Trajectory2D
+VisionDWA::getTrackingReferenceSegmentDiffDrive(const TrackedPose2D &tracking_pose) {
+  int step = 0;
+
+  Trajectory2D ref_traj(config_.prediction_horizon());
+  std::vector<Path::State> states;
+  Path::State simulated_state = currentState;
+  Path::State original_state = currentState;
+  TrackedPose2D simulated_track = tracking_pose;
+  Velocity2D cmd;
+
+  // Simulate following the tracked target for the period til
+  // prediction_horizon assuming the target moves with its same current
+  // velocity
+  while (step < config_.prediction_horizon()) {
+    states.push_back(simulated_state);
+    ref_traj.path.add(step,
+                      Path::Point(simulated_state.x, simulated_state.y, 0.0));
+    this->setCurrentState(simulated_state);
+    cmd = this->getPureTrackingCtrl(simulated_track);
+    if(cmd.vx() >= config_.min_vel() && cmd.omega() >= config_.min_vel()) {
+      // Rotate then Move
+      auto vel_rotate = Velocity2D(0.0, 0.0, cmd.omega());
+      simulated_state.update(vel_rotate, config_.control_time_step());
+      if (step < config_.prediction_horizon() - 1) {
+        ref_traj.velocities.add(step, vel_rotate);
+      }
+      step++;
+      auto vel_move = Velocity2D(cmd.vx(), 0.0, 0.0);
+      simulated_state.update(vel_move, config_.control_time_step());
+      if (step < config_.prediction_horizon() - 1) {
+        ref_traj.velocities.add(step, vel_move);
+      }
+      step++;
+    }
+    else{
+      simulated_state.update(cmd, config_.control_time_step());
+      simulated_track.update(config_.control_time_step());
+      if (step < config_.prediction_horizon() - 1) {
+        ref_traj.velocities.add(step, cmd);
+      }
+      step++;
+    }
   }
   this->setCurrentState(original_state);
 
