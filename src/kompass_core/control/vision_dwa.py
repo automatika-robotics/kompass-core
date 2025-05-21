@@ -12,7 +12,7 @@ from kompass_cpp.types import (
     LaserScan,
     TrajectoryVelocities2D,
     TrajectoryPath,
-    TrackedPose2D,
+    # TrackedPose2D,
 )
 from typing import Optional, List
 import numpy as np
@@ -257,7 +257,7 @@ class VisionDWA(ControllerTemplate):
         detections_3d: Optional[List[Bbox3D]] = None,
         detections_2d: Optional[List[Bbox2D]] = None,
         depth_image: Optional[np.ndarray] = None,
-        tracked_pose: Optional[TrackedPose2D] = None,
+        # tracked_pose: Optional[TrackedPose2D] = None,
         laser_scan: Optional[LaserScanData] = None,
         point_cloud: Optional[List[np.ndarray]] = None,
         local_map: Optional[np.ndarray] = None,
@@ -299,9 +299,9 @@ class VisionDWA(ControllerTemplate):
             return False
 
         try:
-            if (detections_3d or tracked_pose) is not None:
+            if detections_3d is not None:
                 self._result = self._planner.get_tracking_ctrl(
-                    tracked_pose or detections_3d, current_velocity, sensor_data
+                    detections_3d, current_velocity, sensor_data
                 )
             else:
                 self._result = self._planner.get_tracking_ctrl(

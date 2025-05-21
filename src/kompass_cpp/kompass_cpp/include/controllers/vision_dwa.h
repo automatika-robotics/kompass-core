@@ -34,7 +34,7 @@ public:
           Parameter(10, 1, 1000, "Number of steps for future prediction"));
       addParameter(
           "tolerance",
-          Parameter(0.01, 1e-6, 1e3,
+          Parameter(0.01, 0.0, 1.0,
                     "Tolerance value for distance and angle following errors"));
       addParameter(
           "target_distance",
@@ -58,7 +58,7 @@ public:
       // Pure tracking control law parameters
       addParameter("rotation_gain", Parameter(1.0, 1e-2, 10.0));
       addParameter("speed_gain", Parameter(1.0, 1e-2, 10.0));
-      addParameter("min_vel", Parameter(0.1, 1e-9, 1e9));
+      addParameter("min_vel", Parameter(0.01, 1e-9, 1e9));
       addParameter("enable_search", Parameter(false));
       // Kalman Filter parameters
       addParameter("error_pose", Parameter(0.05, 1e-9, 1e9));
