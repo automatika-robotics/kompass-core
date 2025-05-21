@@ -4,6 +4,7 @@ from ..models import (
     Robot,
     RobotGeometry,
 )
+import numpy as np
 from ..datatypes import LaserScanData
 
 
@@ -15,14 +16,16 @@ class EmergencyChecker:
         robot: Robot,
         emergency_distance: float,
         emergency_angle: float,
-        sensor_position_robot: Optional[List[float]] = None,
-        sensor_rotation_robot: Optional[List[float]] = None,
+        sensor_position_robot: Optional[np.ndarray] = None,
+        sensor_rotation_robot: Optional[np.ndarray] = None,
         use_gpu: bool = False,
     ) -> None:
         self.__emergency_distance = emergency_distance
         self.__emergency_angle = emergency_angle
-        self.__sensor_position_robot = sensor_position_robot or [0.0, 0.0, 0.0]
-        self.__sensor_rotation_robot = sensor_rotation_robot or [0.0, 0.0, 0.0, 1.0]
+        self.__sensor_position_robot = sensor_position_robot if sensor_position_robot is not None else np.array([0.0, 0.0, 0.0], dtype=np.float32)
+        self.__sensor_rotation_robot = sensor_rotation_robot if sensor_rotation_robot is not None else np.array(
+            [1.0, 0.0, 0.0, 0.0], dtype=np.float32
+        )
         self.__robot_shape = RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type)
         self.__robot_dimensions = robot.geometry_params
         self.__use_gpu = use_gpu
@@ -35,10 +38,8 @@ class EmergencyChecker:
                 self._critical_zone_checker = CriticalZoneCheckerGPU(
                     robot_shape=self.__robot_shape,
                     robot_dimensions=self.__robot_dimensions,
-                    sensor_position_body=self.__sensor_position_robot
-                    or [0.0, 0.0, 0.0],
-                    sensor_rotation_body=self.__sensor_rotation_robot
-                    or [0.0, 0.0, 0.0, 1.0],
+                    sensor_position_body=self.__sensor_position_robot,
+                    sensor_rotation_body=self.__sensor_rotation_robot,
                     critical_angle=self.__emergency_angle,
                     critical_distance=self.__emergency_distance,
                     scan_angles=scan.angles,
@@ -55,9 +56,8 @@ class EmergencyChecker:
             self._critical_zone_checker = CriticalZoneChecker(
                 robot_shape=self.__robot_shape,
                 robot_dimensions=self.__robot_dimensions,
-                sensor_position_body=self.__sensor_position_robot or [0.0, 0.0, 0.0],
-                sensor_rotation_body=self.__sensor_rotation_robot
-                or [0.0, 0.0, 0.0, 1.0],
+                sensor_position_body=self.__sensor_position_robot,
+                sensor_rotation_body=self.__sensor_rotation_robot,
                 critical_angle=self.__emergency_angle,
                 critical_distance=self.__emergency_distance,
             )

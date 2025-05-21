@@ -72,11 +72,12 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
 
   // LOG_DEBUG("Distance to target", distance, ", ang_error=", angle_error);
 
-  float distance_tolerance = std::max(0.01, config_.tolerance() * config_.target_distance());
+  float distance_tolerance =
+      std::max(0.01, config_.tolerance() * config_.target_distance());
   float angle_tolerance =
       std::max(0.01, config_.tolerance() * config_.target_orientation());
-  LOG_DEBUG("distance_error=", distance_error, ", angle_error=",
-            angle_error, ", distance_tolerance=", distance_tolerance,
+  LOG_DEBUG("distance_error=", distance_error, ", angle_error=", angle_error,
+            ", distance_tolerance=", distance_tolerance,
             ", angle_tolerance=", angle_tolerance);
 
   Velocity2D followingVel;
@@ -123,11 +124,7 @@ bool VisionDWA::setInitialTracking(
     const int pose_x_img, const int pose_y_img,
     const Eigen::MatrixX<unsigned short> &aligned_depth_image,
     const std::vector<Bbox2D> &detected_boxes, const float yaw) {
-  if (!detector_) {
-    throw std::runtime_error(
-        "DepthDetector is not initialized with the camera intrinsics. Call "
-        "'VisionDWA::setCameraIntrinsics' first");
-  }
+
   std::unique_ptr<Bbox2D> target_box;
   for (auto box : detected_boxes) {
     auto limits_x = box.getXLimits();
@@ -143,9 +140,21 @@ bool VisionDWA::setInitialTracking(
     LOG_DEBUG("Target point not found in any detected box");
     return false;
   }
+
+  return setInitialTracking(aligned_depth_image, *target_box, yaw);
+}
+
+bool VisionDWA::setInitialTracking(
+    const Eigen::MatrixX<unsigned short> &aligned_depth_image,
+    const Bbox2D &target_box_2d, const float yaw) {
+  if (!detector_) {
+    throw std::runtime_error(
+        "DepthDetector is not initialized with the camera intrinsics. Call "
+        "'VisionDWA::setCameraIntrinsics' first");
+  }
   // Send current state to the detector
   detector_->updateState(currentState);
-  detector_->updateBoxes(aligned_depth_image, {*target_box});
+  detector_->updateBoxes(aligned_depth_image, {target_box_2d});
   auto boxes_3d = detector_->get3dDetections();
   if (!boxes_3d) {
     LOG_DEBUG("Failed to get 3D box from 2D target box");
@@ -185,8 +194,8 @@ VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose) {
   return ref_traj;
 };
 
-Trajectory2D
-VisionDWA::getTrackingReferenceSegmentDiffDrive(const TrackedPose2D &tracking_pose) {
+Trajectory2D VisionDWA::getTrackingReferenceSegmentDiffDrive(
+    const TrackedPose2D &tracking_pose) {
   int step = 0;
 
   Trajectory2D ref_traj(config_.prediction_horizon());
@@ -201,28 +210,28 @@ VisionDWA::getTrackingReferenceSegmentDiffDrive(const TrackedPose2D &tracking_po
   while (step < config_.prediction_horizon()) {
     this->setCurrentState(simulated_state);
     cmd = this->getPureTrackingCtrl(simulated_track);
-    if(std::abs(cmd.vx()) >= config_.min_vel() && std::abs(cmd.omega()) >= config_.min_vel()) {
+    if (std::abs(cmd.vx()) >= config_.min_vel() &&
+        std::abs(cmd.omega()) >= config_.min_vel()) {
       // Rotate then Move
       ref_traj.path.add(step,
-                    Path::Point(simulated_state.x, simulated_state.y, 0.0));
+                        Path::Point(simulated_state.x, simulated_state.y, 0.0));
       auto vel_rotate = Velocity2D(0.0, 0.0, cmd.omega());
       simulated_state.update(vel_rotate, config_.control_time_step());
       if (step < config_.prediction_horizon() - 1) {
         ref_traj.velocities.add(step, vel_rotate);
       }
       step++;
-      if(step < config_.prediction_horizon() - 2){
+      if (step < config_.prediction_horizon() - 2) {
         auto vel_move = Velocity2D(cmd.vx(), 0.0, 0.0);
-        ref_traj.path.add(step,
-                        Path::Point(simulated_state.x, simulated_state.y, 0.0));
+        ref_traj.path.add(
+            step, Path::Point(simulated_state.x, simulated_state.y, 0.0));
         simulated_state.update(vel_move, config_.control_time_step());
         ref_traj.velocities.add(step, vel_move);
         step++;
       }
-    }
-    else{
+    } else {
       ref_traj.path.add(step,
-                      Path::Point(simulated_state.x, simulated_state.y, 0.0));
+                        Path::Point(simulated_state.x, simulated_state.y, 0.0));
       simulated_state.update(cmd, config_.control_time_step());
       simulated_track.update(config_.control_time_step());
       if (step < config_.prediction_horizon() - 1) {

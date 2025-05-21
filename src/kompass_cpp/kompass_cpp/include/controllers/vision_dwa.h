@@ -291,6 +291,11 @@ public:
                      const std::vector<Bbox2D> &detected_boxes_2d,
                      const float yaw = 0.0);
 
+  bool
+  setInitialTracking(const Eigen::MatrixX<unsigned short> &aligned_depth_image,
+                     const Bbox2D &target_box_2d,
+                     const float yaw = 0.0);
+
 private:
   ControlLimitsParams ctrl_limits_;
   bool is_diff_drive_;

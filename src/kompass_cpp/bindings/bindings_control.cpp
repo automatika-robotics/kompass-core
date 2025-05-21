@@ -276,6 +276,12 @@ void bindings_control(py::module_ &m) {
            py::arg("pixel_x"), py::arg("pixel_y"),
            py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
            py::arg("robot_orientation") = 0.0)
+      .def("set_initial_tracking",
+           py::overload_cast<const Eigen::MatrixX<unsigned short> &,
+                             const Bbox2D &, const float>(
+               &Control::VisionDWA::setInitialTracking),
+           py::arg("aligned_depth_image"), py::arg("target_box_2d"),
+           py::arg("robot_orientation") = 0.0)
       .def("get_tracking_ctrl",
            py::overload_cast<const std::vector<Bbox3D> &,
                              const Control::Velocity2D &,

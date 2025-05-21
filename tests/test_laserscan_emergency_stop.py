@@ -49,7 +49,6 @@ def test_laserscan_polar_tf(laser_scan_data: LaserScanData, plot: bool = False):
     # 90 Deg rotation around z
     translation = [0.0, 0.0, 0.173]
     rotation = [0.0, 0.0, 0.7071068, 0.7071068]
-    # rotation = [0.0, 0.0, 0.0, 1.0]
 
     transformed_scan = get_laserscan_transformed_polar_coordinates(
         angle_min=laser_scan_data.angle_min,
@@ -145,8 +144,8 @@ def test_emergency_stop(laser_scan_data: LaserScanData, use_gpu):
         robot=robot,
         emergency_distance=emergency_distance,
         emergency_angle=emergency_angle,
-        sensor_position_robot=[0.0, 0.0, 0.173],
-        sensor_rotation_robot=[0.0, 0.0, 0.0, 1.0],
+        sensor_position_robot=np.array([0.0, 0.0, 0.173], dtype=np.float32),
+        sensor_rotation_robot=np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32),
         use_gpu=use_gpu,
     )
     angles_size = np.arange(

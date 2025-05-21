@@ -215,7 +215,33 @@ class VisionDWA(ControllerTemplate):
             logging.error(f"Could not set initial tracking state: {e}")
             return False
 
-    def set_initial_tracking_depth(
+    def set_initial_tracking_2d_target(
+        self,
+        current_state: RobotState,
+        target_box: Bbox2D,
+        aligned_depth_image: np.ndarray,
+    ) -> bool:
+        """
+        Set initial tracking state
+
+        :param detected_boxes: Detected boxes
+        :type detected_boxes: List[Bbox3D]
+        """
+        try:
+            self._planner.set_current_state(
+                current_state.x, current_state.y, current_state.yaw, current_state.speed
+            )
+            return self._planner.set_initial_tracking(
+                aligned_depth_image,
+                target_box,
+                current_state.yaw,
+            )
+
+        except Exception as e:
+            logging.error(f"Could not set initial tracking state: {e}")
+            return False
+
+    def set_initial_tracking_image(
         self,
         current_state: RobotState,
         pose_x_img: int,
