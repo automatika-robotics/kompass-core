@@ -1,7 +1,5 @@
 #include "utils/critical_zone_check_gpu.h"
 #include "utils/logger.h"
-#include <CL/sycl.hpp>
-#include <hipSYCL/sycl/libkernel/marray.hpp>
 #include <sycl/sycl.hpp>
 
 namespace Kompass {
@@ -10,7 +8,7 @@ float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
                                     const std::vector<double> &angles,
                                     const bool forward) {
   try {
-    m_q.fill(m_devicePtrOutput, false, m_scan_in_zone);
+    m_q.fill(m_devicePtrOutput, 1.0f, m_scan_in_zone);
 
     m_q.memcpy(m_devicePtrAngles, angles.data(), sizeof(double) * m_scanSize);
     m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(double) * m_scanSize);
@@ -34,7 +32,8 @@ float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
          const auto criticalDistance = critical_distance_;
          const auto slowdownDistance = slowdown_distance_;
          size_t *critical_indices;
-         *m_result = 1.0f;
+         float* result = m_result;
+         *result = 1.0f;
          sycl::range<1> global_size;
          if (forward) {
            critical_indices = m_devicePtrForward;
@@ -62,8 +61,6 @@ float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
 
                float converted_range = sycl::length(transformed_point);
                if (converted_range - robot_radius <= criticalDistance) {
-                 // KERNEL_DEBUG("Converted Range 0 = %3f\n", converted_range);
-                 // point within the zone and range is low
                  devicePtrOutput[idx] = 0.0f;
                } else if (converted_range - robot_radius <= slowdownDistance) {
                  devicePtrOutput[idx] =
@@ -76,7 +73,7 @@ float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
                sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                 sycl::memory_scope::device,
                                 sycl::access::address_space::global_space>
-                   atomic_cost(*m_result);
+                   atomic_cost(*result);
                atomic_cost.fetch_min(devicePtrOutput[idx]);
              });
        });
