@@ -16,16 +16,16 @@ namespace Kompass {
 class CriticalZoneCheckerGPU : public CriticalZoneChecker {
 public:
   // Constructor
-  CriticalZoneCheckerGPU(const CollisionChecker::ShapeType robot_shape_type,
-                         const std::vector<float> &robot_dimensions,
-                         const Eigen::Vector3f &sensor_position_body,
-                         const Eigen::Vector4f &sensor_rotation_body,
-                         const float critical_angle,
-                         const float critical_distance,
-                         const std::vector<double> &angles)
+  CriticalZoneCheckerGPU(
+      const CollisionChecker::ShapeType robot_shape_type,
+      const std::vector<float> &robot_dimensions,
+      const Eigen::Vector3f &sensor_position_body,
+      const Eigen::Vector4f &sensor_rotation_body, const float critical_angle,
+      const float critical_distance,
+      const float slowdown_distance, const std::vector<double> &angles)
       : CriticalZoneChecker(robot_shape_type, robot_dimensions,
                             sensor_position_body, sensor_rotation_body,
-                            critical_angle, critical_distance),
+                            critical_angle, critical_distance, slowdown_distance),
         m_scanSize(angles.size()) {
     m_q = sycl::queue{sycl::default_selector_v,
                       sycl::property::queue::in_order{}};
@@ -35,7 +35,7 @@ public:
 
     m_devicePtrRanges = sycl::malloc_device<double>(m_scanSize, m_q);
     m_devicePtrAngles = sycl::malloc_device<double>(m_scanSize, m_q);
-    m_result = sycl::malloc_shared<bool>(1, m_q);
+    m_result = sycl::malloc_shared<float>(1, m_q);
 
     // set forward and backward indices
     preset(angles);
@@ -52,7 +52,7 @@ public:
 
     m_scan_in_zone =
         std::max(indicies_forward_.size(), indicies_backward_.size());
-    m_devicePtrOutput = sycl::malloc_device<bool>(m_scan_in_zone, m_q);
+    m_devicePtrOutput = sycl::malloc_device<float>(m_scan_in_zone, m_q);
   }
 
   // Destructor
@@ -85,7 +85,7 @@ public:
    * @param ranges         LaserScan ranges in meters
    * @param forward        If the robot is moving forward
    */
-  bool check(const std::vector<double> &ranges,
+  float check(const std::vector<double> &ranges,
              const std::vector<double> &angles, const bool forward);
 
 private:
@@ -95,8 +95,8 @@ private:
   double *m_devicePtrAngles;
   size_t *m_devicePtrForward;
   size_t *m_devicePtrBackward;
-  bool *m_devicePtrOutput;
-  bool *m_result;
+  float *m_devicePtrOutput;
+  float *m_result;
   sycl::queue m_q;
 };
 

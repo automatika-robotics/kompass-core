@@ -3,6 +3,7 @@
 #include "utils/logger.h"
 #include "utils/transformation.h"
 #include <Eigen/Core>
+#include <array>
 
 namespace Kompass {
 /**
@@ -15,7 +16,7 @@ CriticalZoneChecker::CriticalZoneChecker(
     const std::vector<float> &robot_dimensions,
     const Eigen::Vector3f &sensor_position_body,
     const Eigen::Vector4f &sensor_rotation_body, const float critical_angle,
-    const float critical_distance) {
+    const float critical_distance, const float slowdown_distance) {
   // Construct  a geometry object based on the robot shape
   if (robot_shape_type == CollisionChecker::ShapeType::CYLINDER) {
     robotHeight_ = robot_dimensions.at(1);
@@ -45,7 +46,13 @@ CriticalZoneChecker::CriticalZoneChecker(
             angle_left_backward_, "]");
 
   // Set critical distance
+  if (slowdown_distance <= critical_distance) {
+
+    throw std::invalid_argument(
+        "SlowDown distance must be greater than the Critical distance!");
+  }
   critical_distance_ = critical_distance;
+  slowdown_distance_ = slowdown_distance;
 }
 
 void CriticalZoneChecker::preset(const std::vector<double> &angles) {
@@ -75,9 +82,9 @@ void CriticalZoneChecker::preset(const std::vector<double> &angles) {
   preset_ = true;
 }
 
-bool CriticalZoneChecker::check(const std::vector<double> &ranges,
-                                const std::vector<double> &angles,
-                                const bool forward) {
+float CriticalZoneChecker::check(const std::vector<double> &ranges,
+                                 const std::vector<double> &angles,
+                                 const bool forward) {
   if (angles.size() != ranges.size()) {
     LOG_ERROR("Angles and ranges vectors must have the same size!");
     return false;
@@ -102,20 +109,40 @@ bool CriticalZoneChecker::check(const std::vector<double> &ranges,
         cartesianPoint = {x, y, 0.0f};
         // Apply TF
         cartesianPoint = sensor_tf_body_ * cartesianPoint;
+        auto transformation_matrix = sensor_tf_body_.matrix();
+        const std::array<float, 4> x_transform{
+            transformation_matrix(0, 0), transformation_matrix(0, 1),
+            transformation_matrix(0, 2), transformation_matrix(0, 3)};
+
+        const std::array<float, 4> y_transform{
+            transformation_matrix(1, 0), transformation_matrix(1, 1),
+            transformation_matrix(1, 2), transformation_matrix(1, 3)};
+
+        std::array<float, 4> point{x,
+                                   y, 0.0, 1.0};
+        std::array<float, 2> transformed_point{0.0, 0.0};
+
+        for (size_t i = 0; i < 4; ++i) {
+          transformed_point[0] += x_transform[i] * point[i];
+          transformed_point[1] += y_transform[i] * point[i];
+        }
 
         // check if within the zone
         converted_range = std::sqrt(std::pow(cartesianPoint.y(), 2) +
                                     std::pow(cartesianPoint.x(), 2));
-
-        if (converted_range - robotRadius_ <= critical_distance_) {
-          return true;
+        float distance = converted_range - robotRadius_;
+        if (distance <= critical_distance_) {
+          return 0.0;
+        } else if (distance <= slowdown_distance_) {
+          return (distance - critical_distance_) /
+                 (slowdown_distance_ - critical_distance_);
         }
       } else {
         preset_ = false;
         return check(ranges, angles, forward);
       }
     }
-    return false;
+    return 1.0;
   }
 }
 

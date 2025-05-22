@@ -135,6 +135,7 @@ def test_emergency_stop(laser_scan_data: LaserScanData, use_gpu):
         geometry_params=np.array([robot_radius, 0.4]),
     )
     emergency_distance = 0.5
+    slowdown_distance = 1.0
     emergency_angle = 90.0
 
     large_range = 10.0
@@ -143,6 +144,7 @@ def test_emergency_stop(laser_scan_data: LaserScanData, use_gpu):
     emergency_stop = EmergencyChecker(
         robot=robot,
         emergency_distance=emergency_distance,
+        slowdown_distance=slowdown_distance,
         emergency_angle=emergency_angle,
         sensor_position_robot=np.array([0.0, 0.0, 0.173], dtype=np.float32),
         sensor_rotation_robot=np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32),
@@ -155,12 +157,12 @@ def test_emergency_stop(laser_scan_data: LaserScanData, use_gpu):
     ).shape[0]
     laser_scan_data.ranges = np.array([large_range] * angles_size)
 
-    assert not emergency_stop.run(scan=laser_scan_data, forward=True)
+    assert emergency_stop.run(scan=laser_scan_data, forward=True) == 1.0
 
     # Add an obstacle in the critical zone in front of the robot
     laser_scan_data.ranges[0] = emergency_value
-    assert emergency_stop.run(scan=laser_scan_data, forward=True)
-    assert not emergency_stop.run(scan=laser_scan_data, forward=False)
+    assert emergency_stop.run(scan=laser_scan_data, forward=True) == 0.0
+    assert emergency_stop.run(scan=laser_scan_data, forward=False) == 1.0
 
 
 if __name__ == "__main__":
