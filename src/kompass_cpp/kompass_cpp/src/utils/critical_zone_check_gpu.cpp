@@ -12,10 +12,8 @@ float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
   try {
     m_q.fill(m_devicePtrOutput, false, m_scan_in_zone);
 
-    m_q.memcpy(m_devicePtrAngles, angles.data(), sizeof(double) * m_scanSize)
-        .wait();
-    m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(double) * m_scanSize)
-        .wait();
+    m_q.memcpy(m_devicePtrAngles, angles.data(), sizeof(double) * m_scanSize);
+    m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(double) * m_scanSize);
 
     // command scope
     m_q.submit([&](sycl::handler &h) {
@@ -81,8 +79,7 @@ float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
                    atomic_cost(*m_result);
                atomic_cost.fetch_min(devicePtrOutput[idx]);
              });
-       })
-        .wait();
+       });
 
     m_q.wait_and_throw();
 

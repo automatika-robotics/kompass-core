@@ -32,6 +32,6 @@ void bindings_utils_gpu(py::module_ &m) {
            py::arg("sensor_position_body"), py::arg("sensor_rotation_body"),
            py::arg("critical_angle"), py::arg("critical_distance"),
            py::arg("slowdown_distance"), py::arg("scan_angles"))
-      .def("check", &CriticalZoneChecker::check, py::arg("ranges"),
+      .def("check", &CriticalZoneCheckerGPU::check, py::arg("ranges"),
            py::arg("angles"), py::arg("forward"));
 }

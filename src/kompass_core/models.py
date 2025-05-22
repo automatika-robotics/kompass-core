@@ -1163,6 +1163,7 @@ class LinearCtrlLimits(BaseAttrs):
     max_vel: float = field(validator=validators.ge(0.0))  # m/s
     max_acc: float = field(validator=validators.ge(0.0))  # m/s^2
     max_decel: float = field(validator=validators.ge(0.0))  # m/s^2
+    min_absolute_val: float = field(default=0.01, validator=validators.ge(0.0))  # m/s
 
 
 @define(kw_only=True)
@@ -1173,6 +1174,7 @@ class AngularCtrlLimits(BaseAttrs):
     max_steer: float = field(validator=validators.ge(0.0))
     max_acc: float = field(validator=validators.ge(0.0))
     max_decel: float = field(validator=validators.ge(0.0))
+    min_absolute_val: float = field(default=0.01, validator=validators.ge(0.0))  # m/s
 
 
 @define(kw_only=True)
