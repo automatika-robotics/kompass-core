@@ -126,16 +126,16 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
   size_camera_frame(1) = box2d.size.y() * medianDepth / this->fy_;
   size_camera_frame(2) = maximum_d - minimum_d;
 
-  Eigen::Isometry3f camera_in_world = body_in_world_tf_ * camera_in_body_tf_;
+  // Eigen::Isometry3f camera_in_world = body_in_world_tf_ * camera_in_body_tf_;
 
   // Register center in the world frame
-  box3d.center = camera_in_world * center_in_camera_frame;
+  box3d.center = camera_in_body_tf_ * center_in_camera_frame;
 
   LOG_DEBUG("Got detected box in 3D world frame at :", box3d.center.x(), ", ",
             box3d.center.y(), ", ", box3d.center.z());
 
   // Transform size from camera frame to world frame
-  Eigen::Matrix3f abs_rotation = camera_in_world.linear().cwiseAbs();
+  Eigen::Matrix3f abs_rotation = camera_in_body_tf_.linear().cwiseAbs();
   box3d.size = abs_rotation * size_camera_frame;
 
   return box3d;

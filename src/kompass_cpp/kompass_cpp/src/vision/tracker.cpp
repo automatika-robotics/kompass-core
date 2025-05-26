@@ -132,6 +132,13 @@ bool FeatureBasedBboxTracker::updateTracking(
   for (auto box : detected_boxes) {
     detected_boxes_feature_vec = extractFeatures(box);
     auto error_vec = detected_boxes_feature_vec - ref_box_features;
+    // Error vector normalization
+    // for(int i = 0; i < error_vec.size(); ++i) {
+    //   if (std::abs(ref_box_features(i)) > 0.0) {
+    //     float normalized_error = error_vec(i) / std::abs(ref_box_features(i));
+    //     error_vec(i) = normalized_error;
+    //   }
+    // }
     float similarity_score = std::exp(-std::pow(error_vec.norm(), 2));
 
     if (similarity_score > max_similarity_score) {
@@ -155,7 +162,9 @@ bool FeatureBasedBboxTracker::updateTracking(
               ", omega=", trackedBox_->yaw_vec(1), ", v=", trackedBox_->v());
     return true;
   }
-  LOG_DEBUG("Box not found");
+  LOG_DEBUG("Box not found in the detected boxes! Max similarity score = ",
+            max_similarity_score, ", min accepted = ",
+            minAcceptedSimilarityScore_);
   return false;
 }
 

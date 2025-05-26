@@ -45,6 +45,8 @@ class VisionDWAConfig(DWAConfig):
         default=30.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
     )  # Wait for target to appear again timeout (seconds), used if search is disabled
 
+    enable_search: bool = field(default=False)  # Enable or disable the search mechanism
+
     target_search_timeout: float = field(
         default=30.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
     )  # Search timeout in seconds

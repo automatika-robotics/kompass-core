@@ -170,6 +170,10 @@ public:
   getTrackingCtrl(const std::optional<TrackedPose2D> &tracked_pose,
                   const Velocity2D &current_vel, const T &sensor_points) {
     if (tracked_pose.has_value()) {
+      // Reset recorded wait and search times
+      recorded_wait_time_ = 0.0;
+      recorded_search_time_ = 0.0;
+      // Generate reference to target
       Trajectory2D ref_traj;
       if(is_diff_drive_){
         ref_traj = getTrackingReferenceSegmentDiffDrive(tracked_pose.value());
@@ -196,7 +200,57 @@ public:
       // The tracking sample has collisions -> use DWA-like sampling and control
       return this->computeVelocityCommandsSet(current_vel, sensor_points);
     } else {
-      LOG_WARNING("No tracking target is received!");
+      LOG_WARNING("No tracking target is received and DWA goal is reached!");
+      // Start Search and/or Wait if enabled
+      if (config_.enable_search()) {
+        if (recorded_search_time_ < config_.target_search_timeout()) {
+          if (search_commands_queue_.empty()) {
+            getFindTargetCmds();
+          }
+          LOG_DEBUG(
+            "Number of search commands remaining: ", search_commands_queue_.size(),
+            "recorded search time: ", recorded_search_time_);
+          // Create search command
+          Trajectory2D ref_traj(config_.control_horizon() + 1);
+          std::array<double, 3> search_command;
+          for (int i = 0; i <= config_.control_horizon(); i++) {
+            search_command = search_commands_queue_.front();
+            search_commands_queue_.pop();
+            recorded_search_time_ += config_.control_time_step();
+            ref_traj.velocities.add(i, Velocity2D(search_command[0], search_command[1], search_command[2]));
+          }
+          auto result = TrajSearchResult();
+          result.isTrajFound = true;
+          result.trajCost = 0.0;
+          result.trajectory = ref_traj;
+          return result;
+        }
+      } else {
+        if (recorded_wait_time_ < config_.target_wait_timeout()) {
+          auto timeout = config_.target_wait_timeout() - recorded_wait_time_;
+          LOG_DEBUG("Target lost, waiting to get tracked target again ... timeout in ",
+                    timeout, " seconds");
+          // Do nothing and wait
+          Trajectory2D ref_traj(config_.control_horizon() + 1);
+          for (int i = 0; i <= config_.control_horizon(); i++) {
+            recorded_wait_time_ += config_.control_time_step();
+            ref_traj.velocities.add(i, Velocity2D(0.0, 0.0, 0.0));
+          }
+          auto result = TrajSearchResult();
+          result.isTrajFound = true;
+          result.trajCost = 0.0;
+          result.trajectory = ref_traj;
+          return result;
+        }
+      }
+      // Target is lost and not recovered from search or wait
+      LOG_WARNING("Target is lost and not recovered from search or wait");
+      recorded_wait_time_ = 0.0;
+      recorded_search_time_ = 0.0;
+      // Empty the search commands queue
+      while (!search_commands_queue_.empty()) {
+        search_commands_queue_.pop();
+      }
       return TrajSearchResult();
     }
   };
@@ -219,8 +273,13 @@ public:
     if (!detected_boxes.empty()) {
       if (tracker_->trackerInitialized()) {
         // Update the tracker with the detected boxes
-        tracker_->updateTracking(detected_boxes);
-        tracked_pose = tracker_->getFilteredTrackedPose2D();
+        bool tracking_updated = tracker_->updateTracking(detected_boxes);
+        if (!tracking_updated) {
+          LOG_WARNING("Tracker failed to update target with the detected boxes");
+        }
+        else{
+          tracked_pose = tracker_->getFilteredTrackedPose2D();
+        }
       } else {
         throw std::runtime_error(
             "Tracker is not initialized with an initial tracking target. Call "
@@ -253,8 +312,12 @@ public:
       auto boxes_3d = detector_->get3dDetections();
       if (boxes_3d) {
         // Update the tracker with the detected boxes
-        tracker_->updateTracking(boxes_3d.value());
-        tracked_pose = tracker_->getFilteredTrackedPose2D();
+        bool tracking_updated = tracker_->updateTracking(boxes_3d.value());
+        if (!tracking_updated) {
+          LOG_WARNING("Tracker failed to update target with the detected boxes");
+        }else{
+          tracked_pose = tracker_->getFilteredTrackedPose2D();
+        }
       } else {
         LOG_WARNING("Detector failed to find 3D boxes");
       }
@@ -299,6 +362,8 @@ public:
 private:
   ControlLimitsParams ctrl_limits_;
   bool is_diff_drive_;
+  float recorded_search_time_ = 0.0, recorded_wait_time_ = 0.0;
+  std::queue<std::array<double, 3>> search_commands_queue_;
   VisionDWAConfig config_;
   std::unique_ptr<FeatureBasedBboxTracker> tracker_;
   std::unique_ptr<DepthDetector> detector_;
@@ -316,6 +381,11 @@ private:
 
   Trajectory2D
   getTrackingReferenceSegmentDiffDrive(const TrackedPose2D &tracking_pose);
+
+  void generateSearchCommands(double total_rotation, double search_radius,
+                                int max_rotation_steps,
+                                bool enable_pause = false);
+  void getFindTargetCmds(const int last_direction = 1);
 };
 
 } // namespace Control

@@ -104,7 +104,8 @@ struct TrackedBbox3D {
     float time_step = new_box.timestamp - this->box.timestamp;
     if (time_step <= 0.0) {
       LOG_ERROR("Cannot update from new detection, invalid time step = ",
-                time_step);
+                "new_box.timestamp = ", new_box.timestamp,
+                ", old_box.timestamp = ", this->box.timestamp);
       return; // Invalid time step
     }
     // Compute velocity and acceleration based on location change
@@ -123,7 +124,7 @@ struct TrackedBbox3D {
   }
 
   TrackedBbox3D predictConstantVel(const float &dt) {
-    auto predicted_tracking = *this;
+    auto predicted_tracking = TrackedBbox3D(*this);
     predicted_tracking.box.center += predicted_tracking.vel * dt;
     predicted_tracking.yaw_vec(0) += predicted_tracking.yaw_vec(1) * dt;
     predicted_tracking.yaw_vec(2) = 0.0; // Set angular acceleration to zero
@@ -134,7 +135,7 @@ struct TrackedBbox3D {
   };
 
   TrackedBbox3D predictConstantAcc(const float &dt) {
-    auto predicted_tracking = *this;
+    auto predicted_tracking = TrackedBbox3D(*this);
     predicted_tracking.vel += this->acc * dt;
     predicted_tracking.box.center += predicted_tracking.vel * dt;
     predicted_tracking.yaw_vec(1) += predicted_tracking.yaw_vec(2) * dt;
@@ -159,6 +160,7 @@ struct TrackedBbox3D {
     box.center(0) += vel.x() * timeStep;
     box.center(1) += vel.y() * timeStep;
     this->yaw_vec(0) += this->yaw_vec(1) * timeStep;
+    box.timestamp += timeStep;
   }
 
   float distance(const float x, const float y, const float z = 0.0) const {
