@@ -13,7 +13,7 @@ import kompass_cpp
 from kompass_cpp.types import PathInterpolationType, Path as PathCpp
 
 from kompass_core.datatypes.laserscan import LaserScanData
-from kompass_core.datatypes import TrackedPose2D, Bbox3D, Bbox2D
+from kompass_core.datatypes import Bbox3D, Bbox2D
 from kompass_core.control import (
     DVZ,
     DWAConfig,
@@ -499,7 +499,7 @@ def test_vision_dwa_with_depth_img():
     # Create a NumPy array from the OpenCV Mat
     depth_image = np.array(cv_img, dtype=np.ushort, order="F")
 
-    found_target = controller.set_initial_tracking_depth(
+    found_target = controller.set_initial_tracking_image(
         my_robot.state, clicked_point[0], clicked_point[1], detections, depth_image
     )
 
