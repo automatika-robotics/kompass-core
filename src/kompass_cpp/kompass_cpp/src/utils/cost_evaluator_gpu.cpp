@@ -5,7 +5,6 @@
 #include "utils/logger.h"
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
-#include <limits>
 #include <sycl/sycl.hpp>
 #include <vector>
 
@@ -302,8 +301,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     m_q.submit([&](sycl::handler &h) {
          h.depends_on(events);
          auto costs = m_devicePtrCosts;
-         auto minCost = m_minCost;
-         auto reduction = sycl::reduction(minCost, sycl::plus<LowestCost>());
+         auto reduction = sycl::reduction(m_minCost, sycl::plus<LowestCost>());
          // Kernel scope
          h.parallel_for<class minimumCostReduction>(
              sycl::range<1>(trajs_size), reduction,
