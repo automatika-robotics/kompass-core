@@ -84,14 +84,11 @@ struct TrackedBbox3D {
   Eigen::Vector3f vel = {0.0, 0.0, 0.0};
   Eigen::Vector3f acc = {0.0, 0.0, 0.0};
   int unique_id = 0;
-  Eigen::Vector3f yaw_vec = {0.0, 0.0,
-                             0.0}; // To track yaw, omega and angular acc
 
   TrackedBbox3D(const Bbox3D &box) : box(box){};
 
   void setState(const Eigen::Matrix<float, 9, 1> &state_vector) {
     this->box.center = {state_vector(0), state_vector(1), 0.0f};
-    this->yaw_vec = {state_vector(2), state_vector(5), state_vector(8)};
     this->vel = {state_vector(3), state_vector(4), 0.0f};
     this->acc = {state_vector(6), state_vector(7), 0.0f};
   };
@@ -102,32 +99,24 @@ struct TrackedBbox3D {
 
   void updateFromNewDetection(const Bbox3D &new_box) {
     float time_step = new_box.timestamp - this->box.timestamp;
+    Eigen::Vector3f new_vel;
     if (time_step <= 0.0) {
-      LOG_ERROR("Cannot update from new detection, invalid time step = ",
-                "new_box.timestamp = ", new_box.timestamp,
-                ", old_box.timestamp = ", this->box.timestamp);
-      return; // Invalid time step
+      LOG_ERROR("Box updated with invalid time step, Velocity wil be reset to zero.");
+      this->vel = {0.0, 0.0, 0.0};
+      this->acc = {0.0, 0.0, 0.0};
+    }else{
+      // Compute velocity and acceleration based on location change
+      Eigen::Vector3f new_vel = (new_box.center - this->box.center) / time_step;
+      this->acc = (new_vel - this->vel) / time_step;
+      this->vel = new_vel;
     }
-    // Compute velocity and acceleration based on location change
-    Eigen::Vector3f new_vel = (new_box.center - this->box.center) / time_step;
-    this->acc = (new_vel - this->vel) / time_step;
-    this->vel = new_vel;
     // Update
     setfromBox(new_box);
-    // New orientation (yaw) based on new velocity
-    auto new_yaw = std::atan2(new_vel(1), new_vel(0));
-    // Orientation difference
-    auto new_omega = (new_yaw - this->yaw_vec(0)) / time_step;
-    this->yaw_vec(2) = (new_omega - this->yaw_vec(1)) / time_step;
-    this->yaw_vec(1) = new_omega;
-    this->yaw_vec(0) = new_yaw;
   }
 
   TrackedBbox3D predictConstantVel(const float &dt) {
     auto predicted_tracking = TrackedBbox3D(*this);
     predicted_tracking.box.center += predicted_tracking.vel * dt;
-    predicted_tracking.yaw_vec(0) += predicted_tracking.yaw_vec(1) * dt;
-    predicted_tracking.yaw_vec(2) = 0.0; // Set angular acceleration to zero
     // Set acceleration to zero for constant velocity prediction
     predicted_tracking.acc = {0.0, 0.0, 0.0};
     predicted_tracking.box.timestamp += dt;
@@ -138,8 +127,6 @@ struct TrackedBbox3D {
     auto predicted_tracking = TrackedBbox3D(*this);
     predicted_tracking.vel += this->acc * dt;
     predicted_tracking.box.center += predicted_tracking.vel * dt;
-    predicted_tracking.yaw_vec(1) += predicted_tracking.yaw_vec(2) * dt;
-    predicted_tracking.yaw_vec(0) += predicted_tracking.yaw_vec(1) * dt;
     predicted_tracking.box.timestamp += dt;
     return predicted_tracking;
   };
@@ -150,16 +137,17 @@ struct TrackedBbox3D {
 
   float y() const { return box.center.y(); };
 
-  float yaw() const { return this->yaw_vec(0); };
+  float yaw() const { return std::atan2(this->vel(1), this->vel(0)); };
 
-  float omega() const { return yaw_vec(1); };
+  float omega() const {return 0.0;}
+
+  float ang_acc() const { return 0.0; }
 
   float timestamp() const { return box.timestamp; };
 
   void update(const float timeStep) {
     box.center(0) += vel.x() * timeStep;
     box.center(1) += vel.y() * timeStep;
-    this->yaw_vec(0) += this->yaw_vec(1) * timeStep;
     box.timestamp += timeStep;
   }
 
@@ -170,7 +158,7 @@ struct TrackedBbox3D {
 
   Control::TrackedPose2D getTrackedPose() const {
     return Control::TrackedPose2D(box.center.x(), box.center.y(), yaw(),
-                                  vel.x(), vel.y(), omega());
+                                  vel.x(), vel.y(), 0.0);
   }
 };
 

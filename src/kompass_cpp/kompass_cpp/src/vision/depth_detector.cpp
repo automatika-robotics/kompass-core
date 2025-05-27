@@ -26,7 +26,7 @@ DepthDetector::DepthDetector(
     const Eigen::Isometry3f &camera_in_body_tf,
     const Eigen::Vector2f &focal_length, const Eigen::Vector2f &principal_point,
     const float depth_conversion_factor) { // Range of interest for depth values
-                                           // in meters
+                                   // in meters
   minDepth_ = depth_range(0);
   maxDepth_ = depth_range(1);
   // Factor to convert depth image data to meters (in ROS2 its given in mm ->
@@ -34,7 +34,6 @@ DepthDetector::DepthDetector(
   depthConversionFactor_ = depth_conversion_factor;
   // Set camera tf
   camera_in_body_tf_ = camera_in_body_tf;
-  body_in_world_tf_ = Eigen::Isometry3f::Identity();
 
   // Set camera  intrinsic parameters
   fx_ = focal_length.x();
@@ -48,15 +47,6 @@ std::optional<std::vector<Bbox3D>> DepthDetector::get3dDetections() const {
     return *boxes_;
   }
   return std::nullopt;
-}
-
-void DepthDetector::updateState(const Path::State &current_state) {
-
-  body_in_world_tf_ = getTransformation(current_state);
-}
-
-void DepthDetector::updateState(const Eigen::Isometry3f &robot_tf) {
-  body_in_world_tf_ = robot_tf;
 }
 
 void DepthDetector::updateBoxes(
@@ -126,12 +116,10 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
   size_camera_frame(1) = box2d.size.y() * medianDepth / this->fy_;
   size_camera_frame(2) = maximum_d - minimum_d;
 
-  // Eigen::Isometry3f camera_in_world = body_in_world_tf_ * camera_in_body_tf_;
-
   // Register center in the world frame
   box3d.center = camera_in_body_tf_ * center_in_camera_frame;
 
-  LOG_DEBUG("Got detected box in 3D world frame at :", box3d.center.x(), ", ",
+  LOG_DEBUG("Got detected box in 3D coordinates at :", box3d.center.x(), ", ",
             box3d.center.y(), ", ", box3d.center.z());
 
   // Transform size from camera frame to world frame

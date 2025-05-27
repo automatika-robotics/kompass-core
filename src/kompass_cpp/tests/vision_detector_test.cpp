@@ -4,7 +4,6 @@
 #include "utils/transformation.h"
 #include "vision/depth_detector.h"
 #include <Eigen/Dense>
-#include <Eigen/src/Geometry/Quaternion.h>
 #include <opencv2/opencv.hpp>
 #include <stdexcept>
 #define BOOST_TEST_MODULE KOMPASS TESTS
@@ -49,7 +48,6 @@ struct DepthDetectorTestConfig {
         std::make_unique<DepthDetector>(depth_range, cam_in_body, focal_length,
                                         principal_point, depth_conv_factor);
 
-    detector->updateState(current_state);
     cv_img = cv::imread(image_filename, cv::IMREAD_GRAYSCALE);
 
     if (cv_img.empty()) {

@@ -6,10 +6,9 @@
 #include "test.h"
 #include "utils/cost_evaluator.h"
 #include "utils/logger.h"
-#include <Eigen/src/Geometry/Quaternion.h>
+#include "utils/transformation.h"
 #include <memory>
 #include <opencv2/opencv.hpp>
-#include <optional>
 #define BOOST_TEST_MODULE KOMPASS TESTS
 #include "json_export.h"
 #include <boost/dll/runtime_symbol_info.hpp> // for program_location
@@ -75,11 +74,11 @@ struct VisionDWATestConfig {
   // Constructor to initialize the struct
   VisionDWATestConfig(const std::vector<Path::Point> sensor_points,
                       const double timeStep = 0.1,
-                      const int predictionHorizon = 10,
-                      const int controlHorizon = 1,
+                      const int predictionHorizon = 20,
+                      const int controlHorizon = 2,
                       const int maxLinearSamples = 20,
                       const int maxAngularSamples = 20,
-                      const float maxVel = 1.0, const float maxOmega = 4.0,
+                      const float maxVel = 2.0, const float maxOmega = 4.0,
                       const int maxNumThreads = 1,
                       const double reference_path_distance_weight = 1.0,
                       const double goal_distance_weight = 1.0,
@@ -108,11 +107,13 @@ struct VisionDWATestConfig {
     config.setParameter("control_time_step", timeStep);
     config.setParameter("control_horizon", controlHorizon);
     config.setParameter("prediction_horizon", predictionHorizon);
+    config.setParameter("track_velocity", false);
+    // config.setParameter("target_orientation", 0.2);
 
     // For depth config
     // Body to camera tf from robot of test pictures
     auto body_to_link_tf =
-        getTransformation(Eigen::Quaternionf{0.0f, 0.1987f, 0.0f, 0.98f},
+    getTransformation(Eigen::Quaternionf{0.0f, 0.1987f, 0.0f, 0.98f},
                           Eigen::Vector3f{0.32f, 0.0209f, 0.3f});
 
     auto link_to_cam_tf =
@@ -209,7 +210,7 @@ struct VisionDWATestConfig {
   }
 
   bool run_test(const int numPointsPerTrajectory, std::string pltFileName,
-                bool with_tracker, bool simulate_obstacle=false) {
+                 bool simulate_obstacle=false) {
     Control::TrajectorySamples2D samples(2, numPointsPerTrajectory);
     Control::TrajectoryVelocities2D simulated_velocities(
         numPointsPerTrajectory);
@@ -218,10 +219,10 @@ struct VisionDWATestConfig {
     Control::Velocity2D cmd;
     Control::TrajSearchResult result;
 
-    if (with_tracker) {
-      controller->setInitialTracking(ref_point_img(0),
+
+    controller->setInitialTracking(ref_point_img(0),
                                      ref_point_img(1), detected_boxes);
-    }
+
 
     int step = 0;
     while (step < numPointsPerTrajectory) {
@@ -232,19 +233,27 @@ struct VisionDWATestConfig {
       LOG_INFO("Target center at: ", tracked_pose.x(), ", ", tracked_pose.y(),
                ", ", tracked_pose.yaw());
       LOG_INFO("Robot at: ", point.x(), ", ", point.y());
-      auto seen_boxes = detected_boxes;
-      std::optional<Control::TrackedPose2D> seen_target = tracked_pose;
+
+      // Transform boxes to local coordinates
+      std::vector<Bbox3D> boxes_local_coordinates;
+      Eigen::Isometry3f world_in_robot_tf = getTransformation(robotState).inverse();
+      Eigen::Matrix3f abs_rotation = world_in_robot_tf.linear().cwiseAbs();
+      for (auto &box : detected_boxes) {
+        // Transform the box to the robot frame
+        Bbox3D box_local(box);
+        box_local.center = world_in_robot_tf * box.center;
+        box_local.size = abs_rotation * box.size;
+        boxes_local_coordinates.push_back(box_local);
+      }
+
+      auto seen_boxes = boxes_local_coordinates;
       // Simulate lost of target around obstacle
-      if (simulate_obstacle and robotState.y > 0.1 and robotState.y < 0.3) {
+      if (simulate_obstacle and robotState.y > 0.2 and robotState.y < 0.4) {
         LOG_INFO("Sending EMPTY BOXES NOW!!!!!");
         seen_boxes = {};
-        seen_target = std::nullopt;
       }
-      if (with_tracker) {
-        result = controller->getTrackingCtrl(seen_boxes, cmd, cloud);
-      } else {
-        result = controller->getTrackingCtrl(seen_target, cmd, cloud);
-      }
+
+      result = controller->getTrackingCtrl(seen_boxes, cmd, cloud);
 
       if (result.isTrajFound) {
         LOG_INFO(FMAG("STEP: "), step,
@@ -257,21 +266,27 @@ struct VisionDWATestConfig {
                     RST);
           return false;
         }
-        cmd.setVx(controller->getLinearVelocityCmdX());
-        cmd.setVy(controller->getLinearVelocityCmdY());
-        cmd.setOmega(controller->getAngularVelocityCmd());
+        auto velocities = result.trajectory.velocities;
+        int numSteps = 0;
+        for (auto vel: velocities) {
+          if(numSteps >= controlHorizon){
+            break;
+          }
+          numSteps++;
+          cmd = vel;
+          LOG_DEBUG(BOLD(FBLU("Robot at: {x: ")), KBLU, robotState.x, RST,
+                    BOLD(FBLU(", y: ")), KBLU, robotState.y, RST,
+                    BOLD(FBLU(", yaw: ")), KBLU, robotState.yaw, RST,
+                    BOLD(FBLU("}")));
 
-        LOG_DEBUG(BOLD(FBLU("Robot at: {x: ")), KBLU, robotState.x, RST,
-                  BOLD(FBLU(", y: ")), KBLU, robotState.y, RST,
-                  BOLD(FBLU(", yaw: ")), KBLU, robotState.yaw, RST,
-                  BOLD(FBLU("}")));
+          LOG_DEBUG(BOLD(FGRN("Found Control: {Vx: ")), KGRN, vel.vx(), RST,
+                    BOLD(FGRN(", Vy: ")), KGRN, vel.vy(), RST,
+                    BOLD(FGRN(", Omega: ")), KGRN, vel.omega(), RST,
+                    BOLD(FGRN("}")));
 
-        LOG_DEBUG(BOLD(FGRN("Found Control: {Vx: ")), KGRN, cmd.vx(), RST,
-                  BOLD(FGRN(", Vy: ")), KGRN, cmd.vy(), RST,
-                  BOLD(FGRN(", Omega: ")), KGRN, cmd.omega(), RST,
-                  BOLD(FGRN("}")));
+          robotState.update(vel, timeStep);
+        }
 
-        robotState.update(cmd, timeStep);
       } else {
         LOG_ERROR(BOLD(FRED("DWA Planner failed with robot at: {x: ")), KRED,
                   robotState.x, RST, BOLD(FRED(", y: ")), KRED, robotState.y,
@@ -281,9 +296,9 @@ struct VisionDWATestConfig {
       }
 
       tracked_pose.update(timeStep);
-      if (with_tracker) {
-        moveDetectedBoxes();
-      }
+
+      moveDetectedBoxes();
+
       step++;
     }
     samples.push_back(simulated_velocities, robot_path);
@@ -311,11 +326,10 @@ struct VisionDWATestConfig {
   }
 };
 
-BOOST_AUTO_TEST_CASE(test_VisionDWA_obstacle_free) {
+
+BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free) {
   // Create timer
   Timer time;
-
-  bool use_tracker = false;
 
   // Robot pointcloud values (global frame)
   std::vector<Path::Point> cloud = {{10.0, 10.0, 0.1}};
@@ -325,88 +339,46 @@ BOOST_AUTO_TEST_CASE(test_VisionDWA_obstacle_free) {
   int numPointsPerTrajectory = 100;
 
   bool test_passed = testConfig.run_test(
-      numPointsPerTrajectory, std::string("vision_follower_obstacle_free"),
-      use_tracker);
+      numPointsPerTrajectory, std::string("vision_follower_with_tracker"));
   BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
 }
 
-BOOST_AUTO_TEST_CASE(test_VisionDWA_with_obstacle) {
-  // Create timer
-  Timer time;
-
-  bool use_tracker = false;
-
-  // Robot pointcloud values (global frame)
-  std::vector<Path::Point> cloud = {{0.3, 0.27, 0.1}};
-
-  VisionDWATestConfig testConfig(cloud);
-
-  int numPointsPerTrajectory = 100;
-
-  bool test_passed = testConfig.run_test(
-      numPointsPerTrajectory, std::string("vision_follower_with_obstacle"),
-      use_tracker, true);
-  BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
-}
-
-BOOST_AUTO_TEST_CASE(test_VisionDWA_with_tracker_obs_free) {
-  // Create timer
-  Timer time;
-
-  // Sampling configuration
-  bool use_tracker = true;
-
-  // Robot pointcloud values (global frame)
-  std::vector<Path::Point> cloud = {{10.0, 10.0, 0.1}};
-
-  VisionDWATestConfig testConfig(cloud);
-
-  int numPointsPerTrajectory = 100;
-
-  bool test_passed = testConfig.run_test(
-      numPointsPerTrajectory, std::string("vision_follower_with_tracker"),
-      use_tracker);
-  BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
-}
-
-BOOST_AUTO_TEST_CASE(test_VisionDWA_with_tracker_and_obstacle) {
-  // Create timer
-  Timer time;
-
-  bool use_tracker = true;
-
-  // Robot pointcloud values (global frame)
-  std::vector<Path::Point> cloud = {{0.3, 0.27, 0.1}};
-
-  VisionDWATestConfig testConfig(cloud);
-
-  int numPointsPerTrajectory = 100;
-
-  bool test_passed = testConfig.run_test(
-      numPointsPerTrajectory,
-      std::string("vision_follower_with_tracker_and_obstacle"), use_tracker, true);
-  BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
-}
-
-// BOOST_AUTO_TEST_CASE(test_VisionDWA_with_depth_image) {
+// BOOST_AUTO_TEST_CASE(test_VisionDWA_with_tracker_and_obstacle) {
 //   // Create timer
 //   Timer time;
 
-//   std::string filename =
-//       "/home/ahr/kompass/kompass-navigation/tests/resources/control/"
-//       "bag_image_depth.tif";
-//   Bbox2D box({410, 0}, {410, 390});
-//   std::vector<Bbox2D> detections_2d{box};
-
-//   auto initial_point = Eigen::Vector2i{610, 200};
-
 //   // Robot pointcloud values (global frame)
-//   std::vector<Path::Point> cloud = {{10.3, 10.5, 0.2}};
+//   std::vector<Path::Point> cloud = {{0.3, 0.27, 0.1}};
 
 //   VisionDWATestConfig testConfig(cloud);
 
-//   auto test_passed = testConfig.test_one_cmd_depth(filename, detections_2d,
-//                                                    initial_point, cloud);
+//   int numPointsPerTrajectory = 100;
 
-//   BOOST_TEST(test_passed, "VisionDWA Failed To Find Control Using Depth Image");
+//   bool test_passed = testConfig.run_test(
+//       numPointsPerTrajectory,
+//       std::string("vision_follower_with_tracker_and_obstacle"), true);
+//   BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
 // }
+
+BOOST_AUTO_TEST_CASE(test_VisionDWA_with_depth_image) {
+  // Create timer
+  Timer time;
+
+  std::string filename =
+      "/home/ahr/kompass/kompass-navigation/tests/resources/control/"
+      "bag_image_depth.tif";
+  Bbox2D box({410, 0}, {410, 390});
+  std::vector<Bbox2D> detections_2d{box};
+
+  auto initial_point = Eigen::Vector2i{610, 200};
+
+  // Robot pointcloud values (global frame)
+  std::vector<Path::Point> cloud = {{10.3, 10.5, 0.2}};
+
+  VisionDWATestConfig testConfig(cloud);
+
+  auto test_passed = testConfig.test_one_cmd_depth(filename, detections_2d,
+                                                   initial_point, cloud);
+
+  BOOST_TEST(test_passed, "VisionDWA Failed To Find Control Using Depth Image");
+}

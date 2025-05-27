@@ -23,7 +23,7 @@ struct VisionTrackingTestConfig {
   Control::TrajectoryPath reference_path, measured_path, tracked_path;
   Path::State reference_state;
   std::vector<Bbox3D> detected_boxes;
-  std::string pltFileName = "VisionTrackerTest";
+  std::string pltFileName = "vision_tracker_test";
   std::mt19937 gen;
   std::normal_distribution<float> noise;
 

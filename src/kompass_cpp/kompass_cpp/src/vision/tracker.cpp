@@ -46,13 +46,13 @@ bool FeatureBasedBboxTracker::setInitialTracking(const TrackedBbox3D &bBox) {
   state_vec.resize(StateSize);
   state_vec(0) = bBox.box.center[0]; // x
   state_vec(1) = bBox.box.center[1]; // y
-  state_vec(2) = bBox.yaw_vec(0);    // yaw
+  state_vec(2) = bBox.yaw();    // yaw
   state_vec(3) = bBox.vel[0];        // vx
   state_vec(4) = bBox.vel[1];        // vy
-  state_vec(5) = bBox.yaw_vec(1);    // omega
+  state_vec(5) = bBox.omega();    // omega
   state_vec(6) = bBox.acc[0];        // ax
   state_vec(7) = bBox.acc[1];        // ay
-  state_vec(8) = bBox.yaw_vec(2);    // a_yaw
+  state_vec(8) = bBox.ang_acc();    // a_yaw
   stateKalmanFilter_->setInitialState(state_vec);
   return true;
 }
@@ -61,7 +61,6 @@ bool FeatureBasedBboxTracker::setInitialTracking(const Bbox3D &bBox,
                                                  const float yaw) {
   LOG_DEBUG("Setting initial tracked box");
   trackedBox_ = std::make_unique<TrackedBbox3D>(bBox);
-  trackedBox_->yaw_vec(0) = yaw;
   Eigen::Matrix<float, StateSize, 1> state_vec =
       Eigen::Matrix<float, StateSize, 1>::Zero();
   state_vec(0) = bBox.center.x();
@@ -105,13 +104,13 @@ void FeatureBasedBboxTracker::updateTrackedBoxState(const int numberSteps) {
   measurement.resize(StateSize, 1);
   measurement(0) = trackedBox_->box.center.x();
   measurement(1) = trackedBox_->box.center.y();
-  measurement(2) = trackedBox_->yaw_vec(0);
+  measurement(2) = trackedBox_->yaw();
   measurement(3) = trackedBox_->vel.x();
   measurement(4) = trackedBox_->vel.y();
-  measurement(5) = trackedBox_->yaw_vec(1);
+  measurement(5) = trackedBox_->omega();
   measurement(6) = trackedBox_->acc.x();
   measurement(7) = trackedBox_->acc.y();
-  measurement(8) = trackedBox_->yaw_vec(2);
+  measurement(8) = trackedBox_->ang_acc();
   stateKalmanFilter_->estimate(measurement, numberSteps);
 }
 
@@ -131,14 +130,13 @@ bool FeatureBasedBboxTracker::updateTracking(
   size_t similar_box_idx = 0, count = 0;
   for (auto box : detected_boxes) {
     detected_boxes_feature_vec = extractFeatures(box);
-    auto error_vec = detected_boxes_feature_vec - ref_box_features;
+    FeaturesVector error_vec = detected_boxes_feature_vec - ref_box_features;
     // Error vector normalization
-    // for(int i = 0; i < error_vec.size(); ++i) {
-    //   if (std::abs(ref_box_features(i)) > 0.0) {
-    //     float normalized_error = error_vec(i) / std::abs(ref_box_features(i));
-    //     error_vec(i) = normalized_error;
-    //   }
-    // }
+    for(int i = 0; i < error_vec.size(); ++i) {
+      if (std::abs(ref_box_features(i)) > 0.0) {
+        error_vec(i) = error_vec(i) / std::abs(ref_box_features(i));
+      }
+    }
     float similarity_score = std::exp(-std::pow(error_vec.norm(), 2));
 
     if (similarity_score > max_similarity_score) {
@@ -147,6 +145,7 @@ bool FeatureBasedBboxTracker::updateTracking(
     }
     count++;
   }
+  LOG_DEBUG("Max similarity score = ", max_similarity_score);
   if (max_similarity_score > minAcceptedSimilarityScore_) {
     // Update raw tracking
     int number_steps = std::max(static_cast<int>(dt / timeStep_), 1);
@@ -157,9 +156,7 @@ bool FeatureBasedBboxTracker::updateTracking(
     updateTrackedBoxState(number_steps);
     LOG_DEBUG("Update after ", number_steps,
               " timer steps, Box Now updated to: ", trackedBox_->box.center.x(),
-              ", ", trackedBox_->box.center.y(),
-              ", yaw=", trackedBox_->yaw_vec(0),
-              ", omega=", trackedBox_->yaw_vec(1), ", v=", trackedBox_->v());
+              ", ", trackedBox_->box.center.y(), ", v=", trackedBox_->v());
     return true;
   }
   LOG_DEBUG("Box not found in the detected boxes! Max similarity score = ",

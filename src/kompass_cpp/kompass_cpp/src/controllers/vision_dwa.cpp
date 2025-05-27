@@ -58,31 +58,37 @@ void VisionDWA::setCameraIntrinsics(const float focal_length_x,
 }
 
 Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
-  float distance = tracking_pose.distance(0.0, 0.0, 0.0) - trajSampler->getRobotRadius();
+  float distance =
+      tracking_pose.distance(0.0, 0.0, 0.0) - trajSampler->getRobotRadius();
   distance = std::max(distance, 0.0f);
-  float psi = Angle::normalizeToMinusPiPlusPi(std::atan2(tracking_pose.y(), tracking_pose.x()));
+  float psi = Angle::normalizeToMinusPiPlusPi(
+      std::atan2(tracking_pose.y(), tracking_pose.x()));
 
   float distance_error = config_.target_distance() - distance;
   float angle_error =
       Angle::normalizeToMinusPiPlusPi(config_.target_orientation() - psi);
 
-  // LOG_DEBUG("Distance to target", distance, ", ang_error=", angle_error);
-
   float distance_tolerance =
       std::max(0.01, config_.tolerance() * config_.target_distance());
   float angle_tolerance =
       std::max(0.01, config_.tolerance() * config_.target_orientation());
-  LOG_DEBUG("distance=", distance, "distance_error=", distance_error, "psi=", psi, ", angle_error=", angle_error);
+
+  LOG_DEBUG("distance_error=", distance_error, ", angle_error=", angle_error);
 
   Velocity2D followingVel;
   if (abs(distance_error) > distance_tolerance or
       abs(angle_error) > angle_tolerance) {
-    auto term1 = (track_velocity_ * tracking_pose.v() * cos(psi)) / cos(angle_error);
-    auto term2 = - (config_.K_v() * tanh(distance_error)) / cos(angle_error);
+    auto term1 =
+        (track_velocity_ * tracking_pose.v() * cos(psi)) / cos(angle_error);
+    auto term2 = -(config_.K_v() * ctrl_limits_.velXParams.maxVel *
+                   tanh(distance_error)) /
+                 cos(angle_error);
     double v = ((track_velocity_ * tracking_pose.v() * cos(psi)) -
-                (config_.K_v() * tanh(distance_error))) /
+                (config_.K_v() * ctrl_limits_.velXParams.maxVel *
+                 tanh(distance_error))) /
                cos(angle_error);
-    LOG_INFO("v=", v, ", term1=", term1, ", term2=", term2);
+    LOG_DEBUG("v=", v, ", track_velocity_term=", term1,
+              ", dist_error_term=", term2);
     v = std::clamp(v, -ctrl_limits_.velXParams.maxVel,
                    ctrl_limits_.velXParams.maxVel);
     if (std::abs(v) < config_.min_vel()) {
@@ -91,18 +97,22 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
     followingVel.setVx(v);
     double omega;
     if (distance > 0.0) {
-      auto term1_o = track_velocity_ * (tracking_pose.omega() - 2.0 * sin(psi) / distance * tracking_pose.v());
+      auto term1_o =
+          track_velocity_ * (tracking_pose.omega() -
+                             2.0 * sin(psi) / distance * tracking_pose.v());
       auto term2_o = -2.0 * v * sin(angle_error) / distance;
-      auto term3_o = - (config_.K_omega() * tanh(angle_error));
+      auto term3_o = -(config_.K_omega() * tanh(angle_error));
       omega = -track_velocity_ * tracking_pose.omega() -
               2.0 * track_velocity_ * sin(psi) / distance * tracking_pose.v() -
               2.0 * v * sin(angle_error) / distance -
-              2.0 * config_.K_omega() * tanh(angle_error);
-      LOG_INFO("omega=", omega, ", term_track_velocity=", term1_o, ", term_v=", term2_o,
-               ", term_angle_err=", term3_o);
+              2.0 * config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
+                  tanh(angle_error);
+      LOG_DEBUG("omega=", omega, ", term_track_velocity=", term1_o,
+                ", term_v=", term2_o, ", term_angle_err=", term3_o);
     } else {
       omega = -track_velocity_ * tracking_pose.omega() -
-              2.0 * config_.K_omega() * tanh(angle_error);
+              2.0 * config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
+                  tanh(angle_error);
     }
     omega = std::clamp(omega, -ctrl_limits_.omegaParams.maxOmega,
                        ctrl_limits_.omegaParams.maxOmega);
@@ -154,7 +164,6 @@ bool VisionDWA::setInitialTracking(
         "'VisionDWA::setCameraIntrinsics' first");
   }
   // Send current state to the detector
-  detector_->updateState(currentState);
   detector_->updateBoxes(aligned_depth_image, {target_box_2d});
   auto boxes_3d = detector_->get3dDetections();
   if (!boxes_3d) {
@@ -246,11 +255,10 @@ Trajectory2D VisionDWA::getTrackingReferenceSegmentDiffDrive(
   return ref_traj;
 };
 
-
 void VisionDWA::generateSearchCommands(double total_rotation,
-                                            double search_radius,
-                                            int max_rotation_steps,
-                                            bool enable_pause) {
+                                       double search_radius,
+                                       int max_rotation_steps,
+                                       bool enable_pause) {
   // Calculate rotation direction and magnitude
   double rotation_sign = (total_rotation < 0.0) ? -1.0 : 1.0;
   int rotation_steps = max_rotation_steps;
@@ -290,7 +298,7 @@ void VisionDWA::generateSearchCommands(double total_rotation,
   return;
 }
 
-void VisionDWA::getFindTargetCmds(const int  last_direction) {
+void VisionDWA::getFindTargetCmds(const int last_direction) {
   // Generate new search commands if starting a new search or no commands are
   // available
   LOG_DEBUG("Generating new search commands in direction: ", last_direction);
@@ -311,7 +319,6 @@ void VisionDWA::getFindTargetCmds(const int  last_direction) {
   generateSearchCommands(last_direction * M_PI, config_.target_search_radius(),
                          target_search_steps_max / 8);
 }
-
 
 } // namespace Control
 } // namespace Kompass

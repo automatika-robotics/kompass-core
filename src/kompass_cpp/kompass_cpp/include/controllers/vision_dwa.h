@@ -14,6 +14,7 @@
 #include <cmath>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <vector>
 
 namespace Kompass {
@@ -48,7 +49,7 @@ public:
                     "Bearing angle to maintain with the target (rad)"));
       addParameter(
           "track_velocity",
-          Parameter(true,
+          Parameter(false,
                     "Track the linear and angular velocity of the target"));
       // Search Parameters
       addParameter("target_wait_timeout", Parameter(30.0, 0.0, 1e3));
@@ -148,114 +149,6 @@ public:
                            const float principal_point_y);
 
   /**
-   * @brief Get the Pure Tracking Control Command
-   *
-   * @param tracking_pose
-   * @return Velocity2D
-   */
-  Velocity2D getPureTrackingCtrl(const TrackedPose2D &tracking_pose);
-
-  /**
-   * @brief Get the Tracking Control Result based on object tracking and DWA
-   * sampling by direct following of the tracked target
-   *
-   * @tparam T
-   * @param tracking_pose
-   * @param current_vel
-   * @param sensor_points
-   * @return Control::TrajSearchResult
-   */
-  template <typename T>
-  Control::TrajSearchResult
-  getTrackingCtrl(const std::optional<TrackedPose2D> &tracked_pose,
-                  const Velocity2D &current_vel, const T &sensor_points) {
-    if (tracked_pose.has_value()) {
-      // Reset recorded wait and search times
-      recorded_wait_time_ = 0.0;
-      recorded_search_time_ = 0.0;
-      // Generate reference to target
-      Trajectory2D ref_traj;
-      if(is_diff_drive_){
-        ref_traj = getTrackingReferenceSegmentDiffDrive(tracked_pose.value());
-      }
-      else{
-        ref_traj = getTrackingReferenceSegment(tracked_pose.value());
-      }
-
-      TrajSearchResult result;
-      result.isTrajFound = true;
-      result.trajCost = 0.0;
-      result.trajectory = ref_traj;
-      latest_velocity_command_ = ref_traj.velocities.getFront();
-      // ---------------------------------------------------------------
-      // Update reference to use in case goal is lost
-      auto referenceToTarget =
-          Path::Path(ref_traj.path.x, ref_traj.path.y, ref_traj.path.z,
-                     config_.prediction_horizon());
-      this->setCurrentPath(referenceToTarget, false);
-      // ---------------------------------------------------------------
-      return result;
-    }
-    if (!isGoalReached()) {
-      // The tracking sample has collisions -> use DWA-like sampling and control
-      return this->computeVelocityCommandsSet(current_vel, sensor_points);
-    } else {
-      LOG_WARNING("No tracking target is received and DWA goal is reached!");
-      // Start Search and/or Wait if enabled
-      if (config_.enable_search()) {
-        if (recorded_search_time_ < config_.target_search_timeout()) {
-          if (search_commands_queue_.empty()) {
-            getFindTargetCmds();
-          }
-          LOG_DEBUG(
-            "Number of search commands remaining: ", search_commands_queue_.size(),
-            "recorded search time: ", recorded_search_time_);
-          // Create search command
-          Trajectory2D ref_traj(config_.control_horizon() + 1);
-          std::array<double, 3> search_command;
-          for (int i = 0; i <= config_.control_horizon(); i++) {
-            search_command = search_commands_queue_.front();
-            search_commands_queue_.pop();
-            recorded_search_time_ += config_.control_time_step();
-            ref_traj.velocities.add(i, Velocity2D(search_command[0], search_command[1], search_command[2]));
-          }
-          auto result = TrajSearchResult();
-          result.isTrajFound = true;
-          result.trajCost = 0.0;
-          result.trajectory = ref_traj;
-          return result;
-        }
-      } else {
-        if (recorded_wait_time_ < config_.target_wait_timeout()) {
-          auto timeout = config_.target_wait_timeout() - recorded_wait_time_;
-          LOG_DEBUG("Target lost, waiting to get tracked target again ... timeout in ",
-                    timeout, " seconds");
-          // Do nothing and wait
-          Trajectory2D ref_traj(config_.control_horizon() + 1);
-          for (int i = 0; i <= config_.control_horizon(); i++) {
-            recorded_wait_time_ += config_.control_time_step();
-            ref_traj.velocities.add(i, Velocity2D(0.0, 0.0, 0.0));
-          }
-          auto result = TrajSearchResult();
-          result.isTrajFound = true;
-          result.trajCost = 0.0;
-          result.trajectory = ref_traj;
-          return result;
-        }
-      }
-      // Target is lost and not recovered from search or wait
-      LOG_WARNING("Target is lost and not recovered from search or wait");
-      recorded_wait_time_ = 0.0;
-      recorded_search_time_ = 0.0;
-      // Empty the search commands queue
-      while (!search_commands_queue_.empty()) {
-        search_commands_queue_.pop();
-      }
-      return TrajSearchResult();
-    }
-  };
-
-  /**
    * @brief Get the Tracking Control Result based on object tracking and DWA
    * sampling by searching a set of given detections
    *
@@ -307,7 +200,6 @@ public:
     std::optional<TrackedPose2D> tracked_pose = std::nullopt;
     if (!detected_boxes_2d.empty()) {
       // Send current state to the detector
-      detector_->updateState(currentState);
       detector_->updateBoxes(aligned_depth_img, detected_boxes_2d);
       auto boxes_3d = detector_->get3dDetections();
       if (boxes_3d) {
@@ -382,10 +274,129 @@ private:
   Trajectory2D
   getTrackingReferenceSegmentDiffDrive(const TrackedPose2D &tracking_pose);
 
+  /**
+   * @brief Get the Pure Tracking Control Command
+   *
+   * @param tracking_pose
+   * @return Velocity2D
+   */
+  Velocity2D getPureTrackingCtrl(const TrackedPose2D &tracking_pose);
+
+  /**
+   * @brief Get the Pure Tracking Ctrl object
+   *
+   * @param distance_erro
+   * @param angle_error
+   * @return Velocity2D
+   */
+  Velocity2D getPureTrackingCtrl(const float distance_erro, const float angle_error);
+
   void generateSearchCommands(double total_rotation, double search_radius,
                                 int max_rotation_steps,
                                 bool enable_pause = false);
   void getFindTargetCmds(const int last_direction = 1);
+
+  /**
+   * @brief Get the Tracking Control Result based on object tracking and DWA
+   * sampling by direct following of the tracked target in local frame
+   *
+   * @tparam T
+   * @param tracking_pose
+   * @param current_vel
+   * @param sensor_points
+   * @return Control::TrajSearchResult
+   */
+  template <typename T>
+  Control::TrajSearchResult
+  getTrackingCtrl(const std::optional<TrackedPose2D> &tracked_pose,
+                  const Velocity2D &current_vel, const T &sensor_points) {
+    if (tracked_pose.has_value()) {
+      // Reset recorded wait and search times
+      recorded_wait_time_ = 0.0;
+      recorded_search_time_ = 0.0;
+      // Generate reference to target
+      Trajectory2D ref_traj;
+      if (is_diff_drive_) {
+        ref_traj = getTrackingReferenceSegmentDiffDrive(tracked_pose.value());
+      } else {
+        ref_traj = getTrackingReferenceSegment(tracked_pose.value());
+      }
+
+      TrajSearchResult result;
+      result.isTrajFound = true;
+      result.trajCost = 0.0;
+      result.trajectory = ref_traj;
+      latest_velocity_command_ = ref_traj.velocities.getFront();
+      // ---------------------------------------------------------------
+      // Update reference to use in case goal is lost
+      auto referenceToTarget =
+          Path::Path(ref_traj.path.x, ref_traj.path.y, ref_traj.path.z,
+                     config_.prediction_horizon());
+      this->setCurrentPath(referenceToTarget, false);
+      // ---------------------------------------------------------------
+      return result;
+    }
+    if (!isGoalReached()) {
+      // The tracking sample has collisions -> use DWA-like sampling and control
+      return this->computeVelocityCommandsSet(current_vel, sensor_points);
+    } else {
+      LOG_WARNING("No tracking target is received and DWA goal is reached!");
+      // Start Search and/or Wait if enabled
+      if (config_.enable_search()) {
+        if (recorded_search_time_ < config_.target_search_timeout()) {
+          if (search_commands_queue_.empty()) {
+            getFindTargetCmds();
+          }
+          LOG_DEBUG("Number of search commands remaining: ",
+                    search_commands_queue_.size(),
+                    "recorded search time: ", recorded_search_time_);
+          // Create search command
+          Trajectory2D ref_traj(config_.control_horizon() + 1);
+          std::array<double, 3> search_command;
+          for (int i = 0; i <= config_.control_horizon(); i++) {
+            search_command = search_commands_queue_.front();
+            search_commands_queue_.pop();
+            recorded_search_time_ += config_.control_time_step();
+            ref_traj.velocities.add(i, Velocity2D(search_command[0],
+                                                  search_command[1],
+                                                  search_command[2]));
+          }
+          auto result = TrajSearchResult();
+          result.isTrajFound = true;
+          result.trajCost = 0.0;
+          result.trajectory = ref_traj;
+          return result;
+        }
+      } else {
+        if (recorded_wait_time_ < config_.target_wait_timeout()) {
+          auto timeout = config_.target_wait_timeout() - recorded_wait_time_;
+          LOG_DEBUG("Target lost, waiting to get tracked target again ... "
+                    "timeout in ",
+                    timeout, " seconds");
+          // Do nothing and wait
+          Trajectory2D ref_traj(config_.control_horizon() + 1);
+          for (int i = 0; i <= config_.control_horizon(); i++) {
+            recorded_wait_time_ += config_.control_time_step();
+            ref_traj.velocities.add(i, Velocity2D(0.0, 0.0, 0.0));
+          }
+          auto result = TrajSearchResult();
+          result.isTrajFound = true;
+          result.trajCost = 0.0;
+          result.trajectory = ref_traj;
+          return result;
+        }
+      }
+      // Target is lost and not recovered from search or wait
+      LOG_WARNING("Target is lost and not recovered from search or wait");
+      recorded_wait_time_ = 0.0;
+      recorded_search_time_ = 0.0;
+      // Empty the search commands queue
+      while (!search_commands_queue_.empty()) {
+        search_commands_queue_.pop();
+      }
+      return TrajSearchResult();
+    }
+  };
 };
 
 } // namespace Control

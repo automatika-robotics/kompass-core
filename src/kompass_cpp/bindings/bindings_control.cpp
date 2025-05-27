@@ -283,36 +283,6 @@ void bindings_control(py::module_ &m) {
            py::arg("aligned_depth_image"), py::arg("target_box_2d"),
            py::arg("robot_orientation") = 0.0)
       .def("get_tracking_ctrl",
-           py::overload_cast<const std::vector<Bbox3D> &,
-                             const Control::Velocity2D &,
-                             const std::vector<Eigen::Vector3f> &>(
-               &Control::VisionDWA::getTrackingCtrl<
-                   std::vector<Eigen::Vector3f>>),
-           py::arg("detected_boxes"), py::arg("robot_velocity"),
-           py::arg("sensor_data"))
-      .def("get_tracking_ctrl",
-           py::overload_cast<const std::vector<Bbox3D> &,
-                             const Control::Velocity2D &,
-                             const Control::LaserScan &>(
-               &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>),
-           py::arg("detected_boxes"), py::arg("robot_velocity"),
-           py::arg("sensor_data"))
-      .def("get_tracking_ctrl",
-           py::overload_cast<const std::optional<Control::TrackedPose2D> &,
-                             const Control::Velocity2D &,
-                             const std::vector<Eigen::Vector3f> &>(
-               &Control::VisionDWA::getTrackingCtrl<
-                   std::vector<Eigen::Vector3f>>),
-           py::arg("tracked_pose"), py::arg("robot_velocity"),
-           py::arg("sensor_data"))
-      .def("get_tracking_ctrl",
-           py::overload_cast<const std::optional<Control::TrackedPose2D> &,
-                             const Control::Velocity2D &,
-                             const Control::LaserScan &>(
-               &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>),
-           py::arg("tracked_pose"), py::arg("robot_velocity"),
-           py::arg("sensor_data"))
-      .def("get_tracking_ctrl",
            py::overload_cast<const Eigen::MatrixX<unsigned short> &,
                              const std::vector<Bbox2D> &,
                              const Control::Velocity2D &,

@@ -6,13 +6,11 @@ from kompass_cpp.control import (
     SamplingControlResult,
 )
 from kompass_cpp.types import (
-    Bbox3D,
     Bbox2D,
     ControlCmd,
     LaserScan,
     TrajectoryVelocities2D,
     TrajectoryPath,
-    # TrackedPose2D,
 )
 from typing import Optional, List
 import numpy as np
@@ -191,32 +189,6 @@ class VisionDWA(ControllerTemplate):
     def set_camera_intrinsics(self, fx: float, fy: float, cx: float, cy: float) -> None:
         self._planner.set_camera_intrinsics(fx, fy, cx, cy)
 
-    def set_initial_tracking_3d(
-        self,
-        pose_x_img: int,
-        pose_y_img: int,
-        detected_boxes: List[Bbox3D],
-    ) -> bool:
-        """
-        Set initial tracking state
-
-        :param detected_boxes: Detected boxes
-        :type detected_boxes: List[Bbox3D]
-        """
-        try:
-            if any(detected_boxes):
-                return self._planner.set_initial_tracking(
-                    pose_x_img, pose_y_img, detected_boxes
-                )
-
-            logging.error(
-                "Could not set initial tracking state: No detections are provided"
-            )
-            return False
-        except Exception as e:
-            logging.error(f"Could not set initial tracking state: {e}")
-            return False
-
     def set_initial_tracking_2d_target(
         self,
         current_state: RobotState,
@@ -282,10 +254,8 @@ class VisionDWA(ControllerTemplate):
         self,
         *,
         current_state: RobotState,
-        detections_3d: Optional[List[Bbox3D]] = None,
         detections_2d: Optional[List[Bbox2D]] = None,
         depth_image: Optional[np.ndarray] = None,
-        # tracked_pose: Optional[TrackedPose2D] = None,
         laser_scan: Optional[LaserScanData] = None,
         point_cloud: Optional[List[np.ndarray]] = None,
         local_map: Optional[np.ndarray] = None,
@@ -327,14 +297,9 @@ class VisionDWA(ControllerTemplate):
             return False
 
         try:
-            if detections_3d is not None:
-                self._result = self._planner.get_tracking_ctrl(
-                    detections_3d, current_velocity, sensor_data
-                )
-            else:
-                self._result = self._planner.get_tracking_ctrl(
-                    depth_image, detections_2d, current_velocity, sensor_data
-                )
+            self._result = self._planner.get_tracking_ctrl(
+                depth_image, detections_2d, current_velocity, sensor_data
+            )
 
         except Exception as e:
             logging.error(f"Could not find velocity command: {e}")
