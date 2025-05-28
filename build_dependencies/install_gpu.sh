@@ -162,8 +162,8 @@ install_dependencies
 # Check for LLVM/Clang versions
 if [[ $LLVM_VERSION ]]; then
     # Check if given version is within range
-    if (( LLVM_VERSION < 14 || LLVM_VERSION > 17 )); then
-        log ERROR "LLVM Versions higher than 17 and lower than 14 are not compatible with kompass-core."
+    if (( LLVM_VERSION < 15 || LLVM_VERSION > 17 )); then
+        log ERROR "LLVM Versions higher than 20 and lower than 15 are not compatible with kompass-core."
         exit 1
     fi
     if check_llvm_clang_version $LLVM_VERSION; then
