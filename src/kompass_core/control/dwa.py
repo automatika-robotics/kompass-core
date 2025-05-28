@@ -242,9 +242,7 @@ class DWA(FollowerTemplate):
 
         # Init the following result
         self._result = kompass_cpp.control.SamplingControlResult()
-        self._end_of_ctrl_horizon: int = max(
-            int(self._config.control_horizon / self._config.control_time_step), 1
-        )
+        self._end_of_ctrl_horizon: int = max(self._config.control_horizon, 1)
         logging.info("DWA PATH CONTROLLER IS READY")
 
     @property
