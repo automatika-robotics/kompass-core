@@ -38,6 +38,7 @@ class FeatureBasedBboxTracker{
 
     private:
       float timeStep_, minAcceptedSimilarityScore_ = 0.0;
+      std::string trackedLabel_;
       std::unique_ptr<TrackedBbox3D> trackedBox_;
       std::unique_ptr<LinearSSKalmanFilter> stateKalmanFilter_;
 

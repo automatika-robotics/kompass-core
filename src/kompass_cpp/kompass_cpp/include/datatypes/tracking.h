@@ -12,13 +12,14 @@ struct Bbox2D {
   Eigen::Vector2i top_corner = {0, 0};
   Eigen::Vector2i size = {0, 0};
   float timestamp = 0.0; // Timestamp of the detection in seconds
+  std::string label = ""; // Label of the detection, e.g. "car", "pedestrian"
 
   Bbox2D(){};
 
-  Bbox2D(const Bbox2D &box) : top_corner(box.top_corner), size(box.size), timestamp(box.timestamp){};
+  Bbox2D(const Bbox2D &box) : top_corner(box.top_corner), size(box.size), timestamp(box.timestamp), label(box.label){};
 
-  Bbox2D(const Eigen::Vector2i top_corner, const Eigen::Vector2i size, const float timestamp = 0.0)
-      : top_corner(top_corner), size(size), timestamp(timestamp){};
+  Bbox2D(const Eigen::Vector2i top_corner, const Eigen::Vector2i size, const float timestamp = 0.0, const std::string &label = "")
+      : top_corner(top_corner), size(size), timestamp(timestamp), label(label){};
 
   Eigen::Vector2i getXLimits() const {
     return {top_corner.x(), top_corner.x() + size.x()};
@@ -36,6 +37,7 @@ struct Bbox3D {
   Eigen::Vector2i size_img_frame = {0, 0};
   std::vector<Eigen::Vector3f> pc_points = {};
   float timestamp = 0.0; // Timestamp of the detection in seconds
+  std::string label = "";
 
   Bbox3D(){};
 
@@ -43,15 +45,15 @@ struct Bbox3D {
       : center(box.center), size(box.size),
         center_img_frame(box.center_img_frame),
         size_img_frame(box.size_img_frame), pc_points(box.pc_points),
-        timestamp(box.timestamp){};
+        timestamp(box.timestamp), label(box.label){};
 
   Bbox3D(const Eigen::Vector3f &center, const Eigen::Vector3f &size,
          const Eigen::Vector2i center_img_frame,
-         const Eigen::Vector2i size_img_frame, const float timestamp = 0.0,
+         const Eigen::Vector2i size_img_frame, const float timestamp = 0.0, const std::string &label = "",
          const std::vector<Eigen::Vector3f> pc_points = {})
       : center(center), size(size), center_img_frame(center_img_frame),
         size_img_frame(size_img_frame), pc_points(pc_points),
-        timestamp(timestamp){};
+        timestamp(timestamp), label(label){};
 
   Bbox3D(const Eigen::Vector3f &center, const Eigen::Vector3f &size,
          const Bbox2D &box2d, std::vector<Eigen::Vector3f> pc_points = {})
@@ -60,13 +62,13 @@ struct Bbox3D {
             box2d.top_corner +
             Eigen::Vector2i{box2d.size.x() / 2, box2d.size.y() / 2}),
         size_img_frame(box2d.size), pc_points(pc_points),
-        timestamp(box2d.timestamp){};
+        timestamp(box2d.timestamp), label(box2d.label){};
 
   Bbox3D(const Bbox2D &box2d)
       : center_img_frame(
             box2d.top_corner +
             Eigen::Vector2i{box2d.size.x() / 2, box2d.size.y() / 2}),
-        size_img_frame(box2d.size), timestamp(box2d.timestamp){};
+        size_img_frame(box2d.size), timestamp(box2d.timestamp), label(box2d.label){};
 
   Eigen::Vector2f getXLimitsImg() const {
     return {center_img_frame.x() - (size_img_frame.x() / 2),
@@ -98,6 +100,10 @@ struct TrackedBbox3D {
   void setfromBox(const Bbox3D &box) { this->box = box; };
 
   void updateFromNewDetection(const Bbox3D &new_box) {
+    if(new_box.label != this->box.label){
+      LOG_ERROR("Box label mismatch, cannot update tracking.");
+      return;
+    }
     float time_step = new_box.timestamp - this->box.timestamp;
     Eigen::Vector3f new_vel;
     if (time_step <= 0.0) {

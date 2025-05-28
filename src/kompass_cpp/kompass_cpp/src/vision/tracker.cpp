@@ -42,6 +42,7 @@ FeatureBasedBboxTracker::FeatureBasedBboxTracker(const float &time_step,
 
 bool FeatureBasedBboxTracker::setInitialTracking(const TrackedBbox3D &bBox) {
   trackedBox_ = std::make_unique<TrackedBbox3D>(bBox);
+  trackedLabel_ = bBox.box.label;
   Eigen::VectorXf state_vec;
   state_vec.resize(StateSize);
   state_vec(0) = bBox.box.center[0]; // x
@@ -61,6 +62,7 @@ bool FeatureBasedBboxTracker::setInitialTracking(const Bbox3D &bBox,
                                                  const float yaw) {
   LOG_DEBUG("Setting initial tracked box");
   trackedBox_ = std::make_unique<TrackedBbox3D>(bBox);
+  trackedLabel_ = bBox.label;
   Eigen::Matrix<float, StateSize, 1> state_vec =
       Eigen::Matrix<float, StateSize, 1>::Zero();
   state_vec(0) = bBox.center.x();
@@ -116,41 +118,64 @@ void FeatureBasedBboxTracker::updateTrackedBoxState(const int numberSteps) {
 
 bool FeatureBasedBboxTracker::updateTracking(
     const std::vector<Bbox3D> &detected_boxes) {
-  float new_timestamp = detected_boxes[0].timestamp;
-  float dt = new_timestamp - trackedBox_->box.timestamp;
-
-  // Predicted the new location of the tracked box
-  auto predicted_tracked_box = trackedBox_->predictConstantAcc(dt);
-
-  auto ref_box_features = extractFeatures(predicted_tracked_box);
-
-  // Get the features of all the new detections
-  FeaturesVector detected_boxes_feature_vec;
-  float max_similarity_score = 0.0; // Similarity score
-  size_t similar_box_idx = 0, count = 0;
-  for (auto box : detected_boxes) {
-    detected_boxes_feature_vec = extractFeatures(box);
-    FeaturesVector error_vec = detected_boxes_feature_vec - ref_box_features;
-    // Error vector normalization
-    for(int i = 0; i < error_vec.size(); ++i) {
-      if (std::abs(ref_box_features(i)) > 0.0) {
-        error_vec(i) = error_vec(i) / std::abs(ref_box_features(i));
-      }
+  std::vector<Bbox3D> label_boxes;
+  for(auto box : detected_boxes) {
+    if(box.label == trackedLabel_) {
+      label_boxes.push_back(box);
     }
-    float similarity_score = std::exp(-std::pow(error_vec.norm(), 2));
-
-    if (similarity_score > max_similarity_score) {
-      max_similarity_score = similarity_score;
-      similar_box_idx = count;
-    }
-    count++;
   }
+  if (label_boxes.empty()) {
+    LOG_DEBUG("No boxes with label ", trackedLabel_, " found in the detected boxes!");
+    return false;
+  }
+
+  float max_similarity_score = 0.0f; // Similarity score
+  Bbox3D * found_box;
+  float dt = label_boxes[0].timestamp - trackedBox_->box.timestamp;
+
+  if(label_boxes.size() == 1) {
+    // Only one box detected, so it is the same
+    max_similarity_score = 1.0f;
+    found_box = &label_boxes[0];
+  }
+  else{
+    // Compute similarity score and find box
+    // Predicted the new location of the tracked box
+    auto predicted_tracked_box = trackedBox_->predictConstantAcc(dt);
+
+    auto ref_box_features = extractFeatures(predicted_tracked_box);
+
+    // Get the features of all the new detections
+    FeaturesVector detected_boxes_feature_vec;
+    size_t similar_box_idx = 0, count = 0;
+
+    for (auto box : label_boxes) {
+      detected_boxes_feature_vec = extractFeatures(box);
+      FeaturesVector error_vec = detected_boxes_feature_vec - ref_box_features;
+      // Error vector normalization
+      for (int i = 0; i < error_vec.size(); ++i) {
+        if (std::abs(ref_box_features(i)) > 0.0) {
+          error_vec(i) = error_vec(i) / std::abs(ref_box_features(i));
+        }
+      }
+      float similarity_score = std::exp(-std::pow(error_vec.norm(), 2));
+
+      if (similarity_score > max_similarity_score) {
+        max_similarity_score = similarity_score;
+        similar_box_idx = count;
+      }
+      count++;
+    }
+    found_box = &label_boxes[similar_box_idx];
+  }
+
   LOG_DEBUG("Max similarity score = ", max_similarity_score);
   if (max_similarity_score > minAcceptedSimilarityScore_) {
     // Update raw tracking
+    float dt = found_box->timestamp - trackedBox_->box.timestamp;
     int number_steps = std::max(static_cast<int>(dt / timeStep_), 1);
 
-    trackedBox_->updateFromNewDetection(detected_boxes[similar_box_idx]);
+    trackedBox_->updateFromNewDetection(*found_box);
 
     // Update state by applying kalman filter on the raw measurement
     updateTrackedBoxState(number_steps);
