@@ -68,27 +68,22 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
   float angle_error =
       Angle::normalizeToMinusPiPlusPi(config_.target_orientation() - psi);
 
-  float distance_tolerance =
-      std::max(0.01, config_.tolerance() * config_.target_distance());
-  float angle_tolerance =
-      std::max(0.01, config_.tolerance() * config_.target_orientation());
-
-  LOG_DEBUG("distance_error=", distance_error, ", angle_error=", angle_error);
+  // LOG_DEBUG("distance_error=", distance_error, ", angle_error=", angle_error);
 
   Velocity2D followingVel;
-  if (abs(distance_error) > distance_tolerance or
-      abs(angle_error) > angle_tolerance) {
-    auto term1 =
-        (track_velocity_ * tracking_pose.v() * cos(psi)) / cos(angle_error);
-    auto term2 = -(config_.K_v() * ctrl_limits_.velXParams.maxVel *
-                   tanh(distance_error)) /
-                 cos(angle_error);
+  if (abs(distance_error) > config_.dist_tolerance() or
+      abs(angle_error) > config_.ang_tolerance()) {
+    // auto term1 =
+    //     (track_velocity_ * tracking_pose.v() * cos(psi)) / cos(angle_error);
+    // auto term2 = -(config_.K_v() * ctrl_limits_.velXParams.maxVel *
+    //                tanh(distance_error)) /
+    //              cos(angle_error);
     double v = ((track_velocity_ * tracking_pose.v() * cos(psi)) -
                 (config_.K_v() * ctrl_limits_.velXParams.maxVel *
-                 tanh(distance_error))) /
+                 tanh(distance_error / config_.target_distance()))) /
                cos(angle_error);
-    LOG_DEBUG("v=", v, ", track_velocity_term=", term1,
-              ", dist_error_term=", term2);
+    // LOG_DEBUG("v=", v, ", track_velocity_term=", term1,
+    //           ", dist_error_term=", term2);
     v = std::clamp(v, -ctrl_limits_.velXParams.maxVel,
                    ctrl_limits_.velXParams.maxVel);
     if (std::abs(v) < config_.min_vel()) {
@@ -97,21 +92,21 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
     followingVel.setVx(v);
     double omega;
     if (distance > 0.0) {
-      auto term1_o =
-          track_velocity_ * (tracking_pose.omega() -
-                             2.0 * sin(psi) / distance * tracking_pose.v());
-      auto term2_o = -2.0 * v * sin(angle_error) / distance;
-      auto term3_o = -(config_.K_omega() * tanh(angle_error));
+      // auto term1_o =
+      //     track_velocity_ * (tracking_pose.omega() -
+      //                        2.0 * sin(psi) / distance * tracking_pose.v());
+      // auto term2_o = -2.0 * v * sin(angle_error) / distance;
+      // auto term3_o = -(config_.K_omega() * tanh(angle_error));
       omega = -track_velocity_ * tracking_pose.omega() -
-              2.0 * track_velocity_ * sin(psi) / distance * tracking_pose.v() -
-              2.0 * v * sin(angle_error) / distance -
-              2.0 * config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
-                  tanh(angle_error);
-      LOG_DEBUG("omega=", omega, ", term_track_velocity=", term1_o,
-                ", term_v=", term2_o, ", term_angle_err=", term3_o);
+              track_velocity_ * sin(psi) / distance * tracking_pose.v() -
+              v * sin(angle_error) / distance -
+              config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
+                  tanh(angle_error / M_PI_2);
+      // LOG_DEBUG("omega=", omega, ", term_track_velocity=", term1_o,
+      //           ", term_v=", term2_o, ", term_angle_err=", term3_o);
     } else {
       omega = -track_velocity_ * tracking_pose.omega() -
-              2.0 * config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
+              config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
                   tanh(angle_error);
     }
     omega = std::clamp(omega, -ctrl_limits_.omegaParams.maxOmega,
@@ -311,13 +306,13 @@ void VisionDWA::getFindTargetCmds(const int last_direction) {
                          target_search_steps_max / 4, true);
   // go back
   generateSearchCommands(-last_direction * M_PI, config_.target_search_radius(),
-                         target_search_steps_max / 8);
+                         target_search_steps_max / 8, true);
   // rotate -pi
   generateSearchCommands(-last_direction * M_PI, config_.target_search_radius(),
                          target_search_steps_max / 4, true);
   // go back
   generateSearchCommands(last_direction * M_PI, config_.target_search_radius(),
-                         target_search_steps_max / 8);
+                         target_search_steps_max / 8, true);
 }
 
 } // namespace Control

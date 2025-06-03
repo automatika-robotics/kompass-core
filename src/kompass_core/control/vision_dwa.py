@@ -24,8 +24,11 @@ from .dwa import DWAConfig
 
 @define
 class VisionDWAConfig(DWAConfig):
-    tolerance: float = field(
-        default=0.01, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
+    distance_tolerance: float = field(
+        default=0.05, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
+    )
+    angle_tolerance: float = field(
+        default=0.1, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
     )
     # Tolerance value for distance and angle following errors
 
