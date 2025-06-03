@@ -34,9 +34,13 @@ public:
           "prediction_horizon",
           Parameter(10, 1, 1000, "Number of steps for future prediction"));
       addParameter(
-          "tolerance",
-          Parameter(0.01, 0.0, 1.0,
-                    "Tolerance value for distance and angle following errors"));
+          "distance_tolerance",
+          Parameter(0.05, 0.0, 100.0,
+                    "Tolerance value for distance (meters)"));
+      addParameter(
+        "angle_tolerance",
+        Parameter(0.1, 0.0, M_PI,
+                  "Tolerance value for angle (rad)"));
       addParameter(
           "target_distance",
           Parameter(
@@ -100,7 +104,8 @@ public:
     int prediction_horizon() const {
       return getParameter<int>("prediction_horizon");
     }
-    double tolerance() const { return getParameter<double>("tolerance"); }
+    double dist_tolerance() const { return getParameter<double>("distance_tolerance"); }
+    double ang_tolerance() const { return getParameter<double>("angle_tolerance"); }
     double target_distance() const {
       double val = getParameter<double>("target_distance");
       return val < 0 ? -1.0 : val; // Return -1 for None
@@ -345,26 +350,39 @@ private:
       if (config_.enable_search()) {
         if (recorded_search_time_ < config_.target_search_timeout()) {
           if (search_commands_queue_.empty()) {
+            LOG_DEBUG("Search commands queue is empty, generating new search "
+                      "commands");
             getFindTargetCmds();
           }
           LOG_DEBUG("Number of search commands remaining: ",
                     search_commands_queue_.size(),
                     "recorded search time: ", recorded_search_time_);
           // Create search command
-          Trajectory2D ref_traj(config_.control_horizon() + 1);
+          TrajectoryVelocities2D velocities(config_.control_horizon());
+          TrajectoryPath path(config_.control_horizon());
+          LOG_DEBUG("Initializing path and velocities with size: ",
+            config_.control_horizon());
+          path.add(0, 0.0, 0.0);
           std::array<double, 3> search_command;
-          for (int i = 0; i <= config_.control_horizon(); i++) {
+          for (int i = 0; i < config_.control_horizon() - 1; i++) {
+            if (search_commands_queue_.empty()) {
+              LOG_DEBUG("Search commands queue is empty. Ending Search ");
+              return TrajSearchResult();
+            }
             search_command = search_commands_queue_.front();
             search_commands_queue_.pop();
             recorded_search_time_ += config_.control_time_step();
-            ref_traj.velocities.add(i, Velocity2D(search_command[0],
+            path.add(i + 1, 0.0, 0.0);
+            velocities.add(i, Velocity2D(search_command[0],
                                                   search_command[1],
                                                   search_command[2]));
           }
+          LOG_DEBUG("Sending ", config_.control_horizon(), " search commands "
+                    "to the controller");
           auto result = TrajSearchResult();
           result.isTrajFound = true;
           result.trajCost = 0.0;
-          result.trajectory = ref_traj;
+          result.trajectory = Trajectory2D(velocities, path);
           return result;
         }
       } else {
@@ -374,15 +392,18 @@ private:
                     "timeout in ",
                     timeout, " seconds");
           // Do nothing and wait
-          Trajectory2D ref_traj(config_.control_horizon() + 1);
-          for (int i = 0; i <= config_.control_horizon(); i++) {
+          TrajectoryVelocities2D velocities(config_.control_horizon());
+          TrajectoryPath path(config_.control_horizon());
+          path.add(0, 0.0, 0.0);
+          for (int i = 0; i < config_.control_horizon() - 1; i++) {
             recorded_wait_time_ += config_.control_time_step();
-            ref_traj.velocities.add(i, Velocity2D(0.0, 0.0, 0.0));
+            velocities.add(i, Velocity2D(0.0, 0.0, 0.0));
+            path.add(i + 1, 0.0, 0.0);
           }
           auto result = TrajSearchResult();
           result.isTrajFound = true;
           result.trajCost = 0.0;
-          result.trajectory = ref_traj;
+          result.trajectory = Trajectory2D(velocities, path);
           return result;
         }
       }
