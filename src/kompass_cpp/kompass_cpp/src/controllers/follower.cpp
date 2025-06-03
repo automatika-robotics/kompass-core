@@ -34,21 +34,7 @@ Follower::Follower() : Controller(), config() {
 
 Follower::Follower(FollowerParameters config) : Controller() {
   this->config = config;
-  lookahead_distance = config.getParameter<double>("lookahead_distance");
-  enable_reverse_driving = config.getParameter<bool>("enable_reverse_driving");
-  goal_dist_tolerance = config.getParameter<double>("goal_dist_tolerance");
-  goal_orientation_tolerance =
-      config.getParameter<double>("goal_orientation_tolerance");
-  loosing_goal_distance = config.getParameter<double>("loosing_goal_distance");
-  path_segment_length = config.getParameter<double>("path_segment_length");
-  maxDist = config.getParameter<double>("max_point_interpolation_distance");
-  // Set rotate_in_place based on the robot type
-  if (ctrType == Control::ControlType::ACKERMANN) {
-    rotate_in_place = false;
-  } else {
-    rotate_in_place = true;
-  }
-  maxSegmentSize = getMaxSegmentSize();
+  Follower();
 }
 
 size_t Follower::getMaxSegmentSize() const {
