@@ -99,7 +99,7 @@ size_t Follower::getCurrentSegmentIndex() { return current_segment_index_; }
 
 bool Follower::isGoalReached() {
   if (!path_processing_) {
-    return reached_goal_;
+    return true;
   }
 
   const Path::Point goal_point = currentPath->getEnd();
@@ -319,7 +319,7 @@ const double Follower::getPathLength() const {
   return currentPath->totalPathLength();
 }
 const bool Follower::hasPath() const {
-  if (!path_processing_) {
+  if (!currentPath or !path_processing_) {
     return false;
   }
   return currentPath->totalPathLength() > 0.0;

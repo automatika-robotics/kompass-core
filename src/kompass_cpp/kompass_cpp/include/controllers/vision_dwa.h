@@ -341,7 +341,7 @@ private:
       // ---------------------------------------------------------------
       return result;
     }
-    if (!isGoalReached()) {
+    if (this->hasPath() and !isGoalReached()) {
       // The tracking sample has collisions -> use DWA-like sampling and control
       return this->computeVelocityCommandsSet(current_vel, sensor_points);
     } else {

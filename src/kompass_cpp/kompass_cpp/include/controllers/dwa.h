@@ -189,10 +189,8 @@ protected:
       // If the robot is rotating in place and the heading error is large, we
       // do not need to sample trajectories
       LOG_DEBUG("Rotating In Place ...");
-      TrajSearchResult result;
-      result.isTrajFound = true;
-      result.trajectory = trajSampler->generateSingleSampleFromVel(Velocity2D(0.0, 0.0, - currentTrackedTarget_->heading_error * ctrlimitsParams.omegaParams.maxOmega / M_PI));
-      return result;
+      auto trajectory = trajSampler->generateSingleSampleFromVel(Velocity2D(0.0, 0.0, - currentTrackedTarget_->heading_error * ctrlimitsParams.omegaParams.maxOmega / M_PI));
+      return TrajSearchResult{trajectory, true, 0.0};
     }
 
     // Generate set of valid trajectories in the DW
@@ -200,7 +198,7 @@ protected:
         trajSampler->generateTrajectories(global_vel, currentState,
                                           scan_points);
     if (samples_->size() == 0) {
-      return TrajSearchResult();
+      return TrajSearchResult{Trajectory2D(), false, 0.0};
     }
 
     trajCostEvaluator->setPointScan(scan_points, currentState, maxLocalRange_);

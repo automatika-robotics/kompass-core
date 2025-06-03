@@ -577,7 +577,10 @@ struct TrajectorySamples2D {
 struct TrajSearchResult {
   Trajectory2D trajectory;
   bool isTrajFound = false;
-  float trajCost;
+  float trajCost = 0.0;
+
+  // default constructor
+  TrajSearchResult() = default;
 };
 
 // Lowest cost and its associated index for the trajectory sample
