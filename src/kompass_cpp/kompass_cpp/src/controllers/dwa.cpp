@@ -34,6 +34,8 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
   } else {
     max_forward_distance_ = controlLimits.velXParams.maxVel * predictionHorizon;
   }
+
+  initJitCompile();
 }
 
 DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
@@ -59,6 +61,21 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
   } else {
     max_forward_distance_ = controlLimits.velXParams.maxVel * timeHorizon;
   }
+
+  initJitCompile();
+}
+
+void DWA::initJitCompile() {
+  const int dummyNumSamples = 1;
+  const int dummyNumPoints = 2;
+  TrajectoryVelocitySamples2D velocities(dummyNumSamples, dummyNumPoints);
+  TrajectoryPathSamples paths(dummyNumSamples, dummyNumPoints);
+  velocities.push_back({Velocity2D(1.0, 0.0, 0.0)});
+  auto dummyPath = Path::Path({Path::Point(0.0f, 0.0f, 0.0f), Path::Point(1.0f, 1.0f, 0.0f)});
+  paths.push_back(dummyPath);
+  std::unique_ptr<TrajectorySamples2D> dummySamples =
+      std::make_unique<TrajectorySamples2D>(velocities, paths);
+  trajCostEvaluator->getMinTrajectoryCost(dummySamples, &dummyPath, dummyPath);
 }
 
 void DWA::configure(ControlLimitsParams controlLimits, ControlType controlType,

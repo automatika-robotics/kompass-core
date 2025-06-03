@@ -6,6 +6,7 @@
 #include "datatypes/trajectory.h"
 #include "follower.h"
 #include "utils/cost_evaluator.h"
+#include "utils/logger.h"
 #include "utils/trajectory_sampler.h"
 #include <Eigen/Dense>
 #include <memory>
@@ -184,6 +185,16 @@ protected:
     // find closest segment to use in cost computation
     determineTarget();
 
+    if(rotate_in_place and currentTrackedTarget_->heading_error > goal_orientation_tolerance * 10.0){
+      // If the robot is rotating in place and the heading error is large, we
+      // do not need to sample trajectories
+      LOG_DEBUG("Rotating In Place ...");
+      TrajSearchResult result;
+      result.isTrajFound = true;
+      result.trajectory = trajSampler->generateSingleSampleFromVel(Velocity2D(0.0, 0.0, - currentTrackedTarget_->heading_error * ctrlimitsParams.omegaParams.maxOmega / M_PI));
+      return result;
+    }
+
     // Generate set of valid trajectories in the DW
     std::unique_ptr<TrajectorySamples2D> samples_ =
         trajSampler->generateTrajectories(global_vel, currentState,
@@ -216,6 +227,8 @@ private:
   size_t getMaxPathLength();
 
   Path::Path findTrackedPathSegment();
+
+  void initJitCompile();
 };
 
 }; // namespace Control
