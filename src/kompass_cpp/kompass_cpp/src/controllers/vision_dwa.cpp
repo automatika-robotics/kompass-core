@@ -73,17 +73,10 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
   Velocity2D followingVel;
   if (abs(distance_error) > config_.dist_tolerance() or
       abs(angle_error) > config_.ang_tolerance()) {
-    // auto term1 =
-    //     (track_velocity_ * tracking_pose.v() * cos(psi)) / cos(angle_error);
-    // auto term2 = -(config_.K_v() * ctrl_limits_.velXParams.maxVel *
-    //                tanh(distance_error)) /
-    //              cos(angle_error);
     double v = ((track_velocity_ * tracking_pose.v() * cos(psi)) -
                 (config_.K_v() * ctrl_limits_.velXParams.maxVel *
-                 tanh(distance_error / config_.target_distance()))) /
+                 tanh(distance_error))) /
                cos(angle_error);
-    // LOG_DEBUG("v=", v, ", track_velocity_term=", term1,
-    //           ", dist_error_term=", term2);
     v = std::clamp(v, -ctrl_limits_.velXParams.maxVel,
                    ctrl_limits_.velXParams.maxVel);
     if (std::abs(v) < config_.min_vel()) {
@@ -92,18 +85,10 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
     followingVel.setVx(v);
     double omega;
     if (distance > 0.0) {
-      // auto term1_o =
-      //     track_velocity_ * (tracking_pose.omega() -
-      //                        2.0 * sin(psi) / distance * tracking_pose.v());
-      // auto term2_o = -2.0 * v * sin(angle_error) / distance;
-      // auto term3_o = -(config_.K_omega() * tanh(angle_error));
       omega = -track_velocity_ * tracking_pose.omega() -
               track_velocity_ * sin(psi) / distance * tracking_pose.v() -
-              v * sin(angle_error) / distance -
               config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
-                  tanh(angle_error / M_PI_2);
-      // LOG_DEBUG("omega=", omega, ", term_track_velocity=", term1_o,
-      //           ", term_v=", term2_o, ", term_angle_err=", term3_o);
+                  tanh(angle_error);
     } else {
       omega = -track_velocity_ * tracking_pose.omega() -
               config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
@@ -250,31 +235,32 @@ Trajectory2D VisionDWA::getTrackingReferenceSegmentDiffDrive(
   return ref_traj;
 };
 
-void VisionDWA::generateSearchCommands(double total_rotation,
-                                       double search_radius,
-                                       int max_rotation_steps,
+void VisionDWA::generateSearchCommands(float total_rotation,
+                                       float search_radius,
+                                       float max_rotation_time,
                                        bool enable_pause) {
   // Calculate rotation direction and magnitude
   double rotation_sign = (total_rotation < 0.0) ? -1.0 : 1.0;
-  int rotation_steps = max_rotation_steps;
+  float rotation_time = max_rotation_time;
+  int num_pause_steps = static_cast<int>(
+    config_.search_pause() / config_.control_time_step());
   if (enable_pause) {
     // Modify the total number of active rotation to include the pause steps
-    rotation_steps = (max_rotation_steps + config_.search_pause()) /
-                     (config_.search_pause() + 1);
+    rotation_time = max_rotation_time * (1 - num_pause_steps / config_.control_time_step());
   }
   // Angular velocity to rotate 'total_rotation' in total time steps
   // 'rotation_steps' with dt = control_time_step
-  double rotation_value =
-      (total_rotation / rotation_steps) / config_.control_time_step();
-  rotation_value =
-      std::max(std::min(rotation_value, ctrl_limits_.omegaParams.maxOmega),
+  double omega_val = total_rotation / rotation_time;
+
+  omega_val =
+      std::max(std::min(omega_val, ctrl_limits_.omegaParams.maxOmega),
                config_.min_vel());
   // Generate velocity commands
-  for (int i = 0; i <= rotation_steps; i = i + 1) {
+  for (float t = 0.0f; t <= max_rotation_time; t = t + config_.control_time_step()) {
     if (is_diff_drive_) {
       // In-place rotation
       search_commands_queue_.emplace(
-          std::array<double, 3>{0.0, 0.0, rotation_sign * rotation_value});
+          std::array<double, 3>{0.0, 0.0, rotation_sign * omega_val});
     } else {
       // Angular velocity based on linear velocity and radius
       double omega_ackermann =
@@ -285,7 +271,7 @@ void VisionDWA::generateSearchCommands(double total_rotation,
     }
     if (enable_pause) {
       // Add zero commands for search pause
-      for (int j = 0; j <= config_.search_pause(); j++) {
+      for (int j = 0; j <= num_pause_steps; j++) {
         search_commands_queue_.emplace(std::array<double, 3>{0.0, 0.0, 0.0});
       }
     }
@@ -299,20 +285,19 @@ void VisionDWA::getFindTargetCmds(const int last_direction) {
   LOG_DEBUG("Generating new search commands in direction: ", last_direction);
 
   search_commands_queue_ = std::queue<std::array<double, 3>>();
-  int target_search_steps_max = static_cast<int>(
-      config_.target_search_timeout() / config_.control_time_step());
+  const float target_searchtimeout_part = config_.target_search_timeout() / 4;
   // rotate pi
   generateSearchCommands(last_direction * M_PI, config_.target_search_radius(),
-                         target_search_steps_max / 4, true);
+                         target_searchtimeout_part);
   // go back
   generateSearchCommands(-last_direction * M_PI, config_.target_search_radius(),
-                         target_search_steps_max / 8, true);
+                         target_searchtimeout_part);
   // rotate -pi
   generateSearchCommands(-last_direction * M_PI, config_.target_search_radius(),
-                         target_search_steps_max / 4, true);
+                         target_searchtimeout_part);
   // go back
   generateSearchCommands(last_direction * M_PI, config_.target_search_radius(),
-                         target_search_steps_max / 8, true);
+                         target_searchtimeout_part);
 }
 
 } // namespace Control

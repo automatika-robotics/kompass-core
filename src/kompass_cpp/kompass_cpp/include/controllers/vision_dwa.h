@@ -296,9 +296,9 @@ private:
    */
   Velocity2D getPureTrackingCtrl(const float distance_erro, const float angle_error);
 
-  void generateSearchCommands(double total_rotation, double search_radius,
-                                int max_rotation_steps,
-                                bool enable_pause = false);
+  void generateSearchCommands(float total_rotation, float search_radius,
+                              float max_rotation_time,
+                              bool enable_pause = false);
   void getFindTargetCmds(const int last_direction = 1);
 
   /**
@@ -319,6 +319,9 @@ private:
       // Reset recorded wait and search times
       recorded_wait_time_ = 0.0;
       recorded_search_time_ = 0.0;
+      LOG_INFO("Tracking target at position: ",
+                tracked_pose->x(), ", ",
+                tracked_pose->y());
       // Generate reference to target
       Trajectory2D ref_traj;
       if (is_diff_drive_) {
@@ -341,18 +344,23 @@ private:
       // ---------------------------------------------------------------
       return result;
     }
-    if (this->hasPath() and !isGoalReached()) {
+    if (this->hasPath() and !isGoalReached() and
+        this->currentPath->getSize() > 1) {
       // The tracking sample has collisions -> use DWA-like sampling and control
       return this->computeVelocityCommandsSet(current_vel, sensor_points);
-    } else {
-      LOG_WARNING("No tracking target is received and DWA goal is reached!");
+    }
+    else {
       // Start Search and/or Wait if enabled
       if (config_.enable_search()) {
         if (recorded_search_time_ < config_.target_search_timeout()) {
           if (search_commands_queue_.empty()) {
             LOG_DEBUG("Search commands queue is empty, generating new search "
                       "commands");
-            getFindTargetCmds();
+            int last_direction = 1;
+            if (latest_velocity_command_.omega() < 0){
+              last_direction = -1;
+            }
+            getFindTargetCmds(last_direction);
           }
           LOG_DEBUG("Number of search commands remaining: ",
                     search_commands_queue_.size(),
@@ -360,8 +368,6 @@ private:
           // Create search command
           TrajectoryVelocities2D velocities(config_.control_horizon());
           TrajectoryPath path(config_.control_horizon());
-          LOG_DEBUG("Initializing path and velocities with size: ",
-            config_.control_horizon());
           path.add(0, 0.0, 0.0);
           std::array<double, 3> search_command;
           for (int i = 0; i < config_.control_horizon() - 1; i++) {
@@ -385,7 +391,8 @@ private:
           result.trajectory = Trajectory2D(velocities, path);
           return result;
         }
-      } else {
+      }
+      else {
         if (recorded_wait_time_ < config_.target_wait_timeout()) {
           auto timeout = config_.target_wait_timeout() - recorded_wait_time_;
           LOG_DEBUG("Target lost, waiting to get tracked target again ... "

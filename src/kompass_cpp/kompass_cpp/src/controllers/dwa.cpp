@@ -152,6 +152,9 @@ Path::Path DWA::findTrackedPathSegment() {
       current_segment_index_ < max_segment_index_) {
     segment_index = current_segment_index_ + 1;
     return currentPath->segments[current_segment_index_ + 1];
+  } else if (closestPosition->index >= currentSegment.getSize() - 1){
+    // Return current segment directly (last segment)
+    return currentPath->segments[current_segment_index_];
   }
   // Else take the segment points from the current point onwards
   else {

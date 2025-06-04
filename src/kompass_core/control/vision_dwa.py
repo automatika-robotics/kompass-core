@@ -276,16 +276,26 @@ class VisionDWA(ControllerTemplate):
         :return: If planner found a valid solution
         :rtype: bool
         """
-        self._planner.set_current_state(
-            current_state.x, current_state.y, current_state.yaw, current_state.speed
-        )
+        if current_state is not None:
+            self._planner.set_current_state(
+                current_state.x, current_state.y, current_state.yaw, current_state.speed
+            )
+            current_velocity = ControlCmd(
+            vx=current_state.vx, vy=current_state.vy, omega=current_state.omega
+            )
+        else:
+            if self.control_till_horizon is None:
+                current_velocity = ControlCmd(
+                    vx=0.0, vy=0.0, omega=0.0
+                )
+            else:
+                # Get latest cmd
+                current_velocity = ControlCmd(
+                vx=self.control_till_horizon.vx[-1], vy=self.control_till_horizon.vy[-1], omega=self.control_till_horizon.omega[-1]
+                )
 
         if local_map_resolution:
             self._planner.set_resolution(local_map_resolution)
-
-        current_velocity = ControlCmd(
-            vx=current_state.vx, vy=current_state.vy, omega=current_state.omega
-        )
 
         if local_map is not None:
             sensor_data = PointCloudData.numpy_to_kompass_cpp(local_map)
