@@ -130,6 +130,11 @@ public:
   void setOmega(double const value) { velocity_(2) = value; }
   void setSteerAng(double const value) { velocity_(3) = value; }
 
+  // Overload the unary minus operator
+  Velocity2D operator-() const {
+    return Velocity2D(-velocity_(0), -velocity_(1), -velocity_(2));
+  }
+
 private:
   Eigen::Vector4d velocity_{0.0, 0.0, 0.0, 0.0};
 };
@@ -164,6 +169,11 @@ public:
         (vel_.vx() * sin(this->yaw()) + vel_.vy() * cos(this->yaw())) * timeStep;
     float yaw = this->yaw() + vel_.omega() * timeStep;
     setRotation(0.0, 0.0, yaw);
+  }
+
+  void update(const Velocity2D& vel, const float timeStep) {
+    vel_ = vel;
+    update(timeStep);
   }
 
   float distance(const float x, const float y, const float z = 0.0) const{
