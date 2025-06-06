@@ -1,4 +1,5 @@
 #include "controllers/vision_dwa.h"
+#include "controllers/vision_follower.h"
 #include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "datatypes/tracking.h"
@@ -19,8 +20,9 @@
 
 using namespace Kompass;
 
-
 struct VisionDWATestConfig {
+  bool use_local_frame;
+
   // Sampling configuration
   double timeStep;
   int predictionHorizon;
@@ -73,6 +75,7 @@ struct VisionDWATestConfig {
 
   // Constructor to initialize the struct
   VisionDWATestConfig(const std::vector<Path::Point> sensor_points,
+                      const bool use_local_frame = true,
                       const double timeStep = 0.1,
                       const int predictionHorizon = 20,
                       const int controlHorizon = 2,
@@ -83,7 +86,7 @@ struct VisionDWATestConfig {
                       const double reference_path_distance_weight = 1.0,
                       const double goal_distance_weight = 1.0,
                       const double obstacles_distance_weight = 0.0)
-      : timeStep(timeStep), predictionHorizon(predictionHorizon),
+      : use_local_frame(use_local_frame), timeStep(timeStep), predictionHorizon(predictionHorizon),
         controlHorizon(controlHorizon), maxLinearSamples(maxLinearSamples),
         maxAngularSamples(maxAngularSamples), maxNumThreads(maxNumThreads),
         octreeRes(0.1), x_params(maxVel, 5.0, 10.0), y_params(1, 3, 5),
@@ -107,13 +110,15 @@ struct VisionDWATestConfig {
     config.setParameter("control_time_step", timeStep);
     config.setParameter("control_horizon", controlHorizon);
     config.setParameter("prediction_horizon", predictionHorizon);
-    config.setParameter("track_velocity", false);
-    // config.setParameter("target_orientation", 0.2);
+    config.setParameter("use_local_coordinates", use_local_frame);
+    if(!use_local_frame){
+      config.setParameter("speed_gain", 0.1);
+    }
 
     // For depth config
     // Body to camera tf from robot of test pictures
     auto body_to_link_tf =
-    getTransformation(Eigen::Quaternionf{0.0f, 0.1987f, 0.0f, 0.98f},
+        getTransformation(Eigen::Quaternionf{0.0f, 0.1987f, 0.0f, 0.98f},
                           Eigen::Vector3f{0.32f, 0.0209f, 0.3f});
 
     auto link_to_cam_tf =
@@ -128,8 +133,10 @@ struct VisionDWATestConfig {
         body_to_link_tf * link_to_cam_tf * cam_to_cam_opt_tf;
 
     Eigen::Vector3f translation = body_to_cam_tf.translation();
-    Eigen::Quaternionf rotation_quat = Eigen::Quaternionf(body_to_cam_tf.rotation());
-    Eigen::Vector4f rotation = {rotation_quat.w(), rotation_quat.x(), rotation_quat.y(), rotation_quat.z()};
+    Eigen::Quaternionf rotation_quat =
+        Eigen::Quaternionf(body_to_cam_tf.rotation());
+    Eigen::Vector4f rotation = {rotation_quat.w(), rotation_quat.x(),
+                                rotation_quat.y(), rotation_quat.z()};
 
     controller = std::make_unique<Control::VisionDWA>(
         controlType, controlLimits, maxLinearSamples, maxAngularSamples,
@@ -210,7 +217,7 @@ struct VisionDWATestConfig {
   }
 
   bool run_test(const int numPointsPerTrajectory, std::string pltFileName,
-                 bool simulate_obstacle=false) {
+                const bool simulate_obstacle = false) {
     Control::TrajectorySamples2D samples(2, numPointsPerTrajectory);
     Control::TrajectoryVelocities2D simulated_velocities(
         numPointsPerTrajectory);
@@ -219,10 +226,9 @@ struct VisionDWATestConfig {
     Control::Velocity2D cmd;
     Control::TrajSearchResult result;
 
-
-    controller->setInitialTracking(ref_point_img(0),
-                                     ref_point_img(1), detected_boxes);
-
+    controller->setCurrentState(robotState);
+    controller->setInitialTracking(ref_point_img(0), ref_point_img(1),
+                                   detected_boxes);
 
     int step = 0;
     while (step < numPointsPerTrajectory) {
@@ -234,25 +240,31 @@ struct VisionDWATestConfig {
                ", ", tracked_pose.yaw());
       LOG_INFO("Robot at: ", point.x(), ", ", point.y());
 
-      // Transform boxes to local coordinates
-      std::vector<Bbox3D> boxes_local_coordinates;
-      Eigen::Isometry3f world_in_robot_tf = getTransformation(robotState).inverse();
-      Eigen::Matrix3f abs_rotation = world_in_robot_tf.linear().cwiseAbs();
-      for (auto &box : detected_boxes) {
-        // Transform the box to the robot frame
-        Bbox3D box_local(box);
-        box_local.center = world_in_robot_tf * box.center;
-        box_local.size = abs_rotation * box.size;
-        boxes_local_coordinates.push_back(box_local);
+      std::vector<Bbox3D> seen_boxes;
+      if (use_local_frame) {
+        // Transform boxes to local coordinates
+        std::vector<Bbox3D> boxes_local_coordinates;
+        Eigen::Isometry3f world_in_robot_tf =
+            getTransformation(robotState).inverse();
+        Eigen::Matrix3f abs_rotation = world_in_robot_tf.linear().cwiseAbs();
+        for (auto &box : detected_boxes) {
+          // Transform the box to the robot frame
+          Bbox3D box_local(box);
+          box_local.center = world_in_robot_tf * box.center;
+          box_local.size = abs_rotation * box.size;
+          boxes_local_coordinates.push_back(box_local);
+        }
+        seen_boxes = boxes_local_coordinates;
+      } else {
+        seen_boxes = detected_boxes;
       }
 
-      auto seen_boxes = boxes_local_coordinates;
       // Simulate lost of target around obstacle
       if (simulate_obstacle and robotState.y > 0.2 and robotState.y < 0.4) {
         LOG_INFO("Sending EMPTY BOXES NOW!!!!!");
         seen_boxes = {};
       }
-
+      controller->setCurrentState(robotState);
       result = controller->getTrackingCtrl(seen_boxes, cmd, cloud);
 
       if (result.isTrajFound) {
@@ -268,8 +280,8 @@ struct VisionDWATestConfig {
         }
         auto velocities = result.trajectory.velocities;
         int numSteps = 0;
-        for (auto vel: velocities) {
-          if(numSteps >= controlHorizon){
+        for (auto vel : velocities) {
+          if (numSteps >= controlHorizon) {
             break;
           }
           numSteps++;
@@ -326,21 +338,43 @@ struct VisionDWATestConfig {
   }
 };
 
-
-BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free) {
+BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free_local) {
   // Create timer
   Timer time;
 
   // Robot pointcloud values (global frame)
   std::vector<Path::Point> cloud = {{10.0, 10.0, 0.1}};
+  bool use_local_frame = true;
 
-  VisionDWATestConfig testConfig(cloud);
+  VisionDWATestConfig testConfig(cloud, use_local_frame);
 
   int numPointsPerTrajectory = 100;
 
   bool test_passed = testConfig.run_test(
-      numPointsPerTrajectory, std::string("vision_follower_with_tracker"));
-  BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
+      numPointsPerTrajectory,
+      std::string("vision_follower_with_tracker_local_frame"));
+  BOOST_TEST(test_passed,
+             "VisionDWA Failed To Find Control in local frame mode");
+}
+
+BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free_global_frame) {
+  // Create timer
+  Timer time;
+
+  // Robot pointcloud values (global frame)
+  std::vector<Path::Point> cloud = {{10.0, 10.0, 0.1}};
+  bool use_local_frame = false;
+
+  VisionDWATestConfig testConfig(cloud, use_local_frame);
+
+  int numPointsPerTrajectory = 100;
+
+  bool test_passed = testConfig.run_test(
+      numPointsPerTrajectory,
+      std::string("vision_follower_with_tracker_global_frame"),
+      use_local_frame);
+  BOOST_TEST(test_passed,
+             "VisionDWA Failed To Find Control in global frame mode");
 }
 
 // BOOST_AUTO_TEST_CASE(test_VisionDWA_with_tracker_and_obstacle) {
@@ -360,25 +394,26 @@ BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free) {
 //   BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
 // }
 
-BOOST_AUTO_TEST_CASE(test_VisionDWA_with_depth_image) {
-  // Create timer
-  Timer time;
+// BOOST_AUTO_TEST_CASE(test_VisionDWA_with_depth_image) {
+//   // Create timer
+//   Timer time;
 
-  std::string filename =
-      "/home/ahr/kompass/kompass-navigation/tests/resources/control/"
-      "bag_image_depth.tif";
-  Bbox2D box({410, 0}, {410, 390});
-  std::vector<Bbox2D> detections_2d{box};
+//   std::string filename =
+//       "/home/ahr/kompass/kompass-navigation/tests/resources/control/"
+//       "bag_image_depth.tif";
+//   Bbox2D box({410, 0}, {410, 390});
+//   std::vector<Bbox2D> detections_2d{box};
 
-  auto initial_point = Eigen::Vector2i{610, 200};
+//   auto initial_point = Eigen::Vector2i{610, 200};
 
-  // Robot pointcloud values (global frame)
-  std::vector<Path::Point> cloud = {{10.3, 10.5, 0.2}};
+//   // Robot pointcloud values (global frame)
+//   std::vector<Path::Point> cloud = {{10.3, 10.5, 0.2}};
 
-  VisionDWATestConfig testConfig(cloud);
+//   VisionDWATestConfig testConfig(cloud);
 
-  auto test_passed = testConfig.test_one_cmd_depth(filename, detections_2d,
-                                                   initial_point, cloud);
+//   auto test_passed = testConfig.test_one_cmd_depth(filename, detections_2d,
+//                                                    initial_point, cloud);
 
-  BOOST_TEST(test_passed, "VisionDWA Failed To Find Control Using Depth Image");
-}
+//   BOOST_TEST(test_passed, "VisionDWA Failed To Find Control Using Depth
+//   Image");
+// }

@@ -311,7 +311,7 @@ void Path::segment(double pathSegmentLength) {
     new_segment.resize(this->max_segment_size);
     segments.push_back(new_segment);
   } else {
-    int segmentsNumber = max(totalLength / pathSegmentLength, 1.0);
+    int segmentsNumber = max(static_cast<int>(totalLength / pathSegmentLength), 1);
     if (segmentsNumber == 1) {
       auto new_segment = *this;
       new_segment.resize(this->max_segment_size);

@@ -74,9 +74,9 @@ class VisionDWAConfig(DWAConfig):
 
     enable_search: bool = field(default=False)  # Enable or disable the search mechanism
 
-    track_velocity: bool = field(
+    use_local_coordinates: bool = field(
         default=True
-    )  # Enable or disable tracking the linear/angular velocity of the moving target
+    )  # Track the target using robot local coordinates (no need for robot location at lop step)
 
     error_pose: float = field(
         default=0.05, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
@@ -233,9 +233,10 @@ class VisionDWA(ControllerTemplate):
         :type detected_boxes: List[Bbox3D]
         """
         try:
-            self._planner.set_current_state(
-                current_state.x, current_state.y, current_state.yaw, current_state.speed
-            )
+            if self._config.use_local_coordinates:
+                self._planner.set_current_state(
+                    current_state.x, current_state.y, current_state.yaw, current_state.speed
+                )
             if any(detected_boxes):
                 return self._planner.set_initial_tracking(
                     pose_x_img,
@@ -256,7 +257,7 @@ class VisionDWA(ControllerTemplate):
     def loop_step(
         self,
         *,
-        current_state: RobotState,
+        current_state: Optional[RobotState] = None,
         detections_2d: Optional[List[Bbox2D]] = None,
         depth_image: Optional[np.ndarray] = None,
         laser_scan: Optional[LaserScanData] = None,
@@ -276,23 +277,14 @@ class VisionDWA(ControllerTemplate):
         :return: If planner found a valid solution
         :rtype: bool
         """
-        if current_state is not None:
+        robot_cmd = None
+        if self._config.use_local_coordinates and current_state is not None:
             self._planner.set_current_state(
                 current_state.x, current_state.y, current_state.yaw, current_state.speed
             )
-            current_velocity = ControlCmd(
+            robot_cmd = ControlCmd(
             vx=current_state.vx, vy=current_state.vy, omega=current_state.omega
             )
-        else:
-            if self.control_till_horizon is None:
-                current_velocity = ControlCmd(
-                    vx=0.0, vy=0.0, omega=0.0
-                )
-            else:
-                # Get latest cmd
-                current_velocity = ControlCmd(
-                vx=self.control_till_horizon.vx[-1], vy=self.control_till_horizon.vy[-1], omega=self.control_till_horizon.omega[-1]
-                )
 
         if local_map_resolution:
             self._planner.set_resolution(local_map_resolution)
@@ -311,7 +303,7 @@ class VisionDWA(ControllerTemplate):
 
         try:
             self._result = self._planner.get_tracking_ctrl(
-                depth_image, detections_2d, current_velocity, sensor_data
+                depth_image, detections_2d, robot_cmd or self._last_cmd, sensor_data
             )
 
         except Exception as e:
@@ -405,3 +397,17 @@ class VisionDWA(ControllerTemplate):
         if self._result.is_found:
             return self.control_till_horizon.omega[: self._end_of_ctrl_horizon]
         return [0.0]
+
+    @property
+    def _last_cmd(self) -> ControlCmd:
+        """
+        Getter of the last command sent to the controller
+
+        :return: Last command sent to the controller
+        :rtype: ControlCmd
+        """
+        return ControlCmd(
+            vx=self.linear_x_control[-1],
+            vy=self.linear_y_control[-1],
+            omega=self.angular_control[-1],
+        )

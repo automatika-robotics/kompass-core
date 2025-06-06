@@ -4,6 +4,7 @@
 #include "utils/transformation.h"
 #include "vision/depth_detector.h"
 #include <Eigen/Dense>
+#include <cmath>
 #include <opencv2/opencv.hpp>
 #include <stdexcept>
 #define BOOST_TEST_MODULE KOMPASS TESTS
@@ -16,7 +17,7 @@ using namespace Kompass;
 
 struct DepthDetectorTestConfig {
   std::unique_ptr<DepthDetector> detector;
-  Path::State current_state = {0.0, 0.0, 0.0};
+  Path::State current_state = {1.0, 1.0, 0.0};
   std::vector<Bbox2D> detected_boxes;
   std::string pltFileName = "DepthDetectorTest";
   Eigen::Vector2f focal_length = {911.71, 910.288};
@@ -64,8 +65,15 @@ struct DepthDetectorTestConfig {
     detections.push_back(box);
   };
 
-  std::vector<Bbox3D> run(const std::string outputFilename) {
-    detector->updateBoxes(depth_image, detections);
+  std::vector<Bbox3D> run(const std::string outputFilename,
+                          const bool local_frame = true) {
+    if(local_frame){
+      detector->updateBoxes(depth_image, detections);
+    }
+    else{
+      detector->updateBoxes(depth_image, detections, current_state);
+    }
+
     auto boxes3D = detector->get3dDetections();
     if (boxes3D) {
       auto res = boxes3D.value();
@@ -119,7 +127,9 @@ BOOST_AUTO_TEST_CASE(test_Depth_Detector_person_image) {
   auto boxes = config.run(outputFilename);
 }
 
-BOOST_AUTO_TEST_CASE(test_Depth_Detector_bag_image) {
+
+BOOST_AUTO_TEST_CASE(test_Depth_Detector_bag_image_local_frame) {
+  LOG_INFO("Testing and generating 3D boxes in local robot frame");
   // Create timer
   Timer time;
   std::string filename =
@@ -128,9 +138,30 @@ BOOST_AUTO_TEST_CASE(test_Depth_Detector_bag_image) {
   auto config = DepthDetectorTestConfig(filename, box);
   std::string outputFilename =
       "/home/ahr/kompass/uvmap_code/resources/bag_depth_output.jpg";
-  auto boxes = config.run(outputFilename);
-
+  auto boxes = config.run(outputFilename, true);
+  float dist =
+      std::sqrt(std::pow((boxes[0].center.x()), 2) +
+                std::pow((boxes[0].center.y()), 2));
   const float approx_actual_dist = 1.8;
-  BOOST_TEST(std::abs(boxes[0].center.x() - approx_actual_dist) <= 0.1,
+  BOOST_TEST(std::abs(dist - approx_actual_dist) <= 0.1,
+             "3D box distance is not equal to approximate measured distance");
+}
+
+BOOST_AUTO_TEST_CASE(test_Depth_Detector_bag_image_global_frame) {
+  LOG_INFO("Testing and generating 3D boxes in global world frame");
+  // Create timer
+  Timer time;
+  std::string filename =
+      "/home/ahr/kompass/uvmap_code/resources/bag_image_depth.tif";
+  Bbox2D box({410, 0}, {410, 390});
+  auto config = DepthDetectorTestConfig(filename, box);
+  std::string outputFilename =
+      "/home/ahr/kompass/uvmap_code/resources/bag_depth_output.jpg";
+  auto boxes = config.run(outputFilename, false);
+  float dist =
+      std::sqrt(std::pow((boxes[0].center.x() - config.current_state.x), 2) +
+                std::pow((boxes[0].center.y() - config.current_state.y), 2));
+  const float approx_actual_dist = 1.8;
+  BOOST_TEST(std::abs(dist - approx_actual_dist) <= 0.1,
              "3D box distance is not equal to approximate measured distance");
 }

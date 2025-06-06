@@ -40,6 +40,8 @@ DepthDetector::DepthDetector(
   fy_ = focal_length.y();
   cx_ = principal_point.x();
   cy_ = principal_point.y();
+
+  body_in_world_tf_ = Eigen::Isometry3f::Identity();
 }
 
 std::optional<std::vector<Bbox3D>> DepthDetector::get3dDetections() const {
@@ -51,7 +53,11 @@ std::optional<std::vector<Bbox3D>> DepthDetector::get3dDetections() const {
 
 void DepthDetector::updateBoxes(
     const Eigen::MatrixX<unsigned short> aligned_depth_img,
-    const std::vector<Bbox2D> &detections) {
+    const std::vector<Bbox2D> &detections,
+    const std::optional<Path::State> &robot_state) {
+  if(robot_state.has_value()) {
+    body_in_world_tf_ = getTransformation(robot_state.value());
+  }
   alignedDepthImg_ = aligned_depth_img;
   boxes_ = std::make_unique<std::vector<Bbox3D>>();
   for (auto box2d : detections) {
@@ -116,14 +122,15 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
   size_camera_frame(1) = box2d.size.y() * medianDepth / this->fy_;
   size_camera_frame(2) = maximum_d - minimum_d;
 
+  Eigen::Isometry3f camera_in_world_tf = body_in_world_tf_ * camera_in_body_tf_;
   // Register center in the world frame
-  box3d.center = camera_in_body_tf_ * center_in_camera_frame;
+  box3d.center = camera_in_world_tf * center_in_camera_frame;
 
   LOG_DEBUG("Got detected box in 3D coordinates at :", box3d.center.x(), ", ",
             box3d.center.y(), ", ", box3d.center.z());
 
   // Transform size from camera frame to world frame
-  Eigen::Matrix3f abs_rotation = camera_in_body_tf_.linear().cwiseAbs();
+  Eigen::Matrix3f abs_rotation = camera_in_world_tf.linear().cwiseAbs();
   box3d.size = abs_rotation * size_camera_frame;
 
   return box3d;

@@ -52,9 +52,9 @@ public:
           Parameter(0.0, -M_PI, M_PI,
                     "Bearing angle to maintain with the target (rad)"));
       addParameter(
-          "track_velocity",
-          Parameter(false,
-                    "Track the linear and angular velocity of the target"));
+          "use_local_coordinates",
+          Parameter(true,
+                    "Track the item in the local frame of the robot. This mode cannot track the object velocity but can operate without knowing the robot's absolute position (world frame)"));
       // Search Parameters
       addParameter("target_wait_timeout", Parameter(30.0, 0.0, 1e3));
       addParameter("target_search_timeout", Parameter(30.0, 0.0, 1e3));
@@ -83,7 +83,7 @@ public:
     }
     bool enable_search() const { return getParameter<bool>("enable_search"); }
     bool enable_vel_tracking() const {
-      return getParameter<bool>("track_velocity");
+      return not getParameter<bool>("use_local_coordinates");
     }
     double control_time_step() const {
       return getParameter<double>("control_time_step");
@@ -204,8 +204,13 @@ public:
     }
     std::optional<TrackedPose2D> tracked_pose = std::nullopt;
     if (!detected_boxes_2d.empty()) {
-      // Send current state to the detector
-      detector_->updateBoxes(aligned_depth_img, detected_boxes_2d);
+      if (track_velocity_) {
+        // Send current state to the detector
+        detector_->updateBoxes(aligned_depth_img, detected_boxes_2d,
+                               currentState);
+      } else {
+        detector_->updateBoxes(aligned_depth_img, detected_boxes_2d);
+      }
       auto boxes_3d = detector_->get3dDetections();
       if (boxes_3d) {
         // Update the tracker with the detected boxes
@@ -321,7 +326,9 @@ private:
       recorded_search_time_ = 0.0;
       LOG_INFO("Tracking target at position: ",
                 tracked_pose->x(), ", ",
-                tracked_pose->y());
+                tracked_pose->y(), " with velocity: ", tracked_pose->v(), ", ", tracked_pose->omega());
+      LOG_INFO("Robot current position: ", currentState.x, ", ",
+                currentState.y);
       // Generate reference to target
       Trajectory2D ref_traj;
       if (is_diff_drive_) {

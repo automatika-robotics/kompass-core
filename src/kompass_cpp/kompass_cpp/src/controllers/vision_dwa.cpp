@@ -58,25 +58,31 @@ void VisionDWA::setCameraIntrinsics(const float focal_length_x,
 }
 
 Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
-  float distance =
-      tracking_pose.distance(0.0, 0.0, 0.0) - trajSampler->getRobotRadius();
+  float distance, psi;
+  if (track_velocity_) {
+    distance = tracking_pose.distance(currentState.x, currentState.y, 0.0) -
+               trajSampler->getRobotRadius();
+    psi = Angle::normalizeToMinusPiPlusPi(
+        std::atan2(tracking_pose.y(), tracking_pose.x()) - currentState.yaw);
+  } else {
+    distance =
+        tracking_pose.distance(0.0, 0.0, 0.0) - trajSampler->getRobotRadius();
+    psi = Angle::normalizeToMinusPiPlusPi(
+        std::atan2(tracking_pose.y(), tracking_pose.x()));
+  }
   distance = std::max(distance, 0.0f);
-  float psi = Angle::normalizeToMinusPiPlusPi(
-      std::atan2(tracking_pose.y(), tracking_pose.x()));
 
   float distance_error = config_.target_distance() - distance;
   float angle_error =
       Angle::normalizeToMinusPiPlusPi(config_.target_orientation() - psi);
 
-  // LOG_DEBUG("distance_error=", distance_error, ", angle_error=", angle_error);
-
   Velocity2D followingVel;
   if (abs(distance_error) > config_.dist_tolerance() or
       abs(angle_error) > config_.ang_tolerance()) {
-    double v = ((track_velocity_ * tracking_pose.v() * cos(psi)) -
-                (config_.K_v() * ctrl_limits_.velXParams.maxVel *
-                 tanh(distance_error))) /
-               cos(angle_error);
+    double v =
+        track_velocity_ * tracking_pose.v() * cos(angle_error) -
+        config_.K_v() * ctrl_limits_.velXParams.maxVel * tanh(distance_error);
+
     v = std::clamp(v, -ctrl_limits_.velXParams.maxVel,
                    ctrl_limits_.velXParams.maxVel);
     if (std::abs(v) < config_.min_vel()) {
@@ -84,16 +90,12 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
     }
     followingVel.setVx(v);
     double omega;
-    if (distance > 0.0) {
-      omega = -track_velocity_ * tracking_pose.omega() -
-              track_velocity_ * sin(psi) / distance * tracking_pose.v() -
-              config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
-                  tanh(angle_error);
-    } else {
-      omega = -track_velocity_ * tracking_pose.omega() -
-              config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
-                  tanh(angle_error);
-    }
+
+    omega = 2.0 *
+            (track_velocity_ * tracking_pose.v() * sin(angle_error) / distance -
+             config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
+                 tanh(angle_error));
+
     omega = std::clamp(omega, -ctrl_limits_.omegaParams.maxOmega,
                        ctrl_limits_.omegaParams.maxOmega);
     if (std::abs(omega) < config_.min_vel()) {
@@ -143,8 +145,12 @@ bool VisionDWA::setInitialTracking(
         "DepthDetector is not initialized with the camera intrinsics. Call "
         "'VisionDWA::setCameraIntrinsics' first");
   }
-  // Send current state to the detector
-  detector_->updateBoxes(aligned_depth_image, {target_box_2d});
+  if (track_velocity_) {
+    // Send current state to the detector
+    detector_->updateBoxes(aligned_depth_image, {target_box_2d}, currentState);
+  } else {
+    detector_->updateBoxes(aligned_depth_image, {target_box_2d});
+  }
   auto boxes_3d = detector_->get3dDetections();
   if (!boxes_3d) {
     LOG_DEBUG("Failed to get 3D box from 2D target box");
@@ -172,7 +178,9 @@ VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose) {
     this->setCurrentState(simulated_state);
     cmd = this->getPureTrackingCtrl(simulated_track);
     simulated_state.update(cmd, config_.control_time_step());
-    simulated_track.update(config_.control_time_step());
+    if (track_velocity_) {
+      simulated_track.update(config_.control_time_step());
+    }
     if (step < config_.prediction_horizon() - 1) {
       ref_traj.velocities.add(step, cmd);
     }
@@ -207,6 +215,9 @@ Trajectory2D VisionDWA::getTrackingReferenceSegmentDiffDrive(
                         Path::Point(simulated_state.x, simulated_state.y, 0.0));
       auto vel_rotate = Velocity2D(0.0, 0.0, cmd.omega());
       simulated_state.update(vel_rotate, config_.control_time_step());
+      if (track_velocity_) {
+        simulated_track.update(config_.control_time_step());
+      }
       if (step < config_.prediction_horizon() - 1) {
         ref_traj.velocities.add(step, vel_rotate);
       }
@@ -216,6 +227,9 @@ Trajectory2D VisionDWA::getTrackingReferenceSegmentDiffDrive(
         ref_traj.path.add(
             step, Path::Point(simulated_state.x, simulated_state.y, 0.0));
         simulated_state.update(vel_move, config_.control_time_step());
+        if (track_velocity_) {
+          simulated_track.update(config_.control_time_step());
+        }
         ref_traj.velocities.add(step, vel_move);
         step++;
       }
@@ -223,7 +237,9 @@ Trajectory2D VisionDWA::getTrackingReferenceSegmentDiffDrive(
       ref_traj.path.add(step,
                         Path::Point(simulated_state.x, simulated_state.y, 0.0));
       simulated_state.update(cmd, config_.control_time_step());
-      simulated_track.update(config_.control_time_step());
+      if (track_velocity_) {
+        simulated_track.update(config_.control_time_step());
+      }
       if (step < config_.prediction_horizon() - 1) {
         ref_traj.velocities.add(step, cmd);
       }
@@ -242,21 +258,22 @@ void VisionDWA::generateSearchCommands(float total_rotation,
   // Calculate rotation direction and magnitude
   double rotation_sign = (total_rotation < 0.0) ? -1.0 : 1.0;
   float rotation_time = max_rotation_time;
-  int num_pause_steps = static_cast<int>(
-    config_.search_pause() / config_.control_time_step());
+  int num_pause_steps =
+      static_cast<int>(config_.search_pause() / config_.control_time_step());
   if (enable_pause) {
     // Modify the total number of active rotation to include the pause steps
-    rotation_time = max_rotation_time * (1 - num_pause_steps / config_.control_time_step());
+    rotation_time =
+        max_rotation_time * (1 - num_pause_steps / config_.control_time_step());
   }
   // Angular velocity to rotate 'total_rotation' in total time steps
   // 'rotation_steps' with dt = control_time_step
   double omega_val = total_rotation / rotation_time;
 
-  omega_val =
-      std::max(std::min(omega_val, ctrl_limits_.omegaParams.maxOmega),
-               config_.min_vel());
+  omega_val = std::max(std::min(omega_val, ctrl_limits_.omegaParams.maxOmega),
+                       config_.min_vel());
   // Generate velocity commands
-  for (float t = 0.0f; t <= max_rotation_time; t = t + config_.control_time_step()) {
+  for (float t = 0.0f; t <= max_rotation_time;
+       t = t + config_.control_time_step()) {
     if (is_diff_drive_) {
       // In-place rotation
       search_commands_queue_.emplace(
