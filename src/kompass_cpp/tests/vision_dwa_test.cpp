@@ -77,7 +77,7 @@ struct VisionDWATestConfig {
   VisionDWATestConfig(const std::vector<Path::Point> sensor_points,
                       const bool use_local_frame = true,
                       const double timeStep = 0.1,
-                      const int predictionHorizon = 20,
+                      const int predictionHorizon = 6,
                       const int controlHorizon = 2,
                       const int maxLinearSamples = 20,
                       const int maxAngularSamples = 20,
@@ -111,9 +111,6 @@ struct VisionDWATestConfig {
     config.setParameter("control_horizon", controlHorizon);
     config.setParameter("prediction_horizon", predictionHorizon);
     config.setParameter("use_local_coordinates", use_local_frame);
-    if(!use_local_frame){
-      config.setParameter("speed_gain", 0.1);
-    }
 
     // For depth config
     // Body to camera tf from robot of test pictures
@@ -394,26 +391,25 @@ BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free_global_frame) {
 //   BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
 // }
 
-// BOOST_AUTO_TEST_CASE(test_VisionDWA_with_depth_image) {
-//   // Create timer
-//   Timer time;
+BOOST_AUTO_TEST_CASE(test_VisionDWA_with_depth_image) {
+  // Create timer
+  Timer time;
 
-//   std::string filename =
-//       "/home/ahr/kompass/kompass-navigation/tests/resources/control/"
-//       "bag_image_depth.tif";
-//   Bbox2D box({410, 0}, {410, 390});
-//   std::vector<Bbox2D> detections_2d{box};
+  std::string filename =
+      "/home/ahr/kompass/kompass-navigation/tests/resources/control/"
+      "bag_image_depth.tif";
+  Bbox2D box({410, 0}, {410, 390});
+  std::vector<Bbox2D> detections_2d{box};
 
-//   auto initial_point = Eigen::Vector2i{610, 200};
+  auto initial_point = Eigen::Vector2i{610, 200};
 
-//   // Robot pointcloud values (global frame)
-//   std::vector<Path::Point> cloud = {{10.3, 10.5, 0.2}};
+  // Robot pointcloud values (global frame)
+  std::vector<Path::Point> cloud = {{10.3, 10.5, 0.2}};
 
-//   VisionDWATestConfig testConfig(cloud);
+  VisionDWATestConfig testConfig(cloud);
 
-//   auto test_passed = testConfig.test_one_cmd_depth(filename, detections_2d,
-//                                                    initial_point, cloud);
+  auto test_passed = testConfig.test_one_cmd_depth(filename, detections_2d,
+                                                   initial_point, cloud);
 
-//   BOOST_TEST(test_passed, "VisionDWA Failed To Find Control Using Depth
-//   Image");
-// }
+  BOOST_TEST(test_passed, "VisionDWA Failed To Find Control Using Depth Image");
+}
