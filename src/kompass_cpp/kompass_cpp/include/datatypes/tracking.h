@@ -15,6 +15,7 @@ struct Bbox2D {
   float timestamp = 0.0;  // Timestamp of the detection in seconds
   std::string label = ""; // Label of the detection, e.g. "car", "pedestrian"
   Eigen::Vector2i img_size = {640, 480}; // Size of the image frame
+  Eigen::Vector3f vel = {0.0, 0.0, 0.0};
 
   Bbox2D(){};
 
@@ -53,6 +54,8 @@ struct Bbox2D {
     }
     this->img_size = size;
   };
+
+  void setVel(const Eigen::Vector3f &vel) { this->vel = vel; };
 };
 
 struct Bbox3D {
