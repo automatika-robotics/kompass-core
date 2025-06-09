@@ -271,9 +271,11 @@ class LocalMapper:
         if self.config.baysian_update:
             if self.processed:
                 self._calculate_grid_shift(robot_pose)
-            scan_occupancy, scan_occupancy_prob = self.local_mapper.scan_to_grid_baysian(
-                angles=laser_scan.angles,
-                ranges=filtered_ranges,
+            scan_occupancy, scan_occupancy_prob = (
+                self.local_mapper.scan_to_grid_baysian(
+                    angles=laser_scan.angles,
+                    ranges=filtered_ranges,
+                )
             )
 
             # Update grid

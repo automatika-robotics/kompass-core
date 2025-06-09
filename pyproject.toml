@@ -137,4 +137,3 @@ select = "*-manylinux_aarch64"
 inherit.environment = "append"
 environment.VCPKG_TARGET_TRIPLET = "arm64-linux-release"
 environment.LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib"
-

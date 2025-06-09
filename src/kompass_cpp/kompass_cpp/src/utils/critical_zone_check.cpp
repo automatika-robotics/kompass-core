@@ -3,7 +3,6 @@
 #include "utils/logger.h"
 #include "utils/transformation.h"
 #include <Eigen/Core>
-#include <array>
 
 namespace Kompass {
 /**
