@@ -235,7 +235,10 @@ class VisionDWA(ControllerTemplate):
         try:
             if self._config.use_local_coordinates:
                 self._planner.set_current_state(
-                    current_state.x, current_state.y, current_state.yaw, current_state.speed
+                    current_state.x,
+                    current_state.y,
+                    current_state.yaw,
+                    current_state.speed,
                 )
             if any(detected_boxes):
                 return self._planner.set_initial_tracking(
@@ -283,7 +286,7 @@ class VisionDWA(ControllerTemplate):
                 current_state.x, current_state.y, current_state.yaw, current_state.speed
             )
             robot_cmd = ControlCmd(
-            vx=current_state.vx, vy=current_state.vy, omega=current_state.omega
+                vx=current_state.vx, vy=current_state.vy, omega=current_state.omega
             )
 
         if local_map_resolution:

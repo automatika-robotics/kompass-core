@@ -4,6 +4,7 @@
 #include "utils/logger.h"
 #include <Eigen/Dense>
 #include <cmath>
+#include <stdexcept>
 #include <vector>
 
 namespace Kompass {
@@ -11,15 +12,28 @@ namespace Kompass {
 struct Bbox2D {
   Eigen::Vector2i top_corner = {0, 0};
   Eigen::Vector2i size = {0, 0};
-  float timestamp = 0.0; // Timestamp of the detection in seconds
+  float timestamp = 0.0;  // Timestamp of the detection in seconds
   std::string label = ""; // Label of the detection, e.g. "car", "pedestrian"
+  Eigen::Vector2i img_size = {640, 480}; // Size of the image frame
 
   Bbox2D(){};
 
-  Bbox2D(const Bbox2D &box) : top_corner(box.top_corner), size(box.size), timestamp(box.timestamp), label(box.label){};
+  Bbox2D(const Bbox2D &box)
+      : top_corner(box.top_corner), size(box.size), timestamp(box.timestamp),
+        label(box.label), img_size(box.img_size){};
 
-  Bbox2D(const Eigen::Vector2i top_corner, const Eigen::Vector2i size, const float timestamp = 0.0, const std::string &label = "")
-      : top_corner(top_corner), size(size), timestamp(timestamp), label(label){};
+  Bbox2D(const Eigen::Vector2i top_corner, const Eigen::Vector2i size,
+         const float timestamp = 0.0, const std::string &label = "",
+         const Eigen::Vector2i img_size = {640, 480})
+      : top_corner(top_corner), size(size), timestamp(timestamp), label(label),
+        img_size(img_size) {
+    if (size.x() <= 0 || size.y() <= 0) {
+      throw std::invalid_argument("Invalid bounding box size");
+    }
+    if (img_size.x() <= 0 || img_size.y() <= 0) {
+      throw std::invalid_argument("Invalid image size");
+    }
+  };
 
   Eigen::Vector2i getXLimits() const {
     return {top_corner.x(), top_corner.x() + size.x()};
@@ -27,6 +41,17 @@ struct Bbox2D {
 
   Eigen::Vector2i getYLimits() const {
     return {top_corner.y(), top_corner.y() + size.y()};
+  };
+
+  Eigen::Vector2i getCenter() const {
+    return {top_corner.x() + size.x() / 2, top_corner.y() + size.y() / 2};
+  };
+
+  void setImgSize(const Eigen::Vector2i &size) {
+    if (size.x() <= 0 || size.y() <= 0) {
+      throw std::invalid_argument("Invalid image size");
+    }
+    this->img_size = size;
   };
 };
 
@@ -49,7 +74,8 @@ struct Bbox3D {
 
   Bbox3D(const Eigen::Vector3f &center, const Eigen::Vector3f &size,
          const Eigen::Vector2i center_img_frame,
-         const Eigen::Vector2i size_img_frame, const float timestamp = 0.0, const std::string &label = "",
+         const Eigen::Vector2i size_img_frame, const float timestamp = 0.0,
+         const std::string &label = "",
          const std::vector<Eigen::Vector3f> pc_points = {})
       : center(center), size(size), center_img_frame(center_img_frame),
         size_img_frame(size_img_frame), pc_points(pc_points),
@@ -68,7 +94,8 @@ struct Bbox3D {
       : center_img_frame(
             box2d.top_corner +
             Eigen::Vector2i{box2d.size.x() / 2, box2d.size.y() / 2}),
-        size_img_frame(box2d.size), timestamp(box2d.timestamp), label(box2d.label){};
+        size_img_frame(box2d.size), timestamp(box2d.timestamp),
+        label(box2d.label){};
 
   Eigen::Vector2f getXLimitsImg() const {
     return {center_img_frame.x() - (size_img_frame.x() / 2),
@@ -100,17 +127,18 @@ struct TrackedBbox3D {
   void setfromBox(const Bbox3D &box) { this->box = box; };
 
   void updateFromNewDetection(const Bbox3D &new_box) {
-    if(new_box.label != this->box.label){
+    if (new_box.label != this->box.label) {
       LOG_ERROR("Box label mismatch, cannot update tracking.");
       return;
     }
     float time_step = new_box.timestamp - this->box.timestamp;
     Eigen::Vector3f new_vel;
     if (time_step <= 0.0) {
-      LOG_ERROR("Box updated with invalid time step, Velocity wil be reset to zero.");
+      LOG_ERROR(
+          "Box updated with invalid time step, Velocity wil be reset to zero.");
       this->vel = {0.0, 0.0, 0.0};
       this->acc = {0.0, 0.0, 0.0};
-    }else{
+    } else {
       // Compute velocity and acceleration based on location change
       Eigen::Vector3f new_vel = (new_box.center - this->box.center) / time_step;
       this->acc = (new_vel - this->vel) / time_step;
@@ -145,7 +173,7 @@ struct TrackedBbox3D {
 
   float yaw() const { return std::atan2(this->vel(1), this->vel(0)); };
 
-  float omega() const {return 0.0;}
+  float omega() const { return 0.0; }
 
   float ang_acc() const { return 0.0; }
 

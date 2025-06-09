@@ -6,7 +6,6 @@
 #include <nanobind/stl/vector.h>
 #include <vector>
 
-#include "controllers/vision_follower.h"
 #include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "datatypes/tracking.h"
@@ -123,17 +122,6 @@ void bindings_types(py::module_ &m) {
       });
 
   // Vision types
-  py::class_<Control::VisionFollower::TrackingData>(m_types, "TrackingData")
-      .def(py::init<std::array<double, 2>, int, int, std::array<double, 2>,
-                    double>(),
-           py::arg("size_xy"), py::arg("img_width"), py::arg("img_height"),
-           py::arg("center_xy"), py::arg("depth") = -1.0)
-      .def_rw("size_xy", &Control::VisionFollower::TrackingData::size_xy)
-      .def_rw("img_width", &Control::VisionFollower::TrackingData::img_width)
-      .def_rw("img_height", &Control::VisionFollower::TrackingData::img_height)
-      .def_rw("center_xy", &Control::VisionFollower::TrackingData::center_xy)
-      .def_rw("depth", &Control::VisionFollower::TrackingData::depth);
-
   py::class_<Bbox2D>(m_types, "Bbox2D")
       .def(py::init<>())
       .def(py::init<const Bbox2D &>())

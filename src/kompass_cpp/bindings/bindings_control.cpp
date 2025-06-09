@@ -10,7 +10,7 @@
 #include "controllers/pid.h"
 #include "controllers/stanley.h"
 #include "controllers/vision_dwa.h"
-#include "controllers/vision_follower.h"
+#include "controllers/rgb_follower.h"
 #include "datatypes/control.h"
 #include "datatypes/trajectory.h"
 
@@ -219,21 +219,21 @@ void bindings_control(py::module_ &m) {
       .def("set_resolution", &Control::DWA::resetOctreeResolution);
 
   // Vision Follower
-  py::class_<Control::VisionFollower::VisionFollowerConfig,
-             Control::Controller::ControllerParameters>(
-      m_control, "VisionFollowerParameters")
+  py::class_<Control::RGBFollower::RGBFollowerConfig,
+             Control::Controller::ControllerParameters>(m_control,
+                                                        "RGBFollowerParameters")
       .def(py::init<>());
 
-  py::class_<Control::VisionFollower, Control::Controller>(m_control,
-                                                           "VisionFollower")
+  py::class_<Control::RGBFollower, Control::Controller>(m_control,
+                                                        "RGBFollower")
       .def(py::init<const Control::ControlType,
                     const Control::ControlLimitsParams,
-                    const Control::VisionFollower::VisionFollowerConfig>(),
+                    const Control::RGBFollower::RGBFollowerConfig>(),
            py::arg("control_type"), py::arg("control_limits"),
            py::arg("config"))
-      .def("reset_target", &Control::VisionFollower::resetTarget)
-      .def("get_ctrl", &Control::VisionFollower::getCtrl)
-      .def("run", &Control::VisionFollower::run);
+      .def("reset_target", &Control::RGBFollower::resetTarget)
+      .def("get_ctrl", &Control::RGBFollower::getCtrl)
+      .def("run", &Control::RGBFollower::run);
 
   // Vision DWA
   py::class_<Control::VisionDWA::VisionDWAConfig,

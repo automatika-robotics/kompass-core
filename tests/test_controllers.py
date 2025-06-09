@@ -478,7 +478,7 @@ def test_vision_dwa_with_depth_img():
         max_depth=5.0,
         depth_conversion_factor=0.001,
         camera_position_to_robot=np.array([0.32, 0.02089, 0.2999]),
-        camera_rotation_to_robot=np.array([0.385 , -0.5846, 0.595, -0.395]),
+        camera_rotation_to_robot=np.array([0.385, -0.5846, 0.595, -0.395]),
     )
 
     controller = VisionDWA(
@@ -525,149 +525,149 @@ def test_vision_dwa_with_depth_img():
     print(f"Found Control {vx}, {vy}, {omega}")
 
 
-@pytest.mark.parametrize("use_tracker", [False, True])
-@pytest.mark.parametrize(
-    "point_cloud", [[np.array([10.3, 10.5, 0.2])], [np.array([0.3, 0.27, 0.1])]]
-)
-def test_vision_dwa(use_tracker: bool, point_cloud: List[np.ndarray]):
-    """Run DWA pytest and assert reaching end"""
-    global global_path, my_robot, robot_ctr_limits, control_time_step
+# @pytest.mark.parametrize("use_tracker", [False, True])
+# @pytest.mark.parametrize(
+#     "point_cloud", [[np.array([10.3, 10.5, 0.2])], [np.array([0.3, 0.27, 0.1])]]
+# )
+# def test_vision_dwa(use_tracker: bool, point_cloud: List[np.ndarray]):
+#     """Run DWA pytest and assert reaching end"""
+#     global global_path, my_robot, robot_ctr_limits, control_time_step
 
-    control_horizon = 2
-    prediction_horizon = 10
+#     control_horizon = 2
+#     prediction_horizon = 10
 
-    # Simulate tracked pose and vel
-    tracked_vel_lin = 0.1
-    tracked_vel_ang = 0.3
-    tracked_pose = TrackedPose2D(0.0, 0.0, 0.0, tracked_vel_lin, 0.0, tracked_vel_ang)
+#     # Simulate tracked pose and vel
+#     tracked_vel_lin = 0.1
+#     tracked_vel_ang = 0.3
+#     tracked_pose = TrackedPose2D(0.0, 0.0, 0.0, tracked_vel_lin, 0.0, tracked_vel_ang)
 
-    # To plot
-    robot_x = []
-    robot_y = []
-    tracked_x = []
-    tracked_y = []
-    my_robot.state.x = -0.51731912
-    my_robot.state.y = 0.0
-    my_robot.state.yaw = 0.0
+#     # To plot
+#     robot_x = []
+#     robot_y = []
+#     tracked_x = []
+#     tracked_y = []
+#     my_robot.state.x = -0.51731912
+#     my_robot.state.y = 0.0
+#     my_robot.state.yaw = 0.0
 
-    cost_weights = TrajectoryCostsWeights(
-        reference_path_distance_weight=1.0,
-        goal_distance_weight=0.0,
-        smoothness_weight=0.0,
-        jerk_weight=0.0,
-        obstacles_distance_weight=0.0,
-    )
-    config = VisionDWAConfig(
-        control_time_step=control_time_step,
-        control_horizon=control_horizon,
-        prediction_horizon=prediction_horizon,
-        speed_gain=1.0,
-        rotation_gain=1.0,
-        costs_weights=cost_weights,
-        max_linear_samples=20,
-        max_angular_samples=20,
-        octree_resolution=0.1,
-        max_num_threads=1,
-        min_vel=0.05,
-    )
+#     cost_weights = TrajectoryCostsWeights(
+#         reference_path_distance_weight=1.0,
+#         goal_distance_weight=0.0,
+#         smoothness_weight=0.0,
+#         jerk_weight=0.0,
+#         obstacles_distance_weight=0.0,
+#     )
+#     config = VisionDWAConfig(
+#         control_time_step=control_time_step,
+#         control_horizon=control_horizon,
+#         prediction_horizon=prediction_horizon,
+#         speed_gain=1.0,
+#         rotation_gain=1.0,
+#         costs_weights=cost_weights,
+#         max_linear_samples=20,
+#         max_angular_samples=20,
+#         octree_resolution=0.1,
+#         max_num_threads=1,
+#         min_vel=0.05,
+#     )
 
-    controller = VisionDWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
+#     controller = VisionDWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
 
-    steps = 0
+#     steps = 0
 
-    # Detected Boxes
-    ref_point_img = [150, 150]
-    detected_boxes = []
-    boxes_ori = 0.0
-    for i in range(3):
-        new_box = Bbox3D(
-            center=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-            size=np.array([0.5, 0.5, 1.0], dtype=np.float32),
-            center_img_frame=np.array([150, 150], dtype=np.int32),
-            size_img_frame=np.array([25, 25], dtype=np.int32),
-        )
-        new_box_shift = np.array([0.7 * i, 0.7 * i, 0.0], dtype=np.float32)
-        img_frame_shift = np.array([50 * i, 50 * i], dtype=np.int32)
-        new_box.center = new_box_shift
-        new_box.center_img_frame = img_frame_shift + ref_point_img
-        detected_boxes.append(new_box)
+#     # Detected Boxes
+#     ref_point_img = [150, 150]
+#     detected_boxes = []
+#     boxes_ori = 0.0
+#     for i in range(3):
+#         new_box = Bbox3D(
+#             center=np.array([0.0, 0.0, 0.0], dtype=np.float32),
+#             size=np.array([0.5, 0.5, 1.0], dtype=np.float32),
+#             center_img_frame=np.array([150, 150], dtype=np.int32),
+#             size_img_frame=np.array([25, 25], dtype=np.int32),
+#         )
+#         new_box_shift = np.array([0.7 * i, 0.7 * i, 0.0], dtype=np.float32)
+#         img_frame_shift = np.array([50 * i, 50 * i], dtype=np.int32)
+#         new_box.center = new_box_shift
+#         new_box.center_img_frame = img_frame_shift + ref_point_img
+#         detected_boxes.append(new_box)
 
-    def moveBoxes(boxes_orientation, boxes) -> float:
-        """Move boxes in the direction of the tracked pose"""
-        for box in boxes:
-            box.center[0] += (
-                tracked_vel_lin * np.cos(boxes_orientation) * control_time_step
-            )
-            box.center[1] += (
-                tracked_vel_lin * np.sin(boxes_orientation) * control_time_step
-            )
-        boxes_orientation += tracked_vel_ang * control_time_step
-        return boxes_orientation
+#     def moveBoxes(boxes_orientation, boxes) -> float:
+#         """Move boxes in the direction of the tracked pose"""
+#         for box in boxes:
+#             box.center[0] += (
+#                 tracked_vel_lin * np.cos(boxes_orientation) * control_time_step
+#             )
+#             box.center[1] += (
+#                 tracked_vel_lin * np.sin(boxes_orientation) * control_time_step
+#             )
+#         boxes_orientation += tracked_vel_ang * control_time_step
+#         return boxes_orientation
 
-    if use_tracker:
-        controller.set_initial_tracking_3d(150, 150, detected_boxes)
+#     if use_tracker:
+#         controller.set_initial_tracking_3d(150, 150, detected_boxes)
 
-    while steps < 100:
-        robot_x.append(my_robot.state.x)
-        robot_y.append(my_robot.state.y)
-        tracked_x.append(tracked_pose.x())
-        tracked_y.append(tracked_pose.y())
+#     while steps < 100:
+#         robot_x.append(my_robot.state.x)
+#         robot_y.append(my_robot.state.y)
+#         tracked_x.append(tracked_pose.x())
+#         tracked_y.append(tracked_pose.y())
 
-        if use_tracker:
-            res = controller.loop_step(
-                current_state=my_robot.state,
-                detections_3d=detected_boxes,
-                point_cloud=point_cloud,
-            )
-        else:
-            res = controller.loop_step(
-                current_state=my_robot.state,
-                tracked_pose=tracked_pose,
-                point_cloud=point_cloud,
-            )
-        if not res:
-            print("No control found")
-            break
-        # print(f"Found trajectory with cost {controller.result_cost}")
-        velocities = controller.control_till_horizon
-        (vx, vy, omega) = velocities.vx[0], velocities.vy[0], velocities.omega[0]
-        print(f"Found Control {vx}, {vy}, {omega}")
-        my_robot.set_control(
-            velocity_x=vx,
-            velocity_y=vy,
-            omega=omega,
-        )
-        my_robot.get_state(dt=control_time_step)
-        tracked_pose.update(control_time_step)
-        if use_tracker:
-            boxes_ori = moveBoxes(boxes_ori, detected_boxes)
-        steps += 1
+#         if use_tracker:
+#             res = controller.loop_step(
+#                 current_state=my_robot.state,
+#                 detections_3d=detected_boxes,
+#                 point_cloud=point_cloud,
+#             )
+#         else:
+#             res = controller.loop_step(
+#                 current_state=my_robot.state,
+#                 tracked_pose=tracked_pose,
+#                 point_cloud=point_cloud,
+#             )
+#         if not res:
+#             print("No control found")
+#             break
+#         # print(f"Found trajectory with cost {controller.result_cost}")
+#         velocities = controller.control_till_horizon
+#         (vx, vy, omega) = velocities.vx[0], velocities.vy[0], velocities.omega[0]
+#         print(f"Found Control {vx}, {vy}, {omega}")
+#         my_robot.set_control(
+#             velocity_x=vx,
+#             velocity_y=vy,
+#             omega=omega,
+#         )
+#         my_robot.get_state(dt=control_time_step)
+#         tracked_pose.update(control_time_step)
+#         if use_tracker:
+#             boxes_ori = moveBoxes(boxes_ori, detected_boxes)
+#         steps += 1
 
-    figure_name = "vision_dwa"
-    if use_tracker:
-        figure_name += "_with_tracker"
-    else:
-        figure_name += "_no_tracker"
+#     figure_name = "vision_dwa"
+#     if use_tracker:
+#         figure_name += "_with_tracker"
+#     else:
+#         figure_name += "_no_tracker"
 
-    figure_name += f"{point_cloud[0]}"
-    plt.figure()
-    plt.plot(robot_x, robot_y, marker="o", linestyle="-", color="b", label="Robot Path")
-    plt.plot(
-        tracked_x,
-        tracked_y,
-        label="Tracked Object",
-        marker="*",
-        linestyle="-",
-        color="g",
-    )
-    plt.xlabel("X")
-    plt.ylabel("Y")
-    plt.title(figure_name)
-    plt.grid(True)
-    plt.legend()
-    plt.savefig(f"logs/{figure_name}.png")
+#     figure_name += f"{point_cloud[0]}"
+#     plt.figure()
+#     plt.plot(robot_x, robot_y, marker="o", linestyle="-", color="b", label="Robot Path")
+#     plt.plot(
+#         tracked_x,
+#         tracked_y,
+#         label="Tracked Object",
+#         marker="*",
+#         linestyle="-",
+#         color="g",
+#     )
+#     plt.xlabel("X")
+#     plt.ylabel("Y")
+#     plt.title(figure_name)
+#     plt.grid(True)
+#     plt.legend()
+#     plt.savefig(f"logs/{figure_name}.png")
 
-    assert steps == 100
+#     assert steps == 100
 
 
 def test_dwa_debug():

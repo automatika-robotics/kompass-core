@@ -10,7 +10,7 @@ from ._trajectory_ import TrajectoryCostsWeights
 from .dvz import DVZ, DVZConfig
 from .dwa import DWA, DWAConfig
 from .stanley import StanleyConfig, Stanley
-from .vision_follower import VisionFollower, VisionFollowerConfig
+from .rgb_follower import VisionFollower, VisionFollowerConfig
 from .vision_dwa import VisionDWAConfig, VisionDWA
 
 ControllerType = FollowerTemplate

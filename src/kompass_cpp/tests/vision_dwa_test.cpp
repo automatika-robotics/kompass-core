@@ -1,5 +1,4 @@
 #include "controllers/vision_dwa.h"
-#include "controllers/vision_follower.h"
 #include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "datatypes/tracking.h"

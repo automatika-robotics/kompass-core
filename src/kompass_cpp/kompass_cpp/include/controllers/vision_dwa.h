@@ -9,8 +9,8 @@
 #include "utils/logger.h"
 #include "vision/depth_detector.h"
 #include "vision/tracker.h"
+#include "controllers/rgb_follower.h"
 #include <Eigen/Dense>
-#include <boost/filesystem/path.hpp>
 #include <cmath>
 #include <memory>
 #include <optional>
@@ -22,31 +22,12 @@ namespace Control {
 
 class VisionDWA : public DWA {
 public:
-  class VisionDWAConfig : public ControllerParameters {
+  class VisionDWAConfig : public RGBFollower::RGBFollowerConfig {
   public:
-    VisionDWAConfig() : ControllerParameters() {
-      addParameter("control_time_step",
-                   Parameter(0.1, 1e-4, 1e6, "Control time step (s)"));
-      addParameter(
-          "control_horizon",
-          Parameter(2, 1, 1000, "Number of steps for applying the control"));
+    VisionDWAConfig() : RGBFollower::RGBFollowerConfig() {
       addParameter(
           "prediction_horizon",
           Parameter(10, 1, 1000, "Number of steps for future prediction"));
-      addParameter(
-          "distance_tolerance",
-          Parameter(0.05, 0.0, 100.0,
-                    "Tolerance value for distance (meters)"));
-      addParameter(
-        "angle_tolerance",
-        Parameter(0.1, 0.0, M_PI,
-                  "Tolerance value for angle (rad)"));
-      addParameter(
-          "target_distance",
-          Parameter(
-              0.1, -1.0, 1e9,
-              "Target distance to maintain with the target (m)")); // Use -1 for
-                                                                   // None
       addParameter(
           "target_orientation",
           Parameter(0.0, -M_PI, M_PI,
@@ -55,17 +36,6 @@ public:
           "use_local_coordinates",
           Parameter(true,
                     "Track the item in the local frame of the robot. This mode cannot track the object velocity but can operate without knowing the robot's absolute position (world frame)"));
-      // Search Parameters
-      addParameter("target_wait_timeout", Parameter(30.0, 0.0, 1e3));
-      addParameter("target_search_timeout", Parameter(30.0, 0.0, 1e3));
-      addParameter("target_search_radius", Parameter(0.5, 1e-4, 1e4));
-      addParameter("target_search_pause", Parameter(1.0, 0.0, 1e3));
-      // Pure tracking control law parameters
-      addParameter("rotation_gain", Parameter(1.0, 1e-2, 10.0));
-      addParameter("speed_gain", Parameter(1.0, 1e-2, 10.0));
-      addParameter("min_vel", Parameter(0.01, 1e-9, 1e9));
-      addParameter("enable_search", Parameter(false));
-      // Kalman Filter parameters
       addParameter("error_pose", Parameter(0.05, 1e-9, 1e9));
       addParameter("error_vel", Parameter(0.05, 1e-9, 1e9));
       addParameter("error_acc", Parameter(0.05, 1e-9, 1e9));
@@ -81,44 +51,17 @@ public:
           "max_depth",
           Parameter(1e3, 1e-3, 1e9, "Range of interest minimum depth value"));
     }
-    bool enable_search() const { return getParameter<bool>("enable_search"); }
     bool enable_vel_tracking() const {
       return not getParameter<bool>("use_local_coordinates");
     }
-    double control_time_step() const {
-      return getParameter<double>("control_time_step");
-    }
-    double target_search_timeout() const {
-      return getParameter<double>("target_search_timeout");
-    }
-    double target_wait_timeout() const {
-      return getParameter<double>("target_wait_timeout");
-    }
-    double target_search_radius() const {
-      return getParameter<double>("target_search_radius");
-    }
-    double search_pause() const {
-      return getParameter<double>("target_search_pause");
-    }
-    int control_horizon() const { return getParameter<int>("control_horizon"); }
     int prediction_horizon() const {
       return getParameter<int>("prediction_horizon");
     }
     double dist_tolerance() const { return getParameter<double>("distance_tolerance"); }
     double ang_tolerance() const { return getParameter<double>("angle_tolerance"); }
-    double target_distance() const {
-      double val = getParameter<double>("target_distance");
-      return val < 0 ? -1.0 : val; // Return -1 for None
-    }
     double target_orientation() const {
       return getParameter<double>("target_orientation");
     }
-    void set_target_distance(double value) {
-      setParameter("target_distance", value);
-    }
-    double K_omega() const { return getParameter<double>("rotation_gain"); }
-    double K_v() const { return getParameter<double>("speed_gain"); }
-    double min_vel() const { return getParameter<double>("min_vel"); }
     double e_pose() const { return getParameter<double>("error_pose"); }
     double e_vel() const { return getParameter<double>("error_vel"); }
     double e_acc() const { return getParameter<double>("error_acc"); }

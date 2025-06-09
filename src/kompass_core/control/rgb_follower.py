@@ -4,8 +4,8 @@ from typing import Optional
 from attrs import define, field
 from ..utils.common import BaseAttrs, base_validators
 from ..models import Robot, RobotCtrlLimits, RobotType
-from ..datatypes import TrackingData
-import kompass_cpp
+from kompass_cpp.control import RGBFollower, RGBFollowerParameters
+from kompass_cpp.types import Bbox2D
 
 
 @define
@@ -20,7 +20,7 @@ class VisionFollowerConfig(BaseAttrs):
         default=3, validator=base_validators.in_range(min_value=1, max_value=10)
     )
     tolerance: float = field(
-        default=0.1, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
+        default=0.1, validator=base_validators.in_range(min_value=1e-6, max_value=1.0)
     )
     target_distance: Optional[float] = field(default=None)
     target_wait_timeout: float = field(
@@ -46,14 +46,14 @@ class VisionFollowerConfig(BaseAttrs):
     )
     enable_search: bool = field(default=True)
 
-    def to_kompass_cpp(self) -> kompass_cpp.control.VisionFollowerParameters:
+    def to_kompass_cpp(self) -> RGBFollowerParameters:
         """
         Convert to kompass_cpp lib config format
 
         :return: _description_
         :rtype: kompass_cpp.control.VisionFollowerParameters
         """
-        vision_config = kompass_cpp.control.VisionFollowerParameters()
+        vision_config = RGBFollowerParameters()
         vision_config.from_dict(self.asdict())
         return vision_config
 
@@ -63,16 +63,16 @@ class VisionFollower(ControllerTemplate):
         self,
         robot: Robot,
         ctrl_limits: RobotCtrlLimits,
-        config: Optional[VisionFollowerConfig] = None,
+        config: Optional[RGBFollowerParameters] = None,
         config_file: Optional[str] = None,
         config_yaml_root_name: Optional[str] = None,
         **_,
     ):
-        config = config or VisionFollowerConfig()
+        config = config or RGBFollowerParameters()
 
         if config_file:
             config.from_yaml(config_file, config_yaml_root_name, get_common=False)
-        self.__controller = kompass_cpp.control.VisionFollower(
+        self.__controller = RGBFollower(
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
             config=config.to_kompass_cpp(),
@@ -81,17 +81,16 @@ class VisionFollower(ControllerTemplate):
         self._found_ctrl = False
         logging.info("VISION TARGET FOLLOWING CONTROLLER IS READY")
 
-    def reset_target(self, tracking: TrackingData):
-        self.__controller.reset_target(tracking.to_kompass_cpp())
+    def set_initial_tracking_2d_target(self, target_box: Bbox2D, **_):
+        self.__controller.reset_target(target_box)
 
     def loop_step(
         self,
         *,
-        tracking: TrackingData,
+        target_box: Bbox2D,
         **_,
     ) -> bool:
-        tracking_cpp = tracking.to_kompass_cpp() if tracking else None
-        self._found_ctrl = self.__controller.run(tracking_cpp)
+        self._found_ctrl = self.__controller.run(target_box)
         if self._found_ctrl:
             self._ctrl = self.__controller.get_ctrl()
         return self._found_ctrl
@@ -113,7 +112,7 @@ class VisionFollower(ControllerTemplate):
         :return: Linear Velocity Control (m/s)
         :rtype: List[float]
         """
-        return self._ctrl.vx if self._found_ctrl else None
+        return [self._ctrl.vx] if self._found_ctrl else None
 
     @property
     def linear_y_control(self):
@@ -123,7 +122,7 @@ class VisionFollower(ControllerTemplate):
         :return: Linear Velocity Control (m/s)
         :rtype: List[float]
         """
-        return self._ctrl.vy if self._found_ctrl else None
+        return [self._ctrl.vy] if self._found_ctrl else None
 
     @property
     def angular_control(self):
@@ -133,4 +132,4 @@ class VisionFollower(ControllerTemplate):
         :return: Angular Velocity Control (rad/s)
         :rtype: List[float]
         """
-        return self._ctrl.omega if self._found_ctrl else None
+        return [self._ctrl.omega] if self._found_ctrl else None
