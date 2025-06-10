@@ -10,8 +10,8 @@ from ._trajectory_ import TrajectoryCostsWeights
 from .dvz import DVZ, DVZConfig
 from .dwa import DWA, DWAConfig
 from .stanley import StanleyConfig, Stanley
-from .rgb_follower import VisionFollower, VisionFollowerConfig
-from .vision_dwa import VisionDWAConfig, VisionDWA
+from .rgb_follower import VisionRGBFollower, VisionRGBFollowerConfig
+from .rgbd_follower import VisionRGBDFollower, VisionRGBDFollowerConfig
 
 ControllerType = FollowerTemplate
 
@@ -71,19 +71,24 @@ class ControllersID(StrEnum):
     STANLEY = "Stanley"
     DWA = "DWA"
     DVZ = "DVZ"
-    VISION = "VisionDWA"
+    VISION_IMG = "VisionRGBFollower"
+    VISION_DEPTH = "VisionRGBDFollower"
 
 
 ControlClasses = {
     ControllersID.STANLEY: Stanley,
     ControllersID.DVZ: DVZ,
     ControllersID.DWA: DWA,
+    ControllersID.VISION_IMG : VisionRGBFollower,
+    ControllersID.VISION_DEPTH: VisionRGBDFollower
 }
 
 ControlConfigClasses = {
     ControllersID.STANLEY: StanleyConfig,
     ControllersID.DVZ: DVZConfig,
     ControllersID.DWA: DWAConfig,
+    ControllersID.VISION_IMG: VisionRGBFollowerConfig,
+    ControllersID.VISION_DEPTH: VisionRGBDFollowerConfig,
 }
 
 
@@ -101,8 +106,8 @@ __all__ = [
     "DWA",
     "DWAConfig",
     "TrajectoryCostsWeights",
-    "VisionFollower",
-    "VisionFollowerConfig",
-    "VisionDWAConfig",
-    "VisionDWA",
+    "VisionRGBFollower",
+    "VisionRGBFollowerConfig",
+    "VisionRGBDFollower",
+    "VisionRGBDFollowerConfig",
 ]

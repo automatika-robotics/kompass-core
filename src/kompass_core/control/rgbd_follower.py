@@ -20,10 +20,11 @@ from ..models import Robot, RobotState, RobotCtrlLimits, RobotGeometry, RobotTyp
 from ..datatypes.laserscan import LaserScanData
 from ..datatypes.pointcloud import PointCloudData
 from .dwa import DWAConfig
+from .rgb_follower import VisionRGBFollowerConfig
 
 
 @define
-class VisionDWAConfig(DWAConfig):
+class VisionRGBDFollowerConfig(DWAConfig, VisionRGBFollowerConfig):
     distance_tolerance: float = field(
         default=0.05, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
     )
@@ -32,33 +33,10 @@ class VisionDWAConfig(DWAConfig):
     )
     # Tolerance value for distance and angle following errors
 
-    target_distance: Optional[float] = field(
-        default=0.1,
-        validator=base_validators.in_range(min_value=1e-9, max_value=1e9),
-    )  # Target distance to maintain with the target (m)
-
     target_orientation: float = field(
         default=0.0,
         validator=base_validators.in_range(min_value=-np.pi, max_value=np.pi),
     )  # Bearing angle to maintain with the target (rad)
-
-    target_wait_timeout: float = field(
-        default=30.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
-    )  # Wait for target to appear again timeout (seconds), used if search is disabled
-
-    enable_search: bool = field(default=False)  # Enable or disable the search mechanism
-
-    target_search_timeout: float = field(
-        default=30.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
-    )  # Search timeout in seconds
-
-    target_search_radius: float = field(
-        default=0.5, validator=base_validators.in_range(min_value=1e-4, max_value=1e4)
-    )  # Search radius for finding the target (m)
-
-    target_search_pause: float = field(
-        default=1.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
-    )  # Pause between search actions to find target (seconds)
 
     rotation_gain: float = field(
         default=0.5, validator=base_validators.in_range(min_value=1e-2, max_value=10.0)
@@ -67,12 +45,6 @@ class VisionDWAConfig(DWAConfig):
     speed_gain: float = field(
         default=1.0, validator=base_validators.in_range(min_value=1e-2, max_value=10.0)
     )  # Gain for the speed control law
-
-    min_vel: float = field(
-        default=0.1, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
-    )  # Minimum velocity to apply (m/s)
-
-    enable_search: bool = field(default=False)  # Enable or disable the search mechanism
 
     use_local_coordinates: bool = field(
         default=True
@@ -129,12 +101,12 @@ class VisionDWAConfig(DWAConfig):
         return vision_dwa_params
 
 
-class VisionDWA(ControllerTemplate):
+class VisionRGBDFollower(ControllerTemplate):
     def __init__(
         self,
         robot: Robot,
         ctrl_limits: RobotCtrlLimits,
-        config: Optional[VisionDWAConfig] = None,
+        config: Optional[VisionRGBDFollowerConfig] = None,
         config_file: Optional[str] = None,
         config_yaml_root_name: Optional[str] = None,
         control_time_step: Optional[float] = None,
@@ -150,7 +122,7 @@ class VisionDWA(ControllerTemplate):
         :param params_file: Yaml file containing the parameters of the controller under 'dvz_controller'
         :type params_file: str
         """
-        self._config = config or VisionDWAConfig()
+        self._config = config or VisionRGBDFollowerConfig()
 
         if config_file:
             self._config.from_yaml(

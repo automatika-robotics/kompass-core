@@ -1,6 +1,6 @@
 from ._base_ import ControllerTemplate
 import logging
-from typing import Optional
+from typing import Optional, List
 from attrs import define, field
 from ..utils.common import BaseAttrs, base_validators
 from ..models import Robot, RobotCtrlLimits, RobotType
@@ -9,7 +9,7 @@ from kompass_cpp.types import Bbox2D
 
 
 @define
-class VisionFollowerConfig(BaseAttrs):
+class VisionRGBFollowerConfig(BaseAttrs):
     control_time_step: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
@@ -58,17 +58,17 @@ class VisionFollowerConfig(BaseAttrs):
         return vision_config
 
 
-class VisionFollower(ControllerTemplate):
+class VisionRGBFollower(ControllerTemplate):
     def __init__(
         self,
         robot: Robot,
         ctrl_limits: RobotCtrlLimits,
-        config: Optional[RGBFollowerParameters] = None,
+        config: Optional[VisionRGBFollowerConfig] = None,
         config_file: Optional[str] = None,
         config_yaml_root_name: Optional[str] = None,
         **_,
     ):
-        config = config or RGBFollowerParameters()
+        config = config or VisionRGBFollowerConfig()
 
         if config_file:
             config.from_yaml(config_file, config_yaml_root_name, get_common=False)
@@ -87,10 +87,10 @@ class VisionFollower(ControllerTemplate):
     def loop_step(
         self,
         *,
-        target_box: Bbox2D,
+        detections_2d: Optional[List[Bbox2D]],
         **_,
     ) -> bool:
-        self._found_ctrl = self.__controller.run(target_box)
+        self._found_ctrl = self.__controller.run(detections_2d[0] if detections_2d else None)
         if self._found_ctrl:
             self._ctrl = self.__controller.get_ctrl()
         return self._found_ctrl
