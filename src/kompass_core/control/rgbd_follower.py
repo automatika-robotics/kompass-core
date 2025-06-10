@@ -20,11 +20,42 @@ from ..models import Robot, RobotState, RobotCtrlLimits, RobotGeometry, RobotTyp
 from ..datatypes.laserscan import LaserScanData
 from ..datatypes.pointcloud import PointCloudData
 from .dwa import DWAConfig
-from .rgb_follower import VisionRGBFollowerConfig
 
 
 @define
-class VisionRGBDFollowerConfig(DWAConfig, VisionRGBFollowerConfig):
+class VisionRGBDFollowerConfig(DWAConfig):
+    control_time_step: float = field(
+        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
+    )
+    control_horizon: int = field(
+        default=2, validator=base_validators.in_range(min_value=1, max_value=1000)
+    )
+    prediction_horizon: int = field(
+        default=10, validator=base_validators.in_range(min_value=1, max_value=1000)
+    )
+    target_distance: Optional[float] = field(default=None)
+    target_wait_timeout: float = field(
+        default=30.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
+    )  # wait for target to appear again timeout (seconds), used if search is disabled
+    target_search_timeout: float = field(
+        default=30.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
+    )  # search timeout in seconds
+    target_search_pause: float = field(
+        default=2.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
+    )  # pause between search actions to find target (seconds)
+    target_search_radius: float = field(
+        default=0.5, validator=base_validators.in_range(min_value=1e-4, max_value=1e4)
+    )
+    rotation_multiple: float = field(
+        default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1.0)
+    )
+    speed_depth_multiple: float = field(
+        default=0.7, validator=base_validators.in_range(min_value=1e-9, max_value=10.0)
+    )
+    min_vel: float = field(
+        default=0.1, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
+    )
+    enable_search: bool = field(default=True)
     distance_tolerance: float = field(
         default=0.05, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
     )
