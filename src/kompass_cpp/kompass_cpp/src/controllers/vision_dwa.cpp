@@ -30,7 +30,8 @@ VisionDWA::VisionDWA(const ControlType &robotCtrlType,
           config.prediction_horizon(), config.control_horizon(),
           maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
           proximity_sensor_position_body, proximity_sensor_rotation_body,
-          octreeRes, costWeights, maxNumThreads), RGBFollower(robotCtrlType, ctrlLimits) {
+          octreeRes, costWeights, maxNumThreads),
+      RGBFollower(robotCtrlType, ctrlLimits) {
   ctrl_limits_ = ctrlLimits;
   config_ = config;
   // Set the reaching goal distance (used in the DWA mode when vision target is
@@ -74,8 +75,8 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
   distance = std::max(distance, 0.0f);
 
   float distance_error = config_.target_distance() - distance;
-  float angle_error =
-      Angle::normalizeToMinusPiPlusPi(config_.target_orientation() - gamma - psi);
+  float angle_error = Angle::normalizeToMinusPiPlusPi(
+      config_.target_orientation() - gamma - psi);
 
   Velocity2D followingVel;
   if (abs(distance_error) > config_.dist_tolerance() or
@@ -167,7 +168,7 @@ VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose) {
 
   Trajectory2D ref_traj(config_.prediction_horizon());
   Path::State simulated_state(0.0, 0.0, 0.0);
-  if(track_velocity_){
+  if (track_velocity_) {
     // Global frame -> get actual state
     simulated_state = Path::State(currentState);
   }
@@ -189,13 +190,12 @@ VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose) {
     } else {
       // Update the tracked state in the local frame after the robot have
       // moved (apply inverse of robot velocity)
-      tracked_state_tf =
-          getTransformation(simulated_state);
+      tracked_state_tf = getTransformation(simulated_state);
       auto new_state = transformPosition(
           Eigen::Vector3f(simulated_track.x(), simulated_track.y(), 0.0),
           tracked_state_tf.inverse());
       simulated_track = TrackedPose2D(new_state.x(), new_state.y(),
-                      simulated_track.z(), 0.0, 0.0, 0.0);
+                                      simulated_track.z(), 0.0, 0.0, 0.0);
     }
     if (step < config_.prediction_horizon() - 1) {
       ref_traj.velocities.add(step, cmd);
@@ -227,8 +227,8 @@ Trajectory2D VisionDWA::getTrackingReferenceSegmentDiffDrive(
   // velocity
   while (step < config_.prediction_horizon()) {
     LOG_DEBUG("Step: ", step, "Simulated robot at", simulated_state.x, ",",
-             simulated_state.y, " simulated target at ",
-             simulated_track.x(), ",", simulated_track.y());
+              simulated_state.y, " simulated target at ", simulated_track.x(),
+              ",", simulated_track.y());
     this->setCurrentState(simulated_state);
     cmd = this->getPureTrackingCtrl(simulated_track);
     LOG_DEBUG("Got CMD: ", cmd.vx(), ",", cmd.omega());
@@ -241,8 +241,9 @@ Trajectory2D VisionDWA::getTrackingReferenceSegmentDiffDrive(
       simulated_state.update(vel_rotate, config_.control_time_step());
       if (track_velocity_) {
         simulated_track.update(config_.control_time_step());
-      }else{
-        // Update the tracked state in the local frame after the robot have moved (apply inverse of robot velocity)
+      } else {
+        // Update the tracked state in the local frame after the robot have
+        // moved (apply inverse of robot velocity)
         tracked_state_tf = getTransformation(simulated_state);
         auto new_state = transformPosition(
             Eigen::Vector3f(simulated_track.x(), simulated_track.y(), 0.0),
@@ -301,7 +302,6 @@ Trajectory2D VisionDWA::getTrackingReferenceSegmentDiffDrive(
 
   return ref_traj;
 };
-
 
 } // namespace Control
 } // namespace Kompass

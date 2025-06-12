@@ -1,5 +1,6 @@
 #pragma once
 
+#include "controllers/rgb_follower.h"
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
@@ -9,7 +10,6 @@
 #include "utils/logger.h"
 #include "vision/depth_detector.h"
 #include "vision/tracker.h"
-#include "controllers/rgb_follower.h"
 #include <Eigen/Dense>
 #include <cmath>
 #include <memory>
@@ -28,12 +28,10 @@ public:
       addParameter(
           "prediction_horizon",
           Parameter(10, 1, 1000, "Number of steps for future prediction"));
-      addParameter(
-            "distance_tolerance",
-            Parameter(0.1, 1e-6, 1e3, "Distance tolerance value (m)"));
-      addParameter(
-              "angle_tolerance",
-              Parameter(0.1, 1e-6, M_PI, "Angle tolerance value (rad)"));
+      addParameter("distance_tolerance",
+                   Parameter(0.1, 1e-6, 1e3, "Distance tolerance value (m)"));
+      addParameter("angle_tolerance",
+                   Parameter(0.1, 1e-6, M_PI, "Angle tolerance value (rad)"));
       addParameter(
           "target_orientation",
           Parameter(0.0, -M_PI, M_PI,
@@ -41,7 +39,9 @@ public:
       addParameter(
           "use_local_coordinates",
           Parameter(true,
-                    "Track the item in the local frame of the robot. This mode cannot track the object velocity but can operate without knowing the robot's absolute position (world frame)"));
+                    "Track the item in the local frame of the robot. This mode "
+                    "cannot track the object velocity but can operate without "
+                    "knowing the robot's absolute position (world frame)"));
       addParameter("error_pose", Parameter(0.05, 1e-9, 1e9));
       addParameter("error_vel", Parameter(0.05, 1e-9, 1e9));
       addParameter("error_acc", Parameter(0.05, 1e-9, 1e9));
@@ -63,8 +63,12 @@ public:
     int prediction_horizon() const {
       return getParameter<int>("prediction_horizon");
     }
-    double dist_tolerance() const { return getParameter<double>("distance_tolerance"); }
-    double ang_tolerance() const { return getParameter<double>("angle_tolerance"); }
+    double dist_tolerance() const {
+      return getParameter<double>("distance_tolerance");
+    }
+    double ang_tolerance() const {
+      return getParameter<double>("angle_tolerance");
+    }
     double target_orientation() const {
       return getParameter<double>("target_orientation");
     }
@@ -122,9 +126,9 @@ public:
         // Update the tracker with the detected boxes
         bool tracking_updated = tracker_->updateTracking(detected_boxes);
         if (!tracking_updated) {
-          LOG_WARNING("Tracker failed to update target with the detected boxes");
-        }
-        else{
+          LOG_WARNING(
+              "Tracker failed to update target with the detected boxes");
+        } else {
           tracked_pose = tracker_->getFilteredTrackedPose2D();
         }
       } else {
@@ -165,8 +169,9 @@ public:
         // Update the tracker with the detected boxes
         bool tracking_updated = tracker_->updateTracking(boxes_3d.value());
         if (!tracking_updated) {
-          LOG_WARNING("Tracker failed to update target with the detected boxes");
-        }else{
+          LOG_WARNING(
+              "Tracker failed to update target with the detected boxes");
+        } else {
           tracked_pose = tracker_->getFilteredTrackedPose2D();
         }
       } else {
@@ -207,8 +212,7 @@ public:
 
   bool
   setInitialTracking(const Eigen::MatrixX<unsigned short> &aligned_depth_image,
-                     const Bbox2D &target_box_2d,
-                     const float yaw = 0.0);
+                     const Bbox2D &target_box_2d, const float yaw = 0.0);
 
 private:
   VisionDWAConfig config_;
@@ -244,7 +248,8 @@ private:
    * @param angle_error
    * @return Velocity2D
    */
-  Velocity2D getPureTrackingCtrl(const float distance_erro, const float angle_error);
+  Velocity2D getPureTrackingCtrl(const float distance_erro,
+                                 const float angle_error);
 
   /**
    * @brief Get the Tracking Control Result based on object tracking and DWA
@@ -264,11 +269,11 @@ private:
       // Reset recorded wait and search times
       recorded_wait_time_ = 0.0;
       recorded_search_time_ = 0.0;
-      LOG_INFO("Tracking target at position: ",
-                tracked_pose->x(), ", ",
-                tracked_pose->y(), " with velocity: ", tracked_pose->v(), ", ", tracked_pose->omega());
+      LOG_INFO("Tracking target at position: ", tracked_pose->x(), ", ",
+               tracked_pose->y(), " with velocity: ", tracked_pose->v(), ", ",
+               tracked_pose->omega());
       LOG_INFO("Robot current position: ", currentState.x, ", ",
-                currentState.y);
+               currentState.y);
       // Generate reference to target
       Trajectory2D ref_traj;
       if (is_diff_drive_) {
@@ -295,8 +300,7 @@ private:
         this->currentPath->getSize() > 1) {
       // The tracking sample has collisions -> use DWA-like sampling and control
       return this->computeVelocityCommandsSet(current_vel, sensor_points);
-    }
-    else {
+    } else {
       // Start Search and/or Wait if enabled
       if (config_.enable_search()) {
         if (recorded_search_time_ < config_.target_search_timeout()) {
@@ -304,7 +308,7 @@ private:
             LOG_DEBUG("Search commands queue is empty, generating new search "
                       "commands");
             int last_direction = 1;
-            if (latest_velocity_command_.omega() < 0){
+            if (latest_velocity_command_.omega() < 0) {
               last_direction = -1;
             }
             getFindTargetCmds(last_direction);
@@ -326,11 +330,11 @@ private:
             search_commands_queue_.pop();
             recorded_search_time_ += config_.control_time_step();
             path.add(i + 1, 0.0, 0.0);
-            velocities.add(i, Velocity2D(search_command[0],
-                                                  search_command[1],
-                                                  search_command[2]));
+            velocities.add(i, Velocity2D(search_command[0], search_command[1],
+                                         search_command[2]));
           }
-          LOG_DEBUG("Sending ", config_.control_horizon(), " search commands "
+          LOG_DEBUG("Sending ", config_.control_horizon(),
+                    " search commands "
                     "to the controller");
           auto result = TrajSearchResult();
           result.isTrajFound = true;
@@ -338,8 +342,7 @@ private:
           result.trajectory = Trajectory2D(velocities, path);
           return result;
         }
-      }
-      else {
+      } else {
         if (recorded_wait_time_ < config_.target_wait_timeout()) {
           auto timeout = config_.target_wait_timeout() - recorded_wait_time_;
           LOG_DEBUG("Target lost, waiting to get tracked target again ... "

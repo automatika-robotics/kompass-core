@@ -13,7 +13,6 @@ namespace Control {
 
 class RGBFollower {
 public:
-
   class RGBFollowerConfig : public Parameters {
   public:
     RGBFollowerConfig() {
@@ -22,9 +21,7 @@ public:
       addParameter(
           "control_horizon",
           Parameter(2, 1, 1000, "Number of steps for applying the control"));
-      addParameter(
-          "tolerance",
-          Parameter(0.1, 0.0, 1.0, "Tolerance value"));
+      addParameter("tolerance", Parameter(0.1, 0.0, 1.0, "Tolerance value"));
       addParameter(
           "target_distance",
           Parameter(
@@ -41,7 +38,6 @@ public:
       addParameter("speed_gain", Parameter(1.0, 1e-2, 10.0));
       addParameter("min_vel", Parameter(0.01, 1e-9, 1e9));
       addParameter("enable_search", Parameter(false));
-
     }
     bool enable_search() const { return getParameter<bool>("enable_search"); }
     double control_time_step() const {
@@ -74,13 +70,13 @@ public:
   };
 
   RGBFollower(const ControlType robotCtrlType,
-                 const ControlLimitsParams ctrl_limits,
-                 const RGBFollowerConfig config = RGBFollowerConfig());
+              const ControlLimitsParams ctrl_limits,
+              const RGBFollowerConfig config = RGBFollowerConfig());
 
   // Default Destructor
   ~RGBFollower() = default;
 
-  void resetTarget(const Bbox2D& tracking);
+  void resetTarget(const Bbox2D &tracking);
 
   bool run(const std::optional<Bbox2D> tracking);
 
@@ -95,7 +91,8 @@ protected:
   std::unique_ptr<Bbox2D> last_tracking_ = nullptr;
 
   void generateSearchCommands(float total_rotation, float search_radius,
-    float max_rotation_time, bool enable_pause = false);
+                              float max_rotation_time,
+                              bool enable_pause = false);
   void getFindTargetCmds(const int last_direction = 1);
 
 private:

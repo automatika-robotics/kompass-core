@@ -8,9 +8,9 @@
 #include "controllers/dwa.h"
 #include "controllers/follower.h"
 #include "controllers/pid.h"
+#include "controllers/rgb_follower.h"
 #include "controllers/stanley.h"
 #include "controllers/vision_dwa.h"
-#include "controllers/rgb_follower.h"
 #include "datatypes/control.h"
 #include "datatypes/trajectory.h"
 
@@ -168,7 +168,7 @@ void bindings_control(py::module_ &m) {
       .def(py::init<Control::ControlLimitsParams, Control::ControlType, double,
                     double, double, int, int, CollisionChecker::ShapeType,
                     std::vector<float>, const Eigen::Vector3f &,
-                    const  Eigen::Vector4f &, double,
+                    const Eigen::Vector4f &, double,
                     Control::CostEvaluator::TrajectoryCostsWeights, int>(),
            py::arg("control_limits"), py::arg("control_type"),
            py::arg("time_step"), py::arg("prediction_horizon"),
@@ -181,7 +181,7 @@ void bindings_control(py::module_ &m) {
       .def(py::init<Control::TrajectorySampler::TrajectorySamplerParameters,
                     Control::ControlLimitsParams, Control::ControlType,
                     CollisionChecker::ShapeType, std::vector<float>,
-                    const Eigen::Vector3f &, const  Eigen::Vector4f &,
+                    const Eigen::Vector3f &, const Eigen::Vector4f &,
                     Control::CostEvaluator::TrajectoryCostsWeights, int>(),
            py::arg("config"), py::arg("control_limits"),
            py::arg("control_type"), py::arg("robot_shape_type"),
@@ -219,12 +219,11 @@ void bindings_control(py::module_ &m) {
       .def("set_resolution", &Control::DWA::resetOctreeResolution);
 
   // Vision Follower
-  py::class_<Control::RGBFollower::RGBFollowerConfig, Parameters>(m_control,
-                                                        "RGBFollowerParameters")
+  py::class_<Control::RGBFollower::RGBFollowerConfig, Parameters>(
+      m_control, "RGBFollowerParameters")
       .def(py::init<>());
 
-  py::class_<Control::RGBFollower>(m_control,
-                                                        "RGBFollower")
+  py::class_<Control::RGBFollower>(m_control, "RGBFollower")
       .def(py::init<const Control::ControlType,
                     const Control::ControlLimitsParams,
                     const Control::RGBFollower::RGBFollowerConfig>(),
@@ -232,14 +231,16 @@ void bindings_control(py::module_ &m) {
            py::arg("config"))
       .def("reset_target", &Control::RGBFollower::resetTarget)
       .def("get_ctrl", &Control::RGBFollower::getCtrl)
-      .def("run", &Control::RGBFollower::run, py::arg("detection") = py::none());
+      .def("run", &Control::RGBFollower::run,
+           py::arg("detection") = py::none());
 
   // Vision DWA
-  py::class_<Control::VisionDWA::VisionDWAConfig, Control::RGBFollower::RGBFollowerConfig>(m_control,
-                                                        "VisionDWAParameters")
+  py::class_<Control::VisionDWA::VisionDWAConfig,
+             Control::RGBFollower::RGBFollowerConfig>(m_control,
+                                                      "VisionDWAParameters")
       .def(py::init<>());
 
-  py::class_<Control::VisionDWA, Control::DWA, Control::RGBFollower>(m_control, "VisionDWA")
+  py::class_<Control::VisionDWA, Control::DWA>(m_control, "VisionDWA")
       .def(py::init<const Control::ControlType &,
                     const Control::ControlLimitsParams &, const int, const int,
                     const CollisionChecker::ShapeType &,

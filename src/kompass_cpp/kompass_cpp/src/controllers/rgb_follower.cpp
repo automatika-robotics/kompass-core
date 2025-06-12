@@ -26,7 +26,9 @@ void RGBFollower::resetTarget(const Bbox2D &target) {
   std::swap(search_commands_queue_, empty);
   // Set the target as the current tracking bounding
   // box size
-  LOG_DEBUG("Got target size: ", target.size.x(), ", ", target.size.y(), ". Image size=", target.img_size.x(), ", ", target.img_size.y(), ". Center=", target.getCenter().x(), ", ", target.getCenter().y());
+  LOG_DEBUG("Got target size: ", target.size.x(), ", ", target.size.y(),
+            ". Image size=", target.img_size.x(), ", ", target.img_size.y(),
+            ". Center=", target.getCenter().x(), ", ", target.getCenter().y());
   float size = static_cast<float>(target.size.x() * target.size.y()) /
                static_cast<float>(target.img_size.x() * target.img_size.y());
   LOG_DEBUG("Setting vision target reference distance to size: ", size);
@@ -34,9 +36,9 @@ void RGBFollower::resetTarget(const Bbox2D &target) {
 }
 
 void RGBFollower::generateSearchCommands(float total_rotation,
-                                       float search_radius,
-                                       float max_rotation_time,
-                                       bool enable_pause) {
+                                         float search_radius,
+                                         float max_rotation_time,
+                                         bool enable_pause) {
   // Calculate rotation direction and magnitude
   double rotation_sign = (total_rotation < 0.0) ? -1.0 : 1.0;
   float rotation_time = max_rotation_time;
@@ -154,8 +156,9 @@ bool RGBFollower::run(const std::optional<Bbox2D> target) {
 }
 
 void RGBFollower::trackTarget(const Bbox2D &target) {
-  float current_dist = static_cast<float>(target.size.x() * target.size.y()) /
-                       static_cast<float>(target.img_size.x() * target.img_size.y());
+  float current_dist =
+      static_cast<float>(target.size.x() * target.size.y()) /
+      static_cast<float>(target.img_size.x() * target.img_size.y());
 
   float distance_error = config_.target_distance() - current_dist;
 
@@ -167,10 +170,10 @@ void RGBFollower::trackTarget(const Bbox2D &target) {
 
   LOG_DEBUG("Current size: ", current_dist,
             ", Reference size: ", config_.target_distance(),
-            "size_error=", distance_error,
-            ", tolerance=", distance_tolerance);
+            "size_error=", distance_error, ", tolerance=", distance_tolerance);
 
-  LOG_DEBUG("Img error x,y: ", error_x, ", ", error_y, ", tolerance: ", config_.tolerance());
+  LOG_DEBUG("Img error x,y: ", error_x, ", ", error_y,
+            ", tolerance: ", config_.tolerance());
 
   // Initialize control vectors
   std::fill(out_vel_.vx.begin(), out_vel_.vx.end(), 0.0);
@@ -212,19 +215,18 @@ void RGBFollower::trackTarget(const Bbox2D &target) {
     distance_error = config_.target_distance() - simulated_depth;
     error_x = simulated_error_x;
 
-    if (is_diff_drive_ and std::abs(v) >= config_.min_vel() and std::abs(omega) >= config_.min_vel()) {
-        // Rotate then move
-        out_vel_.set(i, omega, 0.0, 0.0);
-        // Set vx_ctrl[i+1] to max(v, 0.0)
-        if (i + 1 < out_vel_._length) {
-          i++;
-          out_vel_.set(i, v, 0.0, 0.0);
-        }
-    }
-    else{
+    if (is_diff_drive_ and std::abs(v) >= config_.min_vel() and
+        std::abs(omega) >= config_.min_vel()) {
+      // Rotate then move
+      out_vel_.set(i, omega, 0.0, 0.0);
+      // Set vx_ctrl[i+1] to max(v, 0.0)
+      if (i + 1 < out_vel_._length) {
+        i++;
+        out_vel_.set(i, v, 0.0, 0.0);
+      }
+    } else {
       out_vel_.set(i, v, 0.0, omega);
     }
-
   }
   return;
 }
