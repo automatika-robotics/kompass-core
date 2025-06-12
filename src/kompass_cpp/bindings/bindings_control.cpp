@@ -219,12 +219,11 @@ void bindings_control(py::module_ &m) {
       .def("set_resolution", &Control::DWA::resetOctreeResolution);
 
   // Vision Follower
-  py::class_<Control::RGBFollower::RGBFollowerConfig,
-             Control::Controller::ControllerParameters>(m_control,
+  py::class_<Control::RGBFollower::RGBFollowerConfig, Parameters>(m_control,
                                                         "RGBFollowerParameters")
       .def(py::init<>());
 
-  py::class_<Control::RGBFollower, Control::Controller>(m_control,
+  py::class_<Control::RGBFollower>(m_control,
                                                         "RGBFollower")
       .def(py::init<const Control::ControlType,
                     const Control::ControlLimitsParams,
@@ -233,15 +232,14 @@ void bindings_control(py::module_ &m) {
            py::arg("config"))
       .def("reset_target", &Control::RGBFollower::resetTarget)
       .def("get_ctrl", &Control::RGBFollower::getCtrl)
-      .def("run", &Control::RGBFollower::run);
+      .def("run", &Control::RGBFollower::run, py::arg("detection") = py::none());
 
   // Vision DWA
-  py::class_<Control::VisionDWA::VisionDWAConfig,
-             Control::Controller::ControllerParameters>(m_control,
+  py::class_<Control::VisionDWA::VisionDWAConfig, Control::RGBFollower::RGBFollowerConfig>(m_control,
                                                         "VisionDWAParameters")
       .def(py::init<>());
 
-  py::class_<Control::VisionDWA, Control::DWA>(m_control, "VisionDWA")
+  py::class_<Control::VisionDWA, Control::DWA, Control::RGBFollower>(m_control, "VisionDWA")
       .def(py::init<const Control::ControlType &,
                     const Control::ControlLimitsParams &, const int, const int,
                     const CollisionChecker::ShapeType &,

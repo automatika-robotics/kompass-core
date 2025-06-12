@@ -30,9 +30,8 @@ VisionDWA::VisionDWA(const ControlType &robotCtrlType,
           config.prediction_horizon(), config.control_horizon(),
           maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
           proximity_sensor_position_body, proximity_sensor_rotation_body,
-          octreeRes, costWeights, maxNumThreads) {
+          octreeRes, costWeights, maxNumThreads), RGBFollower(robotCtrlType, ctrlLimits) {
   ctrl_limits_ = ctrlLimits;
-  is_diff_drive_ = robotCtrlType == ControlType::DIFFERENTIAL_DRIVE;
   config_ = config;
   // Set the reaching goal distance (used in the DWA mode when vision target is
   // lost)
@@ -303,71 +302,6 @@ Trajectory2D VisionDWA::getTrackingReferenceSegmentDiffDrive(
   return ref_traj;
 };
 
-void VisionDWA::generateSearchCommands(float total_rotation,
-                                       float search_radius,
-                                       float max_rotation_time,
-                                       bool enable_pause) {
-  // Calculate rotation direction and magnitude
-  double rotation_sign = (total_rotation < 0.0) ? -1.0 : 1.0;
-  float rotation_time = max_rotation_time;
-  int num_pause_steps =
-      static_cast<int>(config_.search_pause() / config_.control_time_step());
-  if (enable_pause) {
-    // Modify the total number of active rotation to include the pause steps
-    rotation_time =
-        max_rotation_time * (1 - num_pause_steps / config_.control_time_step());
-  }
-  // Angular velocity to rotate 'total_rotation' in total time steps
-  // 'rotation_steps' with dt = control_time_step
-  double omega_val = total_rotation / rotation_time;
-
-  omega_val = std::max(std::min(omega_val, ctrl_limits_.omegaParams.maxOmega),
-                       config_.min_vel());
-  // Generate velocity commands
-  for (float t = 0.0f; t <= max_rotation_time;
-       t = t + config_.control_time_step()) {
-    if (is_diff_drive_) {
-      // In-place rotation
-      search_commands_queue_.emplace(
-          std::array<double, 3>{0.0, 0.0, rotation_sign * omega_val});
-    } else {
-      // Angular velocity based on linear velocity and radius
-      double omega_ackermann =
-          rotation_sign * ctrl_limits_.velXParams.maxVel / search_radius;
-      // Non-holonomic circular motion
-      search_commands_queue_.emplace(std::array<double, 3>{
-          ctrl_limits_.velXParams.maxVel, 0.0, omega_ackermann});
-    }
-    if (enable_pause) {
-      // Add zero commands for search pause
-      for (int j = 0; j <= num_pause_steps; j++) {
-        search_commands_queue_.emplace(std::array<double, 3>{0.0, 0.0, 0.0});
-      }
-    }
-  }
-  return;
-}
-
-void VisionDWA::getFindTargetCmds(const int last_direction) {
-  // Generate new search commands if starting a new search or no commands are
-  // available
-  LOG_DEBUG("Generating new search commands in direction: ", last_direction);
-
-  search_commands_queue_ = std::queue<std::array<double, 3>>();
-  const float target_searchtimeout_part = config_.target_search_timeout() / 4;
-  // rotate pi
-  generateSearchCommands(last_direction * M_PI, config_.target_search_radius(),
-                         target_searchtimeout_part);
-  // go back
-  generateSearchCommands(-last_direction * M_PI, config_.target_search_radius(),
-                         target_searchtimeout_part);
-  // rotate -pi
-  generateSearchCommands(-last_direction * M_PI, config_.target_search_radius(),
-                         target_searchtimeout_part);
-  // go back
-  generateSearchCommands(last_direction * M_PI, config_.target_search_radius(),
-                         target_searchtimeout_part);
-}
 
 } // namespace Control
 } // namespace Kompass

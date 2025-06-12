@@ -133,7 +133,8 @@ void bindings_types(py::module_ &m) {
       .def_rw("size", &Bbox2D::size)
       .def_rw("timestamp", &Bbox2D::timestamp)
       .def_rw("label", &Bbox2D::label)
-      .def("set_vel", &Bbox2D::setVel);
+      .def("set_vel", &Bbox2D::setVel)
+      .def("set_img_size", &Bbox2D::setImgSize);
 
   py::class_<Bbox3D>(m_types, "Bbox3D")
       .def(py::init<>())

@@ -6,6 +6,7 @@ from ..utils.common import BaseAttrs, base_validators
 from ..models import Robot, RobotCtrlLimits, RobotType
 from kompass_cpp.control import RGBFollower, RGBFollowerParameters
 from kompass_cpp.types import Bbox2D
+import numpy as np
 
 
 @define
@@ -35,16 +36,24 @@ class VisionRGBFollowerConfig(BaseAttrs):
     target_search_radius: float = field(
         default=0.5, validator=base_validators.in_range(min_value=1e-4, max_value=1e4)
     )
-    rotation_multiple: float = field(
+    rotation_gain: float = field(
         default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1.0)
     )
-    speed_depth_multiple: float = field(
+    speed_gain: float = field(
         default=0.7, validator=base_validators.in_range(min_value=1e-9, max_value=10.0)
     )
     min_vel: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
     enable_search: bool = field(default=True)
+
+    camera_position_to_robot: np.ndarray = field(
+        default=np.array([0.0, 0.0, 0.0], dtype=np.float32)
+    )
+
+    camera_rotation_to_robot: np.ndarray = field(
+        default=np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+    )
 
     def to_kompass_cpp(self) -> RGBFollowerParameters:
         """
@@ -68,21 +77,22 @@ class VisionRGBFollower(ControllerTemplate):
         config_yaml_root_name: Optional[str] = None,
         **_,
     ):
-        config = config or VisionRGBFollowerConfig()
+        self._config = config or VisionRGBFollowerConfig()
 
         if config_file:
             config.from_yaml(config_file, config_yaml_root_name, get_common=False)
         self.__controller = RGBFollower(
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
-            config=config.to_kompass_cpp(),
+            config=self._config.to_kompass_cpp(),
         )
 
         self._found_ctrl = False
         logging.info("VISION TARGET FOLLOWING CONTROLLER IS READY")
 
-    def set_initial_tracking_2d_target(self, target_box: Bbox2D, **_):
+    def set_initial_tracking_2d_target(self, target_box: Bbox2D, **_) -> bool:
         self.__controller.reset_target(target_box)
+        return True
 
     def loop_step(
         self,
@@ -112,7 +122,7 @@ class VisionRGBFollower(ControllerTemplate):
         :return: Linear Velocity Control (m/s)
         :rtype: List[float]
         """
-        return [self._ctrl.vx] if self._found_ctrl else None
+        return self._ctrl.vx if self._found_ctrl else None
 
     @property
     def linear_y_control(self):
@@ -122,7 +132,7 @@ class VisionRGBFollower(ControllerTemplate):
         :return: Linear Velocity Control (m/s)
         :rtype: List[float]
         """
-        return [self._ctrl.vy] if self._found_ctrl else None
+        return self._ctrl.vy if self._found_ctrl else None
 
     @property
     def angular_control(self):
@@ -132,4 +142,4 @@ class VisionRGBFollower(ControllerTemplate):
         :return: Angular Velocity Control (rad/s)
         :rtype: List[float]
         """
-        return [self._ctrl.omega] if self._found_ctrl else None
+        return self._ctrl.omega if self._found_ctrl else None

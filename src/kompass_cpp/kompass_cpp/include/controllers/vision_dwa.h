@@ -20,7 +20,7 @@
 namespace Kompass {
 namespace Control {
 
-class VisionDWA : public DWA {
+class VisionDWA : public DWA, public RGBFollower {
 public:
   class VisionDWAConfig : public RGBFollower::RGBFollowerConfig {
   public:
@@ -28,6 +28,12 @@ public:
       addParameter(
           "prediction_horizon",
           Parameter(10, 1, 1000, "Number of steps for future prediction"));
+      addParameter(
+            "distance_tolerance",
+            Parameter(0.1, 1e-6, 1e3, "Distance tolerance value (m)"));
+      addParameter(
+              "angle_tolerance",
+              Parameter(0.1, 1e-6, M_PI, "Angle tolerance value (rad)"));
       addParameter(
           "target_orientation",
           Parameter(0.0, -M_PI, M_PI,
@@ -205,10 +211,6 @@ public:
                      const float yaw = 0.0);
 
 private:
-  ControlLimitsParams ctrl_limits_;
-  bool is_diff_drive_;
-  float recorded_search_time_ = 0.0, recorded_wait_time_ = 0.0;
-  std::queue<std::array<double, 3>> search_commands_queue_;
   VisionDWAConfig config_;
   std::unique_ptr<FeatureBasedBboxTracker> tracker_;
   std::unique_ptr<DepthDetector> detector_;
@@ -243,11 +245,6 @@ private:
    * @return Velocity2D
    */
   Velocity2D getPureTrackingCtrl(const float distance_erro, const float angle_error);
-
-  void generateSearchCommands(float total_rotation, float search_radius,
-                              float max_rotation_time,
-                              bool enable_pause = false);
-  void getFindTargetCmds(const int last_direction = 1);
 
   /**
    * @brief Get the Tracking Control Result based on object tracking and DWA

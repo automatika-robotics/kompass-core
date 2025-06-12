@@ -11,12 +11,12 @@
 namespace Kompass {
 namespace Control {
 
-class RGBFollower : public Controller {
+class RGBFollower {
 public:
 
-  class RGBFollowerConfig : public ControllerParameters {
+  class RGBFollowerConfig : public Parameters {
   public:
-    RGBFollowerConfig() : ControllerParameters() {
+    RGBFollowerConfig() {
       addParameter("control_time_step",
                    Parameter(0.1, 1e-4, 1e6, "Control time step (s)"));
       addParameter(
@@ -86,21 +86,22 @@ public:
 
   const Velocities getCtrl() const;
 
-private:
-  ControlType _ctrlType;
+protected:
+  bool is_diff_drive_;
   ControlLimitsParams ctrl_limits_;
-  RGBFollowerConfig config_;
-
-  bool rotate_in_place_;
-  Velocities out_vel_;
   double recorded_search_time_ = 0.0, recorded_wait_time_ = 0.0;
   std::queue<std::array<double, 3>> search_commands_queue_;
   std::array<double, 3> search_command_;
   std::unique_ptr<Bbox2D> last_tracking_ = nullptr;
 
   void generateSearchCommands(float total_rotation, float search_radius,
-                              float max_rotation_time, bool enable_pause = false);
+    float max_rotation_time, bool enable_pause = false);
   void getFindTargetCmds(const int last_direction = 1);
+
+private:
+  RGBFollowerConfig config_;
+  Velocities out_vel_;
+
   void trackTarget(const Bbox2D &tracking);
   //
 };

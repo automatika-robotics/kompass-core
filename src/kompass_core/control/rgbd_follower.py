@@ -46,14 +46,8 @@ class VisionRGBDFollowerConfig(DWAConfig):
     target_search_radius: float = field(
         default=0.5, validator=base_validators.in_range(min_value=1e-4, max_value=1e4)
     )
-    rotation_multiple: float = field(
+    rotation_gain: float = field(
         default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1.0)
-    )
-    speed_depth_multiple: float = field(
-        default=0.7, validator=base_validators.in_range(min_value=1e-9, max_value=10.0)
-    )
-    min_vel: float = field(
-        default=0.1, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
     enable_search: bool = field(default=True)
     distance_tolerance: float = field(
