@@ -4,8 +4,8 @@
 #include <nanobind/stl/string.h>
 #include <variant>
 
-#include "utils/logger.h"
 #include "utils/gpu_check.h"
+#include "utils/logger.h"
 
 namespace py = nanobind;
 
@@ -39,5 +39,6 @@ NB_MODULE(kompass_cpp, m) {
 
   m.def("set_log_level", &setLogLevel, "Set the log level");
   m.def("set_log_file", &setLogFile, "Set the log file");
-  m.def("get_available_accelerators", &getAvailableAccelerators, "Get available accelerators");
+  m.def("get_available_accelerators", &getAvailableAccelerators,
+        "Get available accelerators");
 }

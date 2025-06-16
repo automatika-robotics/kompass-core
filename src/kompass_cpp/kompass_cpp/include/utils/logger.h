@@ -8,7 +8,7 @@
 
 #ifdef GPU
 #include <sycl/sycl.hpp>
-#endif  //!GPU
+#endif //! GPU
 
 namespace Kompass {
 
@@ -136,6 +136,6 @@ inline void setLogFile(const std::string &filename) {
 #else
 #define KERNEL_DEBUG(...)
 #endif
-#endif  // !GPU
+#endif // !GPU
 
 } // namespace Kompass

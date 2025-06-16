@@ -23,8 +23,7 @@ public:
                       const std::vector<float> &robot_dimensions,
                       const Eigen::Vector3f &sensor_position_body,
                       const Eigen::Vector4f &sensor_rotation_body,
-                      const float critical_angle,
-                      const float critical_distance,
+                      const float critical_angle, const float critical_distance,
                       const float slowdown_distance);
 
   /**
@@ -41,10 +40,11 @@ public:
    * @param ranges    LaserScan ranges
    * @param angles    LaserScan angles
    * @param forward   True if the robot is moving forward, false otherwise
-   * @return    Slowdown factor (0.0 - 1.0) if in the slowdown zone, 0.0 if in the critical zone (stop), 1.0 otherwise
+   * @return    Slowdown factor (0.0 - 1.0) if in the slowdown zone, 0.0 if in
+   * the critical zone (stop), 1.0 otherwise
    */
   float check(const std::vector<double> &ranges,
-             const std::vector<double> &angles, const bool forward);
+              const std::vector<double> &angles, const bool forward);
 
 protected:
   double robotHeight_{1.0}, robotRadius_;
