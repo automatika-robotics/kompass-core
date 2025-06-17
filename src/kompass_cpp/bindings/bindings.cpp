@@ -1,8 +1,10 @@
 #include <Eigen/Dense>
 #include <nanobind/nanobind.h>
 #include <nanobind/operators.h>
+#include <nanobind/stl/string.h>
 #include <variant>
 
+#include "utils/gpu_check.h"
 #include "utils/logger.h"
 
 namespace py = nanobind;
@@ -34,6 +36,9 @@ NB_MODULE(kompass_cpp, m) {
       .value("WARNING", LogLevel::WARNING)
       .value("ERROR", LogLevel::ERROR)
       .export_values();
+
   m.def("set_log_level", &setLogLevel, "Set the log level");
   m.def("set_log_file", &setLogFile, "Set the log file");
+  m.def("get_available_accelerators", &getAvailableAccelerators,
+        "Get available accelerators");
 }

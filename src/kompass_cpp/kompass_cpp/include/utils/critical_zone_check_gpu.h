@@ -16,16 +16,18 @@ namespace Kompass {
 class CriticalZoneCheckerGPU : public CriticalZoneChecker {
 public:
   // Constructor
-  CriticalZoneCheckerGPU(
-      const CollisionChecker::ShapeType robot_shape_type,
-      const std::vector<float> &robot_dimensions,
-      const Eigen::Vector3f &sensor_position_body,
-      const Eigen::Vector4f &sensor_rotation_body, const float critical_angle,
-      const float critical_distance,
-      const float slowdown_distance, const std::vector<double> &angles)
+  CriticalZoneCheckerGPU(const CollisionChecker::ShapeType robot_shape_type,
+                         const std::vector<float> &robot_dimensions,
+                         const Eigen::Vector3f &sensor_position_body,
+                         const Eigen::Vector4f &sensor_rotation_body,
+                         const float critical_angle,
+                         const float critical_distance,
+                         const float slowdown_distance,
+                         const std::vector<double> &angles)
       : CriticalZoneChecker(robot_shape_type, robot_dimensions,
                             sensor_position_body, sensor_rotation_body,
-                            critical_angle, critical_distance, slowdown_distance),
+                            critical_angle, critical_distance,
+                            slowdown_distance),
         m_scanSize(angles.size()) {
     m_q = sycl::queue{sycl::default_selector_v,
                       sycl::property::queue::in_order{}};
@@ -86,7 +88,7 @@ public:
    * @param forward        If the robot is moving forward
    */
   float check(const std::vector<double> &ranges,
-             const std::vector<double> &angles, const bool forward);
+              const std::vector<double> &angles, const bool forward);
 
 private:
   const int m_scanSize;
