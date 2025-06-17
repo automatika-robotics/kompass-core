@@ -18,9 +18,6 @@ public:
     RGBFollowerConfig() {
       addParameter("control_time_step",
                    Parameter(0.1, 1e-4, 1e6, "Control time step (s)"));
-      addParameter(
-          "control_horizon",
-          Parameter(2, 1, 1000, "Number of steps for applying the control"));
       addParameter("tolerance", Parameter(0.1, 0.0, 1.0, "Tolerance value"));
       addParameter(
           "target_distance",
@@ -55,7 +52,6 @@ public:
     double search_pause() const {
       return getParameter<double>("target_search_pause");
     }
-    int control_horizon() const { return getParameter<int>("control_horizon"); }
     double tolerance() const { return getParameter<double>("tolerance"); }
     double target_distance() const {
       double val = getParameter<double>("target_distance");

@@ -4,6 +4,7 @@
 #include "utils/logger.h"
 #include <cmath>
 #include <memory>
+#include <algorithm>
 
 namespace Kompass {
 namespace Control {
@@ -13,10 +14,6 @@ RGBFollower::RGBFollower(const ControlType robotCtrlType,
                          const RGBFollowerConfig config) {
   ctrl_limits_ = robotCtrlLimits;
   config_ = config;
-  // Initialize time steps
-  int num_steps = config_.control_horizon();
-  // Initialize control vectors
-  out_vel_ = Velocities(num_steps);
   is_diff_drive_ = robotCtrlType == ControlType::DIFFERENTIAL_DRIVE;
 }
 
@@ -109,10 +106,6 @@ bool RGBFollower::run(const std::optional<Bbox2D> target) {
     recorded_search_time_ = 0.0;
     // Access the TrackingData object
     const auto &data = target.value();
-    // ensure size_xy or depth have valid values
-    if (last_tracking_ == nullptr) {
-      resetTarget(data);
-    }
     last_tracking_ = std::make_unique<Bbox2D>(data);
     // Track the target
     trackTarget(data);
@@ -165,69 +158,65 @@ void RGBFollower::trackTarget(const Bbox2D &target) {
   float distance_tolerance = config_.tolerance() * config_.target_distance();
 
   // Error to have the target in the center of the image (imgz_size / 2)
-  double error_y = (2.0 * target.getCenter().y() / target.img_size.y() - 1.0);
-  double error_x = (2.0 * target.getCenter().x() / target.img_size.x() - 1.0);
+  float error_y = 2.0f * (static_cast<float>(target.getCenter().y()) / static_cast<float>(target.img_size.y()) -  0.5f);
+  float error_x = 2.0f * (static_cast<float>(target.getCenter().x()) / static_cast<float>(target.img_size.x()) -  0.5f);
 
   LOG_DEBUG("Current size: ", current_dist,
             ", Reference size: ", config_.target_distance(),
             "size_error=", distance_error, ", tolerance=", distance_tolerance);
 
-  LOG_DEBUG("Img error x,y: ", error_x, ", ", error_y,
-            ", tolerance: ", config_.tolerance());
+  LOG_DEBUG("Img error x: ", error_x,
+            ", center_x: ", static_cast<float>(target.getCenter().x()), ", img_size_x: ", static_cast<float>(target.img_size.x()));
+  LOG_DEBUG("Img error y: ", error_y,
+  ", center_y: ", static_cast<float>(target.getCenter().y()), ", img_size_y: ", static_cast<float>(target.img_size.y()));
 
-  // Initialize control vectors
-  std::fill(out_vel_.vx.begin(), out_vel_.vx.end(), 0.0);
-  std::fill(out_vel_.vy.begin(), out_vel_.vy.end(), 0.0);
-  std::fill(out_vel_.omega.begin(), out_vel_.omega.end(), 0.0);
-
-  double simulated_depth = current_dist;
-  double simulated_error_x = error_x;
-  double dist_speed, omega, v;
-  for (size_t i = 0; i < out_vel_._length; ++i) {
-    // If all errors are within limits -> break
-    if (std::abs(distance_error) < distance_tolerance &&
-        std::abs(error_y) < config_.tolerance() &&
-        std::abs(error_x) < config_.tolerance()) {
-      break;
-    }
-
-    dist_speed = std::abs(distance_error) > distance_tolerance
-                     ? distance_error * ctrl_limits_.velXParams.maxVel
-                     : 0.0;
-
-    // X center error : (2.0 * tracking.center_xy[0] / tracking.img_width - 1.0)
-    // in [-1, 1] Omega in [-alpha * omega_max, alpha * omega_max]
-    omega = -config_.K_omega() * error_x * ctrl_limits_.omegaParams.maxOmega;
-
-    // Y center error : (2.0 * tracking.center_xy[1] / tracking.img_height
-    // - 1.0) in [-1, 1] V in [-speed_max, speed_max]
-    v = config_.K_v() * dist_speed;
-
-    // Limit by the minimum allowed velocity to avoid sending meaningless low
-    // commands to the robot
-    omega = std::abs(omega) >= config_.min_vel() ? omega : 0.0;
-    v = std::abs(v) >= config_.min_vel() ? v : 0.0;
-
-    simulated_depth += -v * config_.control_time_step();
-    simulated_error_x += -omega * config_.control_time_step();
-
-    // Update distance error
-    distance_error = config_.target_distance() - simulated_depth;
-    error_x = simulated_error_x;
-
-    if (is_diff_drive_ and std::abs(v) >= config_.min_vel() and
-        std::abs(omega) >= config_.min_vel()) {
-      // Rotate then move
-      out_vel_.set(i, omega, 0.0, 0.0);
-      // Set vx_ctrl[i+1] to max(v, 0.0)
-      if (i + 1 < out_vel_._length) {
-        i++;
-        out_vel_.set(i, v, 0.0, 0.0);
-      }
-    } else {
-      out_vel_.set(i, v, 0.0, omega);
-    }
+  float dist_speed, omega, v;
+  // If all errors are within limits -> break
+  if (std::abs(distance_error) < distance_tolerance &&
+      std::abs(error_y) < config_.tolerance() &&
+      std::abs(error_x) < config_.tolerance()) {
+    // Set command to zero
+    out_vel_ = Velocities(1);
+    out_vel_.set(0, 0.0, 0.0, 0.0);
+    return;
   }
+
+  dist_speed = std::abs(distance_error) > distance_tolerance
+                    ? (distance_error / config_.target_distance()) * ctrl_limits_.velXParams.maxVel
+                    : 0.0;
+
+  // X center error : (2.0 * tracking.center_xy[0] / tracking.img_width - 1.0)
+  // in [-1, 1] Omega in [-K_omega * omega_max, K_omega * omega_max]
+  omega = -config_.K_omega() * error_x * ctrl_limits_.omegaParams.maxOmega;
+
+  // Y center error : (2.0 * tracking.center_xy[1] / tracking.img_height
+  // - 1.0) in [-1, 1] V in [-K_v * speed_max, K_v * speed_max]
+  v = config_.K_v() * dist_speed;
+
+  // Limit by the minimum allowed velocity to avoid sending meaningless low
+  // commands to the robot
+  omega = std::abs(omega) >= config_.min_vel() ? omega : 0.0;
+  float omega_limit = static_cast<float>(ctrl_limits_.omegaParams.maxOmega);
+  omega = std::clamp(omega, -omega_limit, omega_limit);
+
+  float v_limit = static_cast<float>(ctrl_limits_.velXParams.maxVel);
+  v = std::abs(v) >= config_.min_vel() ? v : 0.0;
+  v = std::clamp(v, -v_limit, v_limit);
+
+  LOG_DEBUG("dist_error ", distance_error, ", error_x: ", error_x);
+  LOG_DEBUG("v=", v, ", omega= ", omega);
+
+  if (is_diff_drive_ and std::abs(v) >= config_.min_vel() and
+      std::abs(omega) >= config_.min_vel()) {
+    // Rotate then move
+    out_vel_ = Velocities(2);
+    out_vel_.set(0, 0.0, 0.0, omega);
+    out_vel_.set(1, v, 0.0, 0.0);
+  } else {
+    out_vel_ = Velocities(1);
+    out_vel_.set(0, v, 0.0, omega);
+  }
+
   return;
 }
 

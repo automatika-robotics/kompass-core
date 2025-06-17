@@ -26,6 +26,9 @@ public:
   public:
     VisionDWAConfig() : RGBFollower::RGBFollowerConfig() {
       addParameter(
+        "control_horizon",
+        Parameter(2, 1, 1000, "Number of steps for applying the control"));
+      addParameter(
           "prediction_horizon",
           Parameter(10, 1, 1000, "Number of steps for future prediction"));
       addParameter("distance_tolerance",
@@ -57,6 +60,7 @@ public:
           "max_depth",
           Parameter(1e3, 1e-3, 1e9, "Range of interest minimum depth value"));
     }
+    int control_horizon() const { return getParameter<int>("control_horizon"); }
     bool enable_vel_tracking() const {
       return not getParameter<bool>("use_local_coordinates");
     }
