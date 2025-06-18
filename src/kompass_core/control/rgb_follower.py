@@ -74,13 +74,26 @@ class VisionRGBFollower(ControllerTemplate):
         ctrl_limits: RobotCtrlLimits,
         config: Optional[VisionRGBFollowerConfig] = None,
         config_file: Optional[str] = None,
-        config_yaml_root_name: Optional[str] = None,
+        config_root_name: Optional[str] = None,
         **_,
     ):
+        """Init Vision RGB (Image) Follower Controller
+
+        :param robot: Robot object to be controlled
+        :type robot: Robot
+        :param ctrl_limits: Robot control limits
+        :type ctrl_limits: RobotCtrlLimits
+        :param config: Controller configuration, defaults to None
+        :type config: Optional[VisionRGBDFollowerConfig], optional
+        :param config_file: Path to config file (yaml, json, toml), defaults to None
+        :type config_file: Optional[str], optional
+        :param config_root_name: Root name for the controller config in the file, defaults to None
+        :type config_root_name: Optional[str], optional
+        """
         self._config = config or VisionRGBFollowerConfig()
 
         if config_file:
-            config.from_yaml(config_file, config_yaml_root_name, get_common=False)
+            config.from_file(config_file, config_root_name, get_common=False)
         self.__controller = RGBFollower(
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
             control_limits=ctrl_limits.to_kompass_cpp_lib(),

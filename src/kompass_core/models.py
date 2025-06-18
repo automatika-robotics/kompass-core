@@ -175,14 +175,14 @@ class MotionModel2D:
         )
         return output_state
 
-    def set_params_from_yaml(self, path_to_file: str) -> None:
+    def set_params_from_file(self, path_to_file: str) -> None:
         """
-        Sets the robot testing parameters values from a given yaml file under 'robot'
+        Sets the robot testing parameters values from a given config file under 'robot'
 
-        :param path_to_file: Path to YAML file
+        :param path_to_file: Path to file (yaml, json, toml)
         :type path_to_file: str
         """
-        self.params.from_yaml(path_to_file)
+        self.params.from_file(path_to_file)
 
     def set_linear_x_params(self, params: List[float]) -> None:
         """

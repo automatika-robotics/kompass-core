@@ -121,12 +121,12 @@ class DeformableVirtualZone:
         self.zone_shift_y_diff: float = 0.0
 
     def set_from_yaml(self, path_to_file: str) -> None:
-        """Setup the DVZ controller params from YAML.
+        """Setup the DVZ controller params from file.
 
         :param path_to_file:
         :type path_to_file: str
         """
-        self.config.from_yaml(path_to_file, nested_root_name="DVZ")
+        self.config.from_file(path_to_file, nested_root_name="DVZ")
         self._set_control_regularization()
 
     def _set_control_regularization(self) -> None:

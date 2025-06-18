@@ -49,11 +49,11 @@ class FCL:
 
         self.got_map = False
 
-    def configure(self, yaml_file: str, root_name: Optional[str] = None):
+    def configure(self, config_file: str, root_name: Optional[str] = None):
         """
-        Load configuration from yaml
+        Load configuration from file
 
-        :param yaml_file: Path to config file (.yaml)
+        :param yaml_file: Path to config file (yaml, json, toml)
         :type yaml_file: str
         :param root_name: Parent root name of the config in the file 'Parent.fcl' - config must be under 'fcl', defaults to None
         :type root_name: str | None, optional
@@ -62,7 +62,7 @@ class FCL:
             nested_root_name = root_name + ".fcl"
         else:
             nested_root_name = "fcl"
-        self._config.from_yaml(yaml_file, nested_root_name)
+        self._config.from_file(config_file, nested_root_name)
         self._setup_from_config()
 
     def update_state(self, robot_state: RobotState):

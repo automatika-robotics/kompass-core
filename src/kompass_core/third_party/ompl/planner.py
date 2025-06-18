@@ -144,15 +144,15 @@ class OMPLGeometric:
 
     def configure(
         self,
-        yaml_file: str,
+        config_file: str,
         root_name: Optional[str] = None,
         planner_id: Optional[str] = None,
     ):
         """
-        Load config from a yaml file
+        Load config from a configuration file
 
-        :param yaml_file: Path to .yaml fila
-        :type yaml_file: str
+        :param config_file: Path to file (yaml, json, toml)
+        :type config_file: str
         :param root_name: Parent root name of the config in the file 'Parent.ompl' - config must be under 'ompl', defaults to None
         :type root_name: str | None, optional
         """
@@ -160,7 +160,7 @@ class OMPLGeometric:
             nested_root_name = root_name + ".ompl"
         else:
             nested_root_name = "ompl"
-        self._config.from_yaml(yaml_file, nested_root_name=nested_root_name)
+        self._config.from_file(config_file, nested_root_name=nested_root_name)
 
         # Set LOG level
         ompl.util.setLogLevel(
@@ -182,7 +182,7 @@ class OMPLGeometric:
         planner_config = self.available_planners[planner_id]
         planner_params = create_config_class(name=planner_name, conf=planner_config)()
 
-        planner_params.from_yaml(yaml_file, nested_root_name + "." + planner_name)
+        planner_params.from_file(config_file, nested_root_name + "." + planner_name)
 
         self.set_planner(planner_params, planner_id)
 

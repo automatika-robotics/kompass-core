@@ -110,17 +110,24 @@ class Stanley(FollowerTemplate):
         ctrl_limits: RobotCtrlLimits,
         config: Optional[StanleyConfig] = None,
         config_file: Optional[str] = None,
-        config_yaml_root_name: Optional[str] = None,
+        config_root_name: Optional[str] = None,
         generate_reference: bool = False,
         **_,
     ):
-        """
-        Setup the controller
+        """_summary_
 
-        :param robot: Robot using the controller
+        :param robot: Robot object to be controlled
         :type robot: Robot
-        :param params_file: Yaml file containing the parameters of the controller under 'dvz_controller'
-        :type params_file: str
+        :param ctrl_limits: Robot control limits
+        :type ctrl_limits: RobotCtrlLimits
+        :param config: Controller configuration, defaults to None
+        :type config: Optional[VisionRGBDFollowerConfig], optional
+        :param config_file: Path to config file (yaml, json, toml), defaults to None
+        :type config_file: Optional[str], optional
+        :param config_root_name: Root name for the controller config in the file, defaults to None
+        :type config_root_name: Optional[str], optional
+        :param generate_reference: Use to generate reference commands, defaults to False
+        :type generate_reference: bool, optional
         """
         self.__generate_reference = generate_reference
         self._robot = robot
@@ -130,8 +137,8 @@ class Stanley(FollowerTemplate):
             config = StanleyConfig(wheel_base=robot.wheelbase)
 
         if config_file:
-            config.from_yaml(
-                file_path=config_file, nested_root_name=config_yaml_root_name
+            config.from_file(
+                file_path=config_file, nested_root_name=config_root_name
             )
 
         self._config = config

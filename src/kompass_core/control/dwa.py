@@ -194,17 +194,24 @@ class DWA(FollowerTemplate):
         ctrl_limits: RobotCtrlLimits,
         config: Optional[DWAConfig] = None,
         config_file: Optional[str] = None,
-        config_yaml_root_name: Optional[str] = None,
+        config_root_name: Optional[str] = None,
         control_time_step: Optional[float] = None,
         **_,
     ):
-        """
-        Setup the controller
+        """Init DWA (Dynamic Window Approach) Controller
 
-        :param robot: Robot using the controller
+        :param robot: Robot object to be controlled
         :type robot: Robot
-        :param params_file: Yaml file containing the parameters of the controller under 'dvz_controller'
-        :type params_file: str
+        :param ctrl_limits: Robot control limits
+        :type ctrl_limits: RobotCtrlLimits
+        :param config: Controller configuration, defaults to None
+        :type config: Optional[VisionRGBDFollowerConfig], optional
+        :param config_file: Path to config file (yaml, json, toml), defaults to None
+        :type config_file: Optional[str], optional
+        :param config_root_name: Root name for the controller config in the file, defaults to None
+        :type config_root_name: Optional[str], optional
+        :param control_time_step: Control time step (sec), defaults to None
+        :type control_time_step: Optional[float], optional
         """
         # Init and configure the planner
         if not config:
@@ -212,8 +219,8 @@ class DWA(FollowerTemplate):
             config = DWAConfig()
 
         if config_file:
-            config.from_yaml(
-                file_path=config_file, nested_root_name=config_yaml_root_name
+            config.from_file(
+                file_path=config_file, nested_root_name=config_root_name
             )
 
         if control_time_step:
