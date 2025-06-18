@@ -18,7 +18,7 @@ class VisionRGBFollowerConfig(BaseAttrs):
         default=2, validator=base_validators.in_range(min_value=1, max_value=1000)
     )
     buffer_size: int = field(
-        default=3, validator=base_validators.in_range(min_value=1, max_value=10)
+        default=1, validator=base_validators.in_range(min_value=1, max_value=10)
     )
     tolerance: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-6, max_value=1.0)

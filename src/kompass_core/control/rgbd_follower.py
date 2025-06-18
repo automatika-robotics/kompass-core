@@ -33,6 +33,9 @@ class VisionRGBDFollowerConfig(DWAConfig):
     prediction_horizon: int = field(
         default=10, validator=base_validators.in_range(min_value=1, max_value=1000)
     )
+    buffer_size: int = field(
+        default=1, validator=base_validators.in_range(min_value=1, max_value=10)
+    )
     target_distance: Optional[float] = field(default=None)
     target_wait_timeout: float = field(
         default=30.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
