@@ -16,6 +16,12 @@ Kompass Core is a high-performance, GPU-accelerated library for motion planning,
 This package is developed to be used with [Kompass](https://github.com/automatika-robotics/kompass) for creating navigation stacks in [ROS2](https://docs.ros.org/en/rolling/index.html). For detailed usage documentation, check Kompass [docs](https://automatika-robotics.github.io/kompass/).
 
 
+- [**Install**](#installation) Kompass Core 🛠️
+- Check the [**Package Overview**](#-package-overview)
+- [**Copyright**](#copyright) and [**Contributions**](#contributions)
+- To use Kompass Core on your robot with ROS2, check the [**Kompass**](https://automatika-robotics.github.io/kompass) framework 🚀
+
+
 # Installation
 
 ## Install with GPU Support (Recommended)
@@ -95,7 +101,7 @@ This repository consists the following modules:
 
 
 
-## `kompass_core` Package Overview
+## `kompass_core` Overview
 
 - `kompass_core.calibration` - Modules for robot motion model calibration, fitting and robot simulation.
 
