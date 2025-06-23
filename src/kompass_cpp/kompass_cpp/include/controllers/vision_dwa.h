@@ -218,6 +218,10 @@ public:
   setInitialTracking(const Eigen::MatrixX<unsigned short> &aligned_depth_image,
                      const Bbox2D &target_box_2d, const float yaw = 0.0);
 
+  Eigen::Vector2f getErrors() const {
+      return Eigen::Vector2f(dist_error_, orientation_error_);
+    }
+
 private:
   VisionDWAConfig config_;
   std::unique_ptr<FeatureBasedBboxTracker> tracker_;
@@ -243,17 +247,7 @@ private:
    * @param tracking_pose
    * @return Velocity2D
    */
-  Velocity2D getPureTrackingCtrl(const TrackedPose2D &tracking_pose);
-
-  /**
-   * @brief Get the Pure Tracking Ctrl object
-   *
-   * @param distance_erro
-   * @param angle_error
-   * @return Velocity2D
-   */
-  Velocity2D getPureTrackingCtrl(const float distance_erro,
-                                 const float angle_error);
+  Velocity2D getPureTrackingCtrl(const TrackedPose2D &tracking_pose, const bool update_global_error = false);
 
   /**
    * @brief Get the Tracking Control Result based on object tracking and DWA

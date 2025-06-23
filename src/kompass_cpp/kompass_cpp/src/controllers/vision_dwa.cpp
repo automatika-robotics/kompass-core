@@ -57,7 +57,7 @@ void VisionDWA::setCameraIntrinsics(const float focal_length_x,
       config_.depth_conversion_factor());
 }
 
-Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
+Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose, const bool update_global_error) {
   float distance, psi, gamma = 0.0f;
   if (track_velocity_) {
     distance = tracking_pose.distance(currentState.x, currentState.y, 0.0) -
@@ -77,6 +77,12 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose) {
   float distance_error = config_.target_distance() - distance;
   float angle_error = Angle::normalizeToMinusPiPlusPi(
       config_.target_orientation() - gamma - psi);
+
+  // Update error is enabled (to avoid update for simulated states)
+  if (update_global_error) {
+    dist_error_ = distance_error;
+    orientation_error_ = angle_error;
+  }
 
   Velocity2D followingVel;
   if (abs(distance_error) > config_.dist_tolerance() or
@@ -183,7 +189,9 @@ VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose) {
     ref_traj.path.add(step,
                       Path::Point(simulated_state.x, simulated_state.y, 0.0));
     this->setCurrentState(simulated_state);
-    cmd = this->getPureTrackingCtrl(simulated_track);
+    // Get the pure tracking control command
+    // If step == 0, update the global error to have the errors for the initial state
+    cmd = this->getPureTrackingCtrl(simulated_track, (step == 0));
     simulated_state.update(cmd, config_.control_time_step());
     if (track_velocity_) {
       simulated_track.update(config_.control_time_step());

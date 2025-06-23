@@ -216,9 +216,10 @@ class VisionRGBDFollower(ControllerTemplate):
         :type detected_boxes: List[Bbox3D]
         """
         try:
-            self._planner.set_current_state(
-                current_state.x, current_state.y, current_state.yaw, current_state.speed
-            )
+            if current_state:
+                self._planner.set_current_state(
+                    current_state.x, current_state.y, current_state.yaw, current_state.speed
+                )
             return self._planner.set_initial_tracking(
                 aligned_depth_image,
                 target_box,
@@ -228,6 +229,14 @@ class VisionRGBDFollower(ControllerTemplate):
         except Exception as e:
             logging.error(f"Could not set initial tracking state: {e}")
             return False
+
+    @property
+    def dist_error(self) -> float:
+        return self._planner.get_errors()[0]
+
+    @property
+    def orientation_error(self) -> float:
+        return self._planner.get_errors()[1]
 
     def set_initial_tracking_image(
         self,

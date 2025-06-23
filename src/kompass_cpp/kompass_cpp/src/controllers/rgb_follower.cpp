@@ -153,7 +153,7 @@ void RGBFollower::trackTarget(const Bbox2D &target) {
       static_cast<float>(target.size.x() * target.size.y()) /
       static_cast<float>(target.img_size.x() * target.img_size.y());
 
-  float distance_error = config_.target_distance() - current_dist;
+  dist_error_ = config_.target_distance() - current_dist;
 
   float distance_tolerance = config_.tolerance() * config_.target_distance();
 
@@ -161,9 +161,11 @@ void RGBFollower::trackTarget(const Bbox2D &target) {
   float error_y = 2.0f * (static_cast<float>(target.getCenter().y()) / static_cast<float>(target.img_size.y()) -  0.5f);
   float error_x = 2.0f * (static_cast<float>(target.getCenter().x()) / static_cast<float>(target.img_size.x()) -  0.5f);
 
+  orientation_error_ = error_x;
+
   LOG_DEBUG("Current size: ", current_dist,
             ", Reference size: ", config_.target_distance(),
-            "size_error=", distance_error, ", tolerance=", distance_tolerance);
+            "size_error=", dist_error_, ", tolerance=", distance_tolerance);
 
   LOG_DEBUG("Img error x: ", error_x,
             ", center_x: ", static_cast<float>(target.getCenter().x()), ", img_size_x: ", static_cast<float>(target.img_size.x()));
@@ -172,7 +174,7 @@ void RGBFollower::trackTarget(const Bbox2D &target) {
 
   float dist_speed, omega, v;
   // If all errors are within limits -> break
-  if (std::abs(distance_error) < distance_tolerance &&
+  if (std::abs(dist_error_) < distance_tolerance &&
       std::abs(error_y) < config_.tolerance() &&
       std::abs(error_x) < config_.tolerance()) {
     // Set command to zero
@@ -181,8 +183,8 @@ void RGBFollower::trackTarget(const Bbox2D &target) {
     return;
   }
 
-  dist_speed = std::abs(distance_error) > distance_tolerance
-                    ? (distance_error / config_.target_distance()) * ctrl_limits_.velXParams.maxVel
+  dist_speed = std::abs(dist_error_) > distance_tolerance
+                    ? (dist_error_ / config_.target_distance()) * ctrl_limits_.velXParams.maxVel
                     : 0.0;
 
   // X center error : (2.0 * tracking.center_xy[0] / tracking.img_width - 1.0)
@@ -203,7 +205,7 @@ void RGBFollower::trackTarget(const Bbox2D &target) {
   v = std::abs(v) >= config_.min_vel() ? v : 0.0;
   v = std::clamp(v, -v_limit, v_limit);
 
-  LOG_DEBUG("dist_error ", distance_error, ", error_x: ", error_x);
+  LOG_DEBUG("dist_error ", dist_error_, ", error_x: ", error_x);
   LOG_DEBUG("v=", v, ", omega= ", omega);
 
   if (is_diff_drive_ and std::abs(v) >= config_.min_vel() and

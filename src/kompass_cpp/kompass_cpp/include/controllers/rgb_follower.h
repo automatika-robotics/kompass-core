@@ -78,6 +78,10 @@ public:
 
   const Velocities getCtrl() const;
 
+  Eigen::Vector2f getErrors() const {
+    return Eigen::Vector2f(dist_error_, orientation_error_);
+  }
+
 protected:
   bool is_diff_drive_;
   ControlLimitsParams ctrl_limits_;
@@ -85,6 +89,7 @@ protected:
   std::queue<std::array<double, 3>> search_commands_queue_;
   std::array<double, 3> search_command_;
   std::unique_ptr<Bbox2D> last_tracking_ = nullptr;
+  float dist_error_ = 0.0f, orientation_error_ = 0.0f;
 
   void generateSearchCommands(float total_rotation, float search_radius,
                               float max_rotation_time,

@@ -231,6 +231,7 @@ void bindings_control(py::module_ &m) {
            py::arg("config"))
       .def("reset_target", &Control::RGBFollower::resetTarget)
       .def("get_ctrl", &Control::RGBFollower::getCtrl)
+      .def("get_errors", &Control::RGBFollower::getErrors)
       .def("run", &Control::RGBFollower::run,
            py::arg("detection") = py::none());
 
@@ -281,6 +282,7 @@ void bindings_control(py::module_ &m) {
                &Control::VisionDWA::setInitialTracking),
            py::arg("aligned_depth_image"), py::arg("target_box_2d"),
            py::arg("robot_orientation") = 0.0)
+      .def("get_errors", &Control::VisionDWA::getErrors)
       .def("get_tracking_ctrl",
            py::overload_cast<const Eigen::MatrixX<unsigned short> &,
                              const std::vector<Bbox2D> &,

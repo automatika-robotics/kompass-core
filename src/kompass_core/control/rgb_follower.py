@@ -107,6 +107,14 @@ class VisionRGBFollower(ControllerTemplate):
         self.__controller.reset_target(target_box)
         return True
 
+    @property
+    def dist_error(self) -> float:
+        return self._planner.get_errors()[0]
+
+    @property
+    def orientation_error(self) -> float:
+        return self._planner.get_errors()[1]
+
     def loop_step(
         self,
         *,
