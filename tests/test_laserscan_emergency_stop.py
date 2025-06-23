@@ -3,7 +3,6 @@ import json
 import numpy as np
 import logging
 import pytest
-import matplotlib.pyplot as plt
 from kompass_core.datatypes import LaserScanData
 from kompass_core.utils.geometry import get_laserscan_transformed_polar_coordinates
 from kompass_core.utils.emergency_stop import EmergencyChecker
@@ -59,20 +58,25 @@ def test_laserscan_polar_tf(laser_scan_data: LaserScanData, plot: bool = False):
         translation=translation,
         rotation=rotation,
     )
-
     if plot:
-        fig, ax = plt.subplots(subplot_kw={"projection": "polar"})
-        ax.plot(
-            laser_scan_data.angles, laser_scan_data.ranges, label="Original LaserScan"
-        )
-        ax.plot(
-            transformed_scan.angles,
-            transformed_scan.ranges,
-            label="Transformed LaserScan",
-        )
-        fig.legend()
-        dir_name = os.path.dirname(os.path.abspath(__file__))
-        plt.savefig(os.path.join(dir_name, "laserscan_tf_test.png"))
+        try:
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(subplot_kw={"projection": "polar"})
+            ax.plot(
+                laser_scan_data.angles, laser_scan_data.ranges, label="Original LaserScan"
+            )
+            ax.plot(
+                transformed_scan.angles,
+                transformed_scan.ranges,
+                label="Transformed LaserScan",
+            )
+            fig.legend()
+            dir_name = os.path.dirname(os.path.abspath(__file__))
+            plt.savefig(os.path.join(dir_name, "laserscan_tf_test.png"))
+        except ImportError:
+            logging.warning(
+                "Matplotlib is required for visualization. Figures will not be generated. To generate test figures, install it using 'pip install matplotlib'."
+            )
 
     old_range = laser_scan_data.ranges[
         laser_scan_data.angles == laser_scan_data.angle_min
@@ -107,7 +111,17 @@ def test_laserscan_partial_data(laser_scan_data: LaserScanData, plot: bool = Fal
         right_angle=right_angle, left_angle=left_angle
     )
 
+    assert len(partial_angles) <= laser_scan_data.angles.size
+    assert len(partial_ranges) <= laser_scan_data.ranges.size
+
     if plot:
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            logging.warning(
+                "Matplotlib is required for visualization. Figures will not be generated. To generate test figures, install it using 'pip install matplotlib'."
+            )
+            return
         fig, ax = plt.subplots(subplot_kw={"projection": "polar"})
         ax.plot(
             laser_scan_data.angles, laser_scan_data.ranges, label="Original LaserScan"
@@ -116,9 +130,6 @@ def test_laserscan_partial_data(laser_scan_data: LaserScanData, plot: bool = Fal
         fig.legend()
         dir_name = os.path.dirname(os.path.abspath(__file__))
         plt.savefig(os.path.join(dir_name, "laserscan_partial_test.png"))
-
-    assert len(partial_angles) <= laser_scan_data.angles.size
-    assert len(partial_ranges) <= laser_scan_data.ranges.size
 
 
 @pytest.mark.parametrize("use_gpu", [False, True])

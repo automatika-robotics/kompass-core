@@ -4,7 +4,6 @@ import os
 import cv2
 from typing import Union, List
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from attrs import define, field, Factory
@@ -92,6 +91,13 @@ def plot_path(
     figure_tag: str,
 ):
     """Plot Test Results"""
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        logger.warning(
+            "Matplotlib is required for visualization. Figures will not be generated. To generate test figures, install it using 'pip install matplotlib'."
+        )
+        return
     # Extract x and y coordinates from the Path message
     x_coords = [pose.pose.position.x for pose in path.poses]
     y_coords = [pose.pose.position.y for pose in path.poses]
@@ -287,6 +293,13 @@ def test_path_interpolation(plot: bool = False):
         x_inter_cub = cubic_spline_interpolation.x()
         y_inter_cub = cubic_spline_interpolation.y()
 
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            logger.warning(
+                "Matplotlib is required for visualization. Figures will not be generated. To generate test figures, install it using 'pip install matplotlib'."
+            )
+            return
         # Plot the path
         plt.figure()
         plt.plot(
@@ -620,6 +633,14 @@ def test_dwa_debug():
 
     dwa.planner.debug_velocity_search(current_velocity, sensor_data, False)
     (paths_x, paths_y) = dwa.planner.get_debugging_samples()
+
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        logger.warning(
+            "Matplotlib is required for visualization. Figures will not be generated. To generate test figures, install it using 'pip install matplotlib'."
+        )
+        return
     _, ax = plt.subplots()
     # Add the two laserscan obstacles
     obstacle_1 = plt.Circle((-0.117319, 0), 0.1, color="black", label="obstacle")

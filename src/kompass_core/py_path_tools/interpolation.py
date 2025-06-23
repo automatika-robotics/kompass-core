@@ -5,11 +5,17 @@ from typing import List, Optional, Tuple
 from ..utils import geometry as GeometryUtils
 import numpy as np
 from ..datatypes.path import InterpolationPoint, Point2D, Range2D, TrackedPoint
-from scipy.interpolate import CubicSpline
 
 
 class Spline:
     def __init__(self):
+        try:
+            from scipy.interpolate import CubicSpline
+        except ImportError as e:
+            raise ImportError(
+                "CubicSpline from scipy is required for spline interpolation. "
+                "Please install it using 'pip install scipy'."
+            ) from e
         self.x_points: np.ndarray = np.array([])
         self.y_points: np.ndarray = np.array([])
         self.func: Optional[CubicSpline] = None
@@ -23,6 +29,13 @@ class Spline:
         :param y_points: Y coordinates of the spline points
         :type y_points: np.ndarray
         """
+        try:
+            from scipy.interpolate import CubicSpline
+        except ImportError as e:
+            raise ImportError(
+                "CubicSpline from scipy is required for spline interpolation. "
+                "Please install it using 'pip install scipy'."
+            ) from e
         # arrange x points in increasing order
         sorted_indices = np.argsort(x_points)
         self.x_points = np.array(x_points[sorted_indices])

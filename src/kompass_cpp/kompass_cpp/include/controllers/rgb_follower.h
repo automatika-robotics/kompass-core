@@ -1,6 +1,5 @@
 #pragma once
 
-#include "controller.h"
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
 #include "datatypes/tracking.h"

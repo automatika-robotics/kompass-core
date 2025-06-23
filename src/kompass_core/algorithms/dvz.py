@@ -3,10 +3,8 @@ from typing import Any
 
 from ..utils.common import base_validators, BaseAttrs
 from ..utils.geometry import convert_to_0_2pi, convert_to_plus_minus_pi
-import matplotlib.pyplot as plt
 import numpy as np
 from attrs import define, field
-from matplotlib.patches import Ellipse, Polygon
 
 from ..models import Robot, RobotState, RobotCtrlLimits
 
@@ -512,6 +510,13 @@ class DeformableVirtualZone:
         :param display_now: Display the figure, defaults to False
         :type display_now: bool, optional
         """
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.patches import Ellipse, Polygon
+        except ImportError as e:
+            raise ImportError(
+                "Matplotlib is required for visualization. Please install it using 'pip install matplotlib'."
+            ) from e
         # Create new figure if none is given
         if not fig_ax:
             fig_ax = plt.gca()

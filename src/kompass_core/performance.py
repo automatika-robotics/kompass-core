@@ -1,8 +1,6 @@
 from typing import Any, List
 
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from .datatypes.obstacles import ObstaclesData
 from .datatypes.path import (
     PathPoint,
@@ -44,6 +42,12 @@ class MotionResult:
         :param figure_title: Title of the generated figure, defaults to 'Figure 0'
         :type figure_title: str, optional
         """
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError as e:
+            raise ImportError(
+                "Matplotlib is required for visualization. Please install it using 'pip install matplotlib'."
+            ) from e
         _fig_margin = 0.5
 
         fig, [ax0, ax1, ax2, ax3] = plt.subplots(nrows=4, ncols=1, figsize=(8, 8))
@@ -130,6 +134,12 @@ class TestBase(RobotSim):
 
 class TestAvgResults:
     def __init__(self) -> None:
+        try:
+            import pandas as pd
+        except ImportError as e:
+            raise ImportError(
+                "Pandas is required for data handling. Please install it using 'pip install pandas'."
+            ) from e
         columns = [
             "test_id",
             "test_type",
