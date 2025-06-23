@@ -24,6 +24,35 @@ from .dwa import DWAConfig
 
 @define
 class VisionRGBDFollowerConfig(DWAConfig):
+    """
+    Configuration class for a vision-based RGB-D target follower using Dynamic Window Approach (DWA) planning.
+
+    Attributes:
+        control_time_step (float): Time interval between control updates (s).
+        control_horizon (int): Number of steps in the control horizon.
+        prediction_horizon (int): Number of steps in the prediction horizon.
+        buffer_size (int): Size of the trajectory buffer.
+        target_distance (Optional[float]): Desired distance to maintain from the target (m).
+        target_wait_timeout (float): Time to wait for the target to reappear before giving up (s).
+        target_search_timeout (float): Time limit for the search process if the target is lost (s).
+        target_search_pause (float): Pause between successive search attempts (s).
+        target_search_radius (float): Radius within which to search for the lost target (m).
+        rotation_gain (float): Gain applied to rotational control (unitless).
+        speed_gain (float): Gain applied to speed control (unitless).
+        enable_search (bool): Enables or disables the target search behavior.
+        distance_tolerance (float): Acceptable deviation in target distance (m).
+        angle_tolerance (float): Acceptable deviation in target bearing (rad).
+        target_orientation (float): Desired orientation relative to the target (rad).
+        use_local_coordinates (bool): Whether to use robot-local coordinates for tracking.
+        error_pose (float): Estimated error in pose measurements (m).
+        error_vel (float): Estimated error in velocity measurements (m/s).
+        error_acc (float): Estimated error in acceleration measurements (m/s²).
+        depth_conversion_factor (float): Factor to convert raw depth image values to meters.
+        min_depth (float): Minimum depth value considered valid (m).
+        max_depth (float): Maximum depth value considered valid (m).
+        camera_position_to_robot (np.ndarray): 3D translation vector from the camera frame to the robot base (m).
+        camera_rotation_to_robot (np.ndarray): Quaternion representing camera-to-robot rotation.
+    """
     control_time_step: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
@@ -130,6 +159,88 @@ class VisionRGBDFollowerConfig(DWAConfig):
 
 
 class VisionRGBDFollower(ControllerTemplate):
+    """
+    VisionRGBDFollower is a controller for vision-based target tracking using RGB-D (color + depth) image data.
+
+    This controller combines image-based detections (2D bounding boxes) and depth data to estimate 3D positions
+    of visual targets and uses a sampling-based planner (similar to DWA) to compute optimal local motion commands.
+    It integrates camera intrinsics, robot geometry, and multiple sensor modalities (e.g., point clouds, laser scans,
+    local maps) to generate robust and feasible trajectories for following dynamic or static targets in the environment.
+
+    - Usage Example:
+
+    ```python
+    import numpy as np
+    from kompass_core.control import VisionRGBDFollower, VisionRGBDFollowerConfig
+    from kompass_core.models import (
+        Robot,
+        RobotType,
+        RobotCtrlLimits,
+        LinearCtrlLimits,
+        AngularCtrlLimits,
+        RobotGeometry,
+        RobotState,
+    )
+    from kompass_core.datatypes import Bbox2D, LaserScanData
+
+    # Define robot
+    my_robot = Robot(
+        robot_type=RobotType.ACKERMANN,
+        geometry_type=RobotGeometry.Type.CYLINDER,
+        geometry_params=np.array([0.3, 0.6])
+    )
+
+    # Define control limits
+    ctrl_limits = RobotCtrlLimits(
+        vx_limits=LinearCtrlLimits(max_vel=1.5, max_acc=3.0, max_decel=3.0),
+        omega_limits=AngularCtrlLimits(
+            max_vel=2.5, max_acc=2.5, max_decel=2.5, max_steer=np.pi / 2
+        )
+    )
+
+    # Configure controller
+    config = VisionRGBDFollowerConfig(
+        max_linear_samples=15,
+        max_angular_samples=15,
+        control_horizon=10,
+        enable_obstacle_avoidance=True,
+    )
+    controller = VisionRGBDFollower(
+        robot=my_robot,
+        ctrl_limits=ctrl_limits,
+        config=config,
+        camera_focal_length=[525.0, 525.0],
+        camera_principal_point=[319.5, 239.5],
+    )
+
+    # Prepare sensor inputs
+    bbox = Bbox2D(top_left_corner=np.array([200, 150]), size=np.array([50, 100]))
+    bbox.set_img_size(np.array([640, 480]))
+
+    aligned_depth_image = np.random.rand(480, 640).astype(np.int32)  # Fake depth
+    robot_state = RobotState(x=0.0, y=0.0, yaw=0.0, speed=0.0)
+
+    # Initialize target tracking
+    controller.set_initial_tracking_2d_target(
+        current_state=robot_state,
+        target_box=bbox,
+        aligned_depth_image=aligned_depth_image,
+    )
+
+    # Run control loop step
+    success = controller.loop_step(
+        current_state=robot_state,
+        detections_2d=[bbox],
+        depth_image=aligned_depth_image,
+        local_map=np.random.rand(100, 100),  # Fake local map
+        local_map_resolution=0.05
+    )
+
+    # Access control outputs
+    vx_cmd = controller.linear_x_control
+    omega_cmd = controller.angular_control
+    ```
+    """
     def __init__(
         self,
         robot: Robot,
@@ -201,6 +312,17 @@ class VisionRGBDFollower(ControllerTemplate):
         logging.info("VisionDWA CONTROLLER IS READY")
 
     def set_camera_intrinsics(self, fx: float, fy: float, cx: float, cy: float) -> None:
+        """Set depth camera intrinsics for the planner
+
+        :param fx: Focal length in x direction
+        :type fx: float
+        :param fy: Focal length in y direction
+        :type fy: float
+        :param cx: Principal point x coordinate
+        :type cx: float
+        :param cy: Principal point y coordinate
+        :type cy: float
+        """
         self._planner.set_camera_intrinsics(fx, fy, cx, cy)
 
     def set_initial_tracking_2d_target(
@@ -218,7 +340,10 @@ class VisionRGBDFollower(ControllerTemplate):
         try:
             if current_state:
                 self._planner.set_current_state(
-                    current_state.x, current_state.y, current_state.yaw, current_state.speed
+                    current_state.x,
+                    current_state.y,
+                    current_state.yaw,
+                    current_state.speed,
                 )
             return self._planner.set_initial_tracking(
                 aligned_depth_image,
@@ -232,10 +357,20 @@ class VisionRGBDFollower(ControllerTemplate):
 
     @property
     def dist_error(self) -> float:
+        """Getter of the last distance error computed by the controller
+
+        :return: Last distance error (m)
+        :rtype: float
+        """
         return self._planner.get_errors()[0]
 
     @property
     def orientation_error(self) -> float:
+        """Getter of the last orientation error computed by the controller (radians)
+
+        :return: Last orientation error (radians)
+        :rtype: float
+        """
         return self._planner.get_errors()[1]
 
     def set_initial_tracking_image(

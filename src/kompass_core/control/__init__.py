@@ -79,8 +79,8 @@ ControlClasses = {
     ControllersID.STANLEY: Stanley,
     ControllersID.DVZ: DVZ,
     ControllersID.DWA: DWA,
-    ControllersID.VISION_IMG : VisionRGBFollower,
-    ControllersID.VISION_DEPTH: VisionRGBDFollower
+    ControllersID.VISION_IMG: VisionRGBFollower,
+    ControllersID.VISION_DEPTH: VisionRGBDFollower,
 }
 
 ControlConfigClasses = {

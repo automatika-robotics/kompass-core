@@ -11,6 +11,28 @@ import numpy as np
 
 @define
 class VisionRGBFollowerConfig(BaseAttrs):
+    """
+    Configuration class for an RGB-based vision target follower.
+
+    This class defines configuration parameters for controlling a robot that follows a target using RGB vision.
+    It provides settings for control behavior, target tracking, search strategies, velocity and tolerance tuning,
+    and camera-to-robot coordinate transformations.
+
+    Attributes:
+        control_time_step (float): Time interval between control updates (s).
+        control_horizon (int): Number of time steps in the control planning horizon.
+        buffer_size (int): Number of buffered detections to maintain.
+        tolerance (float): Acceptable error when tracking the target.
+        target_distance (Optional[float]): Desired distance to maintain from the target (m).
+        target_wait_timeout (float): Maximum time to wait for a target to reappear if lost (s).
+        target_search_timeout (float): Maximum duration to perform a search when target is lost (s).
+        target_search_pause (float): Delay between successive search attempts (s).
+        target_search_radius (float): Radius used for searching the target (m).
+        rotation_gain (float): Proportional gain for angular control.
+        speed_gain (float): Proportional gain for linear speed control.
+        min_vel (float): Minimum linear velocity allowed during target following (m/s).
+        enable_search (bool): Whether to activate search behavior when the target is lost.
+    """
     control_time_step: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
@@ -68,6 +90,80 @@ class VisionRGBFollowerConfig(BaseAttrs):
 
 
 class VisionRGBFollower(ControllerTemplate):
+    """
+    VisionRGBFollower is a controller for vision-based target following using RGB image data.
+
+    This controller processes 2D object detections (e.g., bounding boxes) and generates velocity commands
+    to follow a visual target using a proportional control law. It supports configuration via Python or external
+    configuration files and allows integration into Kompass-style robotic systems.
+
+    - Usage Example:
+
+    ```python
+    import numpy as np
+    from kompass_core.control import VisionRGBFollower, VisionRGBFollowerConfig
+    from kompass_core.models import (
+        Robot,
+        RobotType,
+        RobotCtrlLimits,
+        LinearCtrlLimits,
+        AngularCtrlLimits,
+        RobotGeometry,
+    )
+    from kompass_core.datatypes import Bbox2D
+
+    # Define robot
+    my_robot = Robot(
+        robot_type=RobotType.ACKERMANN,
+        geometry_type=RobotGeometry.Type.CYLINDER,
+        geometry_params=np.array([0.2, 0.5])
+    )
+
+    # Define control limits
+    ctrl_limits = RobotCtrlLimits(
+        vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=2.0, max_decel=4.0),
+        omega_limits=AngularCtrlLimits(
+            max_vel=2.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
+        )
+    )
+
+    # Create the controller
+    config = VisionRGBFollowerConfig(
+        target_search_timeout=20.0,
+        speed_gain=0.8,
+        rotation_gain=0.9,
+        enable_search=True,
+    )
+    controller = VisionRGBFollower(robot=my_robot, ctrl_limits=ctrl_limits, config=config)
+
+    # 2D detection
+    detection = Bbox2D(
+                top_left_corner=np.array(
+                    [30, 40], dtype=np.int32
+                ),
+                size=np.array(
+                    [
+                        100,
+                        200,
+                    ],
+                    dtype=np.int32,
+                ),
+                timestamp=0.0,
+                label="person",
+            )
+    detection.set_img_size(np.array([640, 480], dtype=np.int32))
+
+    # Set initial target
+    controller.set_initial_tracking_2d_target(detection)
+
+    # Perform a control loop step
+    success = controller.loop_step(detections_2d=[detection])
+
+    # Access control outputs
+    vx = controller.linear_x_control
+    omega = controller.angular_control
+    ```
+    """
     def __init__(
         self,
         robot: Robot,
@@ -104,15 +200,32 @@ class VisionRGBFollower(ControllerTemplate):
         logging.info("VISION TARGET FOLLOWING CONTROLLER IS READY")
 
     def set_initial_tracking_2d_target(self, target_box: Bbox2D, **_) -> bool:
+        """Sets the initial target for the controller to track
+
+        :param target_box: 2D bounding box of the target
+        :type target_box: Bbox2D
+        :return: True if the target was set successfully, False otherwise
+        :rtype: bool
+        """
         self.__controller.reset_target(target_box)
         return True
 
     @property
     def dist_error(self) -> float:
+        """Getter of the last distance error computed by the controller
+
+        :return: Last distance error (m)
+        :rtype: float
+        """
         return self._planner.get_errors()[0]
 
     @property
     def orientation_error(self) -> float:
+        """Getter of the last orientation error computed by the controller (radians)
+
+        :return: Last orientation error (radians)
+        :rtype: float
+        """
         return self._planner.get_errors()[1]
 
     def loop_step(
@@ -121,7 +234,9 @@ class VisionRGBFollower(ControllerTemplate):
         detections_2d: Optional[List[Bbox2D]],
         **_,
     ) -> bool:
-        self._found_ctrl = self.__controller.run(detections_2d[0] if detections_2d else None)
+        self._found_ctrl = self.__controller.run(
+            detections_2d[0] if detections_2d else None
+        )
         if self._found_ctrl:
             self._ctrl = self.__controller.get_ctrl()
         return self._found_ctrl

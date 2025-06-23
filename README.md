@@ -1,9 +1,15 @@
 # Kompass Core
 
+[![中文版本][cn-badge]][cn-url]
+[![ドキュメント-日本語][jp-badge]][jp-url]
 [![PyPI][pypi-badge]][pypi-url]
 [![MIT licensed][mit-badge]][mit-url]
 [![Python Version][python-badge]][python-url]
 
+[cn-badge]: https://img.shields.io/badge/文档-中文-blue.svg
+[cn-url]: docs/README.zh.md
+[jp-badge]: https://img.shields.io/badge/ドキュメント-日本語-red.svg
+[jp-url]: docs/README.ja.md
 [pypi-badge]: https://img.shields.io/pypi/v/kompass-core.svg
 [pypi-url]: https://pypi.org/project/kompass-core/
 [mit-badge]: https://img.shields.io/pypi/l/kompass-core.svg
@@ -26,21 +32,27 @@ This package is developed to be used with [Kompass](https://github.com/automatik
 
 ## Install with GPU Support (Recommended)
 
-To install kompass-core with GPU support, on any Ubuntu 20+ (including Jetpack) based machine, you can simply run the following:
+- To install kompass-core with GPU support, on any Ubuntu 20+ (including Jetpack) based machine, you can simply run the following:
 
-- `curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/heads/main/build_dependencies/install_gpu.sh | bash`
+```bash
+curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/heads/main/build_dependencies/install_gpu.sh | bash
+```
 
 This script will install all relevant dependencies, including [AdaptiveCPP](https://github.com/AdaptiveCpp/AdaptiveCpp) and install the latest version of kompass-core from source. It is good practice to read the [script](https://github.com/automatika-robotics/kompass-core/blob/main/build_dependencies/install_gpu.sh) first.
 
 ## Installing with pip (CPU only)
 
-On Ubuntu versions >= 22.04, install dependencies by running the following:
+- On Ubuntu versions >= 22.04, install dependencies by running the following:
 
-- `sudo apt-get install libompl-dev libfcl-dev libpcl-dev`
+```bash
+sudo apt-get install libompl-dev libfcl-dev libpcl-dev
+```
 
-Then install kompass-core as follows:
+- Then install kompass-core as follows:
 
-- `pip install kompass-core`
+```bash
+pip install kompass-core
+```
 
 Wheels are available on Pypi for linux x86_64 and aarch64 architectures. Please note that the version available on Pypi does not support GPU acceleration yet.
 

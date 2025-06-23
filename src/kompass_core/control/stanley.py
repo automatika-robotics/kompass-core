@@ -137,9 +137,7 @@ class Stanley(FollowerTemplate):
             config = StanleyConfig(wheel_base=robot.wheelbase)
 
         if config_file:
-            config.from_file(
-                file_path=config_file, nested_root_name=config_root_name
-            )
+            config.from_file(file_path=config_file, nested_root_name=config_root_name)
 
         self._config = config
         self._control_time_step = config.control_time_step

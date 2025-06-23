@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import Optional
 import numpy as np
 from attrs import Factory, define, field
 from ..datatypes.laserscan import LaserScanData
@@ -219,9 +219,7 @@ class DWA(FollowerTemplate):
             config = DWAConfig()
 
         if config_file:
-            config.from_file(
-                file_path=config_file, nested_root_name=config_root_name
-            )
+            config.from_file(file_path=config_file, nested_root_name=config_root_name)
 
         if control_time_step:
             config.control_time_step = control_time_step
