@@ -41,9 +41,7 @@ def generate_all_geometric_planners_configs():
         print("-----------------------------\n")
 
 
-def ompl_solve_once(
-    ompl_planner: OMPLGeometric, map_data: Dict, map_numpy: np.ndarray
-):
+def ompl_solve_once(ompl_planner: OMPLGeometric, map_data: Dict, map_numpy: np.ndarray):
     """
     Setup and solve OMPL planning problem with given map and map metadata
 
