@@ -1,16 +1,12 @@
 from enum import Enum
 from typing import List, Optional, Union
 
-from .utils import common as CommonUtils
 from .utils.common import BaseAttrs, base_validators, set_params_from_yaml
 from .utils import geometry as GeometryUtils
 
 import numpy as np
 from attrs import Factory, define, field, validators
 from .datatypes.path import Point2D
-
-import matplotlib.pyplot as plt
-from matplotlib.patches import Circle, Rectangle
 
 import kompass_cpp
 
@@ -490,6 +486,14 @@ class CircularFootprint:
         :param ax: Plot figure axis, defaults to None
         :type ax: _type_, optional
         """
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.patches import Circle
+        except ImportError as e:
+            raise ImportError(
+                "Matplotlib is required for plotting robot footprints. "
+                "Please install it using 'pip install matplotlib'."
+            ) from e
         if not ax:
             ax = plt.gca()
 
@@ -538,7 +542,7 @@ class RectangleFootprint:
 
     def __init__(self, width=1.0, length=2.0):
         """
-        Inits a regtangular robot footprint
+        Inits a rectangular robot footprint
 
         :param width: Robot width (m), defaults to 2.0
         :type width: float, optional
@@ -582,6 +586,14 @@ class RectangleFootprint:
         :param ax: Plot figure axis, defaults to None
         :type ax: _type_, optional
         """
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.patches import Circle, Rectangle
+        except ImportError as e:
+            raise ImportError(
+                "Matplotlib is required for plotting robot footprints. "
+                "Please install it using 'pip install matplotlib'."
+            ) from e
         if not ax:
             ax = plt.gca()
 
@@ -788,7 +800,7 @@ class RobotGeometry:
             cls.Type.SPHERE,
             cls.Type.CAPSULE,
         ]:
-            # First parameter is the radius -> equivilant to wheelbase
+            # First parameter is the radius -> equivalent to wheelbase
             return parameters[0]
         else:
             return np.sqrt(parameters[1] + parameters[0]) / 2
@@ -831,7 +843,7 @@ class RobotGeometry:
             cls.Type.SPHERE,
             cls.Type.CAPSULE,
         ]:
-            # First parameter is the radius -> equivilant to wheelbase
+            # First parameter is the radius -> equivalent to wheelbase
             return CircularFootprint(rad=parameters[0])
         else:
             # Wheelbase is the distance on robot lateral axis (y-axis)
@@ -1191,7 +1203,7 @@ class RobotCtrlLimits(BaseAttrs):
 
     def to_kompass_cpp_lib(self) -> kompass_cpp.control.ControlLimitsParams:
         """
-        Get the control limits parameters transferred to Robotctrl library format
+        Get the control limits parameters transferred to Kompass_cpp library format
 
         :return: 2D control limits
         :rtype: kompass_cpp.control.ctr_limits_params
@@ -1206,7 +1218,7 @@ class RobotCtrlLimits(BaseAttrs):
         self, linear_limits: LinearCtrlLimits
     ) -> kompass_cpp.control.LinearVelocityControlParams:
         """
-        Get linear velocity control limits parameters transfered to Robotctrl library format
+        Get linear velocity control limits parameters transferred to Kompass_cpp library format
 
         :return: Linear forward velocity Vx parameters
         :rtype: kompass_cpp.control.linear_vel_x_params
@@ -1221,7 +1233,7 @@ class RobotCtrlLimits(BaseAttrs):
         self,
     ) -> kompass_cpp.control.AngularVelocityControlParams:
         """
-        Get Omega control limits parameters transfered to Robotctrl library format
+        Get Omega control limits parameters transferred to Kompass_cpp library format
 
         :return: Angular velocity Omega parameters
         :rtype: kompass_cpp.control.angular_vel_params
