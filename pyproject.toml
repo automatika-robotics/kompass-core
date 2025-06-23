@@ -26,9 +26,6 @@ dependencies = [
     "toml",
     "attrs>=23.2.0",
     "pyyaml",
-    "scipy",
-    "matplotlib",
-    "pandas",
 ]
 
 requires-python = ">=3.8.4,<3.13"
