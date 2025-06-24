@@ -34,6 +34,7 @@ NB_MODULE(kompass_cpp, m) {
       .value("DEBUG", LogLevel::DEBUG)
       .value("INFO", LogLevel::INFO)
       .value("WARNING", LogLevel::WARNING)
+      .value("WARN", LogLevel::WARNING)
       .value("ERROR", LogLevel::ERROR)
       .export_values();
 
