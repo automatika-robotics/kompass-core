@@ -1,3 +1,24 @@
+/**
+ * @brief Implementation based on the following work [Xu2024OnboardDO]
+ *
+ * "Onboard Dynamic-Object Detection and Tracking for Autonomous Robot
+ * Navigation With RGB-D Camera" Z. Xu, X. Zhan, Y. Xiu, C. Suzuki, and K.
+ * Shimada. IEEE Robotics and Automation Letters, vol. 9, no. 1, pp. 651–658,
+ * 2024. doi:10.1109/LRA.2023.3334683
+ *
+ * @article{Xu2024OnboardDO,
+ *   title   = {Onboard Dynamic-Object Detection and Tracking for Autonomous
+ * Robot Navigation With RGB-D Camera}, author  = {Z. Xu and X. Zhan and Y. Xiu
+ * and C. Suzuki and K. Shimada}, journal = {IEEE Robotics and Automation
+ * Letters}, volume  = {9}, number  = {1}, pages   = {651--658}, year    =
+ * {2024}, doi     = {10.1109/LRA.2023.3334683}, keywords = { Detectors,
+ * Cameras, Three-dimensional displays, Point cloud compression, Robot vision
+ * systems, Heuristic algorithms, Collision avoidance, RGB-D perception,
+ * Vision-based navigation, Visual tracking, 3D object detection
+ *   }
+ * }
+ */
+
 #pragma once
 
 #include "datatypes/path.h"
@@ -44,4 +65,4 @@ private:
   static float getMedian(const std::vector<float> &values);
 };
 
-} // namespace Kompass
+  } // namespace Kompass
