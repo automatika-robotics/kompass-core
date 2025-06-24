@@ -60,64 +60,20 @@ Wheels are available on Pypi for linux x86_64 and aarch64 architectures. Please 
 
 The following three packages will become available once kompass-core is installed.
 
-- `kompass_core`: The main Python API containing all the wrappers and utilities for motion planning and control for navigation in 2D spaces.
-- `kompass_cpp`: Python bindings for Kompass core C++ library containing the algorithms implementation for path tracking and motion control.
+- `kompass_cpp`: Core C++ library for control, collision checking, and mapping algorithms.
+- `kompass_core`: Python bindings for Kompass core C++ library with front-end classes for configuration and high-level logic.
 - `omplpy`: Bespoke python bindings for the Open Motion Planning Library (OMPL).
 
 
 # 📦 Package Overview
 
-This repository consists the following modules:
-
-- `kompass_cpp/` — Core C++ implementation of planning, control, collision checking, and mapping algorithms.
-
-- `kompass_core/` — Python implementations and front-end classes for configuration and high-level logic.
-
-## `kompass_cpp` Overview
-
-`kompass_cpp/` contains the C++ package which includes mapping, control, trajectory planning, and vision-based tracking algorithms, with **GPU acceleration** support and Python bindings via `nanobind`.
-
-### 1. Mapping
-- Implements efficient local mapping algorithms.
-- Supports **GPU-accelerated** mapping for real-time performance.
-- Core classes: `LocalMapper`, `LocalMapperGPU`
-
-### 2. Control & Trajectory Planning
-- Includes multiple control strategies such as PID, Stanley, Dynamic Window Approach (DWA), and vision-guided controllers.
-- Supports **GPU-accelerated** trajectory sampling and cost evaluation with customizable weights.
-- Core classes: `Controller`, `PID`, `Stanley`, `DWA`, `VisionDWA`, `TrajectorySampler`, `CostEvaluator`
-
-### 3. Collision and Critical Zone Checking
-- Provides collision checking utilities and critical zone detection to ensure safe navigation.
-- Includes both CPU and GPU implementations.
-- Core classes: `CollisionChecker`, `CriticalZoneChecker`, `CriticalZoneCheckerGPU`
-
-### 4. Vision and Tracking
-- Feature-based bounding box tracking and depth detection for enhanced perception.
-- Supports robust vision-based navigation algorithms.
-- Core classes: `FeatureBasedBboxTracker`, `DepthDetector`
-
-### 5. Utilities
-- Thread pooling for efficient multi-threaded operations.
-- Logger utilities for runtime diagnostics.
-- Linear state-space Kalman filter implementation for state estimation.
-- Spline interpolation utilities in the `tk` namespace.
-
-### 6. Data Types and Parameters
-- Rich set of data types to represent paths, trajectories, controls, velocities, and bounding boxes.
-- Strongly-typed parameters and configuration classes to enable flexible tuning.
-
-### 7. Python Bindings
-- Comprehensive Python bindings built with `nanobind` to enable seamless integration with Python workflows.
-- Bindings cover core functionalities across mapping, control, vision, and utilities.
+The package includes modules for mapping, control, trajectory planning, and vision-based tracking algorithms, with **GPU acceleration** support and Python bindings via `nanobind`.
 
 
-
-## `kompass_core` Overview
-
-- `kompass_core.calibration` - Modules for robot motion model calibration, fitting and robot simulation.
-
-- `kompass_core.control` - A rich set of control strategies and configurations. Include the wrapper python classes for the C++ implementations:
+### Control Module
+- Includes a rich set of optimized C++ control strategies implementations and their python wrappers.
+- Supports **GPU-accelerated** trajectory sampling and cost evaluation with customizable weights for sampling based controllers.
+- Internally implements feature-based bounding box tracking and depth detection for enhanced vision-based tracking control.
 
 | Algorithm                                   | Description                                        |
 | ------------------------------------------- | -------------------------------------------------- |
@@ -127,28 +83,28 @@ This repository consists the following modules:
 | **VisionRGBFollower**   | Follow visual targets using RGB images          |
 | **VisionRGBDFollower**   | Follow visual targets using RGBD (depth) images          |
 
-- `kompass_core.datatypes` - Standardized message/data formats for various robot and sensor data.
+### Mapping Module
+- Implements efficient local mapping and occupancy grid generation algorithms, with configuration support for various laser models and grid resolution settings.
+- Supports **GPU-accelerated** mapping for real-time performance.
 
 
-- `kompass_core.mapping` - Local mapping and occupancy grid generation, with configuration support for various laser models and grid resolution settings.
+### Utilities Module
+- Provides collision checking utilities and critical zone detection to ensure safe navigation, including both CPU and GPU implementations.
+- Logger utilities for runtime diagnostics.
+- Linear state-space Kalman filter implementation for state estimation (C++).
+- Spline interpolation utilities for path control.
 
-- `kompass_core.models` - Robot models and motion kinematics, supporting differential, omni-directional, and Ackermann robots. Along with geometry definitions, control limits and simulation-ready state representations.
+### Data Types and Models Modules
+- Rich set of data types to represent paths, trajectories, controls, velocities, bounding boxes and various sensor data.
+- Strongly-typed parameters and configuration classes to enable flexible tuning.
+- Robot models and motion kinematics, supporting differential, omni-directional, and Ackermann robots. Along with geometry definitions, control limits and simulation-ready state representations.
 
-- `kompass_core.motion_cost` - Cost models for trajectory evaluation in Python with various costs including collision probabilities, reference tracking and dynamic/static obstacle handling.
+### Third Party Modules
+Includes wrappers and integrations with external planning and collision libraries:
 
-- `kompass_core.performance` - Modules for evaluating algorithms performance.
+- FCL (Flexible Collision Library)
 
-- `kompass_core.py_path_tools` - Path interpolation and execution tools.
-
-- `kompass_core.simulation` - Tools for simulating robot motion and evaluating path feasibility.
-
-- `kompass_core.third_party` - Wrappers and integrations with external planning and collision libraries:
-
-    - FCL (Flexible Collision Library)
-
-    - OMPL (Open Motion Planning Library)
-
-- `kompass_core.utils` - General utilities.
+- OMPL (Open Motion Planning Library)
 
 
 ## Copyright
