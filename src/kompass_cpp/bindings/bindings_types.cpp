@@ -111,7 +111,7 @@ void bindings_types(py::module_ &m) {
       .value("CYLINDER", CollisionChecker::ShapeType::CYLINDER)
       .value("BOX", CollisionChecker::ShapeType::BOX)
       .value("SPHERE", CollisionChecker::ShapeType::SPHERE)
-      .def("get", [](const std::string &key) {
+      .def_static("get", [](const std::string &key) {
         if (key == "CYLINDER")
           return CollisionChecker::ShapeType::CYLINDER;
         if (key == "BOX")

@@ -233,22 +233,28 @@ struct Velocities {
 
 // Structure for Forward Linear Velocity Control parameters
 struct LinearVelocityControlParams {
-  double maxVel;          // Maximum allowed speed
-  double maxAcceleration; // Maximum acceleration in units per second squared
-  double maxDeceleration; // Maximum deceleration in units per second squared
+  double maxVel = 1.0;
+  double maxAcceleration = 10.0;
+  double maxDeceleration = 10.0;
 
+  LinearVelocityControlParams(const LinearVelocityControlParams &) = default;
+
+  // Parameterized constructor
   LinearVelocityControlParams(double maxVel = 1.0, double maxAcc = 10.0,
                               double maxDec = 10.0)
       : maxVel(maxVel), maxAcceleration(maxAcc), maxDeceleration(maxDec) {}
 };
 
-// Structure for Forward Linear Velocity Control parameters
+// Structure for Angular Velocity Control parameters
 struct AngularVelocityControlParams {
-  double maxAngle; // Maximum allowed steering angle
-  double maxOmega;
-  double maxAcceleration; // Maximum acceleration in units per second squared
-  double maxDeceleration; // Maximum deceleration in units per second squared
+  double maxAngle = M_PI;
+  double maxOmega = 1.0;
+  double maxAcceleration = 10.0;
+  double maxDeceleration = 10.0;
 
+  AngularVelocityControlParams(const AngularVelocityControlParams &) = default;
+
+  // Parameterized constructor
   AngularVelocityControlParams(double maxAng = M_PI, double maxOmg = 1.0,
                                double maxAcc = 10.0, double maxDec = 10.0)
       : maxAngle(maxAng), maxOmega(maxOmg), maxAcceleration(maxAcc),
@@ -261,11 +267,13 @@ struct ControlLimitsParams {
   LinearVelocityControlParams velYParams;
   AngularVelocityControlParams omegaParams;
 
-  ControlLimitsParams(
-      LinearVelocityControlParams velXCtrParams = LinearVelocityControlParams(),
-      LinearVelocityControlParams velYCtrParams = LinearVelocityControlParams(),
-      AngularVelocityControlParams omegaCtrParams =
-          AngularVelocityControlParams())
+  ControlLimitsParams() = default;
+  ControlLimitsParams(const ControlLimitsParams &) = default;
+
+  // Parameterized constructor
+  ControlLimitsParams(const LinearVelocityControlParams &velXCtrParams,
+                      const LinearVelocityControlParams &velYCtrParams,
+                      const AngularVelocityControlParams &omegaCtrParams)
       : velXParams(velXCtrParams), velYParams(velYCtrParams),
         omegaParams(omegaCtrParams) {}
 };

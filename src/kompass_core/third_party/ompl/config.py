@@ -1,5 +1,5 @@
 import inspect
-from typing import Any
+from typing import Any, Union
 
 from attrs import field, make_class
 from ...utils.common import BaseAttrs, base_validators
@@ -87,14 +87,32 @@ class PlanningAlgorithms(object):
         return self.available_planners
 
 
-def initializePlanners():
+def _convert_log_level(log_level: Union[ompl.util.LogLevel, str]) -> ompl.util.LogLevel:
+    """Convert log level to ompl.util.LogLevel."""
+    if isinstance(log_level, ompl.util.LogLevel):
+        return log_level
+    elif isinstance(log_level, str):
+        upper_log_level = log_level.upper()
+        if not upper_log_level.startswith("LOG_"):
+            upper_log_level = "LOG_" + upper_log_level
+        if upper_log_level == "LOG_WARNING":
+            # Handle the special case for LOG_WARNING
+            # as it is not a valid enum in ompl.util.LogLevel
+            upper_log_level = "LOG_WARN"
+        try:
+            return getattr(ompl.util.LogLevel, upper_log_level)
+        except AttributeError as e:
+            raise ValueError(f"Invalid OMPL log level string: {log_level}") from e
+    raise ValueError(f"Invalid OMPL log level: {log_level}")
+
+
+def initializePlanners(log_level: Union[ompl.util.LogLevel, str] = ompl.util.LogLevel.LOG_ERROR):
     """Initialize planner map, similar to ompl python bindings."""
-    logLevel = ompl.util.getLogLevel()
-    # TODO: make log_level an input to initializePlanners to set it when using ompl
-    ompl.util.setLogLevel(ompl.util.LogLevel.LOG_ERROR)
+    log_level = _convert_log_level(log_level)
+    ompl.util.setLogLevel(log_level)
     if not hasattr(ompl.geometric, "planners"):
         ompl.geometric.planners = PlanningAlgorithms(ompl.geometric)
-    ompl.util.setLogLevel(logLevel)
+    ompl.util.setLogLevel(log_level)
 
 
 optimization_objectives = {

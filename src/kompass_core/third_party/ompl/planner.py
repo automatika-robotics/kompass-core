@@ -39,11 +39,6 @@ class OMPLGeometricConfig(BaseAttrs):
         default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1e3)
     )
 
-    log_level: str = field(
-        default="WARN",
-        validator=base_validators.in_(["DEBUG", "INFO", "WARN", "ERROR"]),
-    )
-
     map_resolution: float = field(
         default=0.01, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
@@ -55,6 +50,7 @@ class OMPLGeometric:
     def __init__(
         self,
         robot: Robot,
+        log_level: str = "ERROR",
         use_fcl: bool = True,
         config: Optional[OMPLGeometricConfig] = None,
         config_file: Optional[str] = None,
@@ -73,7 +69,7 @@ class OMPLGeometric:
         :type map_3d: np.ndarray | None, optional
         """
         # Initialize available planners lists in ompl.geometric and ompl.control
-        initializePlanners()
+        initializePlanners(log_level)
 
         self.solution = None
 
@@ -84,11 +80,6 @@ class OMPLGeometric:
             self._config = config
         else:
             self._config = OMPLGeometricConfig()
-
-        # Set log level
-        ompl.util.setLogLevel(
-            getattr(ompl.util.LogLevel, f"LOG_{self._config.log_level}")
-        )
 
         self._use_fcl = use_fcl
 
@@ -161,11 +152,6 @@ class OMPLGeometric:
         else:
             nested_root_name = "ompl"
         self._config.from_file(config_file, nested_root_name=nested_root_name)
-
-        # Set LOG level
-        ompl.util.setLogLevel(
-            getattr(ompl.util.LogLevel, f"LOG_{self._config.log_level}")
-        )
 
         if not planner_id:
             planner_id = self._config.planner_id

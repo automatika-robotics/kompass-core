@@ -29,6 +29,7 @@ void bindings_control(py::module_ &m) {
   // Limits setup
   py::class_<Control::LinearVelocityControlParams>(
       m_control, "LinearVelocityControlParams")
+      .def(py::init<const Control::LinearVelocityControlParams &>())
       .def(py::init<double, double, double>(), py::arg("max_vel") = 0.0,
            py::arg("max_acc") = 0.0, py::arg("max_decel") = 0.0)
       .def_rw("max_vel", &Control::LinearVelocityControlParams::maxVel)
@@ -38,6 +39,7 @@ void bindings_control(py::module_ &m) {
 
   py::class_<Control::AngularVelocityControlParams>(
       m_control, "AngularVelocityControlParams")
+      .def(py::init<const Control::AngularVelocityControlParams &>())
       .def(py::init<double, double, double, double>(),
            py::arg("max_ang") = M_PI, py::arg("max_omega") = 0.0,
            py::arg("max_acc") = 0.0, py::arg("max_decel") = 0.0)
@@ -49,9 +51,10 @@ void bindings_control(py::module_ &m) {
               &Control::AngularVelocityControlParams::maxDeceleration);
 
   py::class_<Control::ControlLimitsParams>(m_control, "ControlLimitsParams")
-      .def(py::init<Control::LinearVelocityControlParams,
-                    Control::LinearVelocityControlParams,
-                    Control::AngularVelocityControlParams>(),
+      .def(py::init<>())
+      .def(py::init<Control::LinearVelocityControlParams &,
+                    Control::LinearVelocityControlParams &,
+                    Control::AngularVelocityControlParams &>(),
            py::arg("vel_x_ctr_params") = Control::LinearVelocityControlParams(),
            py::arg("vel_y_ctr_params") = Control::LinearVelocityControlParams(),
            py::arg("omega_ctr_params") =
