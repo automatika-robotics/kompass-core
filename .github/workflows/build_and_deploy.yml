@@ -27,6 +27,12 @@ jobs:
       - name: Set environment variables
         run: echo "CIBW_ARCHS=${{ matrix.os-arch.arch }}" >> $GITHUB_ENV
 
+      - name: Install Python development headers
+      - run: |
+             PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+             sudo apt-get update
+             sudo apt-get install -y python${PYTHON_VERSION}-dev
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.21.3
 
