@@ -162,6 +162,28 @@ void CollisionChecker::updatePointCloud(const std::vector<Path::Point> &cloud,
   convertPointCloudToOctomap(cloud);
 }
 
+void CollisionChecker::update3DMap(const std::vector<Eigen::Vector3f> &points,
+                                   const bool global_frame) {
+  if (global_frame) {
+    sensor_tf_world_ = Eigen::Isometry3f::Identity();
+  } else {
+    // Transform the sensor position to the world frame
+    sensor_tf_world_ = body->tf * sensor_tf_body_;
+  }
+
+  // Clear old data
+  octTree_->clear();
+
+  octomapCloud_.clear();
+  for (auto &point : points) {
+    octomapCloud_.push_back(point.x(), point.y(), point.z());
+  }
+
+  octTree_->insertPointCloud(octomapCloud_, octomap::point3d(0, 0, 0));
+
+  updateOctreePtr();
+}
+
 void CollisionChecker::convertPointCloudToOctomap(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, const bool global_frame) {
 

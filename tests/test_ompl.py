@@ -108,7 +108,7 @@ def load_map_meta(map_file: str) -> Dict:
         raise Exception(f"Failed to load map metadata: {str(e)}") from e
 
 
-def ompl_geometric_testing(test_repetitions: int = 1):
+def ompl_geometric_testing(test_repetitions: int = 10):
     """
     Test all OMPL geometric planners
 
@@ -117,14 +117,13 @@ def ompl_geometric_testing(test_repetitions: int = 1):
     """
     try:
         import pandas as pd
+
         ompl_df = pd.DataFrame(
             columns=(
                 "method",
                 "solved",
                 "solution_time",
                 "solution_len",
-                "simplification_time",
-                "time_convert_2_ros",
             )
         )
     except Exception:
@@ -150,7 +149,6 @@ def ompl_geometric_testing(test_repetitions: int = 1):
 
     for planner_id in ompl_planner.available_planners.keys():
         solution_time: float = 0.0
-        simplify_time: float = 0.0
         sol_len: float = 0.0
         if planner_id in ["ompl.geometric.AITstar", "ompl.geometric.LazyLBTRRT"]:
             continue
@@ -172,21 +170,9 @@ def ompl_geometric_testing(test_repetitions: int = 1):
 
                 solution_time += end_time - start_time
 
-                solved = True
+                solved = path is not None
                 if path:
-                    start_time = timeit.default_timer()
-
-                    path = ompl_planner.simplify_solution()
-
-                    end_time = timeit.default_timer()
-
-                    simplify_time += end_time - start_time
-
-                    solved = True
-
-                    sol_len += ompl_planner.solution.length()
-                else:
-                    solved = False
+                    sol_len += path.length()
 
             except Exception as e:
                 logging.error(f"{e}")
@@ -197,7 +183,6 @@ def ompl_geometric_testing(test_repetitions: int = 1):
                 "solved": solved,
                 "solution_time": solution_time / test_repetitions,
                 "solution_len": sol_len / test_repetitions,
-                "simplification_time": simplify_time / test_repetitions,
             }
     if ompl_df is not None:
         os.makedirs("logs", exist_ok=True)

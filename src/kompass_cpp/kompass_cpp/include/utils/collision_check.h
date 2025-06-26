@@ -2,6 +2,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
+#include <Eigen/src/Core/Matrix.h>
 #include <memory>
 #include <vector>
 
@@ -96,6 +97,15 @@ public:
    * @param cloud
    */
   void updatePointCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+                        const bool global_frame = true);
+
+  /**
+   * @brief Update the sensor input from Map points (Eigen::Matrix3Xf) data
+   *
+   * @param points
+   * @param global_frame
+   */
+  void update3DMap(const std::vector<Eigen::Vector3f> &points,
                         const bool global_frame = true);
 
   /**

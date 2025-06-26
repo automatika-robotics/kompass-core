@@ -106,7 +106,9 @@ def _convert_log_level(log_level: Union[ompl.util.LogLevel, str]) -> ompl.util.L
     raise ValueError(f"Invalid OMPL log level: {log_level}")
 
 
-def initializePlanners(log_level: Union[ompl.util.LogLevel, str] = ompl.util.LogLevel.LOG_ERROR):
+def initializePlanners(
+    log_level: Union[ompl.util.LogLevel, str] = ompl.util.LogLevel.LOG_ERROR,
+):
     """Initialize planner map, similar to ompl python bindings."""
     log_level = _convert_log_level(log_level)
     ompl.util.setLogLevel(log_level)

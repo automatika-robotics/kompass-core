@@ -14,6 +14,7 @@ void bindings_config(py::module_ &);
 void bindings_control(py::module_ &);
 void bindings_mapping(py::module_ &);
 void bindings_utils(py::module_ &);
+void bindings_planning(py::module_ &);
 
 using namespace Kompass;
 
@@ -28,6 +29,7 @@ NB_MODULE(kompass_cpp, m) {
   bindings_config(m);
   bindings_control(m);
   bindings_mapping(m);
+  bindings_planning(m);
 
   // Utils bindings submodule
   py::enum_<LogLevel>(m, "LogLevel")
