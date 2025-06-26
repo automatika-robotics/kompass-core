@@ -136,7 +136,7 @@ class Calibration:
             x=motion_sample.path_sample.x_points[0],
             y=motion_sample.path_sample.y_points[0],
             yaw=motion_sample.path_sample.heading_points[0],
-            motion_model=calibrated_model,
+            model=calibrated_model,
         )
 
         robot = Robot(
