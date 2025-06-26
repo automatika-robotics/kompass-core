@@ -228,7 +228,7 @@ class DVZ(FollowerTemplate):
 
         :rtype: str
         """
-        return f"total deformation : {self._path_controller.dvz_controller.total_deformation}"
+        return f"Total DVZ deformation : {self._path_controller.total_deformation}"
 
     @property
     def linear_x_control(self) -> List[float]:
