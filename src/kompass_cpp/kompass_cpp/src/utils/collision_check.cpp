@@ -1,7 +1,6 @@
 #include "utils/collision_check.h"
 #include "utils/logger.h"
 #include "utils/transformation.h"
-#include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
 #include <fcl/broadphase/default_broadphase_callbacks.h>
@@ -28,7 +27,7 @@ CollisionChecker::CollisionChecker(
 
   octree_resolution_ = octree_resolution;
   octTree_ = std::make_shared<octomap::OcTree>(octree_resolution_);
-  fclTree_ = std::make_unique<fcl::OcTreef>(octTree_);
+  fclTree_ = std::make_shared<fcl::OcTreef>(octTree_);
 
   body->shapeType = robot_shape_type;
 
@@ -74,13 +73,11 @@ void CollisionChecker::resetOctreeResolution(const double resolution) {
   }
 }
 
-float CollisionChecker::getRadius() const{
-  return robotRadius_;
-}
+float CollisionChecker::getRadius() const { return robotRadius_; }
 
-void CollisionChecker::generateBoxesFromOctomap(
-    std::vector<fcl::CollisionObjectf *> &boxes, fcl::OcTreef &tree) {
-
+std::vector<fcl::CollisionObjectf *>
+CollisionChecker::generateBoxesFromOctomap(fcl::OcTreef &tree) {
+  std::vector<fcl::CollisionObjectf *> boxes;
   // Turn OctTree nodes into boxes
   std::vector<std::array<float, 6>> boxes_ = tree.toBoxes();
 
@@ -108,19 +105,20 @@ void CollisionChecker::generateBoxesFromOctomap(
     obj->computeAABB();
     // Uncomment for debug
     // auto trans = obj->getTransform();
-    // std::cout << "Adding box with translation " << trans.translation() << std::endl;
+    // std::cout << "Adding box with translation " << trans.translation() <<
+    // std::endl;
     boxes.push_back(obj);
   }
 
   LOG_DEBUG("Total Generated boxes above: ", boxes.size());
+  return boxes;
 }
 
 void CollisionChecker::updateOctreePtr() {
   fclTree_.reset(new fcl::OcTreef(octTree_));
-
-  // Transform the tree into a set of boxes and generate collision objects in
-  // OctreeBoxes
-  generateBoxesFromOctomap(OctreeBoxes, *fclTree_);
+  OctreeCollObj_ =
+      std::make_unique<fcl::CollisionObjectf>(fclTree_, sensor_tf_world_);
+  OctreeCollObj_->computeAABB();
 }
 
 void CollisionChecker::updateState(const Path::State current_state) {
@@ -211,8 +209,8 @@ void CollisionChecker::convertPointCloudToOctomap(
     const std::vector<Path::Point> &cloud, const bool global_frame) {
 
   // Transform the sensor position to the world frame
-  // NOTE: Transformation will be applied to the points when generating the
-  // collision boxes
+  // NOTE: Transformation will be applied to the points when creating the
+  // collision object
   if (global_frame) {
     sensor_tf_world_ = Eigen::Isometry3f::Identity();
   } else {
@@ -238,8 +236,8 @@ void CollisionChecker::convertLaserScanToOctomap(
     double height) {
 
   // Transform the sensor position to the world frame
-  // NOTE: Transformation will be applied to the points when generating the
-  // collision boxes
+  // NOTE: Transformation will be applied to the points when creating the
+  // collision object
   sensor_tf_world_ = body->tf * sensor_tf_body_;
 
   // Clear old data
@@ -268,8 +266,8 @@ void CollisionChecker::convertLaserScanToOctomap(
     double height) {
 
   // Transform the sensor position to the world frame
-  // NOTE: Transformation will be applied to the points when generating the
-  // collision boxes
+  // NOTE: Transformation will be applied to the points when creating the
+  // collision object
   sensor_tf_world_ = body->tf * sensor_tf_body_;
 
   // Clear old data
@@ -298,7 +296,7 @@ bool CollisionChecker::checkCollisionsOctree() {
 
   collManager_->clear();
 
-  collManager_->registerObjects(OctreeBoxes);
+  collManager_->registerObject(OctreeCollObj_.get());
 
   collManager_->setup();
 
@@ -308,6 +306,7 @@ bool CollisionChecker::checkCollisionsOctree() {
   return collisionData.result.isCollision();
 
   // NOTE: Code below for testing box by box
+  // auto OctreeBoxes = generateBoxesFromOctomap(*fclTree_);
   // for (auto boxObj : OctreeBoxes) {
   //   collManager->clear();
 
@@ -348,7 +347,7 @@ float CollisionChecker::getMinDistance() {
 
   collManager_->clear();
 
-  collManager_->registerObjects(OctreeBoxes);
+  collManager_->registerObject(OctreeCollObj_.get());
 
   collManager_->setup();
 
@@ -416,7 +415,7 @@ bool CollisionChecker::checkCollisions(const Path::State current_state) {
       std::make_unique<fcl::DynamicAABBTreeCollisionManagerf>();
 
   m_collManager->clear();
-  m_collManager->registerObjects(OctreeBoxes);
+  m_collManager->registerObject(OctreeCollObj_.get());
   m_collManager->setup();
   m_collManager->collide(m_stateObjPtr.get(), &collisionData,
                          fcl::DefaultCollisionFunction);

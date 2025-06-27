@@ -29,9 +29,7 @@ def plt_map_obstacles(map: ObstaclesData, ax=None):
         ax.add_patch(circle)
 
 
-def plt_path_sample(
-    ref_path: PathSample, label="", color="blue", marker="", ax=None
-):
+def plt_path_sample(ref_path: PathSample, label="", color="blue", marker="", ax=None):
     """
     Plot a given path sample as a line
 

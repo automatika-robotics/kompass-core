@@ -1,8 +1,6 @@
 #pragma once
 
-#include <Eigen/Core>
-#include <Eigen/Geometry>
-#include <Eigen/src/Core/Matrix.h>
+#include <Eigen/Dense>
 #include <memory>
 #include <vector>
 
@@ -106,7 +104,7 @@ public:
    * @param global_frame
    */
   void update3DMap(const std::vector<Eigen::Vector3f> &points,
-                        const bool global_frame = true);
+                   const bool global_frame = true);
 
   /**
    * @brief Update the sensor input from PointCloud like struct
@@ -255,13 +253,12 @@ private:
   std::shared_ptr<octomap::OcTree>
       octTree_; // Octomap octree used to get data from laserscan
                 // or pointcloud and convert it to an Octree
-  std::unique_ptr<fcl::OcTreef> fclTree_ =
+  std::shared_ptr<fcl::OcTreef> fclTree_ =
       nullptr; // FCL Octree updated after converting the Octomap octree
   // (required for creating the collision object)
   octomap::Pointcloud octomapCloud_;
-  std::vector<fcl::CollisionObjectf *>
-      OctreeBoxes; // Vector of Boxes collision objects used to check
-                   // collisions with an octTree
+  std::unique_ptr<fcl::CollisionObjectf>
+      OctreeCollObj_; // Octree collision object
 
   double octree_resolution_{0.01};
 
@@ -272,14 +269,14 @@ private:
   void updateOctreePtr();
 
   /**
-   * @brief Generates a vector of fcl::Box collision objects from an
+   * @brief Helper method to generate a vector of fcl::Box collision objects from an
    * fcl::Octree
    *
    * @param boxes
    * @param tree
    */
-  void generateBoxesFromOctomap(std::vector<fcl::CollisionObjectf *> &boxes,
-                                fcl::OcTreef &tree);
+  std::vector<fcl::CollisionObjectf *>
+  generateBoxesFromOctomap(fcl::OcTreef &tree);
 
   /**
    * @brief Helper method to convert PointCloud data to an Octomap

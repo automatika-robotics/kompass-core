@@ -554,9 +554,7 @@ def test_vision_rgb_follower():
     detections = [box]
 
     config = VisionRGBFollowerConfig(
-        control_time_step=control_time_step,
-        speed_gain=1.0,
-        rotation_gain=1.0
+        control_time_step=control_time_step, speed_gain=1.0, rotation_gain=1.0
     )
 
     controller = VisionRGBFollower(
@@ -581,7 +579,11 @@ def test_vision_rgb_follower():
 
     assert res
 
-    (vx, vy, omega) = controller.linear_x_control, controller.linear_y_control, controller.angular_control
+    (vx, vy, omega) = (
+        controller.linear_x_control,
+        controller.linear_y_control,
+        controller.angular_control,
+    )
     print(f"Found Control {vx}, {vy}, {omega}")
 
 

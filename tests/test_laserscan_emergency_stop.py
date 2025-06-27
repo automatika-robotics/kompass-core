@@ -61,9 +61,12 @@ def test_laserscan_polar_tf(laser_scan_data: LaserScanData, plot: bool = False):
     if plot:
         try:
             import matplotlib.pyplot as plt
+
             fig, ax = plt.subplots(subplot_kw={"projection": "polar"})
             ax.plot(
-                laser_scan_data.angles, laser_scan_data.ranges, label="Original LaserScan"
+                laser_scan_data.angles,
+                laser_scan_data.ranges,
+                label="Original LaserScan",
             )
             ax.plot(
                 transformed_scan.angles,
