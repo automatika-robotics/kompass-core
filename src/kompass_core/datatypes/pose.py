@@ -1,35 +1,30 @@
 from typing import Union
 
 import numpy as np
-import quaternion
-from quaternion import quaternion as quat
 
 
 def _equal_approx(
-    v1, v2, is_quaternion=False, absolute_tolerance=0.01
+    v1: np.ndarray,
+    v2: np.ndarray,
+    is_quaternion: bool = False,
+    absolute_tolerance: float = 0.01,
 ) -> Union[bool, np.bool_]:
     """
-        check if two vector/quaternion arrays are approximately equals
-        to within absolute_tolerance
+    Check if two vectors or quaternions are approximately equal within a tolerance.
 
-    :param      v1:                 vector 1
-    :type       v1:                 numpy/ numpy-quaternion
-    :param      v2:                 vector 2
-    :type       v2:                 vector numpy / numpy-quaternion
-    :param      is_quaternion:      is it quaternion check?, defaults to False
-    :type       is_quaternion:      bool, optional
-    :param      absolute_tolerance: tolerate some difference if exist, defaults to 0.01
-    :type       absolute_tolerance: float, optional
-
-    :return:    is both vectors are equal?
-    :rtype:     bool
+    :param v1: First vector or quaternion [w, x, y, z]
+    :param v2: Second vector or quaternion
+    :param is_quaternion: Set to True if comparing quaternions
+    :param absolute_tolerance: Absolute tolerance for comparison
+    :return: True if approximately equal
     """
     if is_quaternion:
-        equal = quaternion.allclose(a=v1, b=v2, rtol=0.0, atol=absolute_tolerance)
+        # q and -q represent the same rotation
+        return np.allclose(v1, v2, rtol=0.0, atol=absolute_tolerance) or np.allclose(
+            v1, -v2, rtol=0.0, atol=absolute_tolerance
+        )
     else:
-        equal = np.allclose(a=v1, b=v2, rtol=0.0, atol=absolute_tolerance)
-
-    return equal
+        return np.allclose(v1, v2, rtol=0.0, atol=absolute_tolerance)
 
 
 class PoseData:
@@ -134,14 +129,14 @@ orientation: (qw={self.qw}, qx={self.qx}, qy={self.qy}, qz={self.qz})"""
         """
         return np.array([self.x, self.y, self.z], dtype=np.float32)
 
-    def get_orientation(self) -> quaternion.quaternion:
+    def get_orientation(self) -> np.ndarray:
         """
         Get the orientation represented as quaternion
 
         :return: orientation represented as quaternion
-        :rtype: quaternion.quaternion
+        :rtype: np.ndarray
         """
-        return quat(self.qw, self.qx, self.qy, self.qz)
+        return np.array([self.qw, self.qx, self.qy, self.qz])
 
     def get_yaw(self) -> np.float64:
         """

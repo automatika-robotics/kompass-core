@@ -21,7 +21,6 @@ keywords = ["robotics", "gpgpu", "navigation", "control", "planning", "mapping"]
 
 dependencies = [
     "numpy<=1.26.4",
-    "numpy-quaternion>=2023.0.3",
     "toml",
     "attrs>=23.2.0",
     "pyyaml",

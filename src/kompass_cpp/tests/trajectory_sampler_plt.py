@@ -32,7 +32,9 @@ def plot_samples(figure_name, trajectories, reference=None):
     try:
         import matplotlib.pyplot as plt
     except ImportError:
-        print("Matplotlib is not installed. Test figures will not be generated. To generate figures run 'pip install matplotlib'")
+        print(
+            "Matplotlib is not installed. Test figures will not be generated. To generate figures run 'pip install matplotlib'"
+        )
         return
 
     if reference:

@@ -2,8 +2,6 @@ import math
 from typing import List, Union, Tuple
 
 import numpy as np
-import quaternion
-from quaternion import quaternion as quat
 
 from ..datatypes.pose import PoseData
 from ..datatypes.laserscan import LaserScanData
@@ -81,21 +79,41 @@ def probability_of_collision(
         return prop_col
 
 
-def _rotate_vector_by_quaternion(q: quaternion.quaternion, v: List) -> List:
+def _np_quaternion_multiply(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
     """
-    rotate a vector v by a rotation quaternion q
-
-    :param      q: the rotation to perform
-    :type       q: quaternion.quaternion
-    :param      v: the vector to be rotated
-    :type       v: List
-
-    :return:    the rotated position of the vector
-    :rtype:     List
+    Multiplies two quaternions q1 * q2
+    Each quaternion is an array [w, x, y, z]
     """
-    vq = quat(0, 0, 0, 0)
-    vq.imag = v
-    return (q * vq * q.inverse()).imag
+    w0, x0, y0, z0 = q1
+    w1, x1, y1, z1 = q2
+    return np.array([
+        w0 * w1 - x0 * x1 - y0 * y1 - z0 * z1,
+        w0 * x1 + x0 * w1 + y0 * z1 - z0 * y1,
+        w0 * y1 - x0 * z1 + y0 * w1 + z0 * x1,
+        w0 * z1 + x0 * y1 - y0 * x1 + z0 * w1,
+    ])
+
+
+def _np_quaternion_conjugate(q: np.ndarray) -> np.ndarray:
+    """
+    Returns the conjugate of a quaternion
+    """
+    w, x, y, z = q
+    return np.array([w, -x, -y, -z])
+
+
+def _rotate_vector_by_quaternion(q: np.ndarray, v: List[float]) -> List[float]:
+    """
+    Rotate a 3D vector v by a quaternion q.
+
+    :param      q: quaternion [w, x, y, z]
+    :param      v: vector [x, y, z]
+    :return:    rotated vector
+    """
+    vq = np.array([0.0, *v])
+    q_conj = _np_quaternion_conjugate(q)
+    rotated_vq = _np_quaternion_multiply(_np_quaternion_multiply(q, vq), q_conj)
+    return rotated_vq[1:].tolist()
 
 
 def get_pose_target_in_reference_frame(
@@ -119,10 +137,13 @@ def get_pose_target_in_reference_frame(
     reference_position = reference_pose.get_position()
     reference_rotation = reference_pose.get_orientation()
 
-    orientation_target_in_ref = reference_rotation.inverse() * orientation_target
+    orientation_target_in_ref = (
+        _np_quaternion_conjugate(reference_rotation) * orientation_target
+    )
 
     position_target_in_ref = _rotate_vector_by_quaternion(
-        reference_rotation.inverse(), (position_target - reference_position).tolist()
+        _np_quaternion_conjugate(reference_rotation),
+        (position_target - reference_position).tolist(),
     )
 
     target_pose_in_ref = PoseData()
@@ -130,10 +151,10 @@ def get_pose_target_in_reference_frame(
         x=position_target_in_ref[0],
         y=position_target_in_ref[1],
         z=position_target_in_ref[2],
-        qw=orientation_target_in_ref.w,
-        qx=orientation_target_in_ref.x,
-        qy=orientation_target_in_ref.y,
-        qz=orientation_target_in_ref.z,
+        qw=orientation_target_in_ref[0],
+        qx=orientation_target_in_ref[1],
+        qy=orientation_target_in_ref[2],
+        qz=orientation_target_in_ref[3],
     )
 
     return target_pose_in_ref
@@ -209,7 +230,7 @@ def from_2d_to_PoseData(x: float, y: float, heading: float) -> PoseData:
     :rtype: PoseData
     """
     pose_data = PoseData()
-    quat_data: quat = from_euler_to_quaternion(heading, 0.0, 0.0)
+    quat_data: np.ndarray = from_euler_to_quaternion(heading, 0.0, 0.0)
     pose_data.set_position(x, y, 0.0)
     pose_data.set_orientation(
         qw=quat_data[0], qx=quat_data[1], qy=quat_data[2], qz=quat_data[3]
