@@ -20,7 +20,7 @@ license = { text = "MIT" }
 keywords = ["robotics", "gpgpu", "navigation", "control", "planning", "mapping"]
 
 dependencies = [
-    "numpy<=1.26.4",
+    "numpy",
     "toml",
     "attrs>=23.2.0",
     "pyyaml",

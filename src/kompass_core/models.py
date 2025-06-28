@@ -1108,9 +1108,9 @@ class OmniDirectionalControl(MotionControl):
 class RobotType(Enum):
     """RobotType."""
 
-    ACKERMANN = "ACKERMANN_ROBOT"
-    DIFFERENTIAL_DRIVE = "DIFFERENTIAL_DRIVE_ROBOT"
-    OMNI = "OMNI_ROBOT"
+    ACKERMANN = "ACKERMANN"
+    DIFFERENTIAL_DRIVE = "DIFFERENTIAL_DRIVE"
+    OMNI = "OMNI"
 
     @classmethod
     def values(cls) -> List[str]:
@@ -1148,17 +1148,17 @@ class RobotType(Enum):
         :return: Robot Type
         :rtype: kompass_cpp.control_types
         """
-        if value == "ACKERMANN_ROBOT":
+        if value == "ACKERMANN":
             return kompass_cpp.control.ControlType.ACKERMANN
-        if value == "DIFFERENTIAL_DRIVE_ROBOT":
+        if value == "DIFFERENTIAL_DRIVE":
             return kompass_cpp.control.ControlType.DIFFERENTIAL_DRIVE
         return kompass_cpp.control.ControlType.OMNI
 
 
 control_types = {
-    "ACKERMANN_ROBOT": AckermannControl,
-    "DIFFERENTIAL_DRIVE_ROBOT": DifferentialDriveControl,
-    "OMNI_ROBOT": OmniDirectionalControl,
+    "ACKERMANN": AckermannControl,
+    "DIFFERENTIAL_DRIVE": DifferentialDriveControl,
+    "OMNI": OmniDirectionalControl,
 }
 
 
