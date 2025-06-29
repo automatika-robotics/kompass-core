@@ -33,6 +33,7 @@ class VisionRGBFollowerConfig(BaseAttrs):
         min_vel (float): Minimum linear velocity allowed during target following (m/s).
         enable_search (bool): Whether to activate search behavior when the target is lost.
     """
+
     control_time_step: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
@@ -164,6 +165,7 @@ class VisionRGBFollower(ControllerTemplate):
     omega = controller.angular_control
     ```
     """
+
     def __init__(
         self,
         robot: Robot,
@@ -189,7 +191,7 @@ class VisionRGBFollower(ControllerTemplate):
         self._config = config or VisionRGBFollowerConfig()
 
         if config_file:
-            config.from_file(config_file, config_root_name, get_common=False)
+            self._config.from_file(config_file, config_root_name, get_common=False)
         self.__controller = RGBFollower(
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
@@ -217,7 +219,7 @@ class VisionRGBFollower(ControllerTemplate):
         :return: Last distance error (m)
         :rtype: float
         """
-        return self._planner.get_errors()[0]
+        return self.__controller.get_errors()[0]
 
     @property
     def orientation_error(self) -> float:
@@ -226,7 +228,7 @@ class VisionRGBFollower(ControllerTemplate):
         :return: Last orientation error (radians)
         :rtype: float
         """
-        return self._planner.get_errors()[1]
+        return self.__controller.get_errors()[1]
 
     def loop_step(
         self,

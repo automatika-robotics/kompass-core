@@ -214,19 +214,15 @@ class DWA(FollowerTemplate):
         :type control_time_step: Optional[float], optional
         """
         # Init and configure the planner
-        if not config:
-            # Default config
-            config = DWAConfig()
+        self._config = config or DWAConfig()
 
         if config_file:
-            config.from_file(file_path=config_file, nested_root_name=config_root_name)
+            self._config.from_file(file_path=config_file, nested_root_name=config_root_name)
 
         if control_time_step:
-            config.control_time_step = control_time_step
+            self._config.control_time_step = control_time_step
 
         self._got_path = False
-
-        self._config = config
 
         self._planner = kompass_cpp.control.DWA(
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
