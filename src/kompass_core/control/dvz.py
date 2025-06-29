@@ -130,7 +130,7 @@ class DVZ(FollowerTemplate):
         return self.__reference_cmd_generator.interpolated_path()
 
     @property
-    def tracked_state(self) -> RobotState:
+    def tracked_state(self) -> Optional[RobotState]:
         """
         Tracked state on the path
 

@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional
 from logging import Logger
 from ..models import (
     Robot,

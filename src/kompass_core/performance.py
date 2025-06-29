@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any, List, Optional
 
 import numpy as np
 from .datatypes.obstacles import ObstaclesData
@@ -18,7 +18,7 @@ class MotionResult:
     def __init__(self) -> None:
         self.time = []
         self.steer_cmds: List[float] = []
-        self.robot_path: PathSample = None
+        self.robot_path: Optional[PathSample] = None
         self.speed_cmd: List[float] = []
         self.ori_error: List[float] = []
         self.lat_error: List[float] = []
@@ -93,7 +93,7 @@ class MotionResult:
         )
 
         # Plot test path
-        visualization.plt_path_points_List(test, color="red", ax=ax3)
+        visualization.plt_path_points_list(test, color="red", ax=ax3)
 
         # Plot robot initial state
         robot_footprint.plt_robot(

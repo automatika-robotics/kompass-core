@@ -19,7 +19,7 @@ struct State {
 
   State(double poseX = 0.0, double poseY = 0.0, double PoseYaw = 0.0,
         double speedValue = 0.0)
-      : x(poseX), y(poseY), yaw(PoseYaw), speed(speedValue){};
+      : x(poseX), y(poseY), yaw(PoseYaw), speed(speedValue) {};
 
   void update(const Kompass::Control::Velocity2D &vel, const float timeStep) {
     this->x +=
@@ -46,7 +46,7 @@ struct Path {
   // interpolation
   int max_segment_size{10};
 
-  Path(const Path& other) = default;
+  Path(const Path &other) = default;
 
   Path(const std::vector<Point> &points = {}, const size_t new_max_size = 10);
 
@@ -70,7 +70,7 @@ struct Path {
   Path getPart(const size_t start, const size_t end,
                const size_t max_part_size = 0) const;
 
-  void pushPoint(const Point& point);
+  void pushPoint(const Point &point);
 
   size_t getSize() const;
 
@@ -109,9 +109,7 @@ struct Path {
 
     Iterator(const Path &p, size_t idx) : path(p), index(idx) {}
 
-    Point operator*() const {
-      return path.getIndex(index);
-    }
+    Point operator*() const { return path.getIndex(index); }
 
     Iterator &operator++() {
       ++index;
@@ -131,10 +129,10 @@ struct Path {
   Iterator end() const { return Iterator(*this, current_size_); }
 
 private:
-  Eigen::VectorXf X_; // Vector of X coordinates
-  Eigen::VectorXf Y_; // Vector of Y coordinates
-  Eigen::VectorXf Z_; // Vector of Z coordinates
-  size_t current_size_{0}; // Current size of the path
+  Eigen::VectorXf X_;                   // Vector of X coordinates
+  Eigen::VectorXf Y_;                   // Vector of Y coordinates
+  Eigen::VectorXf Z_;                   // Vector of Z coordinates
+  size_t current_size_{0};              // Current size of the path
   size_t max_interpolation_iterations_; // Max number of iterations for
                                         // interpolation between two path points
   // Max interpolation distance and total path distance are updated from user

@@ -129,7 +129,8 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
   initLaserscan(360, 10.0, scan_ranges, scan_angles);
 
   bool forward_motion = true;
-  float critical_angle = 160.0, critical_distance = 0.3, slowdown_distance = 0.6;
+  float critical_angle = 160.0, critical_distance = 0.3,
+        slowdown_distance = 0.6;
 
   CriticalZoneChecker zoneChecker(robotShapeType, robotDimensions,
                                   sensor_position_body, sensor_rotation_body,
@@ -144,8 +145,8 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
   setLaserscanAtAngle(-0.1, 0.2, scan_ranges, scan_angles);
   float result = zoneChecker.check(scan_ranges, scan_angles, forward_motion);
   BOOST_TEST(result == 1.0, "Angles are behind and robot is moving forward -> "
-                      "Critical zone result should be 1.0, returned "
-                          << result);
+                            "Critical zone result should be 1.0, returned "
+                                << result);
   if (result == 1.0) {
     LOG_INFO("Test1 PASSED: Angles are behind and robot is moving forward");
   }

@@ -26,7 +26,7 @@ DepthDetector::DepthDetector(
     const Eigen::Isometry3f &camera_in_body_tf,
     const Eigen::Vector2f &focal_length, const Eigen::Vector2f &principal_point,
     const float depth_conversion_factor) { // Range of interest for depth values
-                                   // in meters
+                                           // in meters
   minDepth_ = depth_range(0);
   maxDepth_ = depth_range(1);
   // Factor to convert depth image data to meters (in ROS2 its given in mm ->
@@ -55,7 +55,7 @@ void DepthDetector::updateBoxes(
     const Eigen::MatrixX<unsigned short> aligned_depth_img,
     const std::vector<Bbox2D> &detections,
     const std::optional<Path::State> &robot_state) {
-  if(robot_state.has_value()) {
+  if (robot_state.has_value()) {
     body_in_world_tf_ = getTransformation(robot_state.value());
   }
   alignedDepthImg_ = aligned_depth_img;
@@ -115,7 +115,8 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
       this->fy_;
   center_in_camera_frame(2) = medianDepth;
 
-  LOG_DEBUG("Median depth = ", medianDepth, ", min=", minimum_d, ", max=", maximum_d);
+  LOG_DEBUG("Median depth = ", medianDepth, ", min=", minimum_d,
+            ", max=", maximum_d);
 
   // Size in meters
   size_camera_frame(0) = box2d.size.x() * medianDepth / this->fx_;

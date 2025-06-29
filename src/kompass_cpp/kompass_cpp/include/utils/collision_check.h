@@ -269,8 +269,8 @@ private:
   void updateOctreePtr();
 
   /**
-   * @brief Helper method to generate a vector of fcl::Box collision objects from an
-   * fcl::Octree
+   * @brief Helper method to generate a vector of fcl::Box collision objects
+   * from an fcl::Octree
    *
    * @param boxes
    * @param tree

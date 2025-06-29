@@ -12,7 +12,7 @@ from kompass_cpp.types import (
     TrajectoryVelocities2D,
     TrajectoryPath,
 )
-from typing import Optional, List
+from typing import Optional, List, Union
 import numpy as np
 import logging
 from ._base_ import ControllerTemplate
@@ -521,7 +521,7 @@ class VisionRGBDFollower(ControllerTemplate):
         return None
 
     @property
-    def linear_x_control(self) -> np.ndarray:
+    def linear_x_control(self) -> Union[List[float], np.ndarray]:
         """
         Getter of the last linear forward velocity control computed by the controller
 
@@ -533,7 +533,7 @@ class VisionRGBDFollower(ControllerTemplate):
         return [0.0]
 
     @property
-    def linear_y_control(self) -> np.ndarray:
+    def linear_y_control(self) -> Union[List[float], np.ndarray]:
         """
         Getter the last linear velocity lateral control computed by the controller
 
@@ -545,7 +545,7 @@ class VisionRGBDFollower(ControllerTemplate):
         return [0.0]
 
     @property
-    def angular_control(self) -> np.ndarray:
+    def angular_control(self) -> Union[List[float], np.ndarray]:
         """
         Getter of the last angular velocity control computed by the controller
 

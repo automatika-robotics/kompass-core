@@ -98,7 +98,7 @@ void TrajectorySampler::setSampleDroppingMode(const bool drop_samples) {
   this->drop_samples_ = drop_samples;
 }
 
-float TrajectorySampler::getRobotRadius() const{
+float TrajectorySampler::getRobotRadius() const {
   return collChecker->getRadius();
 }
 
@@ -516,7 +516,7 @@ bool TrajectorySampler::checkStatesFeasibility<LaserScan>(
   for (auto state : states) {
     collChecker->updateState(state);
     // Update the PointCloud values
-    if(collChecker->checkCollisions()){
+    if (collChecker->checkCollisions()) {
       return true;
     }
   }

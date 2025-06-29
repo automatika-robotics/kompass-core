@@ -7,7 +7,6 @@
 namespace py = nanobind;
 using namespace Kompass;
 
-
 // Utils submodule
 void bindings_planning(py::module_ &m) {
   auto m_planning = m.def_submodule("planning", "KOMPASS CPP Planning Module");
@@ -24,7 +23,7 @@ void bindings_planning(py::module_ &m) {
            py::arg("goal_x"), py::arg("goal_y"), py::arg("goal_yaw"),
            py::arg("map_3d"))
       .def("solve", &Planning::OMPL2DGeometricPlanner::solve,
-               py::arg("planning_timeout") = 1.0)
+           py::arg("planning_timeout") = 1.0)
       .def("get_solution", &Planning::OMPL2DGeometricPlanner::getPath)
       .def("set_space_bounds_from_map",
            &Planning::OMPL2DGeometricPlanner::setSpaceBoundsFromMap,

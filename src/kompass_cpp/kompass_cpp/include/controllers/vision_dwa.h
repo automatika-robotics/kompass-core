@@ -26,8 +26,8 @@ public:
   public:
     VisionDWAConfig() : RGBFollower::RGBFollowerConfig() {
       addParameter(
-        "control_horizon",
-        Parameter(2, 1, 1000, "Number of steps for applying the control"));
+          "control_horizon",
+          Parameter(2, 1, 1000, "Number of steps for applying the control"));
       addParameter(
           "prediction_horizon",
           Parameter(10, 1, 1000, "Number of steps for future prediction"));
@@ -219,8 +219,8 @@ public:
                      const Bbox2D &target_box_2d, const float yaw = 0.0);
 
   Eigen::Vector2f getErrors() const {
-      return Eigen::Vector2f(dist_error_, orientation_error_);
-    }
+    return Eigen::Vector2f(dist_error_, orientation_error_);
+  }
 
 private:
   VisionDWAConfig config_;
@@ -247,7 +247,8 @@ private:
    * @param tracking_pose
    * @return Velocity2D
    */
-  Velocity2D getPureTrackingCtrl(const TrackedPose2D &tracking_pose, const bool update_global_error = false);
+  Velocity2D getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
+                                 const bool update_global_error = false);
 
   /**
    * @brief Get the Tracking Control Result based on object tracking and DWA

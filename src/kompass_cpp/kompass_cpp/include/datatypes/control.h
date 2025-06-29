@@ -17,11 +17,11 @@ class Pose3D {
 public:
   Pose3D(const Eigen::Vector3f &position, const Eigen::Vector4f &orientation)
       : position_(position), orientation_(orientation),
-        rotation_matrix_(orientation_.toRotationMatrix()){};
+        rotation_matrix_(orientation_.toRotationMatrix()) {};
 
   Pose3D(const Eigen::Vector3f &position, const Eigen::Quaternionf &orientation)
       : position_(position), orientation_(orientation),
-        rotation_matrix_(orientation.toRotationMatrix()){};
+        rotation_matrix_(orientation.toRotationMatrix()) {};
 
   /**
    * @brief Construct a new Pose3D object using 2D pose information
@@ -30,8 +30,9 @@ public:
    * @param pose_y
    * @param pose_yaw
    */
-  Pose3D(const float &pose_x, const float &pose_y, const float &pose_yaw)
-      {update(pose_x, pose_y, pose_yaw);};
+  Pose3D(const float &pose_x, const float &pose_y, const float &pose_yaw) {
+    update(pose_x, pose_y, pose_yaw);
+  };
 
   void setFrame(const std::string &frame_id) { frame_id_ = frame_id; }
 
@@ -89,12 +90,12 @@ public:
     return std::atan2(rotation_matrix_(1, 0), rotation_matrix_(0, 0));
   };
 
-  void update(const float &pose_x, const float &pose_y, const float &pose_yaw){
+  void update(const float &pose_x, const float &pose_y, const float &pose_yaw) {
     position_ = {pose_x, pose_y, 0.0};
     setRotation(0.0, 0.0, pose_yaw);
   }
 
-  void setRotation(const float pitch, const float roll, const float yaw){
+  void setRotation(const float pitch, const float roll, const float yaw) {
     Eigen::AngleAxisf rotZ(yaw, Eigen::Vector3f::UnitZ());
     Eigen::AngleAxisf rotY(pitch, Eigen::Vector3f::UnitY());
     Eigen::AngleAxisf rotX(roll, Eigen::Vector3f::UnitX());
@@ -102,7 +103,7 @@ public:
     rotation_matrix_ = orientation_.toRotationMatrix();
   }
 
-  protected :
+protected:
   Eigen::Vector3f position_;
   Eigen::Quaternionf orientation_;
   Eigen::Matrix3f rotation_matrix_;
@@ -144,19 +145,19 @@ class TrackedPose2D : public Pose3D {
 public:
   TrackedPose2D(const Eigen::Vector3f &position,
                 const Eigen::Vector4f &orientation, const Velocity2D &vel)
-      : Pose3D(position, orientation), vel_(vel){};
+      : Pose3D(position, orientation), vel_(vel) {};
 
   TrackedPose2D(const Eigen::Vector3f &position,
                 const Eigen::Quaternionf &orientation, const Velocity2D &vel)
-      : Pose3D(position, orientation), vel_(vel){};
+      : Pose3D(position, orientation), vel_(vel) {};
 
   TrackedPose2D(const float &pose_x, const float &pose_y, const float &pose_yaw,
                 const Velocity2D &vel)
-      : Pose3D(pose_x, pose_y, pose_yaw), vel_(vel){};
+      : Pose3D(pose_x, pose_y, pose_yaw), vel_(vel) {};
 
   TrackedPose2D(const float &pose_x, const float &pose_y, const float &pose_yaw,
                 const float &vx, const float &vy, const float &omega)
-      : Pose3D(pose_x, pose_y, pose_yaw), vel_(vx, vy, omega){};
+      : Pose3D(pose_x, pose_y, pose_yaw), vel_(vx, vy, omega) {};
 
   float v() const { return Eigen::Vector2f{vel_.vx(), vel_.vy()}.norm(); };
 
@@ -164,19 +165,21 @@ public:
 
   void update(const float timeStep) {
     position_(0) +=
-        (vel_.vx() * cos(this->yaw()) - vel_.vy() * sin(this->yaw())) * timeStep;
+        (vel_.vx() * cos(this->yaw()) - vel_.vy() * sin(this->yaw())) *
+        timeStep;
     position_(1) +=
-        (vel_.vx() * sin(this->yaw()) + vel_.vy() * cos(this->yaw())) * timeStep;
+        (vel_.vx() * sin(this->yaw()) + vel_.vy() * cos(this->yaw())) *
+        timeStep;
     float yaw = this->yaw() + vel_.omega() * timeStep;
     setRotation(0.0, 0.0, yaw);
   }
 
-  void update(const Velocity2D& vel, const float timeStep) {
+  void update(const Velocity2D &vel, const float timeStep) {
     vel_ = vel;
     update(timeStep);
   }
 
-  float distance(const float x, const float y, const float z = 0.0) const{
+  float distance(const float x, const float y, const float z = 0.0) const {
     return sqrt(pow(position_.x() - x, 2) + pow(position_.y() - y, 2) +
                 pow(position_.z() - z, 2));
   }

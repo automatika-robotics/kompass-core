@@ -47,19 +47,21 @@ Path::Path(const Eigen::VectorXf &x_points, const Eigen::VectorXf &y_points,
   Z_.head(current_size_) = z_points;
 }
 
-const Eigen::VectorXf Path::getX() const { return X_.segment(0, current_size_); }
-
-const Eigen::VectorXf Path::getY() const {return Y_.segment(0, current_size_);}
-
-const Eigen::VectorXf Path::getZ() const { return Z_.segment(0, current_size_); }
-
-size_t Path::getSize() const {
-  return current_size_;
+const Eigen::VectorXf Path::getX() const {
+  return X_.segment(0, current_size_);
 }
 
-void Path::setMaxLength(double max_length) {
-  max_path_length_ = max_length;
+const Eigen::VectorXf Path::getY() const {
+  return Y_.segment(0, current_size_);
 }
+
+const Eigen::VectorXf Path::getZ() const {
+  return Z_.segment(0, current_size_);
+}
+
+size_t Path::getSize() const { return current_size_; }
+
+void Path::setMaxLength(double max_length) { max_path_length_ = max_length; }
 
 void Path::resize(const size_t new_max_size) {
   max_size_ = new_max_size;
@@ -78,9 +80,7 @@ bool Path::endReached(State currentState, double minDist) {
   return dist <= minDist;
 }
 
-size_t Path::getMaxSize() const{
-  return max_size_;
-}
+size_t Path::getMaxSize() const { return max_size_; }
 
 size_t Path::getMaxNumSegments() { return segments.size() - 1; }
 
@@ -88,13 +88,14 @@ Point Path::getEnd() const { return getIndex(current_size_ - 1); }
 
 Point Path::getStart() const { return getIndex(0); }
 
-Point Path::getIndex(const size_t index) const{
+Point Path::getIndex(const size_t index) const {
   assert(index < current_size_ && "Index out of range");
   return Point(X_(index), Y_(index), Z_(index));
 }
 
-Path Path::getPart(const size_t start, const size_t end, const size_t max_part_size) const{
-  if (start >= current_size_ || end >= current_size_ || start >= end ) {
+Path Path::getPart(const size_t start, const size_t end,
+                   const size_t max_part_size) const {
+  if (start >= current_size_ || end >= current_size_ || start >= end) {
     throw std::out_of_range("Invalid range for path part.");
   }
   auto part_size = std::max(max_part_size, end - start + 1);
@@ -105,7 +106,7 @@ Path Path::getPart(const size_t start, const size_t end, const size_t max_part_s
 }
 
 void Path::pushPoint(const Point &point) {
-  if(current_size_ >= max_size_) {
+  if (current_size_ >= max_size_) {
     throw std::out_of_range("Path is full. Cannot add more points.");
   }
   X_(current_size_) = point.x();
@@ -219,7 +220,7 @@ void Path::interpolate(double max_interpolation_point_dist,
   this->max_interpolation_dist_ = max_interpolation_point_dist;
   // Set the maximum size for the points
   auto maxSize = static_cast<size_t>(this->max_path_length_ /
-                                       this->max_interpolation_dist_);
+                                     this->max_interpolation_dist_);
   resize(maxSize);
   // Remaining iteration when interpolating the path (interpolation points
   // between each two path points)
@@ -311,7 +312,8 @@ void Path::segment(double pathSegmentLength) {
     new_segment.resize(this->max_segment_size);
     segments.push_back(new_segment);
   } else {
-    int segmentsNumber = max(static_cast<int>(totalLength / pathSegmentLength), 1);
+    int segmentsNumber =
+        max(static_cast<int>(totalLength / pathSegmentLength), 1);
     if (segmentsNumber == 1) {
       auto new_segment = *this;
       new_segment.resize(this->max_segment_size);
@@ -325,7 +327,7 @@ void Path::segment(double pathSegmentLength) {
 // Segment using a number of segments
 void Path::segmentBySegmentNumber(int numSegments) {
   segments.clear();
-  if (numSegments <= 0 || current_size_ <= 0 ) {
+  if (numSegments <= 0 || current_size_ <= 0) {
     throw std::invalid_argument(
         "Invalid number of segments or empty points vector.");
   }

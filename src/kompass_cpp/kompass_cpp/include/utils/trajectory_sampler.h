@@ -135,7 +135,7 @@ public:
 
   template <typename T>
   bool checkStatesFeasibility(const std::vector<Path::State> &states,
-                                const T &sensor_points);
+                              const T &sensor_points);
 
   size_t numTrajectories;
   size_t numPointsPerTrajectory;

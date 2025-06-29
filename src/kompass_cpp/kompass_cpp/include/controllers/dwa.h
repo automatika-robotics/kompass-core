@@ -72,7 +72,8 @@ public:
                  const int maxNumThreads = 1);
 
   /**
-   * @brief Reset the resolution of the robot's local map, this is equivalent to the box size representing each obstacle after conversion
+   * @brief Reset the resolution of the robot's local map, this is equivalent to
+   * the box size representing each obstacle after conversion
    *
    * @param octreeRes
    */
@@ -111,7 +112,7 @@ public:
 
   template <typename T>
   Controller::Result computeVelocityCommand(const Velocity2D &global_vel,
-                                            const T &scan_points){
+                                            const T &scan_points) {
     TrajSearchResult searchRes = findBestPath(global_vel, scan_points);
     Controller::Result finalResult;
     if (searchRes.isTrajFound) {
@@ -123,18 +124,18 @@ public:
       finalResult.status = Controller::Result::Status::NO_COMMAND_POSSIBLE;
     }
     return finalResult;
-                                            };
+  };
 
   template <typename T>
   TrajSearchResult computeVelocityCommandsSet(const Velocity2D &global_vel,
-                                              const T &scan_points){
+                                              const T &scan_points) {
     TrajSearchResult searchRes = findBestPath(global_vel, scan_points);
     // Update latest velocity command
     if (searchRes.isTrajFound) {
       latest_velocity_command_ = searchRes.trajectory.velocities.getFront();
     }
     return searchRes;
-                                              };
+  };
 
   std::tuple<MatrixXfR, MatrixXfR> getDebuggingSamples() const;
 
@@ -175,7 +176,7 @@ protected:
    */
   template <typename T>
   TrajSearchResult findBestPath(const Velocity2D &global_vel,
-                                const T &scan_points){
+                                const T &scan_points) {
     // Throw an error if the global path is not set
     if (!currentPath) {
       throw std::invalid_argument("Pointer to global path is NULL. Cannot use "
@@ -185,11 +186,15 @@ protected:
     // find closest segment to use in cost computation
     determineTarget();
 
-    if(rotate_in_place and currentTrackedTarget_->heading_error > goal_orientation_tolerance * 10.0){
+    if (rotate_in_place and currentTrackedTarget_->heading_error >
+                                goal_orientation_tolerance * 10.0) {
       // If the robot is rotating in place and the heading error is large, we
       // do not need to sample trajectories
       LOG_DEBUG("Rotating In Place ...");
-      auto trajectory = trajSampler->generateSingleSampleFromVel(Velocity2D(0.0, 0.0, - currentTrackedTarget_->heading_error * ctrlimitsParams.omegaParams.maxOmega / M_PI));
+      auto trajectory = trajSampler->generateSingleSampleFromVel(
+          Velocity2D(0.0, 0.0,
+                     -currentTrackedTarget_->heading_error *
+                         ctrlimitsParams.omegaParams.maxOmega / M_PI));
       return TrajSearchResult{trajectory, true, 0.0};
     }
 
@@ -208,7 +213,7 @@ protected:
     // Evaluate the samples and get the sample with the minimum cost
     return trajCostEvaluator->getMinTrajectoryCost(samples_, currentPath.get(),
                                                    trackedRefPathSegment);
-                                };
+  };
 
 private:
   double max_forward_distance_ = 0.0;

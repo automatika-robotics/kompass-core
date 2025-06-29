@@ -90,7 +90,8 @@ struct TrajectoryVelocities2D {
   // get the first element
   Velocity2D getFront() const {
     assert(numPointsPerTrajectory_ > 1 && "Velocities are empty");
-    return Velocity2D(vx(0), vy(0), omega(0)); };
+    return Velocity2D(vx(0), vy(0), omega(0));
+  };
   // get the last element
   Velocity2D getEnd() const {
     assert(numPointsPerTrajectory_ > 1 && "Velocities are empty");
@@ -211,7 +212,8 @@ struct TrajectoryPath {
   // get the first element
   Path::Point getFront() const {
     assert(numPointsPerTrajectory_ > 0 && "Path is empty");
-    return Path::Point(x(0), y(0), z(0)); };
+    return Path::Point(x(0), y(0), z(0));
+  };
   // get the last element
   Path::Point getEnd() const {
     assert(numPointsPerTrajectory_ > 0 && "Path is empty");
@@ -401,7 +403,9 @@ struct TrajectoryPathSamples {
 
   // Add a new path from a Path struct.
   void push_back(const Path::Path &path) {
-    assert(path.getSize() == numPointsPerTrajectory_ && "Path points vector must have size equivalent to numPointsPerTrajectory");
+    assert(path.getSize() == numPointsPerTrajectory_ &&
+           "Path points vector must have size equivalent to "
+           "numPointsPerTrajectory");
 
     pathIndex_++;
     for (size_t i = 0; i < numPointsPerTrajectory_; ++i) {

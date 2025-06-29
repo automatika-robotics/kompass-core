@@ -105,7 +105,7 @@ public:
    */
   TrajSearchResult
   getMinTrajectoryCost(const std::unique_ptr<TrajectorySamples2D> &trajs,
-                       const Path::Path* reference_path,
+                       const Path::Path *reference_path,
                        const Path::Path &tracked_segment);
 
   /**
@@ -148,7 +148,9 @@ public:
   };
 
   void setPointScan(const std::vector<Path::Point> &cloud,
-                    const Path::State &current_state, const float max_sensor_range, const float max_obstacle_cost_range_multiple = 3.0) {
+                    const Path::State &current_state,
+                    const float max_sensor_range,
+                    const float max_obstacle_cost_range_multiple = 3.0) {
     obstaclePointsX.clear();
     obstaclePointsY.clear();
     maxObstaclesDist = max_sensor_range / max_obstacle_cost_range_multiple;
@@ -229,8 +231,7 @@ private:
    * @param trajectories
    * @param reference_path
    */
-  sycl::event goalCostFunc(const size_t trajs_size,
-                           const float ref_path_length,
+  sycl::event goalCostFunc(const size_t trajs_size, const float ref_path_length,
                            const double cost_weight);
 
   /**
