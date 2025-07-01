@@ -63,8 +63,8 @@ public:
                 ControlLimitsParams ctrLimits, size_t maxNumTrajectories,
                 size_t numPointsPerTrajectory, size_t maxRefPathSegmentSize);
   CostEvaluator(TrajectoryCostsWeights &costsWeights,
-                const std::array<float, 3> &sensor_position_body,
-                const std::array<float, 4> &sensor_rotation_body,
+                const Eigen::Vector3f &sensor_position_body,
+                const Eigen::Quaternionf &sensor_rotation_body,
                 ControlLimitsParams ctrLimits, size_t maxNumTrajectories,
                 size_t numPointsPerTrajectory, size_t maxRefPathSegmentSize);
 
@@ -105,7 +105,7 @@ public:
    */
   TrajSearchResult
   getMinTrajectoryCost(const std::unique_ptr<TrajectorySamples2D> &trajs,
-                       const Path::Path &reference_path,
+                       const Path::Path *reference_path,
                        const Path::Path &tracked_segment);
 
   /**
@@ -148,7 +148,9 @@ public:
   };
 
   void setPointScan(const std::vector<Path::Point> &cloud,
-                    const Path::State &current_state, const float max_sensor_range, const float max_obstacle_cost_range_multiple = 3.0) {
+                    const Path::State &current_state,
+                    const float max_sensor_range,
+                    const float max_obstacle_cost_range_multiple = 3.0) {
     obstaclePointsX.clear();
     obstaclePointsY.clear();
     maxObstaclesDist = max_sensor_range / max_obstacle_cost_range_multiple;
@@ -209,6 +211,7 @@ private:
   float *m_devicePtrTempCosts = nullptr;
   LowestCost *m_minCost;
   sycl::queue m_q;
+  sycl::vec<float, 3> m_deviceRefPathEnd;
   void initializeGPUMemory();
   /**
    * @brief Trajectory cost based on the distance to a given reference path
@@ -228,9 +231,7 @@ private:
    * @param trajectories
    * @param reference_path
    */
-  sycl::event goalCostFunc(const size_t trajs_size,
-                           const Path::Point &last_ref_point,
-                           const float ref_path_length,
+  sycl::event goalCostFunc(const size_t trajs_size, const float ref_path_length,
                            const double cost_weight);
 
   /**
@@ -283,7 +284,7 @@ private:
    * @return float
    */
   float goalCostFunc(const Trajectory2D &trajectory,
-                     const Path::Path &reference_path,
+                     const Path::Point &reference_path_end_point,
                      const float ref_path_length);
 
   /**

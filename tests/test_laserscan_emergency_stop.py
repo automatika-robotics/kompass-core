@@ -3,7 +3,6 @@ import json
 import numpy as np
 import logging
 import pytest
-import matplotlib.pyplot as plt
 from kompass_core.datatypes import LaserScanData
 from kompass_core.utils.geometry import get_laserscan_transformed_polar_coordinates
 from kompass_core.utils.emergency_stop import EmergencyChecker
@@ -49,7 +48,6 @@ def test_laserscan_polar_tf(laser_scan_data: LaserScanData, plot: bool = False):
     # 90 Deg rotation around z
     translation = [0.0, 0.0, 0.173]
     rotation = [0.0, 0.0, 0.7071068, 0.7071068]
-    # rotation = [0.0, 0.0, 0.0, 1.0]
 
     transformed_scan = get_laserscan_transformed_polar_coordinates(
         angle_min=laser_scan_data.angle_min,
@@ -60,20 +58,28 @@ def test_laserscan_polar_tf(laser_scan_data: LaserScanData, plot: bool = False):
         translation=translation,
         rotation=rotation,
     )
-
     if plot:
-        fig, ax = plt.subplots(subplot_kw={"projection": "polar"})
-        ax.plot(
-            laser_scan_data.angles, laser_scan_data.ranges, label="Original LaserScan"
-        )
-        ax.plot(
-            transformed_scan.angles,
-            transformed_scan.ranges,
-            label="Transformed LaserScan",
-        )
-        fig.legend()
-        dir_name = os.path.dirname(os.path.abspath(__file__))
-        plt.savefig(os.path.join(dir_name, "laserscan_tf_test.png"))
+        try:
+            import matplotlib.pyplot as plt
+
+            fig, ax = plt.subplots(subplot_kw={"projection": "polar"})
+            ax.plot(
+                laser_scan_data.angles,
+                laser_scan_data.ranges,
+                label="Original LaserScan",
+            )
+            ax.plot(
+                transformed_scan.angles,
+                transformed_scan.ranges,
+                label="Transformed LaserScan",
+            )
+            fig.legend()
+            dir_name = os.path.dirname(os.path.abspath(__file__))
+            plt.savefig(os.path.join(dir_name, "laserscan_tf_test.png"))
+        except ImportError:
+            logging.warning(
+                "Matplotlib is required for visualization. Figures will not be generated. To generate test figures, install it using 'pip install matplotlib'."
+            )
 
     old_range = laser_scan_data.ranges[
         laser_scan_data.angles == laser_scan_data.angle_min
@@ -108,7 +114,17 @@ def test_laserscan_partial_data(laser_scan_data: LaserScanData, plot: bool = Fal
         right_angle=right_angle, left_angle=left_angle
     )
 
+    assert len(partial_angles) <= laser_scan_data.angles.size
+    assert len(partial_ranges) <= laser_scan_data.ranges.size
+
     if plot:
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            logging.warning(
+                "Matplotlib is required for visualization. Figures will not be generated. To generate test figures, install it using 'pip install matplotlib'."
+            )
+            return
         fig, ax = plt.subplots(subplot_kw={"projection": "polar"})
         ax.plot(
             laser_scan_data.angles, laser_scan_data.ranges, label="Original LaserScan"
@@ -117,9 +133,6 @@ def test_laserscan_partial_data(laser_scan_data: LaserScanData, plot: bool = Fal
         fig.legend()
         dir_name = os.path.dirname(os.path.abspath(__file__))
         plt.savefig(os.path.join(dir_name, "laserscan_partial_test.png"))
-
-    assert len(partial_angles) <= laser_scan_data.angles.size
-    assert len(partial_ranges) <= laser_scan_data.ranges.size
 
 
 @pytest.mark.parametrize("use_gpu", [False, True])
@@ -136,6 +149,7 @@ def test_emergency_stop(laser_scan_data: LaserScanData, use_gpu):
         geometry_params=np.array([robot_radius, 0.4]),
     )
     emergency_distance = 0.5
+    slowdown_distance = 1.0
     emergency_angle = 90.0
 
     large_range = 10.0
@@ -144,9 +158,10 @@ def test_emergency_stop(laser_scan_data: LaserScanData, use_gpu):
     emergency_stop = EmergencyChecker(
         robot=robot,
         emergency_distance=emergency_distance,
+        slowdown_distance=slowdown_distance,
         emergency_angle=emergency_angle,
-        sensor_position_robot=[0.0, 0.0, 0.173],
-        sensor_rotation_robot=[0.0, 0.0, 0.0, 1.0],
+        sensor_position_robot=np.array([0.0, 0.0, 0.173], dtype=np.float32),
+        sensor_rotation_robot=np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32),
         use_gpu=use_gpu,
     )
     angles_size = np.arange(
@@ -156,12 +171,12 @@ def test_emergency_stop(laser_scan_data: LaserScanData, use_gpu):
     ).shape[0]
     laser_scan_data.ranges = np.array([large_range] * angles_size)
 
-    assert not emergency_stop.run(scan=laser_scan_data, forward=True)
+    assert emergency_stop.run(scan=laser_scan_data, forward=True) == 1.0
 
     # Add an obstacle in the critical zone in front of the robot
     laser_scan_data.ranges[0] = emergency_value
-    assert emergency_stop.run(scan=laser_scan_data, forward=True)
-    assert not emergency_stop.run(scan=laser_scan_data, forward=False)
+    assert emergency_stop.run(scan=laser_scan_data, forward=True) == 0.0
+    assert emergency_stop.run(scan=laser_scan_data, forward=False) == 1.0
 
 
 if __name__ == "__main__":

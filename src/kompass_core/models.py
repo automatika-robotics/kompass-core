@@ -1,16 +1,12 @@
 from enum import Enum
 from typing import List, Optional, Union
 
-from .utils import common as CommonUtils
 from .utils.common import BaseAttrs, base_validators, set_params_from_yaml
 from .utils import geometry as GeometryUtils
 
 import numpy as np
 from attrs import Factory, define, field, validators
 from .datatypes.path import Point2D
-
-import matplotlib.pyplot as plt
-from matplotlib.patches import Circle, Rectangle
 
 import kompass_cpp
 
@@ -175,14 +171,14 @@ class MotionModel2D:
         )
         return output_state
 
-    def set_params_from_yaml(self, path_to_file: str) -> None:
+    def set_params_from_file(self, path_to_file: str) -> None:
         """
-        Sets the robot testing parameters values from a given yaml file under 'robot'
+        Sets the robot testing parameters values from a given config file under 'robot'
 
-        :param path_to_file: Path to YAML file
+        :param path_to_file: Path to file (yaml, json, toml)
         :type path_to_file: str
         """
-        self.params.from_yaml(path_to_file)
+        self.params.from_file(path_to_file)
 
     def set_linear_x_params(self, params: List[float]) -> None:
         """
@@ -490,6 +486,14 @@ class CircularFootprint:
         :param ax: Plot figure axis, defaults to None
         :type ax: _type_, optional
         """
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.patches import Circle
+        except ImportError as e:
+            raise ImportError(
+                "Matplotlib is required for plotting robot footprints. "
+                "Please install it using 'pip install matplotlib'."
+            ) from e
         if not ax:
             ax = plt.gca()
 
@@ -538,7 +542,7 @@ class RectangleFootprint:
 
     def __init__(self, width=1.0, length=2.0):
         """
-        Inits a regtangular robot footprint
+        Inits a rectangular robot footprint
 
         :param width: Robot width (m), defaults to 2.0
         :type width: float, optional
@@ -582,6 +586,14 @@ class RectangleFootprint:
         :param ax: Plot figure axis, defaults to None
         :type ax: _type_, optional
         """
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.patches import Circle, Rectangle
+        except ImportError as e:
+            raise ImportError(
+                "Matplotlib is required for plotting robot footprints. "
+                "Please install it using 'pip install matplotlib'."
+            ) from e
         if not ax:
             ax = plt.gca()
 
@@ -788,7 +800,7 @@ class RobotGeometry:
             cls.Type.SPHERE,
             cls.Type.CAPSULE,
         ]:
-            # First parameter is the radius -> equivilant to wheelbase
+            # First parameter is the radius -> equivalent to wheelbase
             return parameters[0]
         else:
             return np.sqrt(parameters[1] + parameters[0]) / 2
@@ -831,7 +843,7 @@ class RobotGeometry:
             cls.Type.SPHERE,
             cls.Type.CAPSULE,
         ]:
-            # First parameter is the radius -> equivilant to wheelbase
+            # First parameter is the radius -> equivalent to wheelbase
             return CircularFootprint(rad=parameters[0])
         else:
             # Wheelbase is the distance on robot lateral axis (y-axis)
@@ -1096,9 +1108,9 @@ class OmniDirectionalControl(MotionControl):
 class RobotType(Enum):
     """RobotType."""
 
-    ACKERMANN = "ACKERMANN_ROBOT"
-    DIFFERENTIAL_DRIVE = "DIFFERENTIAL_DRIVE_ROBOT"
-    OMNI = "OMNI_ROBOT"
+    ACKERMANN = "ACKERMANN"
+    DIFFERENTIAL_DRIVE = "DIFFERENTIAL_DRIVE"
+    OMNI = "OMNI"
 
     @classmethod
     def values(cls) -> List[str]:
@@ -1136,17 +1148,17 @@ class RobotType(Enum):
         :return: Robot Type
         :rtype: kompass_cpp.control_types
         """
-        if value == "ACKERMANN_ROBOT":
+        if value == "ACKERMANN":
             return kompass_cpp.control.ControlType.ACKERMANN
-        if value == "DIFFERENTIAL_DRIVE_ROBOT":
+        if value == "DIFFERENTIAL_DRIVE":
             return kompass_cpp.control.ControlType.DIFFERENTIAL_DRIVE
         return kompass_cpp.control.ControlType.OMNI
 
 
 control_types = {
-    "ACKERMANN_ROBOT": AckermannControl,
-    "DIFFERENTIAL_DRIVE_ROBOT": DifferentialDriveControl,
-    "OMNI_ROBOT": OmniDirectionalControl,
+    "ACKERMANN": AckermannControl,
+    "DIFFERENTIAL_DRIVE": DifferentialDriveControl,
+    "OMNI": OmniDirectionalControl,
 }
 
 
@@ -1163,6 +1175,7 @@ class LinearCtrlLimits(BaseAttrs):
     max_vel: float = field(validator=validators.ge(0.0))  # m/s
     max_acc: float = field(validator=validators.ge(0.0))  # m/s^2
     max_decel: float = field(validator=validators.ge(0.0))  # m/s^2
+    min_absolute_val: float = field(default=0.01, validator=validators.ge(0.0))  # m/s
 
 
 @define(kw_only=True)
@@ -1173,6 +1186,7 @@ class AngularCtrlLimits(BaseAttrs):
     max_steer: float = field(validator=validators.ge(0.0))
     max_acc: float = field(validator=validators.ge(0.0))
     max_decel: float = field(validator=validators.ge(0.0))
+    min_absolute_val: float = field(default=0.01, validator=validators.ge(0.0))  # m/s
 
 
 @define(kw_only=True)
@@ -1189,7 +1203,7 @@ class RobotCtrlLimits(BaseAttrs):
 
     def to_kompass_cpp_lib(self) -> kompass_cpp.control.ControlLimitsParams:
         """
-        Get the control limits parameters transferred to Robotctrl library format
+        Get the control limits parameters transferred to Kompass_cpp library format
 
         :return: 2D control limits
         :rtype: kompass_cpp.control.ctr_limits_params
@@ -1204,7 +1218,7 @@ class RobotCtrlLimits(BaseAttrs):
         self, linear_limits: LinearCtrlLimits
     ) -> kompass_cpp.control.LinearVelocityControlParams:
         """
-        Get linear velocity control limits parameters transfered to Robotctrl library format
+        Get linear velocity control limits parameters transferred to Kompass_cpp library format
 
         :return: Linear forward velocity Vx parameters
         :rtype: kompass_cpp.control.linear_vel_x_params
@@ -1219,7 +1233,7 @@ class RobotCtrlLimits(BaseAttrs):
         self,
     ) -> kompass_cpp.control.AngularVelocityControlParams:
         """
-        Get Omega control limits parameters transfered to Robotctrl library format
+        Get Omega control limits parameters transferred to Kompass_cpp library format
 
         :return: Angular velocity Omega parameters
         :rtype: kompass_cpp.control.angular_vel_params

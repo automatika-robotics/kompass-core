@@ -20,15 +20,10 @@ license = { text = "MIT" }
 keywords = ["robotics", "gpgpu", "navigation", "control", "planning", "mapping"]
 
 dependencies = [
-    "numpy<=1.26.4",
-    "numpy-quaternion>=2023.0.3",
-    "python-fcl-fork",
-    "omegaconf",
+    "numpy",
+    "toml",
     "attrs>=23.2.0",
     "pyyaml",
-    "scipy",
-    "matplotlib",
-    "pandas",
 ]
 
 requires-python = ">=3.8.4,<3.13"
@@ -137,4 +132,3 @@ select = "*-manylinux_aarch64"
 inherit.environment = "append"
 environment.VCPKG_TARGET_TRIPLET = "arm64-linux-release"
 environment.LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib"
-

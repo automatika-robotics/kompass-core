@@ -4,7 +4,6 @@ import os
 import timeit
 from typing import Dict
 import numpy as np
-import pandas as pd
 
 import omplpy as ompl
 from kompass_core.models import Robot, RobotGeometry, RobotType
@@ -18,10 +17,6 @@ ompl_resources = os.path.join(dir_name, "resources/ompl")
 
 SOLUTION_TOLERANCE_TIME = 0.3
 SOLUTION_TOLERANCE_LENGTH = 0.1
-
-REF_RESULTS = pd.read_csv(
-    os.path.join(ompl_resources, "test_results_geometric_ref.csv")
-)
 
 
 def generate_all_geometric_planners_configs():
@@ -41,9 +36,7 @@ def generate_all_geometric_planners_configs():
         print("-----------------------------\n")
 
 
-def ompl_solve_once(
-    ompl_planner: OMPLGeometric, map_data: Dict, map_numpy: np.ndarray
-):
+def ompl_solve_once(ompl_planner: OMPLGeometric, map_data: Dict, map_numpy: np.ndarray):
     """
     Setup and solve OMPL planning problem with given map and map metadata
 
@@ -115,23 +108,29 @@ def load_map_meta(map_file: str) -> Dict:
         raise Exception(f"Failed to load map metadata: {str(e)}") from e
 
 
-def ompl_geometric_testing(test_repetitions: int = 1):
+def ompl_geometric_testing(test_repetitions: int = 10):
     """
     Test all OMPL geometric planners
 
     :param test_repetitions: _description_, defaults to 7
     :type test_repetitions: int, optional
     """
-    ompl_df = pd.DataFrame(
-        columns=(
-            "method",
-            "solved",
-            "solution_time",
-            "solution_len",
-            "simplification_time",
-            "time_convert_2_ros",
+    try:
+        import pandas as pd
+
+        ompl_df = pd.DataFrame(
+            columns=(
+                "method",
+                "solved",
+                "solution_time",
+                "solution_len",
+            )
         )
-    )
+    except Exception:
+        logger.error(
+            "Pandas is not installed. Result CSV will not be generated. Please install pandas if you wish to generate a CSV of the results."
+        )
+        ompl_df = None
 
     robot = Robot(
         robot_type=RobotType.ACKERMANN,
@@ -150,7 +149,6 @@ def ompl_geometric_testing(test_repetitions: int = 1):
 
     for planner_id in ompl_planner.available_planners.keys():
         solution_time: float = 0.0
-        simplify_time: float = 0.0
         sol_len: float = 0.0
         if planner_id in ["ompl.geometric.AITstar", "ompl.geometric.LazyLBTRRT"]:
             continue
@@ -172,39 +170,37 @@ def ompl_geometric_testing(test_repetitions: int = 1):
 
                 solution_time += end_time - start_time
 
-                solved = True
+                solved = path is not None
                 if path:
-                    start_time = timeit.default_timer()
-
-                    path = ompl_planner.simplify_solution()
-
-                    end_time = timeit.default_timer()
-
-                    simplify_time += end_time - start_time
-
-                    solved = True
-
-                    sol_len += ompl_planner.solution.length()
-                else:
-                    solved = False
+                    sol_len += path.length()
 
             except Exception as e:
                 logging.error(f"{e}")
 
-        ompl_df.loc[len(ompl_df)] = {
-            "method": planner_id,
-            "solved": solved,
-            "solution_time": solution_time / test_repetitions,
-            "solution_len": sol_len / test_repetitions,
-            "simplification_time": simplify_time / test_repetitions,
-        }
-
-    os.makedirs("logs", exist_ok=True)
-    ompl_df.to_csv("logs/ompl_test_results.csv", index=False)
+        if ompl_df is not None:
+            ompl_df.loc[len(ompl_df)] = {
+                "method": planner_id,
+                "solved": solved,
+                "solution_time": solution_time / test_repetitions,
+                "solution_len": sol_len / test_repetitions,
+            }
+    if ompl_df is not None:
+        os.makedirs("logs", exist_ok=True)
+        ompl_df.to_csv("logs/ompl_test_results.csv", index=False)
     return ompl_df
 
 
 def ompl_test_all():
+    try:
+        import pandas as pd
+    except ImportError:
+        logger.error(
+            "Pandas is not installed. Result CSV will not be generated. lease install it to run OMPL test."
+        )
+
+    REF_RESULTS = pd.read_csv(
+        os.path.join(ompl_resources, "test_results_geometric_ref.csv")
+    )
     logging.info("Running all OMPL planners tests")
     results_df = ompl_geometric_testing(test_repetitions=20)
     logging.info("Done all OMPL planners tests")

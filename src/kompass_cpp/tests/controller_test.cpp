@@ -34,7 +34,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   // Create a test path
   std::vector<Path::Point> points{Path::Point(0.0, 0.0, 0.0), Path::Point(1.0, 0.0, 0.0),
                                   Path::Point(2.0, 0.0, 0.0)};
-  Path::Path path(points);
+  Path::Path path(points, 500);
 
   // Sampling configuration
   double timeStep = 0.1;
@@ -65,8 +65,8 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   auto robotShapeType = Kompass::CollisionChecker::ShapeType::CYLINDER;
   std::vector<float> robotDimensions{0.1, 0.4};
   // std::array<float, 3> sensorPositionWRTbody {0.0, 0.0, 1.0};
-  const std::array<float, 3> sensor_position_body{0.0, 0.0, 0.0};
-  const std::array<float, 4> sensor_rotation_body{0, 0, 0, 1};
+  const Eigen::Vector3f sensor_position_body{0.0, 0.0, 0.0};
+  const Eigen::Vector4f sensor_rotation_body{0, 0, 0, 1};
 
   // Robot start state (pose)
   Path::State robotState(-0.51731912, 0.0, 0.0, 0.0);

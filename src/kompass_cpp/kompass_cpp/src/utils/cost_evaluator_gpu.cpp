@@ -3,11 +3,8 @@
 #include "datatypes/trajectory.h"
 #include "utils/cost_evaluator.h"
 #include "utils/logger.h"
-#include <Eigen/src/Core/Matrix.h>
-#include <Eigen/src/Geometry/Transform.h>
-#include <cstddef>
-#include <cstdlib>
-#include <limits>
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
 #include <sycl/sycl.hpp>
 #include <vector>
 
@@ -33,16 +30,15 @@ CostEvaluator::CostEvaluator(TrajectoryCostsWeights &costsWeights,
 }
 
 CostEvaluator::CostEvaluator(TrajectoryCostsWeights &costsWeights,
-                             const std::array<float, 3> &sensor_position_body,
-                             const std::array<float, 4> &sensor_rotation_body,
+                             const Eigen::Vector3f &sensor_position_body,
+                             const Eigen::Quaternionf &sensor_rotation_body,
                              ControlLimitsParams ctrLimits,
                              size_t maxNumTrajectories,
                              size_t numPointsPerTrajectory,
                              size_t maxRefPathSegmentSize) {
 
   sensor_tf_body_ =
-      getTransformation(Eigen::Quaternionf(sensor_rotation_body.data()),
-                        Eigen::Vector3f(sensor_position_body.data()));
+      getTransformation(sensor_rotation_body, sensor_position_body);
   this->costWeights = std::make_unique<TrajectoryCostsWeights>(costsWeights);
 
   accLimits_ = {static_cast<float>(ctrLimits.velXParams.maxAcceleration),
@@ -193,7 +189,7 @@ CostEvaluator::~CostEvaluator() {
 
 TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     const std::unique_ptr<TrajectorySamples2D> &trajs,
-    const Path::Path &reference_path, const Path::Path &tracked_segment) {
+    const Path::Path *reference_path, const Path::Path &tracked_segment) {
 
   try {
     double weight;
@@ -224,15 +220,17 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     if ((costWeights->getParameter<double>("reference_path_distance_weight") >
              0.0 ||
          costWeights->getParameter<double>("goal_distance_weight") > 0.0) &&
-        (ref_path_length = reference_path.totalPathLength()) > 0.0) {
+        (ref_path_length = reference_path->totalPathLength()) > 0.0) {
       if ((weight = costWeights->getParameter<double>("goal_distance_weight")) >
           0.0) {
-        events.push_back(goalCostFunc(trajs_size, reference_path.getEnd(),
-                                      ref_path_length, weight));
+        auto last_point = reference_path->getEnd();
+        m_deviceRefPathEnd =
+            sycl::vec(last_point.x(), last_point.y(), last_point.z());
+        events.push_back(goalCostFunc(trajs_size, ref_path_length, weight));
       }
       if ((weight = costWeights->getParameter<double>(
                "reference_path_distance_weight")) > 0.0) {
-        size_t tracked_segment_size = tracked_segment.points.size();
+        size_t tracked_segment_size = tracked_segment.getSize();
         m_q.memcpy(m_devicePtrTrackedSegmentX, tracked_segment.getX().data(),
                    sizeof(float) * tracked_segment_size)
             .wait();
@@ -279,7 +277,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
           // path
           m_devicePtrTempCosts[idx] +=
               custom_cost->weight *
-              custom_cost->evaluator_(traj, reference_path);
+              custom_cost->evaluator_(traj, *reference_path);
         }
         idx += 1;
       }
@@ -303,8 +301,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     m_q.submit([&](sycl::handler &h) {
          h.depends_on(events);
          auto costs = m_devicePtrCosts;
-         auto minCost = m_minCost;
-         auto reduction = sycl::reduction(minCost, sycl::plus<LowestCost>());
+         auto reduction = sycl::reduction(m_minCost, sycl::plus<LowestCost>());
          // Kernel scope
          h.parallel_for<class minimumCostReduction>(
              sycl::range<1>(trajs_size), reduction,
@@ -427,7 +424,6 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
 
 // Compute the cost of trajectory based on distance to the goal point
 sycl::event CostEvaluator::goalCostFunc(const size_t trajs_size,
-                                        const Path::Point &last_ref_point,
                                         const float ref_path_length,
                                         const double cost_weight) {
   // -----------------------------------------------------
@@ -447,7 +443,8 @@ sycl::event CostEvaluator::goalCostFunc(const size_t trajs_size,
     const float pathLength = ref_path_length;
     auto global_size = sycl::range<1>(trajs_size);
     // Last point of reference path
-    sycl::vec<float, 2> lastRefPoint = {last_ref_point.x(), last_ref_point.y()};
+    sycl::vec<float, 2> lastRefPoint = {m_deviceRefPathEnd[0],
+                                        m_deviceRefPathEnd[1]};
     // Kernel scope
     h.parallel_for<class goalCostKernel>(
         sycl::range<1>(global_size), [=](sycl::id<1> id) {

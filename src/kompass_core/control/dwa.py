@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import Optional, Union, List
 import numpy as np
 from attrs import Factory, define, field
 from ..datatypes.laserscan import LaserScanData
@@ -96,13 +96,15 @@ class DWAConfig(FollowerConfig):
         default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
 
-    prediction_horizon: float = field(
-        default=1.0, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
+    control_horizon: int = field(
+        default=2, validator=base_validators.in_range(min_value=1, max_value=1000)
     )
+    # Number of steps for applying the control
 
-    control_horizon: float = field(
-        default=0.2, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
+    prediction_horizon: int = field(
+        default=10, validator=base_validators.in_range(min_value=1, max_value=1000)
     )
+    # Number of steps for future prediction
 
     max_linear_samples: int = field(
         default=20, validator=base_validators.in_range(min_value=1, max_value=1e3)
@@ -112,9 +114,13 @@ class DWAConfig(FollowerConfig):
         default=20, validator=base_validators.in_range(min_value=1, max_value=1e3)
     )
 
-    sensor_position_to_robot: List[float] = field(default=[0.0, 0.0, 0.0])
+    proximity_sensor_position_to_robot: np.ndarray = field(
+        default=np.array([0.0, 0.0, 0.0], dtype=np.float32)
+    )
 
-    sensor_rotation_to_robot: List[float] = field(default=[0.0, 0.0, 0.0, 1.0])
+    proximity_sensor_rotation_to_robot: np.ndarray = field(
+        default=np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+    )
 
     octree_resolution: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-9, max_value=1e3)
@@ -188,47 +194,48 @@ class DWA(FollowerTemplate):
         ctrl_limits: RobotCtrlLimits,
         config: Optional[DWAConfig] = None,
         config_file: Optional[str] = None,
-        config_yaml_root_name: Optional[str] = None,
+        config_root_name: Optional[str] = None,
         control_time_step: Optional[float] = None,
         **_,
     ):
-        """
-        Setup the controller
+        """Init DWA (Dynamic Window Approach) Controller
 
-        :param robot: Robot using the controller
+        :param robot: Robot object to be controlled
         :type robot: Robot
-        :param params_file: Yaml file containing the parameters of the controller under 'dvz_controller'
-        :type params_file: str
+        :param ctrl_limits: Robot control limits
+        :type ctrl_limits: RobotCtrlLimits
+        :param config: Controller configuration, defaults to None
+        :type config: Optional[VisionRGBDFollowerConfig], optional
+        :param config_file: Path to config file (yaml, json, toml), defaults to None
+        :type config_file: Optional[str], optional
+        :param config_root_name: Root name for the controller config in the file, defaults to None
+        :type config_root_name: Optional[str], optional
+        :param control_time_step: Control time step (sec), defaults to None
+        :type control_time_step: Optional[float], optional
         """
         # Init and configure the planner
-        if not config:
-            # Default config
-            config = DWAConfig()
+        self._config = config or DWAConfig()
 
         if config_file:
-            config.from_yaml(
-                file_path=config_file, nested_root_name=config_yaml_root_name
-            )
+            self._config.from_file(file_path=config_file, nested_root_name=config_root_name)
 
         if control_time_step:
-            config.control_time_step = control_time_step
+            self._config.control_time_step = control_time_step
 
         self._got_path = False
-
-        self._config = config
 
         self._planner = kompass_cpp.control.DWA(
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
             time_step=config.control_time_step,
-            prediction_horizon=config.prediction_horizon,
-            control_horizon=config.control_horizon,
+            prediction_horizon=config.prediction_horizon * config.control_time_step,
+            control_horizon=config.control_horizon * config.control_time_step,
             max_linear_samples=config.max_linear_samples,
             max_angular_samples=config.max_angular_samples,
             robot_shape_type=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
             robot_dimensions=robot.geometry_params,
-            sensor_position_robot=config.sensor_position_to_robot,
-            sensor_rotation_robot=config.sensor_rotation_to_robot,
+            sensor_position_robot=config.proximity_sensor_position_to_robot,
+            sensor_rotation_robot=config.proximity_sensor_rotation_to_robot,
             octree_resolution=config.octree_resolution,
             cost_weights=config.costs_weights.to_kompass_cpp(),
             max_num_threads=config.max_num_threads,
@@ -236,9 +243,7 @@ class DWA(FollowerTemplate):
 
         # Init the following result
         self._result = kompass_cpp.control.SamplingControlResult()
-        self._end_of_ctrl_horizon: int = max(
-            int(self._config.control_horizon / self._config.control_time_step), 1
-        )
+        self._end_of_ctrl_horizon: int = max(self._config.control_horizon, 1)
         logging.info("DWA PATH CONTROLLER IS READY")
 
     @property
@@ -351,7 +356,7 @@ class DWA(FollowerTemplate):
     @property
     def control_till_horizon(
         self,
-    ) -> Optional[List[kompass_cpp.types.TrajectoryVelocities2D]]:
+    ) -> Optional[kompass_cpp.types.TrajectoryVelocities2D]:
         """
         Getter of the planner control result until the control horizon
 
@@ -381,7 +386,7 @@ class DWA(FollowerTemplate):
         return None
 
     @property
-    def linear_x_control(self) -> np.ndarray:
+    def linear_x_control(self) -> Union[List[float], np.ndarray]:
         """
         Getter of the last linear forward velocity control computed by the controller
 
@@ -393,7 +398,7 @@ class DWA(FollowerTemplate):
         return [0.0]
 
     @property
-    def linear_y_control(self) -> np.ndarray:
+    def linear_y_control(self) -> Union[List[float], np.ndarray]:
         """
         Getter the last linear velocity lateral control computed by the controller
 
@@ -405,7 +410,7 @@ class DWA(FollowerTemplate):
         return [0.0]
 
     @property
-    def angular_control(self) -> np.ndarray:
+    def angular_control(self) -> Union[List[float], np.ndarray]:
         """
         Getter of the last angular velocity control computed by the controller
 

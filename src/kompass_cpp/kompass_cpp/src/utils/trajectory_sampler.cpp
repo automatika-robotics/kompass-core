@@ -5,6 +5,7 @@
 #include <mutex>
 #include <vector>
 
+#include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
 #include "utils/logger.h"
@@ -26,8 +27,8 @@ TrajectorySampler::TrajectorySampler(
     double predictionHorizon, double controlHorizon, int maxLinearSamples,
     int maxAngularSamples, const CollisionChecker::ShapeType robotShapeType,
     const std::vector<float> robotDimensions,
-    const std::array<float, 3> &sensor_position_body,
-    const std::array<float, 4> &sensor_rotation_body, const double octreeRes,
+    const Eigen::Vector3f &sensor_position_body,
+    const Eigen::Quaternionf &sensor_rotation_body, const double octreeRes,
     const int maxNumThreads) {
   // Setup the collision checker
   collChecker = std::make_unique<CollisionChecker>(
@@ -61,8 +62,8 @@ TrajectorySampler::TrajectorySampler(
     TrajectorySamplerParameters config, ControlLimitsParams controlLimits,
     ControlType controlType, const CollisionChecker::ShapeType robotShapeType,
     const std::vector<float> robotDimensions,
-    const std::array<float, 3> &sensor_position_body,
-    const std::array<float, 4> &sensor_rotation_body, const int maxNumThreads) {
+    const Eigen::Vector3f &sensor_position_body,
+    const Eigen::Quaternionf &sensor_rotation_body, const int maxNumThreads) {
   double octreeRes = config.getParameter<double>("octree_map_resolution");
   // Setup the collision checker
   collChecker = std::make_unique<CollisionChecker>(
@@ -97,6 +98,10 @@ void TrajectorySampler::setSampleDroppingMode(const bool drop_samples) {
   this->drop_samples_ = drop_samples;
 }
 
+float TrajectorySampler::getRobotRadius() const {
+  return collChecker->getRadius();
+}
+
 void TrajectorySampler::updateParams(TrajectorySamplerParameters config) {
   time_step_ = config.getParameter<double>("time_step");
   max_time_ = config.getParameter<double>("prediction_horizon");
@@ -123,14 +128,7 @@ void TrajectorySampler::getAdmissibleTrajsFromVel(
   size_t last_free_index{numPointsPerTrajectory - 1};
 
   for (size_t i = 0; i < (numPointsPerTrajectory - 1); ++i) {
-
-    simulated_pose.x += (vel.vx() * cos(simulated_pose.yaw) -
-                         vel.vy() * sin(simulated_pose.yaw)) *
-                        time_step_;
-    simulated_pose.y += (vel.vx() * sin(simulated_pose.yaw) +
-                         vel.vy() * cos(simulated_pose.yaw)) *
-                        time_step_;
-    simulated_pose.yaw += vel.omega() * time_step_;
+    simulated_pose.update(vel, time_step_);
 
     // Update the position of the robot in the collision checker (updates the
     // robot collision object) No need to update the Octree (laserscan)
@@ -199,13 +197,8 @@ void TrajectorySampler::getAdmissibleTrajsFromVelDiffDrive(
       simulated_pose.yaw += vel.omega() * time_step_;
       temp_vel = Velocity2D(0.0, 0.0, vel.omega(), vel.steer_ang());
     } else {
-      simulated_pose.x += (vel.vx() * cos(simulated_pose.yaw) -
-                           vel.vy() * sin(simulated_pose.yaw)) *
-                          time_step_;
-      simulated_pose.y += (vel.vx() * sin(simulated_pose.yaw) +
-                           vel.vy() * cos(simulated_pose.yaw)) *
-                          time_step_;
       temp_vel = Velocity2D(vel.vx(), vel.vy(), 0.0, 0.0);
+      simulated_pose.update(temp_vel, time_step_);
     }
 
     // Update the position of the robot in the collision checker (updates the
@@ -509,6 +502,79 @@ void TrajectorySampler::UpdateReachableVelocityRange(
 
   ang_sample_resolution_ =
       std::max((max_omega_ - min_omega_) / (ang_samples_max_ - 1), 0.001);
+}
+
+void TrajectorySampler::updateState(const Path::State &current_state) {
+  collChecker->updateState(current_state);
+}
+
+template <>
+bool TrajectorySampler::checkStatesFeasibility<LaserScan>(
+    const std::vector<Path::State> &states, const LaserScan &scan) {
+  // collChecker->updateState(states[0]);
+  collChecker->updateScan(scan.ranges, scan.angles);
+  for (auto state : states) {
+    collChecker->updateState(state);
+    // Update the PointCloud values
+    if (collChecker->checkCollisions()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template <>
+bool TrajectorySampler::checkStatesFeasibility<std::vector<Path::Point>>(
+    const std::vector<Path::State> &states,
+    const std::vector<Path::Point> &cloud) {
+  // collChecker->updateState(states[0]);
+  collChecker->updatePointCloud(cloud);
+  for (auto state : states) {
+    collChecker->updateState(state);
+    // Update the PointCloud values
+    if (collChecker->checkCollisions()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+Trajectory2D
+TrajectorySampler::generateSingleSampleFromVel(const Velocity2D &vel,
+                                               const Path::State &pose) {
+  Path::State simulated_pose = pose;
+  Trajectory2D trajectory(numPointsPerTrajectory);
+  trajectory.path.add(0, simulated_pose.x, simulated_pose.y);
+  if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
+    for (size_t i = 0; i < (numPointsPerTrajectory - 1); ++i) {
+      if (std::abs(vel.vx()) > MIN_VEL && std::abs(vel.omega()) > MIN_VEL) {
+        // Rotate then move
+        Velocity2D tempVel = vel;
+        tempVel.setVx(0.0);
+        simulated_pose.update(tempVel, time_step_);
+        trajectory.path.add(i + 1, simulated_pose.x, simulated_pose.y);
+        trajectory.velocities.add(i, vel);
+
+        tempVel.setVx(vel.vx());
+        tempVel.setOmega(0.0);
+        simulated_pose.update(tempVel, time_step_);
+        trajectory.path.add(i + 1, simulated_pose.x, simulated_pose.y);
+        trajectory.velocities.add(i, vel);
+        i++;
+      }
+      // Else apply directly
+      simulated_pose.update(vel, time_step_);
+      trajectory.path.add(i + 1, simulated_pose.x, simulated_pose.y);
+      trajectory.velocities.add(i, vel);
+    }
+  } else {
+    for (size_t i = 0; i < (numPointsPerTrajectory - 1); ++i) {
+      simulated_pose.update(vel, time_step_);
+      trajectory.path.add(i + 1, simulated_pose.x, simulated_pose.y);
+      trajectory.velocities.add(i, vel);
+    }
+  }
+  return trajectory;
 }
 
 }; // namespace Control

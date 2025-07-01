@@ -3,7 +3,6 @@
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/vector.h>
-#include <nanobind/stl/array.h>
 
 namespace py = nanobind;
 using namespace Kompass;
@@ -27,12 +26,12 @@ void bindings_utils_gpu(py::module_ &m) {
 
   py::class_<CriticalZoneCheckerGPU>(m, "CriticalZoneCheckerGPU")
       .def(py::init<CollisionChecker::ShapeType, const std::vector<float> &,
-                    const std::array<float, 3> &, const std::array<float, 4> &,
-                    float, float, const std::vector<double> &>(),
+                    const Eigen::Vector3f &, const Eigen::Vector4f &, const float,
+                    const float, const float, const std::vector<double> &>(),
            py::arg("robot_shape"), py::arg("robot_dimensions"),
            py::arg("sensor_position_body"), py::arg("sensor_rotation_body"),
            py::arg("critical_angle"), py::arg("critical_distance"),
-           py::arg("scan_angles"))
-      .def("check", &CriticalZoneChecker::check, py::arg("ranges"),
+           py::arg("slowdown_distance"), py::arg("scan_angles"))
+      .def("check", &CriticalZoneCheckerGPU::check, py::arg("ranges"),
            py::arg("angles"), py::arg("forward"));
 }

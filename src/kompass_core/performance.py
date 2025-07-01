@@ -1,8 +1,6 @@
-from typing import Any, List
+from typing import Any, List, Optional
 
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from .datatypes.obstacles import ObstaclesData
 from .datatypes.path import (
     PathPoint,
@@ -20,7 +18,7 @@ class MotionResult:
     def __init__(self) -> None:
         self.time = []
         self.steer_cmds: List[float] = []
-        self.robot_path: PathSample = None
+        self.robot_path: Optional[PathSample] = None
         self.speed_cmd: List[float] = []
         self.ori_error: List[float] = []
         self.lat_error: List[float] = []
@@ -44,6 +42,12 @@ class MotionResult:
         :param figure_title: Title of the generated figure, defaults to 'Figure 0'
         :type figure_title: str, optional
         """
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError as e:
+            raise ImportError(
+                "Matplotlib is required for visualization. Please install it using 'pip install matplotlib'."
+            ) from e
         _fig_margin = 0.5
 
         fig, [ax0, ax1, ax2, ax3] = plt.subplots(nrows=4, ncols=1, figsize=(8, 8))
@@ -89,7 +93,7 @@ class MotionResult:
         )
 
         # Plot test path
-        visualization.plt_path_points_List(test, color="red", ax=ax3)
+        visualization.plt_path_points_list(test, color="red", ax=ax3)
 
         # Plot robot initial state
         robot_footprint.plt_robot(
@@ -130,6 +134,12 @@ class TestBase(RobotSim):
 
 class TestAvgResults:
     def __init__(self) -> None:
+        try:
+            import pandas as pd
+        except ImportError as e:
+            raise ImportError(
+                "Pandas is required for data handling. Please install it using 'pip install pandas'."
+            ) from e
         columns = [
             "test_id",
             "test_type",

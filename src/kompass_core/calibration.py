@@ -1,10 +1,8 @@
 import logging
 
 from .utils.geometry import convert_to_plus_minus_pi
-import matplotlib.pyplot as plt
 import numpy as np
 from .datatypes.path import MotionSample, PathSample
-from scipy import optimize
 
 from .models import MotionModel2D, Robot, RobotState
 from .simulation import RobotSim
@@ -63,6 +61,12 @@ class ModelFitting(RobotSim):
         :return: Calibrated robot model
         :rtype: MotionModel2D
         """
+        try:
+            from scipy import optimize
+        except ImportError as e:
+            raise ImportError(
+                "SciPy is required for optimization. Please install it using 'pip install scipy'."
+            ) from e
         motion_model = self.robot.state.model
         vx_opt, vx_cov = optimize.curve_fit(
             MotionModel2D.x_model,
@@ -132,7 +136,7 @@ class Calibration:
             x=motion_sample.path_sample.x_points[0],
             y=motion_sample.path_sample.y_points[0],
             yaw=motion_sample.path_sample.heading_points[0],
-            motion_model=calibrated_model,
+            model=calibrated_model,
         )
 
         robot = Robot(
@@ -181,6 +185,13 @@ class Calibration:
         :param modeled_path: Motion model output data
         :type modeled_path: PathSample
         """
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            logging.error(
+                "Matplotlib is not installed. Please install it to visualize the calibration results."
+            )
+            return
         fig, [ax0, ax1, ax2, ax3] = plt.subplots(nrows=4, ncols=1, figsize=(8, 8))
         fig.suptitle("Calibration Results")
         fig.tight_layout(pad=3.0)

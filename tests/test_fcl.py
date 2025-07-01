@@ -344,7 +344,7 @@ def test_fcl(save_results: bool = False):
             "collision_manager_1_data": rdata.result.is_collision,
         }
         results["pointcloud_with_manager"] = res_dict
-        os.makedirs('logs', exist_ok=True)
+        os.makedirs("logs", exist_ok=True)
         with open("logs/fcl_result.json", "w") as f:
             json.dump(results, f)
 

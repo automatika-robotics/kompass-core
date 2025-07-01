@@ -9,7 +9,7 @@ from kompass_cpp.mapping import (
     OCCUPANCY_TYPE,
 )
 
-from ..utils.geometry import from_frame1_to_frame2, get_pose_target_in_reference_frame
+from ..utils.geometry import transform_point_from_local_to_global, get_relative_pose
 
 from .laserscan_model import LaserScanModelConfig
 from ..utils.common import BaseAttrs, base_validators
@@ -221,8 +221,8 @@ class LocalMapper:
         # i.e. we have a t+1 state
         # get current shift in translation and orientation of the new center
         # with respect to the previous old center
-        pose_current_robot_in_previous_robot = get_pose_target_in_reference_frame(
-            reference_pose=self._pose_robot_in_world, target_pose=current_robot_pose
+        pose_current_robot_in_previous_robot = get_relative_pose(
+            pose_1_in_ref=self._pose_robot_in_world, pose_2_in_ref=current_robot_pose
         )
         # new position and orientation with respect to the previous pose
         _position_in_previous_pose = pose_current_robot_in_previous_robot.get_position()
@@ -264,16 +264,18 @@ class LocalMapper:
 
         # Calculate new grid pose
         self._pose_robot_in_world = robot_pose
-        self.lower_right_corner_pose = from_frame1_to_frame2(
-            robot_pose, self._local_lower_right_corner_point
+        self.lower_right_corner_pose = transform_point_from_local_to_global(
+            self._local_lower_right_corner_point, robot_pose
         )
 
         if self.config.baysian_update:
             if self.processed:
                 self._calculate_grid_shift(robot_pose)
-            scan_occupancy, scan_occupancy_prob = self.local_mapper.scan_to_grid_baysian(
-                angles=laser_scan.angles,
-                ranges=filtered_ranges,
+            scan_occupancy, scan_occupancy_prob = (
+                self.local_mapper.scan_to_grid_baysian(
+                    angles=laser_scan.angles,
+                    ranges=filtered_ranges,
+                )
             )
 
             # Update grid

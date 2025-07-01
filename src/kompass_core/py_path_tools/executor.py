@@ -103,14 +103,14 @@ class PathExecutor:
 
     def configure(self, config_file: str, nested_root_name: Optional[str] = None):
         """
-        Configure the executor using a yaml file
+        Configure the executor using a configuration file (yaml, json, toml)
 
-        :param config_file: _description_
+        :param config_file: Path to file with configuration parameters
         :type config_file: str
         :param nested_root_name: _description_, defaults to None
         :type nested_root_name: Optional[str], optional
         """
-        self.params.from_yaml(config_file, nested_root_name)
+        self.params.from_file(config_file, nested_root_name)
 
     def record_path_point(self, x: float, y: float, heading: float, vel: float) -> bool:
         """

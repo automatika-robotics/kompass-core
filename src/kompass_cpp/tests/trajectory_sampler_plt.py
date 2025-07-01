@@ -1,5 +1,4 @@
 import json
-import matplotlib.pyplot as plt
 import argparse
 
 
@@ -29,12 +28,21 @@ def read_path_from_json(filename: str):
         print(f"Read file error: {e}")
 
 
-def plot_samples(trajectories, reference, figure_name):
-    # Plot reference
-    ref_path = reference["points"]
-    x_coords = [point["x"] for point in ref_path]
-    y_coords = [point["y"] for point in ref_path]
-    plt.plot(x_coords, y_coords, "--b")
+def plot_samples(figure_name, trajectories, reference=None):
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print(
+            "Matplotlib is not installed. Test figures will not be generated. To generate figures run 'pip install matplotlib'"
+        )
+        return
+
+    if reference:
+        # Plot reference
+        ref_path = reference["points"]
+        x_coords = [point["x"] for point in ref_path]
+        y_coords = [point["y"] for point in ref_path]
+        plt.plot(x_coords, y_coords, "--b", linewidth=7.0, label="reference")
 
     for traj in trajectories:
         path = traj["points"]
@@ -63,7 +71,7 @@ def main():
     parser.add_argument(
         "--reference",
         type=str,
-        required=True,
+        required=False,
         help="Reference path JSON file name in the current directory",
     )
 
@@ -75,9 +83,13 @@ def main():
     reference_file = args.reference
 
     trajectories = read_trajectories_from_json(f"{samples_file}.json")
-    reference = read_path_from_json(f"{reference_file}.json")
+
+    reference = (
+        read_path_from_json(f"{reference_file}.json") if reference_file else None
+    )
+
     # print(trajectories)
-    plot_samples(trajectories, reference, samples_file)
+    plot_samples(samples_file, trajectories, reference)
 
 
 if __name__ == "__main__":

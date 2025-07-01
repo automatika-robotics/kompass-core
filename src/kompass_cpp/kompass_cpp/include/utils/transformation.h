@@ -3,8 +3,6 @@
 #include "datatypes/path.h"
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
-#include <Eigen/src/Core/Matrix.h>
-#include <Eigen/src/Geometry/Transform.h>
 
 namespace Kompass {
 
@@ -25,11 +23,11 @@ getTransformation(const RotationType &rotation_src_to_goal,
   // Create a transformation matrix
   Eigen::Isometry3f transform_src_to_goal = Eigen::Isometry3f::Identity();
 
-  // Set rotation based on the type of RotationType
-  transform_src_to_goal.rotate(rotation_src_to_goal);
-
   // Set translation
-  transform_src_to_goal.pretranslate(translation_src_to_goal);
+  transform_src_to_goal.translate(translation_src_to_goal);
+
+  // Set rotation based on the type of RotationType
+  transform_src_to_goal.rotate(Eigen::Quaternionf(rotation_src_to_goal));
 
   return transform_src_to_goal;
 }

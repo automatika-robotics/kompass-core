@@ -7,6 +7,7 @@
 #include "datatypes/trajectory.h"
 #include <array>
 #include <cmath>
+#include <memory>
 #include <vector>
 
 #ifndef MIN_VEL
@@ -77,16 +78,16 @@ public:
                     int maxAngularSamples,
                     const CollisionChecker::ShapeType robotShapeType,
                     const std::vector<float> robotDimensions,
-                    const std::array<float, 3> &sensor_position_body,
-                    const std::array<float, 4> &sensor_rotation_body,
+                    const Eigen::Vector3f &sensor_position_body,
+                    const Eigen::Quaternionf &sensor_rotation_body,
                     const double octreeRes, const int maxNumThreads = 1);
 
   TrajectorySampler(TrajectorySamplerParameters config,
                     ControlLimitsParams controlLimits, ControlType controlType,
                     const CollisionChecker::ShapeType robotShapeType,
                     const std::vector<float> robotDimensions,
-                    const std::array<float, 3> &sensor_position_body,
-                    const std::array<float, 4> &sensor_rotation_body,
+                    const Eigen::Vector3f &sensor_position_body,
+                    const Eigen::Quaternionf &sensor_rotation_body,
                     const int maxNumThreads = 1);
 
   /**
@@ -94,6 +95,8 @@ public:
    *
    */
   ~TrajectorySampler() = default;
+
+  void updateState(const Path::State &current_state);
 
   void setSampleDroppingMode(const bool drop_samples);
 
@@ -123,6 +126,16 @@ public:
    * @param resolution
    */
   void resetOctreeResolution(const double resolution);
+
+  float getRobotRadius() const;
+
+  Trajectory2D
+  generateSingleSampleFromVel(const Velocity2D &vel,
+                              const Path::State &pose = Path::State());
+
+  template <typename T>
+  bool checkStatesFeasibility(const std::vector<Path::State> &states,
+                              const T &sensor_points);
 
   size_t numTrajectories;
   size_t numPointsPerTrajectory;

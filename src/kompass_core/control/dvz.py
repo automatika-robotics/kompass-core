@@ -71,11 +71,11 @@ class DVZ(FollowerTemplate):
         :type ctrl_limits: RobotCtrlLimits
         :param control_time_step: Time step (s)
         :type control_time_step: float
-        :param config_file: Path to YAML config file, defaults to None
+        :param config_file: Path to config file, defaults to None
         :type config_file: Optional[str], optional
         :param config: DVZ configuration, defaults to None
         :type config: Optional[DVZConfig], optional
-        :param config_yaml_root_name: Root name for the config in the YAML file, defaults to None
+        :param config_yaml_root_name: Root name for the config in the config file, defaults to None
         :type config_yaml_root_name: Optional[str], optional
         """
         # Init the controller
@@ -130,7 +130,7 @@ class DVZ(FollowerTemplate):
         return self.__reference_cmd_generator.interpolated_path()
 
     @property
-    def tracked_state(self) -> RobotState:
+    def tracked_state(self) -> Optional[RobotState]:
         """
         Tracked state on the path
 
@@ -228,7 +228,7 @@ class DVZ(FollowerTemplate):
 
         :rtype: str
         """
-        return f"total deformation : {self._path_controller.dvz_controller.total_deformation}"
+        return f"Total DVZ deformation : {self._path_controller.total_deformation}"
 
     @property
     def linear_x_control(self) -> List[float]:

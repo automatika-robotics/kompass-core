@@ -3,7 +3,6 @@ import os
 from typing import List, Union
 
 import numpy as np
-import pandas as pd
 from attrs import define, field
 
 
@@ -428,7 +427,12 @@ class MotionSample(TrajectorySample):
         """
         try:
             csv_mapping = self._csv_mapping()
-
+            try:
+                import pandas as pd
+            except ImportError as e:
+                raise ImportError(
+                    "Pandas is required for data handling. Please install it using 'pip install pandas'."
+                ) from e
             # Create a DataFrame using pandas
             motion_df = pd.DataFrame(csv_mapping)
             # Check if the directory exists, if not, create it
@@ -467,6 +471,12 @@ class MotionSample(TrajectorySample):
         :return: Motion sample loaded from file
         :rtype: bool
         """
+        try:
+            import pandas as pd
+        except ImportError as e:
+            raise ImportError(
+                "Pandas is required for data handling. Please install it using 'pip install pandas'."
+            ) from e
         if os.path.exists(file_location):
             _, extension = os.path.splitext(file_name)
 

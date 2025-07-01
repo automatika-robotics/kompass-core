@@ -1,9 +1,9 @@
 import json
 import logging
 import os
+import cv2
 from typing import Union, List
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from attrs import define, field, Factory
@@ -12,6 +12,7 @@ import kompass_cpp
 from kompass_cpp.types import PathInterpolationType, Path as PathCpp
 
 from kompass_core.datatypes.laserscan import LaserScanData
+from kompass_core.datatypes import Bbox2D
 from kompass_core.control import (
     DVZ,
     DWAConfig,
@@ -19,6 +20,10 @@ from kompass_core.control import (
     DWA,
     StanleyConfig,
     Stanley,
+    VisionRGBDFollower,
+    VisionRGBDFollowerConfig,
+    VisionRGBFollower,
+    VisionRGBFollowerConfig,
 )
 from kompass_core.models import (
     AngularCtrlLimits,
@@ -86,6 +91,13 @@ def plot_path(
     figure_tag: str,
 ):
     """Plot Test Results"""
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        logger.warning(
+            "Matplotlib is required for visualization. Figures will not be generated. To generate test figures, install it using 'pip install matplotlib'."
+        )
+        return
     # Extract x and y coordinates from the Path message
     x_coords = [pose.pose.position.x for pose in path.poses]
     y_coords = [pose.pose.position.y for pose in path.poses]
@@ -177,11 +189,8 @@ def run_control(
 
     # Interpolated path for visualization
     interpolated_path = controller.interpolated_path()
-    interpolation_x = []
-    interpolation_y = []
-    for point in interpolated_path.points:
-        interpolation_x.append(point[0])
-        interpolation_y.append(point[1])
+    interpolation_x = interpolated_path.x()
+    interpolation_y = interpolated_path.y()
 
     i = 0
     x_robot = []
@@ -275,15 +284,22 @@ def test_path_interpolation(plot: bool = False):
         x_ref = [pose.pose.position.x for pose in ref_path.poses]
         y_ref = [pose.pose.position.y for pose in ref_path.poses]
 
-        x_inter_lin = [point[0] for point in linear_interpolation.points]
-        y_inter_lin = [point[1] for point in linear_interpolation.points]
+        x_inter_lin = linear_interpolation.x()
+        y_inter_lin = linear_interpolation.y()
 
-        x_inter_her = [point[0] for point in hermite_spline_interpolation.points]
-        y_inter_her = [point[1] for point in hermite_spline_interpolation.points]
+        x_inter_her = hermite_spline_interpolation.x()
+        y_inter_her = hermite_spline_interpolation.y()
 
-        x_inter_cub = [point[0] for point in cubic_spline_interpolation.points]
-        y_inter_cub = [point[1] for point in cubic_spline_interpolation.points]
+        x_inter_cub = cubic_spline_interpolation.x()
+        y_inter_cub = cubic_spline_interpolation.y()
 
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            logger.warning(
+                "Matplotlib is required for visualization. Figures will not be generated. To generate test figures, install it using 'pip install matplotlib'."
+            )
+            return
         # Plot the path
         plt.figure()
         plt.plot(
@@ -330,9 +346,9 @@ def test_path_interpolation(plot: bool = False):
                 )
                 length += np.sqrt(d_x**2 + d_y**2)
         elif isinstance(path, PathCpp):
-            for idx in range(len(path.points) - 1):
-                d_x = path.points[idx + 1][0] - path.points[idx][0]
-                d_y = path.points[idx + 1][1] - path.points[idx][1]
+            for idx in range(path.size() - 1):
+                d_x = path.getIndex(idx + 1)[0] - path.getIndex(idx)[0]
+                d_y = path.getIndex(idx + 1)[1] - path.getIndex(idx)[1]
                 length += np.sqrt(d_x**2 + d_y**2)
         return length
 
@@ -408,8 +424,8 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
         max_angular_samples=4,
         octree_resolution=0.1,
         costs_weights=cost_weights,
-        prediction_horizon=1.0,
-        control_horizon=0.2,
+        prediction_horizon=10,
+        control_horizon=2,
         control_time_step=control_time_step,
         max_num_threads=1,
     )
@@ -429,6 +445,148 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
     assert reached_end is True
 
 
+def test_vision_dwa_with_depth_img():
+    """Run VisionRGBDFollower pytest and assert reaching end"""
+    global global_path, my_robot, robot_ctr_limits, control_time_step
+
+    from kompass_core import set_logging_level
+
+    set_logging_level("DEBUG")
+
+    my_robot.state.x = -0.5
+
+    image_file_path = f"{control_resources}/bag_image_depth.tif"
+    # clicked point on image to track target
+    clicked_point = [610, 200]
+    # Detected 2D box
+    box = Bbox2D(top_left_corner=np.array([410, 0]), size=np.array([410, 390]))
+    detections = [box]
+
+    point_cloud = [np.array([10.3, 10.5, 0.2], dtype=np.float32)]
+
+    control_horizon = 2
+    prediction_horizon = 10
+
+    focal_length = [911.71, 910.288]
+    principal_point = [643.06, 366.72]
+
+    cost_weights = TrajectoryCostsWeights(
+        reference_path_distance_weight=1.0,
+        goal_distance_weight=0.0,
+        smoothness_weight=0.0,
+        jerk_weight=0.0,
+        obstacles_distance_weight=0.0,
+    )
+    config = VisionRGBDFollowerConfig(
+        control_time_step=control_time_step,
+        control_horizon=control_horizon,
+        prediction_horizon=prediction_horizon,
+        speed_gain=1.0,
+        rotation_gain=1.0,
+        costs_weights=cost_weights,
+        max_linear_samples=20,
+        max_angular_samples=20,
+        octree_resolution=0.1,
+        max_num_threads=1,
+        min_depth=0.001,
+        max_depth=5.0,
+        depth_conversion_factor=0.001,
+        camera_position_to_robot=np.array([0.32, 0.02089, 0.2999]),
+        camera_rotation_to_robot=np.array([0.385, -0.5846, 0.595, -0.395]),
+    )
+
+    controller = VisionRGBDFollower(
+        robot=my_robot,
+        ctrl_limits=robot_ctr_limits,
+        config=config,
+        camera_focal_length=focal_length,
+        camera_principal_point=principal_point,
+    )
+
+    # Get image
+    cv_img = cv2.imread(image_file_path, cv2.IMREAD_UNCHANGED)
+
+    if cv_img is None:
+        logging.error("Could not open or find the image")
+        return
+
+    # Create a NumPy array from the OpenCV Mat
+    depth_image = np.array(cv_img, dtype=np.ushort, order="F")
+
+    found_target = controller.set_initial_tracking_image(
+        my_robot.state, clicked_point[0], clicked_point[1], detections, depth_image
+    )
+
+    if not found_target:
+        print("Point not found on image")
+        return
+    else:
+        print("Point found on image ...")
+
+    res = controller.loop_step(
+        current_state=my_robot.state,
+        detections_2d=detections,
+        depth_image=depth_image,
+        point_cloud=point_cloud,
+    )
+    if not res:
+        print("No control found")
+
+    assert res
+
+    velocities = controller.control_till_horizon
+    (vx, vy, omega) = velocities.vx[0], velocities.vy[0], velocities.omega[0]
+    print(f"Found Control {vx}, {vy}, {omega}")
+
+
+def test_vision_rgb_follower():
+    """Run VisionRGBFollower pytest and assert reaching end"""
+    global global_path, my_robot, robot_ctr_limits, control_time_step
+
+    from kompass_core import set_logging_level
+
+    set_logging_level("DEBUG")
+
+    my_robot.state.x = -0.5
+
+    box = Bbox2D(top_left_corner=np.array([410, 0]), size=np.array([410, 390]))
+    box.set_img_size(np.array([640, 480], dtype=np.int32))
+    detections = [box]
+
+    config = VisionRGBFollowerConfig(
+        control_time_step=control_time_step, speed_gain=1.0, rotation_gain=1.0
+    )
+
+    controller = VisionRGBFollower(
+        robot=my_robot,
+        ctrl_limits=robot_ctr_limits,
+        config=config,
+    )
+
+    found_target = controller.set_initial_tracking_2d_target(box)
+
+    if not found_target:
+        print("Point not found on image")
+        return
+    else:
+        print("Point found on image ...")
+
+    res = controller.loop_step(
+        detections_2d=detections,
+    )
+    if not res:
+        print("No control found")
+
+    assert res
+
+    (vx, vy, omega) = (
+        controller.linear_x_control,
+        controller.linear_y_control,
+        controller.angular_control,
+    )
+    print(f"Found Control {vx}, {vy}, {omega}")
+
+
 def test_dwa_debug():
     global global_path, my_robot, robot_ctr_limits, control_time_step
 
@@ -444,8 +602,8 @@ def test_dwa_debug():
         max_angular_samples=21,
         octree_resolution=0.1,
         costs_weights=cost_weights,
-        prediction_horizon=1.0,
-        control_horizon=0.2,
+        prediction_horizon=10,
+        control_horizon=2,
         control_time_step=control_time_step,
         max_num_threads=1,
     )
@@ -477,6 +635,14 @@ def test_dwa_debug():
 
     dwa.planner.debug_velocity_search(current_velocity, sensor_data, False)
     (paths_x, paths_y) = dwa.planner.get_debugging_samples()
+
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        logger.warning(
+            "Matplotlib is required for visualization. Figures will not be generated. To generate test figures, install it using 'pip install matplotlib'."
+        )
+        return
     _, ax = plt.subplots()
     # Add the two laserscan obstacles
     obstacle_1 = plt.Circle((-0.117319, 0), 0.1, color="black", label="obstacle")
@@ -515,7 +681,7 @@ def run_before_and_after_tests():
     robot_ctr_limits = RobotCtrlLimits(
         vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
         omega_limits=AngularCtrlLimits(
-            max_vel=3.0, max_acc=5.0, max_decel=10.0, max_steer=np.pi
+            max_vel=4.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
         ),
     )
 
@@ -541,7 +707,7 @@ def main():
     robot_ctr_limits = RobotCtrlLimits(
         vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
         omega_limits=AngularCtrlLimits(
-            max_vel=2.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
+            max_vel=4.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
         ),
     )
 
@@ -567,6 +733,14 @@ def main():
     ## TESTING DWA ##
     print("RUNNING DWA CONTROLLER TEST")
     test_dwa(plot=True, figure_name="dwa", figure_tag="DWA Controller Test Results")
+
+    ## TESTING VISION RGBD Follower (VISION DWA) ##
+    print("RUNNING VISION DWA CONTROLLER TEST")
+    test_vision_dwa_with_depth_img()
+
+    ## TESTING VISION RGB Follower ##
+    print("RUNNING VISION RGB FOLLOWER TEST")
+    test_vision_rgb_follower()
 
 
 if __name__ == "__main__":

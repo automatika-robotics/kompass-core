@@ -1,21 +1,17 @@
 #include "utils/critical_zone_check_gpu.h"
 #include "utils/logger.h"
-#include <CL/sycl.hpp>
-#include <hipSYCL/sycl/libkernel/marray.hpp>
 #include <sycl/sycl.hpp>
 
 namespace Kompass {
 
-bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
-                                   const std::vector<double> &angles,
-                                   const bool forward) {
+float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
+                                    const std::vector<double> &angles,
+                                    const bool forward) {
   try {
-    m_q.fill(m_devicePtrOutput, false, m_scan_in_zone);
+    m_q.fill(m_devicePtrOutput, 1.0f, m_scan_in_zone);
 
-    m_q.memcpy(m_devicePtrAngles, angles.data(), sizeof(double) * m_scanSize)
-        .wait();
-    m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(double) * m_scanSize)
-        .wait();
+    m_q.memcpy(m_devicePtrAngles, angles.data(), sizeof(double) * m_scanSize);
+    m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(double) * m_scanSize);
 
     // command scope
     m_q.submit([&](sycl::handler &h) {
@@ -34,7 +30,10 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
       const auto devicePtrAngles = m_devicePtrAngles;
       const auto devicePtrOutput = m_devicePtrOutput;
       const auto criticalDistance = critical_distance_;
+      const auto slowdownDistance = slowdown_distance_;
       size_t *critical_indices;
+      float *result = m_result;
+      *result = 1.0f;
       sycl::range<1> global_size;
       if (forward) {
         critical_indices = m_devicePtrForward;
@@ -60,23 +59,23 @@ bool CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
               transformed_point[1] += y_transform[i] * point[i];
             }
 
-            double converted_range = sycl::length(transformed_point);
+            float converted_range = sycl::length(transformed_point);
             if (converted_range - robot_radius <= criticalDistance) {
-              // point within the zone and range is low
-              devicePtrOutput[idx] = true;
+              devicePtrOutput[idx] = 0.0f;
+            } else if (converted_range - robot_radius <= slowdownDistance) {
+              devicePtrOutput[idx] =
+                  (converted_range - robot_radius - criticalDistance) /
+                  (slowdownDistance - criticalDistance);
+            } else {
+              devicePtrOutput[idx] = 1.0f;
             }
-          });
-    }).wait();
 
-    *m_result = false;
-    // Launch a kernel that reduces the array using a logical OR operation.
-    // If any element is true, the reduction will produce true.
-    m_q.submit([&](sycl::handler &h) {
-      auto reduction = sycl::reduction(m_result, sycl::logical_or<bool>());
-      auto devicePtrOutput = m_devicePtrOutput;
-      h.parallel_for(
-          sycl::range<1>(m_scan_in_zone), reduction,
-          [=](sycl::id<1> idx, auto &r) { r.combine(devicePtrOutput[idx]); });
+            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                atomic_cost(*result);
+            atomic_cost.fetch_min(devicePtrOutput[idx]);
+          });
     });
 
     m_q.wait_and_throw();

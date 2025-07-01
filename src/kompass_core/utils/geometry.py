@@ -2,8 +2,6 @@ import math
 from typing import List, Union, Tuple
 
 import numpy as np
-import quaternion
-from quaternion import quaternion as quat
 
 from ..datatypes.pose import PoseData
 from ..datatypes.laserscan import LaserScanData
@@ -81,88 +79,109 @@ def probability_of_collision(
         return prop_col
 
 
-def _rotate_vector_by_quaternion(q: quaternion.quaternion, v: List) -> List:
+def _np_quaternion_multiply(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
     """
-    rotate a vector v by a rotation quaternion q
-
-    :param      q: the rotation to perform
-    :type       q: quaternion.quaternion
-    :param      v: the vector to be rotated
-    :type       v: List
-
-    :return:    the rotated position of the vector
-    :rtype:     List
+    Multiplies two quaternions q1 * q2
+    Each quaternion is an array [w, x, y, z]
     """
-    vq = quat(0, 0, 0, 0)
-    vq.imag = v
-    return (q * vq * q.inverse()).imag
+    w0, x0, y0, z0 = q1
+    w1, x1, y1, z1 = q2
+    return np.array([
+        w0 * w1 - x0 * x1 - y0 * y1 - z0 * z1,
+        w0 * x1 + x0 * w1 + y0 * z1 - z0 * y1,
+        w0 * y1 - x0 * z1 + y0 * w1 + z0 * x1,
+        w0 * z1 + x0 * y1 - y0 * x1 + z0 * w1,
+    ])
 
 
-def get_pose_target_in_reference_frame(
-    reference_pose: PoseData, target_pose: PoseData
-) -> PoseData:
+def _np_quaternion_conjugate(q: np.ndarray) -> np.ndarray:
     """
-    Computes a target pose with respect to the frame (coordinate system) defined by a reference.
-    target and reference should be given first in a common frame
-
-    :param      reference_pose:     Pose of reference frame in a common frame
-    :type       reference_pose:     PoseData
-    :param      target_pose:        Pose of target frame in a common frame
-    :type       target_pose:        PoseData
-
-    :return:    The pose of target in the reference frame
-    :rtype:     PoseData
+    Returns the conjugate of a quaternion
     """
-    position_target = target_pose.get_position()
-    orientation_target = target_pose.get_orientation()
+    w, x, y, z = q
+    return np.array([w, -x, -y, -z])
 
-    reference_position = reference_pose.get_position()
-    reference_rotation = reference_pose.get_orientation()
 
-    orientation_target_in_ref = reference_rotation.inverse() * orientation_target
+def _rotate_vector_by_quaternion(q: np.ndarray, v: List[float]) -> List[float]:
+    """
+    Rotate a 3D vector v by a quaternion q.
 
-    position_target_in_ref = _rotate_vector_by_quaternion(
-        reference_rotation.inverse(), (position_target - reference_position).tolist()
+    :param      q: quaternion [w, x, y, z]
+    :param      v: vector [x, y, z]
+    :return:    rotated vector
+    """
+    vq = np.array([0.0, *v])
+    q_conj = _np_quaternion_conjugate(q)
+    rotated_vq = _np_quaternion_multiply(_np_quaternion_multiply(q, vq), q_conj)
+    return rotated_vq[1:].tolist()
+
+
+def _transform_pose(pose: PoseData, reference_pose: PoseData) -> PoseData:
+    """
+    Transforms a pose from a local frame to a global frame using a reference pose.
+    Equivalent to: global_pose = reference_pose * local_pose
+
+    :param pose: PoseData in local frame
+    :type pose: PoseData
+    :param reference_pose: PoseData of local frame in global frame
+    :type reference_pose: PoseData
+    :return: PoseData in global frame
+    :rtype: PoseData
+    """
+    rotated_position = _rotate_vector_by_quaternion(reference_pose.get_orientation(), pose.get_position().tolist())
+    translated_position = reference_pose.get_position() + np.array(rotated_position)
+
+    combined_orientation = _np_quaternion_multiply(reference_pose.get_orientation(), pose.get_orientation())
+
+    result = PoseData()
+    result.set_pose(
+        *translated_position,
+        *combined_orientation
     )
-
-    target_pose_in_ref = PoseData()
-    target_pose_in_ref.set_pose(
-        x=position_target_in_ref[0],
-        y=position_target_in_ref[1],
-        z=position_target_in_ref[2],
-        qw=orientation_target_in_ref.w,
-        qx=orientation_target_in_ref.x,
-        qy=orientation_target_in_ref.y,
-        qz=orientation_target_in_ref.z,
-    )
-
-    return target_pose_in_ref
+    return result
 
 
-def from_frame1_to_frame2(
-    pose_1_in_2: PoseData, pose_target_in_1: PoseData
-) -> PoseData:
+def _inverse_pose(pose: PoseData) -> PoseData:
     """
-    get the pose of a target in frame 2 instead of frame 1
+    Computes the inverse of a pose (converts pose_in_frame to frame_in_pose)
 
-    :param      pose_1_in_2:        pose of frame 1 in frame 2
-    :type       pose_1_in_2:        PoseData
-    :param      pose_target_in_1:   pose of target in frame 1
-    :type       pose_target_in_1:   PoseData
-
-    :return:    pose of target in frame 2
-    :rtype:     PoseData
+    :param pose: PoseData to invert
+    :type pose: PoseData
+    :return: Inverse pose
+    :rtype: PoseData
     """
-    pose_2_origin = PoseData()
-    pose_2_in_1 = get_pose_target_in_reference_frame(
-        reference_pose=pose_1_in_2, target_pose=pose_2_origin
-    )
+    inv_orientation = _np_quaternion_conjugate(pose.get_orientation())
+    inv_position = _rotate_vector_by_quaternion(inv_orientation, (-pose.get_position()).tolist())
 
-    pose_target_in_2 = get_pose_target_in_reference_frame(
-        reference_pose=pose_2_in_1, target_pose=pose_target_in_1
+    result = PoseData()
+    result.set_pose(
+        *inv_position,
+        *inv_orientation
     )
+    return result
 
-    return pose_target_in_2
+def transform_point_from_local_to_global(point_pose_in_local: PoseData, robot_pose_in_global: PoseData) -> PoseData:
+    """Transforms a point from the robot frame to the global frame.
+
+    :param point_pose_in_local: Target point in robot frame
+    :type point_pose_in_local: PoseData
+    :param robot_pose_in_global: Robot pose in global frame
+    :type robot_pose_in_global: PoseData
+    :return: Target point in global frame
+    :rtype: PoseData
+    """
+    return _transform_pose(point_pose_in_local, robot_pose_in_global)
+
+def get_relative_pose(pose_1_in_ref: PoseData, pose_2_in_ref: PoseData) -> PoseData:
+    """
+    Computes the pose of pose_2 in the coordinate frame of pose_1.
+
+    :param pose_1_in_ref: PoseData of frame 1 in reference frame
+    :param pose_2_in_ref: PoseData of frame 2 in reference frame
+    :return: PoseData of pose_2 in frame 1
+    """
+    pose_ref_in_1 = _inverse_pose(pose_1_in_ref)
+    return _transform_pose(pose_2_in_ref, pose_ref_in_1)
 
 
 def from_euler_to_quaternion(yaw: float, pitch: float, roll: float) -> np.ndarray:
@@ -209,7 +228,7 @@ def from_2d_to_PoseData(x: float, y: float, heading: float) -> PoseData:
     :rtype: PoseData
     """
     pose_data = PoseData()
-    quat_data: quat = from_euler_to_quaternion(heading, 0.0, 0.0)
+    quat_data: np.ndarray = from_euler_to_quaternion(heading, 0.0, 0.0)
     pose_data.set_position(x, y, 0.0)
     pose_data.set_orientation(
         qw=quat_data[0], qx=quat_data[1], qy=quat_data[2], qz=quat_data[3]
@@ -254,7 +273,7 @@ def from_frame1_to_frame2_2d(
     )
 
     # Get transformd pose
-    pose_target_in_2: PoseData = from_frame1_to_frame2(pose_1_in_2, pose_target_in_1)
+    pose_target_in_2: PoseData = get_relative_pose(pose_1_in_2, pose_target_in_1)
 
     return pose_target_in_2
 

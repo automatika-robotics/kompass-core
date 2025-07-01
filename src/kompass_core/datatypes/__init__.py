@@ -14,7 +14,7 @@ from .path import (
 )
 from .pointcloud import PointCloudData
 from .pose import PoseData
-from .vision import TrackingData, ImageMetaData
+from kompass_cpp.types import Bbox3D, Bbox2D
 
 __all__ = [
     "LaserScanData",
@@ -31,6 +31,6 @@ __all__ = [
     "Odom2D",
     "PointCloudData",
     "PoseData",
-    "TrackingData",
-    "ImageMetaData",
+    "Bbox3D",
+    "Bbox2D",
 ]

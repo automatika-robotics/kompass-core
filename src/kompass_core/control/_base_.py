@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Optional, List
+from typing import Optional, List, Union
 import numpy as np
 import kompass_cpp
 from ..models import RobotState
@@ -95,7 +95,7 @@ class ControllerTemplate:
 
     @property
     @abstractmethod
-    def linear_x_control(self):
+    def linear_x_control(self) -> Union[List[float], np.ndarray]:
         """
         Getter of the last linear forward velocity control computed by the controller
 
@@ -106,7 +106,7 @@ class ControllerTemplate:
 
     @property
     @abstractmethod
-    def linear_y_control(self):
+    def linear_y_control(self) -> Union[List[float], np.ndarray]:
         """
         Getter the last linear velocity lateral control computed by the controller
 
@@ -117,7 +117,7 @@ class ControllerTemplate:
 
     @property
     @abstractmethod
-    def angular_control(self):
+    def angular_control(self) -> Union[List[float], np.ndarray]:
         """
         Getter of the last angular velocity control computed by the controller
 
@@ -255,7 +255,7 @@ class FollowerTemplate:
 
     @property
     @abstractmethod
-    def linear_x_control(self) -> List[float]:
+    def linear_x_control(self) -> Union[List[float], np.ndarray]:
         """
         Getter of the last linear forward velocity control computed by the controller
 
@@ -266,7 +266,7 @@ class FollowerTemplate:
 
     @property
     @abstractmethod
-    def linear_y_control(self) -> List[float]:
+    def linear_y_control(self) -> Union[List[float], np.ndarray]:
         """
         Getter the last linear velocity lateral control computed by the controller
 
@@ -277,7 +277,7 @@ class FollowerTemplate:
 
     @property
     @abstractmethod
-    def angular_control(self) -> List[float]:
+    def angular_control(self) -> Union[List[float], np.ndarray]:
         """
         Getter of the last angular velocity control computed by the controller
 
@@ -298,7 +298,7 @@ class FollowerTemplate:
         return target.crosstrack_error
 
     @property
-    def orientation_error(self) -> float:
+    def orientation_error(self) -> Union[float, np.ndarray]:
         """
         Getter of the path tracking orientation error (rad)
 

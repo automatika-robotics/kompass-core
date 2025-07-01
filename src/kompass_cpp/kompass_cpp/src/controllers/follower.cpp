@@ -1,6 +1,5 @@
 #include <Eigen/Dense>
 #include <cmath>
-#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -35,21 +34,7 @@ Follower::Follower() : Controller(), config() {
 
 Follower::Follower(FollowerParameters config) : Controller() {
   this->config = config;
-  lookahead_distance = config.getParameter<double>("lookahead_distance");
-  enable_reverse_driving = config.getParameter<bool>("enable_reverse_driving");
-  goal_dist_tolerance = config.getParameter<double>("goal_dist_tolerance");
-  goal_orientation_tolerance =
-      config.getParameter<double>("goal_orientation_tolerance");
-  loosing_goal_distance = config.getParameter<double>("loosing_goal_distance");
-  path_segment_length = config.getParameter<double>("path_segment_length");
-  maxDist = config.getParameter<double>("max_point_interpolation_distance");
-  // Set rotate_in_place based on the robot type
-  if (ctrType == Control::ControlType::ACKERMANN) {
-    rotate_in_place = false;
-  } else {
-    rotate_in_place = true;
-  }
-  maxSegmentSize = getMaxSegmentSize();
+  Follower();
 }
 
 size_t Follower::getMaxSegmentSize() const {
@@ -81,15 +66,16 @@ void Follower::clearCurrentPath() {
   return;
 }
 
-void Follower::setCurrentPath(const Path::Path &path) {
-  currentPath = std::make_unique<Path::Path>(path.points);
-  refPath = std::make_unique<Path::Path>(path.points);
+void Follower::setCurrentPath(const Path::Path &path, const bool interpolate) {
+  currentPath = std::make_unique<Path::Path>(path);
+  refPath = std::make_unique<Path::Path>(path);
 
   currentPath->setMaxLength(
       this->config.getParameter<double>("max_path_length"));
 
-  currentPath->interpolate(maxDist, interpolationType);
-
+  if (interpolate) {
+    currentPath->interpolate(maxDist, interpolationType);
+  }
   // Segment path
   currentPath->segment(path_segment_length);
 
@@ -113,7 +99,7 @@ size_t Follower::getCurrentSegmentIndex() { return current_segment_index_; }
 
 bool Follower::isGoalReached() {
   if (!path_processing_) {
-    return reached_goal_;
+    return true;
   }
 
   const Path::Point goal_point = currentPath->getEnd();
@@ -220,8 +206,7 @@ Path::State Follower::projectPointOnSegment(const Path::Point &a,
 
 Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 
-  const std::vector<Path::Point> &segment_points =
-      currentPath->segments[segment_index].points;
+  const Path::Path &segment_path = currentPath->segments[segment_index];
   double min_distance = std::numeric_limits<double>::max();
   Path::State closest_point;
   double segment_position = 0.0; // in [0, 1]
@@ -232,17 +217,16 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 
   double segment_heading = std::atan2(end.y() - start.y(), end.x() - start.x());
 
-  for (size_t i = 0; i < segment_points.size(); ++i) {
-
-    Path::Point projected_point = segment_points[i];
+  for (auto projected_point : segment_path) {
     double distance = calculateDistance(currentState, projected_point);
 
     if (distance < min_distance) {
       min_distance = distance;
       closest_point = {projected_point.x(), projected_point.y(),
                        segment_heading};
-      segment_position = static_cast<double>(i) / (segment_points.size() - 1);
-      point_index = i;
+      segment_position =
+          static_cast<double>(point_index) / (segment_path.getSize() - 1);
+      point_index++;
     }
   }
 
@@ -274,12 +258,16 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 void Follower::determineTarget() {
 
   currentTrackedTarget_ = std::make_unique<Target>();
-  // closestPosition = new Path::PathPosition();
-
-  // closest position is never updated
-  // OR If we reached end of segment or end of path -> Find new point
+  LOG_DEBUG("Closest point index on segment ", closestPosition->index,
+            " max index on segment is",
+            currentPath->segments[current_segment_index_].getSize() - 1,
+            " its segment length = ", closestPosition->segment_length);
+  // If closest position is never updated
+  // OR If we reached end of a segment or end of the path -> Find new segment
+  // then new point on segment
   if ((closestPosition->segment_length <= 0.0) ||
-      (closestPosition->segment_index >= currentPath->points.size() - 1) ||
+      (closestPosition->index >=
+       currentPath->segments[current_segment_index_].getSize() - 1) ||
       (closestPosition->segment_length >= 1.0)) {
     *closestPosition = findClosestPathPoint();
   }
@@ -288,7 +276,7 @@ void Follower::determineTarget() {
     *closestPosition =
         findClosestPointOnSegment(closestPosition->segment_index);
   }
-  currentTrackedTarget_->segment_index = closestPosition->segment_index;
+  currentTrackedTarget_->segment_index = current_segment_index_;
   currentTrackedTarget_->position_in_segment = closestPosition->segment_length;
 
   currentTrackedTarget_->movement = closestPosition->state;
@@ -332,7 +320,7 @@ const double Follower::getPathLength() const {
   return currentPath->totalPathLength();
 }
 const bool Follower::hasPath() const {
-  if (!path_processing_) {
+  if (!currentPath or !path_processing_) {
     return false;
   }
   return currentPath->totalPathLength() > 0.0;

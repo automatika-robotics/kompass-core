@@ -90,7 +90,8 @@ struct TrajectoryVelocities2D {
   // get the first element
   Velocity2D getFront() const {
     assert(numPointsPerTrajectory_ > 1 && "Velocities are empty");
-    return Velocity2D(vx(0), vy(0), omega(0)); };
+    return Velocity2D(vx(0), vy(0), omega(0));
+  };
   // get the last element
   Velocity2D getEnd() const {
     assert(numPointsPerTrajectory_ > 1 && "Velocities are empty");
@@ -148,14 +149,15 @@ struct TrajectoryPath {
 
   // initialize from a  Path
   explicit TrajectoryPath(const Path::Path &path) {
-    x.resize(path.points.size());
-    y.resize(path.points.size());
-    z.resize(path.points.size());
-    numPointsPerTrajectory_ = path.points.size();
-    for (size_t i = 0; i < path.points.size(); ++i) {
-      x(i) = path.points[i].x();
-      y(i) = path.points[i].y();
-      z(i) = path.points[i].z();
+    x.resize(path.getSize());
+    y.resize(path.getSize());
+    z.resize(path.getSize());
+    numPointsPerTrajectory_ = path.getSize();
+    // Set the current path points
+    for (size_t i = 0; i < path.getSize(); ++i) {
+      x(i) = path.getIndex(i).x();
+      y(i) = path.getIndex(i).y();
+      z(i) = path.getIndex(i).z();
     }
   };
 
@@ -210,7 +212,8 @@ struct TrajectoryPath {
   // get the first element
   Path::Point getFront() const {
     assert(numPointsPerTrajectory_ > 0 && "Path is empty");
-    return Path::Point(x(0), y(0), z(0)); };
+    return Path::Point(x(0), y(0), z(0));
+  };
   // get the last element
   Path::Point getEnd() const {
     assert(numPointsPerTrajectory_ > 0 && "Path is empty");
@@ -278,7 +281,7 @@ struct Trajectory2D {
 
   // initialize with path object and velocity vector
   explicit Trajectory2D(std::vector<Velocity2D> &velocities, Path::Path &path) {
-    if (velocities.size() != path.points.size()) {
+    if (velocities.size() != path.getSize()) {
       throw std::invalid_argument(
           "Velocity2D vector and path points vector should have the same size "
           "must have the same numPointsPerTrajectory");
@@ -400,14 +403,15 @@ struct TrajectoryPathSamples {
 
   // Add a new path from a Path struct.
   void push_back(const Path::Path &path) {
-    assert(path.points.size() == numPointsPerTrajectory_ &&
-           "Path points vector must have size equivalent to numPointsPerTrajectory");
+    assert(path.getSize() == numPointsPerTrajectory_ &&
+           "Path points vector must have size equivalent to "
+           "numPointsPerTrajectory");
 
     pathIndex_++;
     for (size_t i = 0; i < numPointsPerTrajectory_; ++i) {
-      x(pathIndex_, i) = path.points[i].x();
-      y(pathIndex_, i) = path.points[i].y();
-      z(pathIndex_, i) = path.points[i].z();
+      x(pathIndex_, i) = path.getIndex(i).x();
+      y(pathIndex_, i) = path.getIndex(i).y();
+      z(pathIndex_, i) = path.getIndex(i).z();
     }
   }
 
@@ -577,7 +581,10 @@ struct TrajectorySamples2D {
 struct TrajSearchResult {
   Trajectory2D trajectory;
   bool isTrajFound = false;
-  float trajCost;
+  float trajCost = 0.0;
+
+  // default constructor
+  TrajSearchResult() = default;
 };
 
 // Lowest cost and its associated index for the trajectory sample

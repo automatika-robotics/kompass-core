@@ -25,7 +25,7 @@ inline void from_json(const json &j, Path::Point &p) {
 // Convert Path to JSON
 inline void to_json(json &j, const Path::Path &p) {
   j["points"] = json::array(); // Initialize as a JSON array
-  for (const auto &point : p.points) {
+  for (const auto &point : p) {
     j["points"].push_back(
         json{{"x", point.x()}, {"y", point.y()}}); // Serialize each Point
   }
@@ -42,13 +42,14 @@ inline void to_json(json &j, const Control::TrajectoryPath &p) {
 
 // Convert JSON to Path
 inline void from_json(const json &j, Path::Path &p) {
-  p.points.clear(); // Clear existing points
+  std::vector<Path::Point> points;
   for (const auto &item : j.at("points")) {
     Path::Point point;
     point.x() = item.at("x");
     point.y() = item.at("y");
-    p.points.push_back(point); // Deserialize each Point
+    points.push_back(point); // Deserialize each Point
   }
+  p = Path::Path(points, points.size());
 }
 
 // Convert Velocity to JSON
@@ -92,11 +93,26 @@ inline void to_json(json &j, const Control::TrajectorySamples2D &samples,
 }
 
 // Save trajectories to a JSON file
-inline void saveTrajectoriesToJson(
-    const Control::TrajectorySamples2D &trajectories,
-    const std::string &filename) {
+void saveTrajectoriesToJson(const Control::TrajectorySamples2D &trajectories,
+                            const std::string &filename) {
   json j;
   to_json(j, trajectories);
+  std::ofstream file(filename);
+  if (file.is_open()) {
+    file << j.dump(4); // Pretty print with 4 spaces indentation
+    file.close();
+  } else {
+    std::cerr << "Unable to open file: " << filename << std::endl;
+  }
+}
+
+void saveTrajectoryToJson(const Control::Trajectory2D &trajectory,
+                          const std::string &filename) {
+  json j;
+  j["paths"] = json::array(); // Initialize as a JSON array
+  json j_p;
+  to_json(j_p, trajectory.path);
+  j["paths"].push_back(j_p); // Serialize each Point
   std::ofstream file(filename);
   if (file.is_open()) {
     file << j.dump(4); // Pretty print with 4 spaces indentation

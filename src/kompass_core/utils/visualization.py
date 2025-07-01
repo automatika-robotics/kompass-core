@@ -1,16 +1,11 @@
 from typing import List, Optional
 import numpy as np
-import cv2
-import matplotlib.colors as PltColors
-import matplotlib.markers as PltMarkers
-import matplotlib.pyplot as plt
-from matplotlib.axes import Axes
 
 from ..datatypes.obstacles import ObstaclesData, OCCUPANCY_TYPE
 from ..datatypes.path import PathPoint, PathSample
 
 
-def plt_map_obstacles(map: ObstaclesData, ax: Axes = None):
+def plt_map_obstacles(map: ObstaclesData, ax=None):
     """
     Plot a given map's obstacles as circles
 
@@ -19,6 +14,12 @@ def plt_map_obstacles(map: ObstaclesData, ax: Axes = None):
     :param ax: Plotting Axes, defaults to None
     :type ax: Axes, optional
     """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as e:
+        raise ImportError(
+            "Matplotlib is required for visualization. Please install it using 'pip install matplotlib'."
+        ) from e
     if not ax:
         ax = plt.gca()
 
@@ -28,9 +29,7 @@ def plt_map_obstacles(map: ObstaclesData, ax: Axes = None):
         ax.add_patch(circle)
 
 
-def plt_path_sample(
-    ref_path: PathSample, label="", color="blue", marker="", ax: Axes = None
-):
+def plt_path_sample(ref_path: PathSample, label="", color="blue", marker="", ax=None):
     """
     Plot a given path sample as a line
 
@@ -45,6 +44,14 @@ def plt_path_sample(
     :param ax: Plotting Axes, defaults to None
     :type ax: Axes, optional
     """
+    try:
+        import matplotlib.colors as PltColors
+        import matplotlib.markers as PltMarkers
+        import matplotlib.pyplot as plt
+    except ImportError as e:
+        raise ImportError(
+            "Matplotlib is required for visualization. Please install it using 'pip install matplotlib'."
+        ) from e
     if color not in PltColors.cnames.keys():
         color = "blue"
 
@@ -64,7 +71,7 @@ def plt_path_sample(
 
 
 def plt_path_points_list(
-    ref_path: List[PathPoint], label="", color="blue", marker="", ax: Axes = None
+    ref_path: List[PathPoint], label="", color="blue", marker="", ax=None
 ):
     """
     Plot a given list of path points as a line
@@ -80,6 +87,14 @@ def plt_path_points_list(
     :param ax: Plotting Axes, defaults to None
     :type ax: Axes, optional
     """
+    try:
+        import matplotlib.colors as PltColors
+        import matplotlib.markers as PltMarkers
+        import matplotlib.pyplot as plt
+    except ImportError as e:
+        raise ImportError(
+            "Matplotlib is required for visualization. Please install it using 'pip install matplotlib'."
+        ) from e
     if color not in PltColors.cnames.keys():
         color = "blue"
 
@@ -110,7 +125,12 @@ def _resize_image(image: np.ndarray, scale: float) -> np.ndarray:
     :return:    _description_
     :rtype:     np.ndarray
     """
-
+    try:
+        import cv2
+    except ImportError as e:
+        raise ImportError(
+            "OpenCV is required for image processing. Please install it using 'pip install opencv-python'."
+        ) from e
     width = int(image.shape[1] * scale)
     height = int(image.shape[0] * scale)
     dim = (width, height)
@@ -197,6 +217,12 @@ def visualize_grid(
     :return:    grid image
     :rtype:     np.ndarray
     """
+    try:
+        import cv2
+    except ImportError as e:
+        raise ImportError(
+            "OpenCV is required for image processing. Please install it using 'pip install opencv-python'."
+        ) from e
     grid_image = MAPPING_GRID_TO_COLOR[
         grid_data
     ]  # map HxWx1 grid to HxWx3 RGB colored grid as image
