@@ -23,7 +23,6 @@ Kompass Core 是一个高性能、支持 GPU 加速的库，用于机器人导�
 
 - [**安装指南**](#安装指南) Kompass Core 🛠️
 - 查看 [**软件包概览**](#-软件包概览)
-- [**版权信息**](#版权信息) 与 [**贡献说明**](#贡献说明)
 - 若需在 ROS2 中使用 Kompass Core，请访问 [**Kompass 框架**](https://automatika-robotics.github.io/kompass) 🚀
 
 # 安装指南
@@ -152,5 +151,3 @@ Kompass Core 遵循 MIT 开源许可证。详细信息请见 [LICENSE](LICENSE) 
 ## 贡献说明
 
 Kompass Core 由 [Automatika Robotics](https://automatikarobotics.com/) 与 [Inria](https://inria.fr/) 合作开发，欢迎社区开发者贡献代码与文档。
-
-

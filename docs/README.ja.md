@@ -25,7 +25,6 @@ Kompass の理念は、「驚異的な高速性」と「高信頼性」を追求
 
 - [**インストール**](#installation) Kompass Core 🛠️
 - [**パッケージ概要**](#-package-overview) を確認
-- [**著作権**](#copyright) および [**コントリビューション**](#contributions)
 - ROS2 環境でロボットに Kompass Core を導入したい場合は、[**Kompass**](https://automatika-robotics.github.io/kompass) フレームワークをご参照ください 🚀
 
 # インストール方法
@@ -155,4 +154,3 @@ Kompass Core は MIT ライセンスのもとで公開されています。詳�
 ## コントリビューション
 
 Kompass Core は [Automatika Robotics](https://automatikarobotics.com/) と [Inria](https://inria.fr/) の共同開発プロジェクトです。コミュニティからの貢献は大歓迎です。
-

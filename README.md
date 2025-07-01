@@ -24,7 +24,6 @@ This package is developed to be used with [Kompass](https://github.com/automatik
 
 - [**Install**](#installation) Kompass Core 🛠️
 - Check the [**Package Overview**](#-package-overview)
-- [**Copyright**](#copyright) and [**Contributions**](#contributions)
 - To use Kompass Core on your robot with ROS2, check the [**Kompass**](https://automatika-robotics.github.io/kompass) framework 🚀
 
 
