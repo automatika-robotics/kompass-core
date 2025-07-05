@@ -198,7 +198,9 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     size_t trajs_size = trajs->size();
     std::vector<sycl::event> events;
 
-    m_q.fill(m_devicePtrCosts, 0.0f, trajs_size);
+    // TODO: Investigate error in AdaptiveCPP JIT compilation for filling
+    // float memory without wait
+    m_q.fill(m_devicePtrCosts, 0.0f, trajs_size).wait();
 
     m_q.memcpy(m_devicePtrPathsX, trajs->paths.x.data(),
                sizeof(float) * trajs_size * numPointsPerTrajectory_);

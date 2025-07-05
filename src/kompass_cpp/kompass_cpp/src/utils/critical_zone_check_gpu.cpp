@@ -8,7 +8,9 @@ float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
                                     const std::vector<double> &angles,
                                     const bool forward) {
   try {
-    m_q.fill(m_devicePtrOutput, 1.0f, m_scan_in_zone);
+    // TODO: Investigate error in AdaptiveCPP JIT compilation for filling
+    // float memory without wait
+    m_q.fill(m_devicePtrOutput, 1.0f, m_scan_in_zone).wait();
 
     m_q.memcpy(m_devicePtrAngles, angles.data(), sizeof(double) * m_scanSize);
     m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(double) * m_scanSize);
