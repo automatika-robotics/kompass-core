@@ -299,7 +299,7 @@ fi
 log INFO "Installing kompass-core with pip"
 export PIP_BREAK_SYSTEM_PACKAGES=1
 pip install pip-tools
-pip uninstall kompass-core  # uninstall any previous versions
+pip uninstall -y kompass-core  # uninstall any previous versions
 pip install .
 
 # Clean up source files if not required
