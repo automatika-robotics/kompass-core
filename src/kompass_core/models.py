@@ -730,7 +730,7 @@ class RobotGeometry:
         BOX = 3  # (x, y, z) Axis-aligned box with given side lengths
         CYLINDER = 2  # (rad, lz) Cylinder with given radius and height along z-axis
         SPHERE = 1  # (rad) Sphere with given radius
-        ELLIPSOID = 3  # (x, y, z) Axis-aligned ellipsoid with given radis
+        ELLIPSOID = 3  # (x, y, z) Axis-aligned ellipsoid with given radius
         CAPSULE = 2  # (rad, lz) Capsule with given radius and height along z-axis
         CONE = 2  # (rad, lz) Cone with given radius and height along z-axis
 
@@ -804,6 +804,36 @@ class RobotGeometry:
             return parameters[0]
         else:
             return np.sqrt(parameters[1] + parameters[0]) / 2
+
+    @classmethod
+    def get_height(cls, geometry_type: Type, parameters: np.ndarray) -> float:
+        """
+        Gets the robot height from the geometry
+
+        :param geometry_type: Robot Geometry Type
+        :type geometry_type: Type
+        :param parameters: Robot Geometry Parameters
+        :type parameters: np.ndarray
+
+        :return: Robot height if the parameters are valid, else None
+        :rtype: Optional[float]
+        """
+        if not cls.is_valid_parameters(geometry_type, parameters):
+            raise ValueError("Invalid parameters for the robot geometry")
+        if geometry_type in [
+            cls.Type.CONE,
+            cls.Type.CYLINDER,
+            cls.Type.CAPSULE,
+            cls.Type.ELLIPSOID,
+        ]:
+            # Last parameter is the height
+            return parameters[-1]
+        elif geometry_type == cls.Type.SPHERE:
+            # Return sphere height
+            return parameters[0] * 2.0
+        else:
+            # return BOX height
+            return parameters[0]
 
     @classmethod
     def get_length(cls, geometry_type: Type, parameters: np.ndarray) -> Optional[float]:
@@ -1289,6 +1319,16 @@ class Robot:
         :rtype: float
         """
         return RobotGeometry.get_radius(self.geometry_type, self.geometry_params)
+
+    @property
+    def height(self) -> float:
+        """
+        Gets the robot height
+
+        :return: Height (meters)
+        :rtype: float
+        """
+        return RobotGeometry.get_height(self.geometry_type, self.geometry_params)
 
     @property
     def wheelbase(self) -> float:
