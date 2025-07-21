@@ -1,8 +1,8 @@
 from .local_mapper import LocalMapper, MapConfig
-from .laserscan_model import LaserScanModelConfig
+from .scan_model import ScanModelConfig
 
 __all__ = [
     "LocalMapper",
     "MapConfig",
-    "LaserScanModelConfig",
+    "ScanModelConfig",
 ]
