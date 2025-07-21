@@ -13,12 +13,14 @@ public:
   // Constructor with basic parameters
   LocalMapper(const int gridHeight, const int gridWidth, float resolution,
               const Eigen::Vector3f &laserscanPosition,
-              float laserscanOrientation, int maxPointsPerLine,
+              float laserscanOrientation, float angleStep, float maxHeight,
+              float minHeight, float rangeMax, int maxPointsPerLine,
               int maxNumThreads = 1)
       : m_gridHeight(gridHeight), m_gridWidth(gridWidth),
         m_resolution(resolution), m_laserscanOrientation(laserscanOrientation),
         m_pPrior(0.5f), m_pEmpty(0.4f), m_pOccupied(0.6f), m_rangeSure(1.0f),
-        m_rangeMax(5.0f), m_wallSize(0.2f),
+        m_rangeMax(rangeMax), m_wallSize(0.2f), m_angleStep(angleStep),
+        m_maxHeight(maxHeight), m_minHeight(minHeight),
         m_maxPointsPerLine(maxPointsPerLine),
         m_centralPoint(std::round(gridHeight / 2) - 1,
                        std::round(gridWidth / 2) - 1),
@@ -37,11 +39,13 @@ public:
               const Eigen::Vector3f &laserscanPosition,
               float laserscanOrientation, float pPrior, float pOccupied,
               float pEmpty, float rangeSure, float rangeMax, float wallSize,
+              float angleStep, float maxHeight, float minHeight,
               int maxPointsPerLine, int maxNumThreads = 1)
       : m_gridHeight(gridHeight), m_gridWidth(gridWidth),
         m_resolution(resolution), m_laserscanOrientation(laserscanOrientation),
         m_pPrior(pPrior), m_pEmpty(pEmpty), m_pOccupied(pOccupied),
         m_rangeSure(rangeSure), m_rangeMax(rangeMax), m_wallSize(wallSize),
+        m_angleStep(angleStep), m_maxHeight(maxHeight), m_minHeight(minHeight),
         m_maxPointsPerLine(maxPointsPerLine),
         m_centralPoint(std::round(gridHeight / 2) - 1,
                        std::round(gridWidth / 2) - 1),
@@ -110,6 +114,45 @@ public:
   scanToGridBaysian(const std::vector<double> &angles,
                     const std::vector<double> &ranges);
 
+  /**
+   * Projects 3D point cloud data onto a 2D grid using Bresenham line drawing.
+   *
+   * @param data        Flattened point cloud data (int8), typically in XYZ
+   * format.
+   * @param point_step  Number of bytes between each point in the data array.
+   * @param row_step    Number of bytes between each row in the data array.
+   * @param height      Number of rows (height of the point cloud).
+   * @param width       Number of columns (width of the point cloud).
+   * @param x_offset    Offset (in bytes) to the x-coordinate within a point.
+   * @param y_offset    Offset (in bytes) to the y-coordinate within a point.
+   * @param z_offset    Offset (in bytes) to the z-coordinate within a point.
+   * @return            A 2D occupancy grid as an Eigen::MatrixXi.
+   */
+  Eigen::MatrixXi &scanToGrid(const std::vector<int8_t> &data, int point_step,
+                              int row_step, int height, int width,
+                              float x_offset, float y_offset, float z_offset);
+  /**
+   * Projects 3D point cloud data onto a 2D grid using Bresenham line drawing,
+   * with Bayesian updates to build a probabilistic occupancy grid.
+   *
+   * @param data        Flattened point cloud data (int8), typically in XYZ
+   * format.
+   * @param point_step  Number of bytes between each point in the data array.
+   * @param row_step    Number of bytes between each row in the data array.
+   * @param height      Number of rows (height of the point cloud).
+   * @param width       Number of columns (width of the point cloud).
+   * @param x_offset    Offset (in bytes) to the x-coordinate within a point.
+   * @param y_offset    Offset (in bytes) to the y-coordinate within a point.
+   * @param z_offset    Offset (in bytes) to the z-coordinate within a point.
+   * @return            A tuple containing:
+   *                      - Discrete occupancy grid (Eigen::MatrixXi&)
+   *                      - Probabilistic occupancy grid (Eigen::MatrixXf&)
+   */
+  std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
+  scanToGridBaysian(const std::vector<int8_t> &data, int point_step,
+                    int row_step, int height, int width, float x_offset,
+                    float y_offset, float z_offset);
+
 protected:
   // Transforms a point from grid coordinate (i,j) to the local coordinates
   // frame of the grid (around the central cell) (x,y,z)
@@ -168,6 +211,9 @@ protected:
   const float m_rangeSure;
   const float m_rangeMax;
   const float m_wallSize;
+  const float m_angleStep;
+  const float m_maxHeight;
+  const float m_minHeight;
   const int m_maxPointsPerLine;
   const Eigen::Vector2i m_centralPoint;
   const Eigen::Vector3f m_laserscanPosition;

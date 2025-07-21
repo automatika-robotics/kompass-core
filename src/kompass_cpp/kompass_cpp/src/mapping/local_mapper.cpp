@@ -1,10 +1,12 @@
 #include "mapping/local_mapper.h"
 #include "mapping/line_drawing.h"
+#include "utils/pointcloud.h"
 #include "utils/threadpool.h"
 
 #include <Eigen/SparseCore>
 #include <cstdio>
 #include <mutex>
+#include <vector>
 
 namespace Kompass {
 namespace Mapping {
@@ -236,6 +238,31 @@ LocalMapper::scanToGridBaysian(const std::vector<double> &angles,
     }
   }
   return std::tie(gridData, gridDataProb);
+}
+
+Eigen::MatrixXi &LocalMapper::scanToGrid(const std::vector<int8_t> &data,
+                                         int point_step, int row_step,
+                                         int height, int width, float x_offset,
+                                         float y_offset, float z_offset) {
+  std::vector<double> angles;
+  std::vector<double> ranges;
+  pointCloudToLaserScanFromRaw(
+      data, point_step, row_step, height, width, x_offset, y_offset, z_offset,
+      m_rangeMax, m_minHeight, m_maxHeight, m_angleStep, angles, ranges);
+  return scanToGrid(angles, ranges);
+}
+
+std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
+LocalMapper::scanToGridBaysian(const std::vector<int8_t> &data, int point_step,
+                               int row_step, int height, int width,
+                               float x_offset, float y_offset, float z_offset) {
+
+  std::vector<double> angles;
+  std::vector<double> ranges;
+  pointCloudToLaserScanFromRaw(
+      data, point_step, row_step, height, width, x_offset, y_offset, z_offset,
+      m_rangeMax, m_minHeight, m_maxHeight, m_angleStep, angles, ranges);
+  return scanToGridBaysian(angles, ranges);
 }
 } // namespace Mapping
 } // namespace Kompass
