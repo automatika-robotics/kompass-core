@@ -28,8 +28,8 @@
  * @param max_z        Maximum acceptable Z value (inclusive). If negative,
  * disabled.
  * @param angle_step   Angular resolution (in radians) of each bin.
- * @param angles_out   Output vector of bin angles in radians [0, 2π).
  * @param ranges_out   Output vector of minimum distances per bin.
+ * @param angles_out   Output vector of bin angles in radians [0, 2π).
  *
  * @throws std::out_of_range If point offsets access memory out of bounds.
  */
