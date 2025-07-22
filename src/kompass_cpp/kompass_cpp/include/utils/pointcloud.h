@@ -87,3 +87,80 @@ inline void pointCloudToLaserScanFromRaw(
     }
   }
 }
+
+/**
+ * @brief Converts raw PointCloud2-style byte data to 2D LaserScan-like data.
+ *
+ * This function extracts 3D points (x, y, z) directly from a raw byte buffer
+ * and projects them onto a 2D laser scan by computing the angle and distance
+ * for each point. It divides the full 360° field of view into bins using
+ * num_bins, and assigns the closest point to each bin.
+ *
+ * @param data         Raw point cloud data as a flattened byte array.
+ * @param point_step   Number of bytes between successive points in a row.
+ * @param row_step     Number of bytes between successive rows.
+ * @param height       Number of rows in the point cloud.
+ * @param width        Number of columns in the point cloud.
+ * @param x_offset     Byte offset to the x-coordinate in a point.
+ * @param y_offset     Byte offset to the y-coordinate in a point.
+ * @param z_offset     Byte offset to the z-coordinate in a point.
+ * @param max_range    Initial value and upper clipping range for distances.
+ * @param min_z        Minimum acceptable Z value (inclusive).
+ * @param max_z        Maximum acceptable Z value (inclusive). If negative,
+ * disabled.
+ * @param num_bins     Expected size of ranges vector
+ * @param ranges_out   Output vector of minimum distances per bin.
+ *
+ * @throws std::out_of_range If point offsets access memory out of bounds.
+ */
+inline void pointCloudToLaserScanFromRaw(const std::vector<int8_t> &data,
+                                         int point_step, int row_step,
+                                         int height, int width, int x_offset,
+                                         int y_offset, int z_offset,
+                                         double max_range, double min_z,
+                                         double max_z, const int num_bins,
+                                         std::vector<double> &ranges_out) {
+
+  const double two_pi = 2.0 * M_PI;
+
+  // Initialize range output with max_range
+  ranges_out.assign(num_bins, max_range);
+
+  // Iterate over raw points
+  for (int row = 0; row < height; ++row) {
+    for (int col = 0; col < width; ++col) {
+      std::size_t point_start = row * row_step + col * point_step;
+
+      std::size_t max_offset = point_start +
+                               std::max({x_offset, y_offset, z_offset}) +
+                               sizeof(float);
+      if (max_offset > data.size()) {
+        throw std::out_of_range("Point offset out of bounds");
+      }
+
+      float x, y, z;
+      std::memcpy(&x, &data[point_start + x_offset], sizeof(float));
+      std::memcpy(&y, &data[point_start + y_offset], sizeof(float));
+      std::memcpy(&z, &data[point_start + z_offset], sizeof(float));
+
+      // Z filtering
+      if (z < min_z || (max_z >= 0.0 && z > max_z)) {
+        continue;
+      }
+
+      double angle = std::atan2(y, x);
+      if (angle < 0.0) {
+        angle += two_pi;
+      }
+
+      // calculate bin based on normalized angle and num_bins
+      int bin = static_cast<int>((angle / two_pi) * num_bins);
+      bin = std::min(bin, num_bins - 1);
+
+      double distance = std::sqrt(x * x + y * y);
+      if (distance < ranges_out[bin]) {
+        ranges_out[bin] = distance;
+      }
+    }
+  }
+}

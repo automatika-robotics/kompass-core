@@ -7,9 +7,10 @@ import numpy as np
 import pytest
 from kompass_core.datatypes.pose import PoseData
 from kompass_core.datatypes.laserscan import LaserScanData
+from kompass_core.datatypes.scan_model import ScanModelConfig
 from kompass_cpp.mapping import OCCUPANCY_TYPE
 
-from kompass_core.mapping import LocalMapper, MapConfig, ScanModelConfig
+from kompass_core.mapping import LocalMapper, MapConfig
 from kompass_core.utils.visualization import visualize_grid
 
 

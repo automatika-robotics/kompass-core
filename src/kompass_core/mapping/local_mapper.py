@@ -12,7 +12,7 @@ from kompass_cpp.mapping import (
 
 from ..utils.geometry import transform_point_from_local_to_global, get_relative_pose
 
-from .scan_model import ScanModelConfig
+from ..datatypes.scan_model import ScanModelConfig
 from ..utils.common import BaseAttrs, base_validators
 
 
@@ -123,8 +123,8 @@ class LocalMapper:
 
         :param config: Mapper config
         :type config: MapConfig
-        :param scan_model_config: LaserScan model config
-        :type scan_model_config: LaserScanModelConfig
+        :param scan_model_config: LaserScan or PointCloud model config
+        :type scan_model_config: ScanModelConfig
         """
 
         self.config = config

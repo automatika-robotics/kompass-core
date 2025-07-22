@@ -1,11 +1,11 @@
-from typing import Optional
+from typing import Optional, Union
 from logging import Logger
 from ..models import (
     Robot,
     RobotGeometry,
 )
 import numpy as np
-from ..datatypes import LaserScanData
+from ..datatypes import LaserScanData, PointCloudData, ScanModelConfig
 
 
 class EmergencyChecker:
@@ -17,10 +17,12 @@ class EmergencyChecker:
         emergency_distance: float,
         slowdown_distance: float,
         emergency_angle: float,
+        scan_model: Optional[ScanModelConfig] = None,
         sensor_position_robot: Optional[np.ndarray] = None,
         sensor_rotation_robot: Optional[np.ndarray] = None,
         use_gpu: bool = False,
     ) -> None:
+        self.__scan_model = scan_model or ScanModelConfig()
         self.__emergency_distance = emergency_distance
         self.__slowdown_distance = slowdown_distance
         self.__emergency_angle = emergency_angle
@@ -39,7 +41,16 @@ class EmergencyChecker:
         self.__use_gpu = use_gpu
         self.__initialized = False
 
-    def _init_checker(self, scan: LaserScanData) -> None:
+    def _init_checker(self, scan: Union[LaserScanData, PointCloudData]) -> None:
+        angles = (
+            scan.angles
+            if isinstance(scan, LaserScanData)
+            else np.arange(
+                0.0,
+                2 * np.pi,
+                self.__scan_model.angle_step,
+            )
+        )
         if self.__use_gpu:
             try:
                 from kompass_cpp.utils import CriticalZoneCheckerGPU
@@ -52,7 +63,10 @@ class EmergencyChecker:
                     critical_angle=self.__emergency_angle,
                     critical_distance=self.__emergency_distance,
                     slowdown_distance=self.__slowdown_distance,
-                    scan_angles=scan.angles,
+                    scan_angles=angles,
+                    min_height=self.__scan_model.min_height,
+                    max_height=self.__scan_model.max_height,
+                    range_max=self.__scan_model.range_max,
                 )
             except (ImportError, ModuleNotFoundError):
                 Logger(name="EmergencyChecker").error(
@@ -71,9 +85,15 @@ class EmergencyChecker:
                 critical_angle=self.__emergency_angle,
                 critical_distance=self.__emergency_distance,
                 slowdown_distance=self.__slowdown_distance,
+                scan_angles=angles,
+                min_height=self.__scan_model.min_height,
+                max_height=self.__scan_model.max_height,
+                range_max=self.__scan_model.range_max,
             )
 
-    def run(self, *_, scan: LaserScanData, forward: bool = True) -> float:
+    def run(
+        self, *_, scan: Union[LaserScanData, PointCloudData], forward: bool = True
+    ) -> float:
         """Runs emergency checking on new incoming laser scan data
 
         :param scan: 2D Laserscan data (ranges/angles)
@@ -86,6 +106,9 @@ class EmergencyChecker:
         if not self.__initialized:
             self._init_checker(scan)
             self.__initialized = True
-        return self._critical_zone_checker.check(
-            ranges=scan.ranges, angles=scan.angles, forward=forward
-        )
+        if isinstance(scan, LaserScanData):
+            return self._critical_zone_checker.check(
+                ranges=scan.ranges, forward=forward
+            )
+        else:
+            return self._critical_zone_checker.check(**scan.asdict())
