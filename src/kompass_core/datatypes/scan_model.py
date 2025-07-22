@@ -65,11 +65,11 @@ class ScanModelConfig(BaseAttrs):
     )
 
     max_height: float = field(
-        default=0.01, validator=base_validators.in_range(min_value=1e-2, max_value=1e2)
+        default=10.0, validator=base_validators.in_range(min_value=-1e2, max_value=1e2)
     )
 
     min_height: float = field(
-        default=0.01, validator=base_validators.in_range(min_value=1e-2, max_value=1e2)
+        default=-10.0, validator=base_validators.in_range(min_value=-1e2, max_value=1e2)
     )
 
     def __attrs_post_init__(self):
