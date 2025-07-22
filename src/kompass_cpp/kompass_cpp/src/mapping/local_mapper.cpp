@@ -261,7 +261,7 @@ LocalMapper::scanToGridBaysian(const std::vector<int8_t> &data, int point_step,
   std::vector<double> ranges;
   pointCloudToLaserScanFromRaw(
       data, point_step, row_step, height, width, x_offset, y_offset, z_offset,
-      m_rangeMax, m_minHeight, m_maxHeight, m_angleStep, angles, ranges);
+      m_rangeMax, m_minHeight, m_maxHeight, m_angleStep, ranges, angles);
   return scanToGridBaysian(angles, ranges);
 }
 } // namespace Mapping
