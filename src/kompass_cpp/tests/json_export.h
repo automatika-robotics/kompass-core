@@ -92,6 +92,12 @@ inline void to_json(json &j, const Control::TrajectorySamples2D &samples,
   }
 }
 
+// Convert LaserScan to JSON
+inline void to_json(json &j, const std::vector<double>& ranges,
+                    const std::vector<double>& angles) {
+  j = json{{"ranges", ranges}, {"angles", angles}};
+}
+
 // Save trajectories to a JSON file
 void saveTrajectoriesToJson(const Control::TrajectorySamples2D &trajectories,
                             const std::string &filename) {
@@ -126,6 +132,21 @@ void saveTrajectoryToJson(const Control::Trajectory2D &trajectory,
 inline void savePathToJson(const Path::Path &path, const std::string &filename) {
   json j;
   to_json(j, path);
+  std::ofstream file(filename);
+  if (file.is_open()) {
+    file << j.dump(4); // Pretty print with 4 spaces indentation
+    file.close();
+  } else {
+    std::cerr << "Unable to open file: " << filename << std::endl;
+  }
+}
+
+// Save LaserScan data (ranges and angles) to JSON
+inline void saveScanToJson(const std::vector<double>& ranges,
+                           const std::vector<double>& angles,
+                           const std::string &filename) {
+  json j;
+  to_json(j, ranges, angles);
   std::ofstream file(filename);
   if (file.is_open()) {
     file << j.dump(4); // Pretty print with 4 spaces indentation
