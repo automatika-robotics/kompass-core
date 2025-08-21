@@ -10,8 +10,6 @@
 #include <octomap/OcTree.h>
 #include <octomap/Pointcloud.h>
 #include <octomap/octomap.h>
-#include <pcl/io/pcd_io.h>
-#include <pcl/point_types.h>
 
 #include "datatypes/path.h"
 
@@ -90,14 +88,6 @@ public:
                   const std::vector<double> &angles);
 
   /**
-   * @brief Update the sensor input from PointCloud (pcl::PointCloud) data
-   *
-   * @param cloud
-   */
-  void updatePointCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-                        const bool global_frame = true);
-
-  /**
    * @brief Update the sensor input from Map points (Eigen::Matrix3Xf) data
    *
    * @param points
@@ -131,14 +121,6 @@ public:
   float getMinDistance();
 
   /**
-   * @brief Get the Min Distance from given PointCloud data
-   *
-   * @param cloud
-   * @return float
-   */
-  float getMinDistance(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
-
-  /**
    * @brief Get the Min Distance object from given LaserScan data
    *
    * @param ranges
@@ -168,15 +150,6 @@ public:
    * @return false
    */
   bool checkCollisions();
-
-  /**
-   * @brief Check collisions between the robot and given PointCloud data
-   *
-   * @param cloud
-   * @return true
-   * @return false
-   */
-  bool checkCollisions(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
 
   /**
    * @brief Check collisions between the robot and given PointCloud data
@@ -277,15 +250,6 @@ private:
    */
   std::vector<fcl::CollisionObjectf *>
   generateBoxesFromOctomap(fcl::OcTreef &tree);
-
-  /**
-   * @brief Helper method to convert PointCloud data to an Octomap
-   *
-   * @param cloud
-   */
-  void
-  convertPointCloudToOctomap(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-                             const bool global_frame = true);
 
   /**
    * @brief Helper method to convert PointCloud data to an Octomap
