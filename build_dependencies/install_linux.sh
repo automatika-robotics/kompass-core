@@ -16,5 +16,4 @@ $VCPKG_ROOT/bootstrap-vcpkg.sh -disableMetrics
 
 # install dependencies
 $VCPKG_ROOT/vcpkg install fcl --triplet=$VCPKG_TARGET_TRIPLET
-$VCPKG_ROOT/vcpkg install pcl[core] --triplet=$VCPKG_TARGET_TRIPLET
 $VCPKG_ROOT/vcpkg install ompl --triplet=$VCPKG_TARGET_TRIPLET

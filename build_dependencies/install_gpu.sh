@@ -289,7 +289,6 @@ if [[ $(echo "$UBUNTU_VERSION <= 20.04" | bc -l) == 1 ]]; then
     # install dependencies
     log WARN "Installing ompl and fcl with vcpkg for latest version..."
     $VCPKG_ROOT/vcpkg install fcl --triplet=$VCPKG_TARGET_TRIPLET
-    $VCPKG_ROOT/vcpkg install pcl[core] --triplet=$VCPKG_TARGET_TRIPLET
     $VCPKG_ROOT/vcpkg install ompl --triplet=$VCPKG_TARGET_TRIPLET
 else
     log INFO "Installing ompl and fcl from apt..."
