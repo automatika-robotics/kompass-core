@@ -292,7 +292,7 @@ if [[ $(echo "$UBUNTU_VERSION <= 20.04" | bc -l) == 1 ]]; then
     $VCPKG_ROOT/vcpkg install ompl --triplet=$VCPKG_TARGET_TRIPLET
 else
     log INFO "Installing ompl and fcl from apt..."
-    $SUDO apt install -y libompl-dev libfcl-dev libpcl-dev libode-dev
+    $SUDO apt install -y libompl-dev libfcl-dev libode-dev
 fi
 
 log INFO "Installing kompass-core with pip"

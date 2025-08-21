@@ -45,7 +45,7 @@ curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/hea
 - Ubuntu 22.04 以降では、以下のコマンドで依存パッケージをインストールします：
 
 ```bash
-  sudo apt-get install libompl-dev libfcl-dev libpcl-dev
+  sudo apt-get install libompl-dev libfcl-dev
 ```
 - その後、以下のように kompass-core をインストールします：
 
