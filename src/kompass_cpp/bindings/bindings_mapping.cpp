@@ -21,7 +21,7 @@ void bindings_mapping(py::module_ &m) {
 
   py::class_<Mapping::LocalMapper>(m_mapping, "LocalMapper")
       .def(py::init<const int, const int, float, const Eigen::Vector3f &, float,
-                    float, float, float, float, int, int>(),
+                    bool, int, float, float, float, float, int, int>(),
            py::arg("grid_height"), py::arg("grid_width"), py::arg("resolution"),
            py::arg("laserscan_position"), py::arg("laserscan_orientation"),
            py::arg("is_pointcloud"), py::arg("scan_size"),
@@ -30,8 +30,8 @@ void bindings_mapping(py::module_ &m) {
            py::arg("max_num_threads") = 1)
 
       .def(py::init<const int, const int, float, const Eigen::Vector3f &, float,
-                    float, float, float, float, float, float, float, float,
-                    float, int, int>(),
+                    bool, int, float, float, float, float, float, float, float,
+                    float, float, int, int>(),
            py::arg("grid_height"), py::arg("grid_width"), py::arg("resolution"),
            py::arg("laserscan_position"), py::arg("laserscan_orientation"),
            py::arg("is_pointcloud"), py::arg("scan_size"), py::arg("p_prior"),
