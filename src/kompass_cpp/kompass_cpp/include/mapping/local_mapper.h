@@ -42,7 +42,6 @@ public:
       initializedRanges.resize(scanSize);
       for (int i = 0; i < scanSize; ++i) {
         initializedAngles[i] = i * angleStep;
-        initializedRanges[i] = rangeMax;
       }
     }
   }

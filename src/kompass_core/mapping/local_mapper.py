@@ -262,7 +262,7 @@ class LocalMapper:
         # Get transformation between the previous robot state (pose and grid) w.r.t the current state.
 
         if not self.processed:
-            self.is_pointcloud = isinstance(scan, LaserScanData)
+            self.is_pointcloud = isinstance(scan, PointCloudData)
             if self.is_pointcloud:
                 self._initialize_mapper(int(2 * np.pi / self.scan_model.angle_step) + 1)
             else:
