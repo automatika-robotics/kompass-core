@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring> // for std::memcpy
-#include <stdexcept>
 #include <vector>
 
 /**
@@ -35,9 +34,10 @@
  * @throws std::out_of_range If point offsets access memory out of bounds.
  */
 inline void pointCloudToLaserScanFromRaw(
-    const std::vector<int8_t> &data, int point_step, int row_step, int height,
-    int width, int x_offset, int y_offset, int z_offset, double max_range,
-    double min_z, double max_z, double angle_step,
+    const std::vector<int8_t> &data, const int point_step, const int row_step,
+    const int height, const int width, const int x_offset, const int y_offset,
+    const int z_offset, const double max_range, const double min_z,
+    const double max_z, const double angle_step,
     std::vector<double> &ranges_out, std::vector<double> &angles_out) {
 
   const double two_pi = 2.0 * M_PI;
@@ -53,7 +53,7 @@ inline void pointCloudToLaserScanFromRaw(
 
   // Iterate over raw points
   for (int row = 0; row < height; ++row) {
-    for (int col = 0; col < row_step; col+= point_step) {
+    for (int col = 0; col < row_step; col += point_step) {
       std::size_t point_start = row * row_step + col;
 
       std::size_t max_offset = point_start +
@@ -95,8 +95,9 @@ inline void pointCloudToLaserScanFromRaw(
  *
  * This function extracts 3D points (x, y, z) directly from a raw byte buffer
  * and projects them onto a 2D laser scan by computing the angle and distance
- * for each point. It divides the full 360° field of view into bins using
- * num_bins, and assigns the closest point to each bin.
+ * for each point. It divides the full 360° field of view into bins and assigns
+ * the closest point to each bin. FOR INTERNAL USE: with pre-initialized output
+ * vectors.
  *
  * @param data         Raw point cloud data as a flattened byte array.
  * @param point_step   Number of bytes between successive points in a row.
@@ -110,34 +111,31 @@ inline void pointCloudToLaserScanFromRaw(
  * @param min_z        Minimum acceptable Z value (inclusive).
  * @param max_z        Maximum acceptable Z value (inclusive). If negative,
  * disabled.
- * @param num_bins     Expected size of ranges vector
+ * @param num_bins     Number of rays in the laserscan.
  * @param ranges_out   Output vector of minimum distances per bin.
  *
  * @throws std::out_of_range If point offsets access memory out of bounds.
  */
-inline void pointCloudToLaserScanFromRaw(const std::vector<int8_t> &data,
-                                         int point_step, int row_step,
-                                         int height, int width, int x_offset,
-                                         int y_offset, int z_offset,
-                                         double max_range, double min_z,
-                                         double max_z, const int num_bins,
-                                         std::vector<double> &ranges_out) {
+inline void pointCloudToLaserScanFromRaw(
+    const std::vector<int8_t> &data, const int point_step, const int row_step,
+    const int height, const int width, const int x_offset, const int y_offset,
+    const int z_offset, const double max_range, const double min_z,
+    const double max_z, const int num_bins,
+    std::vector<double> &ranges_out) {
 
   const double two_pi = 2.0 * M_PI;
 
-  // Initialize range output with max_range
-  ranges_out.assign(num_bins, max_range);
-
   // Iterate over raw points
   for (int row = 0; row < height; ++row) {
-    for (int col = 0; col < width; ++col) {
-      std::size_t point_start = row * row_step + col * point_step;
+    for (int col = 0; col < row_step; col += point_step) {
+      std::size_t point_start = row * row_step + col;
 
       std::size_t max_offset = point_start +
                                std::max({x_offset, y_offset, z_offset}) +
                                sizeof(float);
       if (max_offset > data.size()) {
-        throw std::out_of_range("Point offset out of bounds");
+        LOG_WARNING("Point offset out of bounds");
+        continue;
       }
 
       float x, y, z;
@@ -155,9 +153,8 @@ inline void pointCloudToLaserScanFromRaw(const std::vector<int8_t> &data,
         angle += two_pi;
       }
 
-      // calculate bin based on normalized angle and num_bins
       int bin = static_cast<int>((angle / two_pi) * num_bins);
-      bin = std::min(bin, num_bins - 1);
+      bin = std::min(bin, num_bins - 1); // Clamp just in case
 
       double distance = std::sqrt(x * x + y * y);
       if (distance < ranges_out[bin]) {

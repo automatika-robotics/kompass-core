@@ -163,6 +163,8 @@ class LocalMapper:
             p_prior=self.scan_model.p_prior,
         )
 
+        # flag for pointcloud
+        self.is_pointcloud = False
         # turned to true after the first map update is done
         self.processed = False
 
@@ -195,6 +197,7 @@ class LocalMapper:
                 resolution=self.config.resolution,
                 laserscan_position=self.pose_laserscanner_in_robot.get_position(),
                 laserscan_orientation=self.laserscan_orientation_in_robot,
+                is_pointcloud=self.is_pointcloud,
                 scan_size=scan_size,
                 angle_step=self.scan_model.angle_step,
                 max_height=self.scan_model.max_height,
@@ -211,6 +214,8 @@ class LocalMapper:
                 resolution=self.config.resolution,
                 laserscan_position=self.pose_laserscanner_in_robot.get_position(),
                 laserscan_orientation=self.laserscan_orientation_in_robot,
+                is_pointcloud=self.is_pointcloud,
+                scan_size=scan_size,
                 **self.scan_model.asdict(),
                 max_points_per_line=self.config.max_points_per_line,
                 max_num_threads=self.config.max_num_threads,
@@ -257,10 +262,11 @@ class LocalMapper:
         # Get transformation between the previous robot state (pose and grid) w.r.t the current state.
 
         if not self.processed:
-            if isinstance(scan, LaserScanData):
-                self._initialize_mapper(scan.ranges.size)
-            else:
+            self.is_pointcloud = isinstance(scan, LaserScanData)
+            if self.is_pointcloud:
                 self._initialize_mapper(int(2 * np.pi / self.scan_model.angle_step) + 1)
+            else:
+                self._initialize_mapper(scan.ranges.size)  # type: ignore
 
         # Calculate new grid pose
         self._pose_robot_in_world = robot_pose
@@ -271,22 +277,22 @@ class LocalMapper:
         if self.config.baysian_update:
             if self.processed:
                 self._calculate_grid_shift(robot_pose)
-            if isinstance(scan, LaserScanData):
-                # filter out negative range and points outside grid limit
-                filtered_ranges = np.minimum(
-                    self.config.filter_limit,
-                    np.maximum(0.0, scan.ranges),
-                )
-                scan_occupancy, scan_occupancy_prob = (
-                    self.local_mapper.scan_to_grid_baysian(
-                        angles=scan.angles,
-                        ranges=filtered_ranges,
-                    )
-                )
-            else:
+            if self.is_pointcloud:
                 scan_occupancy, scan_occupancy_prob = (
                     self.local_mapper.scan_to_grid_baysian(
                         **scan.asdict(),
+                    )
+                )
+            else:
+                # filter out negative range and points outside grid limit
+                filtered_ranges = np.minimum(
+                    self.config.filter_limit,
+                    np.maximum(0.0, scan.ranges),  # type: ignore
+                )
+                scan_occupancy, scan_occupancy_prob = (
+                    self.local_mapper.scan_to_grid_baysian(
+                        angles=scan.angles,  # type: ignore
+                        ranges=filtered_ranges,
                     )
                 )
 
@@ -304,19 +310,19 @@ class LocalMapper:
             ] = OCCUPANCY_TYPE.EMPTY.value
 
         else:
-            if isinstance(scan, LaserScanData):
+            if self.is_pointcloud:
+                scan_occupancy = self.local_mapper.scan_to_grid(
+                    **scan.asdict(),
+                )
+            else:
                 # filter out negative range and points outside grid limit
                 filtered_ranges = np.minimum(
                     self.config.filter_limit,
-                    np.maximum(0.0, scan.ranges),
+                    np.maximum(0.0, scan.ranges),  # type: ignore
                 )
                 scan_occupancy = self.local_mapper.scan_to_grid(
-                    angles=scan.angles,
+                    angles=scan.angles,  # type:ignore
                     ranges=filtered_ranges,
-                )
-            else:
-                scan_occupancy = self.local_mapper.scan_to_grid(
-                    **scan.asdict(),
                 )
 
             # Update grid

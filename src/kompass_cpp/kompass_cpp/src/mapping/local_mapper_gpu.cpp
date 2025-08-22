@@ -11,12 +11,10 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<int8_t> &data,
                                             int height, int width,
                                             float x_offset, float y_offset,
                                             float z_offset) {
-  std::vector<double> angles;
-  std::vector<double> ranges;
   pointCloudToLaserScanFromRaw(
       data, point_step, row_step, height, width, x_offset, y_offset, z_offset,
-      m_rangeMax, m_minHeight, m_maxHeight, m_angleStep, ranges, angles);
-  return scanToGrid(angles, ranges);
+      m_rangeMax, m_minHeight, m_maxHeight, m_scanSize, initializedRanges);
+  return scanToGrid(initializedAngles, initializedRanges);
 }
 
 Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
