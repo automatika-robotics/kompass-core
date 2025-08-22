@@ -120,10 +120,12 @@ inline void pointCloudToLaserScanFromRaw(
     const std::vector<int8_t> &data, const int point_step, const int row_step,
     const int height, const int width, const int x_offset, const int y_offset,
     const int z_offset, const double max_range, const double min_z,
-    const double max_z, const int num_bins,
-    std::vector<double> &ranges_out) {
+    const double max_z, const int num_bins, std::vector<double> &ranges_out) {
 
   const double two_pi = 2.0 * M_PI;
+
+  // reinitialize ranges
+  ranges_out.assign(num_bins, max_range);
 
   // Iterate over raw points
   for (int row = 0; row < height; ++row) {
