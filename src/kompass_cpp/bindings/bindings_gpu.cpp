@@ -11,7 +11,7 @@ using namespace Kompass;
 void bindings_mapping_gpu(py::module_ &m) {
   py::class_<Mapping::LocalMapperGPU>(m, "LocalMapperGPU")
       .def(py::init<const int, const int, float, const Eigen::Vector3f &, float,
-                    int, float, float, float, float, int>(),
+                    bool, int, float, float, float, float, int>(),
            py::arg("grid_height"), py::arg("grid_width"), py::arg("resolution"),
            py::arg("laserscan_position"), py::arg("laserscan_orientation"),
            py::arg("is_pointcloud"), py::arg("scan_size"),
