@@ -260,7 +260,7 @@ class LocalMapper:
             if isinstance(scan, LaserScanData):
                 self._initialize_mapper(scan.ranges.size)
             else:
-                self._initialize_mapper(scan.height * scan.width)
+                self._initialize_mapper(int(2 * np.pi / self.scan_model.angle_step) + 1)
 
         # Calculate new grid pose
         self._pose_robot_in_world = robot_pose
