@@ -54,7 +54,7 @@ struct GridMapConfig {
                                        : grid_height * grid_res * std::sqrt(2)),
         maxPointsPerLine(static_cast<int>((limit / grid_res) * 1.5)),
         local_mapper(Mapping::LocalMapper(
-            grid_height, grid_width, grid_res, {0.0, 0.0, 0.0}, 0.0, pPrior,
+            grid_height, grid_width, grid_res, {0.0, 0.0, 0.0}, 0.0, false, 0, pPrior,
             pOccupied, pEmpty, rangeSure, rangeMax, wallSize, angleStep,
             maxHeight, minHeight, maxPointsPerLine, maxNumThreads)) {
 

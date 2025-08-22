@@ -14,9 +14,9 @@ void bindings_mapping_gpu(py::module_ &m) {
                     int, float, float, float, float, int>(),
            py::arg("grid_height"), py::arg("grid_width"), py::arg("resolution"),
            py::arg("laserscan_position"), py::arg("laserscan_orientation"),
-           py::arg("scan_size"), py::arg("angle_step"), py::arg("max_height"),
-           py::arg("min_height"), py::arg("range_max"),
-           py::arg("max_points_per_line") = 32)
+           py::arg("is_pointcloud"), py::arg("scan_size"),
+           py::arg("angle_step"), py::arg("max_height"), py::arg("min_height"),
+           py::arg("range_max"), py::arg("max_points_per_line") = 32)
 
       .def("scan_to_grid",
            py::overload_cast<const std::vector<double> &,
