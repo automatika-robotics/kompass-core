@@ -1,5 +1,6 @@
 #pragma once
 
+#include "utils/logger.h"
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cstdint>
@@ -52,14 +53,15 @@ inline void pointCloudToLaserScanFromRaw(
 
   // Iterate over raw points
   for (int row = 0; row < height; ++row) {
-    for (int col = 0; col < width; ++col) {
-      std::size_t point_start = row * row_step + col * point_step;
+    for (int col = 0; col < row_step; col+= point_step) {
+      std::size_t point_start = row * row_step + col;
 
       std::size_t max_offset = point_start +
                                std::max({x_offset, y_offset, z_offset}) +
                                sizeof(float);
       if (max_offset > data.size()) {
-        throw std::out_of_range("Point offset out of bounds");
+        LOG_WARNING("Point offset out of bounds");
+        continue;
       }
 
       float x, y, z;
