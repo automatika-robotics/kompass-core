@@ -11,11 +11,12 @@ enum class OccupancyType { UNEXPLORED = -1, EMPTY = 0, OCCUPIED = 100 };
 class LocalMapper {
 public:
   // Constructor with basic parameters
-  LocalMapper(const int gridHeight, const int gridWidth, float resolution,
+  LocalMapper(const int gridHeight, const int gridWidth, const float resolution,
               const Eigen::Vector3f &laserscanPosition,
-              float laserscanOrientation, float angleStep, float maxHeight,
-              float minHeight, float rangeMax, int maxPointsPerLine,
-              int maxNumThreads = 1)
+              const float laserscanOrientation, const bool isPointCloud,
+              const int scanSize, const float angleStep, const float maxHeight,
+              const float minHeight, const float rangeMax,
+              const int maxPointsPerLine, const int maxNumThreads = 1)
       : m_gridHeight(gridHeight), m_gridWidth(gridWidth),
         m_resolution(resolution), m_laserscanOrientation(laserscanOrientation),
         m_pPrior(0.5f), m_pEmpty(0.4f), m_pOccupied(0.6f), m_rangeSure(1.0f),
@@ -24,7 +25,8 @@ public:
         m_maxPointsPerLine(maxPointsPerLine),
         m_centralPoint(std::round(gridHeight / 2) - 1,
                        std::round(gridWidth / 2) - 1),
-        m_laserscanPosition(laserscanPosition), m_maxNumThreads(maxNumThreads) {
+        m_laserscanPosition(laserscanPosition), m_scanSize(scanSize),
+        m_maxNumThreads(maxNumThreads) {
     m_startPoint = localToGrid(
         Eigen::Vector2f(laserscanPosition(0), laserscanPosition(1)));
     gridData = Eigen::MatrixXi(gridHeight, gridWidth);
@@ -32,15 +34,28 @@ public:
     previousGridDataProb = Eigen::MatrixXf(gridHeight, gridWidth);
     // initialize previous grid data
     previousGridDataProb.fill(m_pPrior);
+
+    // initialize ranges and angles if working with pointcloud
+    if (isPointCloud) {
+      // Prefill angles and ranges
+      initializedAngles.resize(scanSize);
+      initializedRanges.resize(scanSize);
+      for (int i = 0; i < scanSize; ++i) {
+        initializedAngles[i] = i * angleStep;
+        initializedRanges[i] = rangeMax;
+      }
+    }
   }
 
   // Constructor with additional baysian parameters
-  LocalMapper(const int gridHeight, const int gridWidth, float resolution,
+  LocalMapper(const int gridHeight, const int gridWidth, const float resolution,
               const Eigen::Vector3f &laserscanPosition,
-              float laserscanOrientation, float pPrior, float pOccupied,
-              float pEmpty, float rangeSure, float rangeMax, float wallSize,
-              float angleStep, float maxHeight, float minHeight,
-              int maxPointsPerLine, int maxNumThreads = 1)
+              const float laserscanOrientation, const bool isPointCloud,
+              const int scanSize, const float pPrior, const float pOccupied,
+              const float pEmpty, const float rangeSure, const float rangeMax,
+              const float wallSize, const float angleStep,
+              const float maxHeight, const float minHeight,
+              const int maxPointsPerLine, const int maxNumThreads = 1)
       : m_gridHeight(gridHeight), m_gridWidth(gridWidth),
         m_resolution(resolution), m_laserscanOrientation(laserscanOrientation),
         m_pPrior(pPrior), m_pEmpty(pEmpty), m_pOccupied(pOccupied),
@@ -49,7 +64,8 @@ public:
         m_maxPointsPerLine(maxPointsPerLine),
         m_centralPoint(std::round(gridHeight / 2) - 1,
                        std::round(gridWidth / 2) - 1),
-        m_laserscanPosition(laserscanPosition), m_maxNumThreads(maxNumThreads) {
+        m_laserscanPosition(laserscanPosition), m_scanSize(scanSize),
+        m_maxNumThreads(maxNumThreads) {
     m_startPoint = localToGrid(
         Eigen::Vector2f(laserscanPosition(0), laserscanPosition(1)));
     gridData = Eigen::MatrixXi(gridHeight, gridWidth);
@@ -57,6 +73,16 @@ public:
     previousGridDataProb = Eigen::MatrixXf(gridHeight, gridWidth);
     // initialize previous grid data
     previousGridDataProb.fill(m_pPrior);
+    // initialize ranges and angles if working with pointcloud
+    if (isPointCloud) {
+      // Prefill angles and ranges
+      initializedAngles.resize(scanSize);
+      initializedRanges.resize(scanSize);
+      for (int i = 0; i < scanSize; ++i) {
+        initializedAngles[i] = i * angleStep;
+        initializedRanges[i] = rangeMax;
+      }
+    }
   }
 
   // Default destructor
@@ -217,10 +243,13 @@ protected:
   const int m_maxPointsPerLine;
   const Eigen::Vector2i m_centralPoint;
   const Eigen::Vector3f m_laserscanPosition;
+  const int m_scanSize;
   Eigen::Vector2i m_startPoint;
   Eigen::MatrixXi gridData;
   Eigen::MatrixXf gridDataProb;
   Eigen::MatrixXf previousGridDataProb;
+  std::vector<double> initializedRanges; // only initialized for pointcloud data
+  std::vector<double> initializedAngles; // only initialized for pointcloud data
 
 private:
   const int m_maxNumThreads;

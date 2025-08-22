@@ -42,7 +42,7 @@ struct GridMapConfig {
         limit(grid_width > grid_height ? grid_width * grid_res * std::sqrt(2)
                                        : grid_height * grid_res * std::sqrt(2)),
         gpu_local_mapper(Mapping::LocalMapperGPU(
-            grid_height, grid_width, grid_res, {0.0, 0.0, 0.0}, 0.0, 63,
+            grid_height, grid_width, grid_res, {0.0, 0.0, 0.0}, 0.0, false, 63,
             angleStep, maxHeight, minHeight, rangeMax)) {
 
     // Logging the central point and limit circle radius

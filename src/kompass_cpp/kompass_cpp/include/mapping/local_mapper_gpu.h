@@ -11,15 +11,16 @@ namespace Mapping {
 class LocalMapperGPU : public LocalMapper {
 public:
   // Constructor
-  LocalMapperGPU(const int gridHeight, const int gridWidth, float resolution,
+  LocalMapperGPU(const int gridHeight, const int gridWidth,
+                 const float resolution,
                  const Eigen::Vector3f &laserscanPosition,
-                 float laserscanOrientation, int scanSize, float angleStep,
-                 float maxHeight, float minHeight, float rangeMax,
-                 int maxPointsPerLine = 32)
+                 const float laserscanOrientation, const bool isPointCloud,
+                 const int scanSize, const float angleStep,
+                 const float maxHeight, const float minHeight,
+                 const float rangeMax, const int maxPointsPerLine = 32)
       : LocalMapper(gridHeight, gridWidth, resolution, laserscanPosition,
-                    laserscanOrientation, angleStep, maxHeight, minHeight,
-                    rangeMax, maxPointsPerLine),
-        m_scanSize(scanSize) {
+                    laserscanOrientation, isPointCloud, scanSize, angleStep, maxHeight,
+                    minHeight, rangeMax, maxPointsPerLine) {
     m_q = sycl::queue{sycl::default_selector_v,
                       sycl::property::queue::in_order{}};
     auto dev = m_q.get_device();
@@ -90,7 +91,6 @@ public:
                               float x_offset, float y_offset, float z_offset);
 
 private:
-  const int m_scanSize;
   double *m_devicePtrRanges;
   double *m_devicePtrAngles;
   int *m_devicePtrGrid;
