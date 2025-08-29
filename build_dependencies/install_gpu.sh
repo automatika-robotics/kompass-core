@@ -221,13 +221,16 @@ $SUDO apt install -y libboost-fiber-dev libboost-context-dev libboost-test-dev
 # Clone and build AdaptiveCpp
 if [[ ! -d "AdaptiveCpp" ]]; then
     log INFO "Cloning AdaptiveCpp repository..."
-    git clone "$ADAPTIVE_CPP_URL"
+    git clone --depth 1 --no-checkout "$ADAPTIVE_CPP_URL"
 else
     log WARN "AdaptiveCpp directory already exists. Skipping download."
 fi
 
 
 cd AdaptiveCpp
+# Checkout latest tag
+LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)
+git checkout "$LATEST_TAG"
 mkdir -p build && cd build
 log INFO "Configuring build with CMake..."
 CXX=$CLANG_EXECUTABLE_PATH cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" -DLLVM_DIR="$LLVM_DIR" -DCLANG_EXECUTABLE_PATH="$CLANG_EXECUTABLE_PATH" ..
@@ -250,13 +253,15 @@ log INFO "Installing kompass-core dependencies..."
 # Clone and build kompass-core
 if [[ ! -d "kompass-core" ]]; then
     log INFO "Cloning kompass-core repository..."
-    git clone --depth 1 --branch main "$KOMPASS_CORE_URL"
+    git clone --depth 1 --no-checkout "$KOMPASS_CORE_URL"
 else
     log WARN "kompass-core directory already exists. Skipping download."
 fi
 
 cd kompass-core
-
+# Checkout latest tag
+LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)
+git checkout "$LATEST_TAG"
 # For ubuntu <= 20.04 install dependencies via vcpkg
 if [[ $(echo "$UBUNTU_VERSION <= 20.04" | bc -l) == 1 ]]; then
     log WARN "Installing vcpkg for Ubuntu version <= 20.04..."
