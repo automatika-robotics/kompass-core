@@ -1,18 +1,24 @@
 #include "utils/critical_zone_check_gpu.h"
+#include "utils/pointcloud.h"
 #include "utils/logger.h"
 #include <sycl/sycl.hpp>
 
 namespace Kompass {
 
+float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data, int point_step, int row_step,
+              int height, int width, float x_offset, float y_offset,
+              float z_offset, const bool forward){
+
+  std::vector<double> ranges;
+  pointCloudToLaserScanFromRaw(
+      data, point_step, row_step, height, width, x_offset, y_offset, z_offset,
+      range_max_, min_height_, max_height_, sin_angles_.size(), ranges);
+  return check(ranges, forward);
+}
+
 float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
-                                    const std::vector<double> &angles,
                                     const bool forward) {
   try {
-    // TODO: Investigate error in AdaptiveCPP JIT compilation for filling
-    // float memory without wait
-    m_q.fill(m_devicePtrOutput, 1.0f, m_scan_in_zone).wait();
-
-    m_q.memcpy(m_devicePtrAngles, angles.data(), sizeof(double) * m_scanSize);
     m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(double) * m_scanSize);
 
     // command scope
@@ -29,8 +35,8 @@ float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
           transformation_matrix(1, 2), transformation_matrix(1, 3)};
 
       const auto devicePtrRanges = m_devicePtrRanges;
-      const auto devicePtrAngles = m_devicePtrAngles;
-      const auto devicePtrOutput = m_devicePtrOutput;
+      const auto devicePtrCos = m_cos;
+      const auto devicePtrSin = m_sin;
       const auto criticalDistance = critical_distance_;
       const auto slowdownDistance = slowdown_distance_;
       size_t *critical_indices;
@@ -50,10 +56,9 @@ float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
           global_size, [=](sycl::id<1> idx) {
             const size_t local_id = critical_indices[idx];
             double range = devicePtrRanges[local_id];
-            double angle = devicePtrAngles[local_id];
 
-            sycl::vec<float, 4> point{range * sycl::cos(angle),
-                                      range * sycl::sin(angle), 0.0, 1.0};
+            sycl::vec<float, 4> point{range * devicePtrCos[local_id],
+                                      range * devicePtrSin[local_id], 0.0, 1.0};
             sycl::vec<float, 2> transformed_point{0.0, 0.0};
 
             for (size_t i = 0; i < 4; ++i) {
@@ -62,21 +67,22 @@ float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
             }
 
             float converted_range = sycl::length(transformed_point);
+            float slowdownFactor;
             if (converted_range - robot_radius <= criticalDistance) {
-              devicePtrOutput[idx] = 0.0f;
+              slowdownFactor = 0.0f;
             } else if (converted_range - robot_radius <= slowdownDistance) {
-              devicePtrOutput[idx] =
+              slowdownFactor =
                   (converted_range - robot_radius - criticalDistance) /
                   (slowdownDistance - criticalDistance);
             } else {
-              devicePtrOutput[idx] = 1.0f;
+              slowdownFactor = 1.0f;
             }
 
             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
                 atomic_cost(*result);
-            atomic_cost.fetch_min(devicePtrOutput[idx]);
+            atomic_cost.fetch_min(slowdownFactor);
           });
     });
 

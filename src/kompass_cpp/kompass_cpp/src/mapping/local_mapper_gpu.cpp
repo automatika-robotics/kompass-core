@@ -1,9 +1,21 @@
 #include "mapping/local_mapper_gpu.h"
 #include "utils/logger.h"
+#include "utils/pointcloud.h"
 #include <sycl/sycl.hpp>
 
 namespace Kompass {
 namespace Mapping {
+
+Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<int8_t> &data,
+                                            int point_step, int row_step,
+                                            int height, int width,
+                                            float x_offset, float y_offset,
+                                            float z_offset) {
+  pointCloudToLaserScanFromRaw(
+      data, point_step, row_step, height, width, x_offset, y_offset, z_offset,
+      m_rangeMax, m_minHeight, m_maxHeight, m_scanSize, initializedRanges);
+  return scanToGrid(initializedAngles, initializedRanges);
+}
 
 Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
                                             const std::vector<double> &ranges) {

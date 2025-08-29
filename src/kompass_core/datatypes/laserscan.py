@@ -78,7 +78,7 @@ class LaserScanData(BaseAttrs):
             self.ranges = self.ranges[:minimum_size]
 
     def __convert_to_0_2pi(
-        cls, value: Union[float, np.ndarray]
+        self, value: Union[float, np.ndarray]
     ) -> Union[float, np.ndarray]:
         """
         Helper method to convert an angle or array of angles to [0,2pi]

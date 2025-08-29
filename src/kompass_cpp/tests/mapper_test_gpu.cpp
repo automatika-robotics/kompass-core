@@ -19,6 +19,10 @@ struct GridMapConfig {
   int grid_height;
   int grid_width;
   float grid_res;
+  float rangeMax;
+  float angleStep;
+  float minHeight;
+  float maxHeight;
   float actual_size;
 
   Eigen::Vector2i centralPoint;
@@ -30,14 +34,16 @@ struct GridMapConfig {
   // Constructor to initialize the struct
   GridMapConfig()
       : angle_increment(0.1), corner_distance(0.5), random_points(50),
-        grid_height(10), grid_width(10), grid_res(0.1),
+        grid_height(10), grid_width(10), grid_res(0.1), rangeMax(20.0),
+        angleStep(0.01), minHeight(0.0), maxHeight(0.0),
         actual_size(grid_width * grid_res),
         centralPoint(std::round(grid_height / 2) - 1,
                      std::round(grid_width / 2) - 1),
         limit(grid_width > grid_height ? grid_width * grid_res * std::sqrt(2)
                                        : grid_height * grid_res * std::sqrt(2)),
         gpu_local_mapper(Mapping::LocalMapperGPU(
-            grid_height, grid_width, grid_res, {0.0, 0.0, 0.0}, 0.0, 63)) {
+            grid_height, grid_width, grid_res, {0.0, 0.0, 0.0}, 0.0, false, 63,
+            angleStep, maxHeight, minHeight, rangeMax)) {
 
     // Logging the central point and limit circle radius
     // (for demonstration purposes)
