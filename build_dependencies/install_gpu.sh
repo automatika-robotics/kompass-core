@@ -75,9 +75,9 @@ install_dependencies() {
         $SUDO rm /etc/apt/trusted.gpg.d/kitware.gpg
         $SUDO apt update -y && apt install -y cmake
         $SUDO apt install -y --only-upgrade cmake
-        local dependencies=("git" "make" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config")
+        local dependencies=("git" "make" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq")
     else
-        local dependencies=("git" "make" "cmake" "software-properties-common" "wget" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config")
+        local dependencies=("git" "make" "cmake" "software-properties-common" "wget" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq")
     fi
 
     # Install other tool dependencies
@@ -121,15 +121,19 @@ check_llvm_clang_versions_in_range() {
 
 #### kompass-core Install Script ####
 
-KOMPASS_CORE_URL="https://github.com/automatika-robotics/kompass-core"
+KOMPASS_CORE_REPO = "automatika-robotics/kompass-core"
+KOMPASS_CORE_URL="https://github.com/$KOMPASS_CORE_REPO"
 ADAPTIVE_CPP_URL="https://github.com/AdaptiveCpp/AdaptiveCpp"
+ADAPTIVE_CPP_SOURCE_VERSION="v25.02.0"
 DEFAULT_INSTALL_PREFIX="/usr/local"
 DEFAULT_KEEP_SOURCE_FILES=false
 MINIMUM_LLVM_VERSION=14
+DEFAULT_NIGHTLY=false
 
 INSTALL_PREFIX="$DEFAULT_INSTALL_PREFIX"
 LLVM_VERSION=""
 KEEP_SOURCE_FILES="$DEFAULT_KEEP_SOURCE_FILES"
+NIGHTLY="$DEFAULT_NIGHTLY"
 
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
@@ -137,6 +141,7 @@ while [[ "$#" -gt 0 ]]; do
         --acpp-install-prefix) INSTALL_PREFIX="$2"; shift ;;
         --llvm-version) LLVM_VERSION="$2"; shift ;;
         --keep-source-files) KEEP_SOURCE_FILES=true ;;
+        --nightly) NIGHTLY=true ;;
         --quiet) QUIET_MODE=true ;;
         --debug) DEBUG_MODE=true ;;
         *) log ERROR "Unknown parameter: $1"; exit 1 ;;
@@ -221,7 +226,7 @@ $SUDO apt install -y libboost-fiber-dev libboost-context-dev libboost-test-dev
 # Clone and build AdaptiveCpp
 if [[ ! -d "AdaptiveCpp" ]]; then
     log INFO "Cloning AdaptiveCpp repository..."
-    git clone --depth 1 --no-checkout "$ADAPTIVE_CPP_URL"
+    git clone --depth 1 --no-checkout --branch $ADAPTIVE_CPP_SOURCE_VERSION "$ADAPTIVE_CPP_URL"
 else
     log WARN "AdaptiveCpp directory already exists. Skipping download."
 fi
@@ -229,8 +234,6 @@ fi
 
 cd AdaptiveCpp
 # Checkout latest tag
-LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)
-git checkout "$LATEST_TAG"
 mkdir -p build && cd build
 log INFO "Configuring build with CMake..."
 CXX=$CLANG_EXECUTABLE_PATH cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" -DLLVM_DIR="$LLVM_DIR" -DCLANG_EXECUTABLE_PATH="$CLANG_EXECUTABLE_PATH" ..
@@ -252,16 +255,20 @@ log INFO "Installing kompass-core dependencies..."
 
 # Clone and build kompass-core
 if [[ ! -d "kompass-core" ]]; then
-    log INFO "Cloning kompass-core repository..."
-    git clone --depth 1 --no-checkout "$KOMPASS_CORE_URL"
+    if [ "${NIGHTLY}" = "true" ]; then
+        log INFO "NIGHTLY build enabled, cloning kompass-core from main..."
+        git clone --depth 1 --branch main "$KOMPASS_CORE_URL"
+    else
+        # Checkout latest tag
+        LATEST_TAG=$(curl -s "https://api.github.com/repos/$KOMPASS_CORE_REPO/tags" | jq -r '.[0].name')
+        log INFO "Cloning kompass-core repository at tag $LATEST_TAG..."
+        git clone --depth 1 --branch "$LATEST_TAG" "$KOMPASS_CORE_URL"
+    fi
 else
     log WARN "kompass-core directory already exists. Skipping download."
 fi
 
 cd kompass-core
-# Checkout latest tag
-LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)
-git checkout "$LATEST_TAG"
 # For ubuntu <= 20.04 install dependencies via vcpkg
 if [[ $(echo "$UBUNTU_VERSION <= 20.04" | bc -l) == 1 ]]; then
     log WARN "Installing vcpkg for Ubuntu version <= 20.04..."
