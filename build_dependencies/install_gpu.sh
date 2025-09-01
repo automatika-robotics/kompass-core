@@ -226,7 +226,7 @@ $SUDO apt install -y libboost-fiber-dev libboost-context-dev libboost-test-dev
 # Clone and build AdaptiveCpp
 if [[ ! -d "AdaptiveCpp" ]]; then
     log INFO "Cloning AdaptiveCpp repository..."
-    git clone --depth 1 --no-checkout --branch $ADAPTIVE_CPP_SOURCE_VERSION "$ADAPTIVE_CPP_URL"
+    git clone --depth 1 --branch $ADAPTIVE_CPP_SOURCE_VERSION "$ADAPTIVE_CPP_URL"
 else
     log WARN "AdaptiveCpp directory already exists. Skipping download."
 fi
