@@ -121,7 +121,7 @@ check_llvm_clang_versions_in_range() {
 
 #### kompass-core Install Script ####
 
-KOMPASS_CORE_REPO = "automatika-robotics/kompass-core"
+KOMPASS_CORE_REPO="automatika-robotics/kompass-core"
 KOMPASS_CORE_URL="https://github.com/$KOMPASS_CORE_REPO"
 ADAPTIVE_CPP_URL="https://github.com/AdaptiveCpp/AdaptiveCpp"
 ADAPTIVE_CPP_SOURCE_VERSION="v25.02.0"
