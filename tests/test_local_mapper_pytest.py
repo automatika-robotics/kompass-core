@@ -7,9 +7,10 @@ import numpy as np
 import pytest
 from kompass_core.datatypes.pose import PoseData
 from kompass_core.datatypes.laserscan import LaserScanData
+from kompass_core.datatypes.scan_model import ScanModelConfig
 from kompass_cpp.mapping import OCCUPANCY_TYPE
 
-from kompass_core.mapping import LocalMapper, MapConfig, LaserScanModelConfig
+from kompass_core.mapping import LocalMapper, MapConfig
 from kompass_core.utils.visualization import visualize_grid
 
 
@@ -71,7 +72,7 @@ def local_mapper() -> LocalMapper:
 
     mapper_config = MapConfig(width=3.0, height=3.0, padding=0.0, resolution=0.05)
 
-    scan_model_config = LaserScanModelConfig(
+    scan_model_config = ScanModelConfig(
         p_prior=0.5, p_occupied=0.9, range_sure=0.1, range_max=20.0, wall_size=0.075
     )
 
@@ -187,7 +188,7 @@ def laser_scan_data(local_mapper: LocalMapper, range_option: str) -> LaserScanDa
     else:  # random
         laser_scan_data.ranges = np.random.uniform(
             low=min_range_from_robot,
-            high=local_mapper.scan_update_model.range_max,
+            high=local_mapper.scan_model.range_max,
             size=angles_size,
         )
 

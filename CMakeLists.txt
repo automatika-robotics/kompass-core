@@ -44,10 +44,20 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG --std=c++17 -fPIC -
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS} -Wall -O3 -fPIC")
 set(CMAKE_CXX_FLAGS_DEBUG "-g --std=c++17 -Wall")
 
+# Find python for all packages
+if(NOT DEFINED Python_EXECUTABLE)
+    # Prefer python paths set in the environment
+    if(DEFINED ENV{PYTHON})
+        set(Python_EXECUTABLE "$ENV{PYTHON}" CACHE FILEPATH "Python interpreter")
+    endif()
+endif()
+find_package(Python REQUIRED COMPONENTS Interpreter Development.Module
+             OPTIONAL_COMPONENTS Development.SABIModule)
+
 # Add kompass cpp
 add_subdirectory(src/kompass_cpp)
 
-# Add ompl bindings if building with skbuild
+# Add ompl bindings if building with skbuild or debugging
 if (SKBUILD OR CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_subdirectory(src/ompl_bindings)
 endif()

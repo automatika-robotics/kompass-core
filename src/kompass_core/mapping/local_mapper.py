@@ -1,9 +1,10 @@
-from typing import Optional
+from typing import Optional, Union
 from attrs import define, field, validators
 import math
 import numpy as np
 from ..datatypes.pose import PoseData
 from ..datatypes.laserscan import LaserScanData
+from ..datatypes.pointcloud import PointCloudData
 
 from kompass_cpp.mapping import (
     OCCUPANCY_TYPE,
@@ -11,7 +12,7 @@ from kompass_cpp.mapping import (
 
 from ..utils.geometry import transform_point_from_local_to_global, get_relative_pose
 
-from .laserscan_model import LaserScanModelConfig
+from ..datatypes.scan_model import ScanModelConfig
 from ..utils.common import BaseAttrs, base_validators
 
 
@@ -115,15 +116,15 @@ class LocalMapper:
     def __init__(
         self,
         config: MapConfig,
-        scan_model_config: LaserScanModelConfig,
+        scan_model_config: ScanModelConfig,
         pose_laser_scanner_in_robot: Optional[PoseData] = None,
     ):
         """Initialize a LocalMapper
 
         :param config: Mapper config
         :type config: MapConfig
-        :param scan_model_config: LaserScan model config
-        :type scan_model_config: LaserScanModelConfig
+        :param scan_model_config: LaserScan or PointCloud model config
+        :type scan_model_config: ScanModelConfig
         """
 
         self.config = config
@@ -146,7 +147,7 @@ class LocalMapper:
         self._pose_robot_in_world = PoseData()
         self.lower_right_corner_pose = PoseData()
 
-        self.scan_update_model = scan_model_config
+        self.scan_model = scan_model_config
 
         self.pose_laserscanner_in_robot = (
             pose_laser_scanner_in_robot if pose_laser_scanner_in_robot else PoseData()
@@ -159,9 +160,11 @@ class LocalMapper:
         self.grid_data = GridData(
             width=self.grid_width,
             height=self.grid_height,
-            p_prior=self.scan_update_model.p_prior,
+            p_prior=self.scan_model.p_prior,
         )
 
+        # flag for pointcloud
+        self.is_pointcloud = False
         # turned to true after the first map update is done
         self.processed = False
 
@@ -194,7 +197,12 @@ class LocalMapper:
                 resolution=self.config.resolution,
                 laserscan_position=self.pose_laserscanner_in_robot.get_position(),
                 laserscan_orientation=self.laserscan_orientation_in_robot,
+                is_pointcloud=self.is_pointcloud,
                 scan_size=scan_size,
+                angle_step=self.scan_model.angle_step,
+                max_height=self.scan_model.max_height,
+                min_height=self.scan_model.min_height,
+                range_max=self.scan_model.range_max,
                 max_points_per_line=self.config.max_points_per_line,
             )
         except ImportError:
@@ -206,7 +214,9 @@ class LocalMapper:
                 resolution=self.config.resolution,
                 laserscan_position=self.pose_laserscanner_in_robot.get_position(),
                 laserscan_orientation=self.laserscan_orientation_in_robot,
-                **self.scan_update_model.asdict(),
+                is_pointcloud=self.is_pointcloud,
+                scan_size=scan_size,
+                **self.scan_model.asdict(),
                 max_points_per_line=self.config.max_points_per_line,
                 max_num_threads=self.config.max_num_threads,
             )
@@ -232,35 +242,31 @@ class LocalMapper:
             self.local_mapper.get_previous_grid_in_current_pose(
                 current_position_in_previous_pose=_position_in_previous_pose[:2],
                 current_orientation_in_previous_pose=_orientation_in_previous_pose,
-                unknown_value=self.scan_update_model.p_prior,
+                unknown_value=self.scan_model.p_prior,
             )
         )
 
     def update_from_scan(
         self,
         robot_pose: PoseData,
-        laser_scan: LaserScanData,
+        scan: Union[LaserScanData, PointCloudData],
     ):
         """
         Update the local map using new LaserScan data
 
         :param robot_pose: Current robot position
         :type robot_pose: PoseData
-        :param laser_scan: LaserScan data
-        :type laser_scan: LaserScanData
-        :param pose_laser_scanner_in_robot: Pose of the sensor w.r.t the robot, defaults to None
-        :type pose_laser_scanner_in_robot: Optional[PoseData], optional
+        :param scan: Scan data, laserscan or pointcloud
+        :type scan: LaserScanData or PointCloudData
         """
         # Get transformation between the previous robot state (pose and grid) w.r.t the current state.
 
         if not self.processed:
-            self._initialize_mapper(laser_scan.ranges.size)
-
-        # filter out negative range and points outside grid limit
-        filtered_ranges = np.minimum(
-            self.config.filter_limit,
-            np.maximum(0.0, laser_scan.ranges),
-        )
+            self.is_pointcloud = isinstance(scan, PointCloudData)
+            if self.is_pointcloud:
+                self._initialize_mapper(int(2 * np.pi / self.scan_model.angle_step) + 1)
+            else:
+                self._initialize_mapper(scan.ranges.size)  # type: ignore
 
         # Calculate new grid pose
         self._pose_robot_in_world = robot_pose
@@ -271,31 +277,53 @@ class LocalMapper:
         if self.config.baysian_update:
             if self.processed:
                 self._calculate_grid_shift(robot_pose)
-            scan_occupancy, scan_occupancy_prob = (
-                self.local_mapper.scan_to_grid_baysian(
-                    angles=laser_scan.angles,
-                    ranges=filtered_ranges,
+            if self.is_pointcloud:
+                scan_occupancy, scan_occupancy_prob = (
+                    self.local_mapper.scan_to_grid_baysian(
+                        **scan.asdict(),
+                    )
                 )
-            )
+            else:
+                # filter out negative range and points outside grid limit
+                filtered_ranges = np.minimum(
+                    self.config.filter_limit,
+                    np.maximum(0.0, scan.ranges),  # type: ignore
+                )
+                scan_occupancy, scan_occupancy_prob = (
+                    self.local_mapper.scan_to_grid_baysian(
+                        angles=scan.angles,  # type: ignore
+                        ranges=filtered_ranges,
+                    )
+                )
 
             # Update grid
             self.grid_data.occupancy = np.copy(scan_occupancy)
 
             self.grid_data.occupancy_prob[
-                scan_occupancy_prob > self.scan_update_model.p_prior
+                scan_occupancy_prob > self.scan_model.p_prior
             ] = OCCUPANCY_TYPE.OCCUPIED.value
             self.grid_data.occupancy_prob[
-                scan_occupancy_prob == self.scan_update_model.p_prior
+                scan_occupancy_prob == self.scan_model.p_prior
             ] = OCCUPANCY_TYPE.UNEXPLORED.value
             self.grid_data.occupancy_prob[
-                scan_occupancy_prob < self.scan_update_model.p_prior
+                scan_occupancy_prob < self.scan_model.p_prior
             ] = OCCUPANCY_TYPE.EMPTY.value
 
         else:
-            scan_occupancy = self.local_mapper.scan_to_grid(
-                angles=laser_scan.angles,
-                ranges=filtered_ranges,
-            )
+            if self.is_pointcloud:
+                scan_occupancy = self.local_mapper.scan_to_grid(
+                    **scan.asdict(),
+                )
+            else:
+                # filter out negative range and points outside grid limit
+                filtered_ranges = np.minimum(
+                    self.config.filter_limit,
+                    np.maximum(0.0, scan.ranges),  # type: ignore
+                )
+                scan_occupancy = self.local_mapper.scan_to_grid(
+                    angles=scan.angles,  # type:ignore
+                    ranges=filtered_ranges,
+                )
 
             # Update grid
             self.grid_data.occupancy = np.copy(scan_occupancy)

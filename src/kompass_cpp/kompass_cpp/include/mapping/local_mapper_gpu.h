@@ -11,13 +11,16 @@ namespace Mapping {
 class LocalMapperGPU : public LocalMapper {
 public:
   // Constructor
-  LocalMapperGPU(const int gridHeight, const int gridWidth, float resolution,
+  LocalMapperGPU(const int gridHeight, const int gridWidth,
+                 const float resolution,
                  const Eigen::Vector3f &laserscanPosition,
-                 float laserscanOrientation, int scanSize,
-                 int maxPointsPerLine = 32)
+                 const float laserscanOrientation, const bool isPointCloud,
+                 const int scanSize, const float angleStep,
+                 const float maxHeight, const float minHeight,
+                 const float rangeMax, const int maxPointsPerLine = 32)
       : LocalMapper(gridHeight, gridWidth, resolution, laserscanPosition,
-                    laserscanOrientation, maxPointsPerLine),
-        m_scanSize(scanSize) {
+                    laserscanOrientation, isPointCloud, scanSize, angleStep, maxHeight,
+                    minHeight, rangeMax, maxPointsPerLine) {
     m_q = sycl::queue{sycl::default_selector_v,
                       sycl::property::queue::in_order{}};
     auto dev = m_q.get_device();
@@ -68,8 +71,26 @@ public:
   Eigen::MatrixXi &scanToGrid(const std::vector<double> &angles,
                               const std::vector<double> &ranges);
 
+  /**
+   * Uses a GPU to Projects 3D point cloud data onto a 2D grid using Bresenham
+   * line drawing.
+   *
+   * @param data        Flattened point cloud data (int8), typically in XYZ
+   * format.
+   * @param point_step  Number of bytes between each point in the data array.
+   * @param row_step    Number of bytes between each row in the data array.
+   * @param height      Number of rows (height of the point cloud).
+   * @param width       Number of columns (width of the point cloud).
+   * @param x_offset    Offset (in bytes) to the x-coordinate within a point.
+   * @param y_offset    Offset (in bytes) to the y-coordinate within a point.
+   * @param z_offset    Offset (in bytes) to the z-coordinate within a point.
+   * @return            A 2D occupancy grid as an Eigen::MatrixXi.
+   */
+  Eigen::MatrixXi &scanToGrid(const std::vector<int8_t> &data, int point_step,
+                              int row_step, int height, int width,
+                              float x_offset, float y_offset, float z_offset);
+
 private:
-  const int m_scanSize;
   double *m_devicePtrRanges;
   double *m_devicePtrAngles;
   int *m_devicePtrGrid;
