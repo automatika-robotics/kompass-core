@@ -1,15 +1,23 @@
 # Set the module name
 set(MODULE_NAME kompass_cpp)
 
-# Detect the installed nanobind package and import it into CMake
-find_package(Python 3.8
-  REQUIRED COMPONENTS Interpreter Development.Module
-  OPTIONAL_COMPONENTS Development.SABIModule)
-execute_process(
-  COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
-  OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_DIR)
-list(APPEND CMAKE_PREFIX_PATH "${nanobind_DIR}")
-find_package(nanobind CONFIG REQUIRED)
+# Detect nanobind (injected by scikit build)
+find_package(nanobind CONFIG)
+
+# Fallback: query Python for nanobind’s cmake_dir if not found
+if(NOT nanobind_FOUND)
+    execute_process(
+        COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+        OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_DIR
+        RESULT_VARIABLE nanobind_result
+    )
+    if(nanobind_result EQUAL 0 AND EXISTS "${nanobind_DIR}")
+        list(APPEND CMAKE_PREFIX_PATH "${nanobind_DIR}")
+        find_package(nanobind CONFIG REQUIRED)
+    else()
+        message(FATAL_ERROR "nanobind not found. Please pip install nanobind.")
+    endif()
+endif()
 
 # Take out GPU bindings if adaptive cpp not found
 if(NOT AdaptiveCpp_FOUND)
@@ -24,7 +32,7 @@ else()
     file(GLOB_RECURSE SOURCES "*.cpp")
 endif()
 
-# add project as pybind module
+# add project as nanobind module
 nanobind_add_module(${MODULE_NAME} STABLE_ABI ${SOURCES})
 target_link_libraries(${MODULE_NAME} PRIVATE kompass)
 

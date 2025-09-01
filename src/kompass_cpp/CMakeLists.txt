@@ -1,7 +1,7 @@
 # find required packages
 find_package(Eigen3 3.4 REQUIRED NO_MODULE)
-find_package(fcl REQUIRED)
-find_package(ompl REQUIRED)
+find_package(fcl 0.7 REQUIRED)
+find_package(ompl 1.5 REQUIRED)
 
 # find sycl
 find_package(AdaptiveCpp)
