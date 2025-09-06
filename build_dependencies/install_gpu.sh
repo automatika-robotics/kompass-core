@@ -134,12 +134,14 @@ INSTALL_PREFIX="$DEFAULT_INSTALL_PREFIX"
 LLVM_VERSION=""
 KEEP_SOURCE_FILES="$DEFAULT_KEEP_SOURCE_FILES"
 NIGHTLY="$DEFAULT_NIGHTLY"
+CUDA_ROOT=""
 
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --acpp-install-prefix) INSTALL_PREFIX="$2"; shift ;;
         --llvm-version) LLVM_VERSION="$2"; shift ;;
+        --cuda-root) CUDA_ROOT="$2"; shift ;;
         --keep-source-files) KEEP_SOURCE_FILES=true ;;
         --nightly) NIGHTLY=true ;;
         --quiet) QUIET_MODE=true ;;
@@ -236,9 +238,17 @@ cd AdaptiveCpp
 # Checkout latest tag
 mkdir -p build && cd build
 log INFO "Configuring build with CMake..."
-CXX=$CLANG_EXECUTABLE_PATH cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" -DLLVM_DIR="$LLVM_DIR" -DCLANG_EXECUTABLE_PATH="$CLANG_EXECUTABLE_PATH" ..
+CMAKE_FLAGS="-DCMAKE_INSTALL_PREFIX=$INSTALL_PREFIX -DLLVM_DIR=$LLVM_DIR -DCLANG_EXECUTABLE_PATH=$CLANG_EXECUTABLE_PATH"
+
+if [[ -n "$CUDA_ROOT" ]]; then
+    log INFO "CUDA root specified: $CUDA_ROOT. Enabling CUDA backend..."
+    CMAKE_FLAGS="$CMAKE_FLAGS -DWITH_CUDA_BACKEND=ON -DCUDA_TOOLKIT_ROOT_DIR=$CUDA_ROOT"
+else
+    log INFO "Building with defaults."
+fi
+CXX=$CLANG_EXECUTABLE_PATH cmake $CMAKE_FLAGS ..
 log INFO "Building and installing AdaptiveCpp to $INSTALL_PREFIX..."
-$SUDO make install -j8
+$SUDO make install -j$(nproc)
 
 # Back to main pwd
 cd ../..
