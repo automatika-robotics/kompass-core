@@ -2,11 +2,41 @@
 #include "utils/pointcloud.h"
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
-#include <nanobind/stl/vector.h>
+#include <nanobind/stl/array.h>
+#include <nanobind/stl/optional.h>
+#include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
+#include <nanobind/stl/vector.h>
 
 namespace py = nanobind;
 using namespace Kompass;
+
+py::ndarray<py::numpy, float, py::shape<-1, 3>, py::c_contig>
+read_pcd_py(const std::string &filename) {
+  auto result = readPCD(filename);
+
+  if (!result) {
+    throw std::runtime_error("Failed to read PCD file: " + filename);
+  }
+
+  std::vector<std::array<float, 3>> points = std::move(*result);
+  size_t n = points.size();
+
+  // Raw float pointer into vector storage
+  float *raw_ptr = reinterpret_cast<float *>(points.data());
+
+  // Capsule takes ownership of the vector
+  auto capsule = py ::capsule(
+      new std::vector<std::array<float, 3>>(std::move(points)),
+      [](void *p) noexcept {
+        delete reinterpret_cast<std::vector<std::array<float, 3>> *>(p);
+      });
+
+  py ::ndarray<py ::numpy, float, py ::shape<-1, 3>, py::c_contig> arr(
+      raw_ptr, {n, 3}, capsule);
+
+  return arr;
+}
 
 #if GPU
 void bindings_utils_gpu(py::module_ &);
@@ -63,6 +93,8 @@ void bindings_utils(py::module_ &m) {
       py::arg("y_offset"), py::arg("z_offset"), py::arg("max_range"),
       py::arg("min_z"), py::arg("max_z"), py::arg("angle_step"),
       "Converts raw PointCloud2 binary data to laser scan ranges and angles.");
+
+  m_utils.def("read_pcd", &read_pcd_py, py::arg("filename"));
 
 #if GPU
   bindings_utils_gpu(m_utils);
