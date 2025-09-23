@@ -177,6 +177,26 @@ inline bool is_space(char c) {
   return c == ' ' || (c >= '\t' && c <= '\r');
 }
 
+/**
+ * @brief Reads a PCD (Point Cloud Data) file and extracts 3D points.
+ *
+ * This function parses a PCD file header to detect the number of points,
+ * field layout, and data format (`ascii` or `binary`). It extracts the `x`,
+ * `y`, and `z` fields for all points and stores them in a contiguous memory
+ * buffer (3 floats per point).
+ *
+ * @param filename Path to the PCD file to read.
+ *
+ * @return std::optional<std::vector<std::array<float, 3>>>
+ *   - Returns std::nullopt if the file cannot be opened, is malformed,
+ *     missing required fields, or uses an unsupported DATA format.
+ *
+ * @note
+ * - Only `ascii` and `binary` PCD formats are supported.
+ * - Additional fields in the PCD file are ignored.
+ *
+ * @throws std::runtime_error if parsing fails due to an invalid file format.
+ */
 inline std::optional<std::vector<std::array<float, 3>>>
 readPCD(const std::string &filename) {
   std::ifstream file(filename, std::ios::binary);
