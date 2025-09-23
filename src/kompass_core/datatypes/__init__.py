@@ -12,7 +12,7 @@ from .path import (
     Range2D,
     Odom2D,
 )
-from .pointcloud import PointCloudData, read_points_from_pcd
+from .pointcloud import PointCloudData, get_points_from_pcd, get_occupancy_grid_from_pcd
 from .scan_model import ScanModelConfig
 from .pose import PoseData
 from kompass_cpp.types import Bbox3D, Bbox2D
@@ -35,5 +35,6 @@ __all__ = [
     "PoseData",
     "Bbox3D",
     "Bbox2D",
-    "read_points_from_pcd"
+    "get_points_from_pcd",
+    "get_occupancy_grid_from_pcd"
 ]

@@ -286,11 +286,11 @@ readPCD(const std::string &filename) {
       return std::nullopt;
     }
     for (size_t i = 0; i < fields.size(); ++i) {
-      if (i < x_idx)
+      if ((int)i < x_idx)
         x_offset += field_sizes[i];
-      if (i < y_idx)
+      if ((int)i < y_idx)
         y_offset += field_sizes[i];
-      if (i < z_idx)
+      if ((int)i < z_idx)
         z_offset += field_sizes[i];
       point_stride += field_sizes[i];
     }
@@ -348,4 +348,77 @@ readPCD(const std::string &filename) {
   }
 
   return points;
+}
+
+inline std::pair<Eigen::Matrix<int8_t, Eigen::Dynamic, Eigen::Dynamic>,
+                 std::array<float, 3>>
+readPCDToOccupancyGrid(const std::string &filename,
+                          const float grid_resolution,
+                          const float z_ground_limit,
+                          const float robot_height) {
+
+  auto pcd_points_opt = readPCD(filename);
+
+  if (!pcd_points_opt) {
+    throw std::runtime_error("Failed to read PCD file: " + filename);
+  }
+
+  using MatrixXi8 = Eigen::Matrix<int8_t, Eigen::Dynamic, Eigen::Dynamic>;
+
+  const auto &pcd_points = *pcd_points_opt;
+  if (pcd_points.empty()) {
+    return {MatrixXi8(), {0.0f, 0.0f, 0.0f}};
+  }
+
+  // Find bounding box
+  float min_x = std::numeric_limits<float>::max();
+  float min_y = std::numeric_limits<float>::max();
+  float max_x = std::numeric_limits<float>::lowest();
+  float max_y = std::numeric_limits<float>::lowest();
+
+  for (const auto &p : pcd_points) {
+    min_x = std::min(min_x, p[0]);
+    min_y = std::min(min_y, p[1]);
+    max_x = std::max(max_x, p[0]);
+    max_y = std::max(max_y, p[1]);
+  }
+
+  // 2. Compute grid size
+  int cell_num_x =
+      static_cast<int>(std::ceil((max_x - min_x) / grid_resolution));
+  int cell_num_y =
+      static_cast<int>(std::ceil((max_y - min_y) / grid_resolution));
+
+  // Precompute reciprocal
+  float inv_res = 1.0f / grid_resolution;
+
+  // Initialize grid with -1 (unknown)
+  MatrixXi8 grid_data = MatrixXi8::Constant(cell_num_x, cell_num_y, -1);
+
+  // 3. Fill grid
+  for (const auto &p : pcd_points) {
+    const float x = p[0];
+    const float y = p[1];
+    const float z = p[2];
+
+    int cell_x = static_cast<int>((x - min_x) * inv_res);
+    int cell_y = static_cast<int>((y - min_y) * inv_res);
+
+    if (cell_x >= 0 && cell_x < cell_num_x && cell_y >= 0 &&
+        cell_y < cell_num_y) {
+      int8_t z_val;
+      if (z > z_ground_limit && z <= robot_height) {
+        z_val = 100; // occupied
+      } else if (z <= z_ground_limit) {
+        z_val = 0; // free
+      } else {
+        z_val = -1; // unknown
+      }
+
+      grid_data(cell_x, cell_y) = std::max(grid_data(cell_x, cell_y), z_val);
+    }
+  }
+
+  // Return Eigen matrix + origin (min_x, min_y, 0)
+  return {std::move(grid_data), {min_x, min_y, 0.0f}};
 }

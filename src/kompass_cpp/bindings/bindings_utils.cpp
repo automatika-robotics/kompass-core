@@ -7,6 +7,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind/stl/pair.h>
 
 namespace py = nanobind;
 using namespace Kompass;
@@ -94,7 +95,14 @@ void bindings_utils(py::module_ &m) {
       py::arg("min_z"), py::arg("max_z"), py::arg("angle_step"),
       "Converts raw PointCloud2 binary data to laser scan ranges and angles.");
 
-  m_utils.def("read_pcd", &read_pcd_py, py::arg("filename"));
+  m_utils.def(
+      "read_pcd", &read_pcd_py, py::arg("filename"),
+      "Convert PCD file to a numpy array of points (zero-copy return).");
+
+  m_utils.def("read_pcd_to_occupancy_grid", &readPCDToOccupancyGrid,
+              py::arg("filename"), py::arg("grid_resolution"),
+              py::arg("z_ground_limit"), py::arg("robot_height"),
+              "Convert PCD file to an occupancy grid (zero-copy return).");
 
 #if GPU
   bindings_utils_gpu(m_utils);
