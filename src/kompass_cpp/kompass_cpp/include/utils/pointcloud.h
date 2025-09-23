@@ -1,5 +1,6 @@
 #pragma once
 
+#include "mapping/local_mapper.h"
 #include "utils/logger.h"
 #include <Eigen/Dense>
 #include <algorithm>
@@ -350,12 +351,39 @@ readPCD(const std::string &filename) {
   return points;
 }
 
+/**
+ * @brief Converts a PCD file to a 2D occupancy grid.
+ *
+ * This function reads a PCD (Point Cloud Data) file containing 3D points (x, y,
+ * z) and converts it into a 2D occupancy grid represented as an Eigen matrix of
+ * int8_t. Each cell in the grid can have the following values:
+ *   - 100: occupied (z between z_ground_limit and robot_height)
+ *   - 0: free (z <= z_ground_limit)
+ *   - -1: unknown (z above robot_height)
+ *
+ * The grid resolution defines the size of each cell in meters. The function
+ * also returns the origin of the grid corresponding to the minimum x and y
+ * coordinates of the point cloud (z is always 0).
+ *
+ * @param filename        Path to the PCD file to read.
+ * @param grid_resolution Size of each grid cell in meters.
+ * @param z_ground_limit  Minimum z value considered free (cells below this are
+ * free).
+ * @param robot_height    Maximum z value considered occupied (cells above this
+ * are unknown).
+ *
+ * @return A pair consisting of:
+ *         1. Eigen::Matrix<int8_t, Dynamic, Dynamic>: the occupancy grid
+ *            with dimensions [num_cells_x, num_cells_y].
+ *         2. std::array<float, 3>: the origin of the grid in world coordinates
+ *            (min_x, min_y, 0.0f).
+ *
+ * @throws std::runtime_error If the PCD file cannot be read or parsing fails.
+ */
 inline std::pair<Eigen::Matrix<int8_t, Eigen::Dynamic, Eigen::Dynamic>,
                  std::array<float, 3>>
-readPCDToOccupancyGrid(const std::string &filename,
-                          const float grid_resolution,
-                          const float z_ground_limit,
-                          const float robot_height) {
+readPCDToOccupancyGrid(const std::string &filename, const float grid_resolution,
+                       const float z_ground_limit, const float robot_height) {
 
   auto pcd_points_opt = readPCD(filename);
 
@@ -383,7 +411,7 @@ readPCDToOccupancyGrid(const std::string &filename,
     max_y = std::max(max_y, p[1]);
   }
 
-  // 2. Compute grid size
+  // Compute grid size
   int cell_num_x =
       static_cast<int>(std::ceil((max_x - min_x) / grid_resolution));
   int cell_num_y =
@@ -395,7 +423,7 @@ readPCDToOccupancyGrid(const std::string &filename,
   // Initialize grid with -1 (unknown)
   MatrixXi8 grid_data = MatrixXi8::Constant(cell_num_x, cell_num_y, -1);
 
-  // 3. Fill grid
+  // Fill grid
   for (const auto &p : pcd_points) {
     const float x = p[0];
     const float y = p[1];
@@ -408,11 +436,14 @@ readPCDToOccupancyGrid(const std::string &filename,
         cell_y < cell_num_y) {
       int8_t z_val;
       if (z > z_ground_limit && z <= robot_height) {
-        z_val = 100; // occupied
+        z_val = static_cast<int>(
+            Kompass::Mapping::OccupancyType::OCCUPIED); // occupied
       } else if (z <= z_ground_limit) {
-        z_val = 0; // free
+        z_val =
+            static_cast<int>(Kompass::Mapping::OccupancyType::EMPTY); // free
       } else {
-        z_val = -1; // unknown
+        z_val = static_cast<int>(
+            Kompass::Mapping::OccupancyType::UNEXPLORED); // unknown
       }
 
       grid_data(cell_x, cell_y) = std::max(grid_data(cell_x, cell_y), z_val);
