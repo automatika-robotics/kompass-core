@@ -16,7 +16,7 @@ def get_points_from_pcd(file_path: str) -> np.ndarray:
 def get_occupancy_grid_from_pcd(
     file_path: str,
     grid_resolution: float,
-    z_groud_limit: float,
+    z_ground_limit: float,
     robot_height: float,
 ) -> Tuple[np.ndarray, list]:
     """Read occupancy grid directly from a pcd file.
@@ -24,13 +24,13 @@ def get_occupancy_grid_from_pcd(
     :type str
     :param grid_resolution: Resoluion of the grid
     :type float
-    :param z_groud_limit: Height limit to consider
+    :param z_ground_limit: Height limit to consider
     :type float
     :param robot_height: Height of the robot
     :type float
     """
     return read_pcd_to_occupancy_grid(
-        file_path, grid_resolution, z_groud_limit, robot_height
+        file_path, grid_resolution, z_ground_limit, robot_height
     )
 
 
