@@ -321,7 +321,7 @@ log INFO "Installing kompass-core with pip"
 export PIP_BREAK_SYSTEM_PACKAGES=1
 pip install pip-tools
 pip uninstall -y kompass-core  # uninstall any previous versions
-pip install .
+CXX=$CLANG_EXECUTABLE_PATH pip install .
 
 # Clean up source files if not required
 if [[ $KEEP_SOURCE_FILES == false ]]; then
