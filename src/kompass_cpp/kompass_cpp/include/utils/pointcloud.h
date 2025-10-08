@@ -14,6 +14,23 @@
 #include <string>
 #include <vector>
 
+
+// --- Compatibility shim for libstdc++ versions that lack from_chars(float) ---
+#if defined(__GLIBCXX__) && (!defined(__cpp_lib_to_chars) || __cpp_lib_to_chars < 201611L)
+namespace std {
+inline from_chars_result from_chars(const char* first, const char* last, float& value) noexcept {
+  char* end;
+  value = std::strtof(first, &end);
+  return { end, (end == first ? std::errc::invalid_argument : std::errc()) };
+}
+inline from_chars_result from_chars(const char* first, const char* last, double& value) noexcept {
+  char* end;
+  value = std::strtod(first, &end);
+  return { end, (end == first ? std::errc::invalid_argument : std::errc()) };
+}
+}
+#endif
+
 /**
  * @brief Converts raw PointCloud2-style byte data to 2D LaserScan-like data.
  *
