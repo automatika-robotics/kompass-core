@@ -75,9 +75,9 @@ install_dependencies() {
         $SUDO rm /etc/apt/trusted.gpg.d/kitware.gpg
         $SUDO apt update -y && apt install -y cmake
         $SUDO apt install -y --only-upgrade cmake
-        local dependencies=("git" "make" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq")
+        local dependencies=("git" "make" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq" "python3-minimal" "python3-apt" "python3-dev")
     else
-        local dependencies=("git" "make" "cmake" "software-properties-common" "wget" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq")
+        local dependencies=("git" "make" "cmake" "software-properties-common" "wget" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq" "python3-minimal" "python3-apt" "python3-dev")
     fi
 
     # Install other tool dependencies
@@ -95,6 +95,12 @@ install_dependencies() {
         $SUDO apt install -y "${missing[@]}"
     else
         log INFO "All dependencies are already installed."
+    fi
+
+    #  Ensure /usr/bin/python3 exists for system scripts like add-apt-repository
+    if [ ! -x /usr/bin/python3 ]; then
+        log INFO "Fixing missing /usr/bin/python3 symlink..."
+        $SUDO ln -sf $(command -v python3) /usr/bin/python3
     fi
 }
 
