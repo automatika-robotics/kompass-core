@@ -294,7 +294,7 @@ class DWA(FollowerTemplate):
         )
 
         if local_map is not None:
-            sensor_data = PointCloudData.numpy_to_kompass_cpp(local_map)
+            sensor_data = local_map
         elif laser_scan:
             if len(laser_scan.angles) != len(laser_scan.ranges):
                 logging.error(
@@ -305,7 +305,7 @@ class DWA(FollowerTemplate):
                 ranges=laser_scan.ranges, angles=laser_scan.angles
             )
         elif point_cloud:
-            sensor_data = point_cloud.to_kompass_cpp()
+            sensor_data = point_cloud.data
         else:
             logging.error(
                 "Cannot compute control without sensor data. Provide 'laser_scan' or 'point_cloud' input"
