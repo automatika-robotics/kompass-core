@@ -82,6 +82,9 @@ struct Path {
 
   float getOrientation(const size_t index) const;
 
+  //Get curvature at index
+  double getCurvature(const size_t index) const;
+
   static float distance(const Point &p1, const Point &p2);
 
   // Function to compute the total path length
@@ -132,6 +135,7 @@ private:
   Eigen::VectorXf X_;                   // Vector of X coordinates
   Eigen::VectorXf Y_;                   // Vector of Y coordinates
   Eigen::VectorXf Z_;                   // Vector of Z coordinates
+  Eigen::VectorXf Curvature_;           // Curvature values
   size_t current_size_{0};              // Current size of the path
   size_t max_interpolation_iterations_; // Max number of iterations for
                                         // interpolation between two path points
