@@ -2,6 +2,7 @@
 #include <cmath>
 
 #include "controllers/stanley.h"
+#include "controllers/follower.h"
 #include "utils/angles.h"
 #include "utils/logger.h"
 
@@ -15,12 +16,9 @@ Stanley::Stanley() : Follower() {
   wheel_base = config.getParameter<double>("wheel_base");
 }
 
-Stanley::Stanley(StanleyParameters config) {
-  this->config = config;
-  cross_track_gain = config.getParameter<double>("cross_track_gain");
-  heading_gain = config.getParameter<double>("heading_gain");
-  min_velocity = config.getParameter<double>("cross_track_min_linear_vel");
-  wheel_base = config.getParameter<double>("wheel_base");
+Stanley::Stanley(StanleyParameters config) : Follower() {
+  setParams(config);
+  Stanley();
 }
 
 Controller::Result Stanley::execute(Path::State currentPosition,

@@ -13,16 +13,30 @@ using namespace std;
 namespace Kompass {
 namespace Control {
 
-Follower::Follower() : Controller(), config() {
+Follower::Follower() : Controller(), config() { setParams(config); }
+
+void Follower::setParams(const FollowerParameters &config) {
+  this->config = config;
   // Get parameters from config
-  lookahead_distance = config.getParameter<double>("lookahead_distance");
-  enable_reverse_driving = config.getParameter<bool>("enable_reverse_driving");
-  goal_dist_tolerance = config.getParameter<double>("goal_dist_tolerance");
+  lookahead_distance = this->config.getParameter<double>("lookahead_distance");
+  enable_reverse_driving =
+      this->config.getParameter<bool>("enable_reverse_driving");
+  goal_dist_tolerance =
+      this->config.getParameter<double>("goal_dist_tolerance");
   goal_orientation_tolerance =
-      config.getParameter<double>("goal_orientation_tolerance");
-  loosing_goal_distance = config.getParameter<double>("loosing_goal_distance");
-  path_segment_length = config.getParameter<double>("path_segment_length");
-  maxDist = config.getParameter<double>("max_point_interpolation_distance");
+      this->config.getParameter<double>("goal_orientation_tolerance");
+  loosing_goal_distance =
+      this->config.getParameter<double>("loosing_goal_distance");
+  path_segment_length =
+      this->config.getParameter<double>("path_segment_length");
+  maxDist =
+      this->config.getParameter<double>("max_point_interpolation_distance");
+  speed_reg_curvature =
+      this->config.getParameter<double>("speed_regulation_curvature");
+  speed_reg_rotation =
+      this->config.getParameter<double>("speed_regulation_angular");
+  min_speed_regulation_factor =
+      this->config.getParameter<double>("min_speed_regulation_factor");
   // Set rotate_in_place based on the robot type
   if (ctrType == Control::ControlType::ACKERMANN) {
     rotate_in_place = false;
@@ -32,8 +46,8 @@ Follower::Follower() : Controller(), config() {
   maxSegmentSize = getMaxSegmentSize();
 }
 
-Follower::Follower(FollowerParameters config) : Controller() {
-  this->config = config;
+Follower::Follower(const FollowerParameters &config) : Controller() {
+  setParams(config);
   Follower();
 }
 
@@ -301,6 +315,55 @@ bool Follower::isForwardSegment(const Path::Path &segment1,
                                         angle_between_points)) <=
          (M_PI - std::abs(Angle::normalizeTo0Pi(
                      angle_between_points - segment1.getStartOrientation())));
+}
+
+double
+Follower::calculateExponentialSpeedFactor(double current_angular_vel) const {
+  if (!currentPath || !path_processing_) {
+    return 1.0;
+  }
+
+  double curvature_sum = 0.0;
+  double dist = 0.0;
+
+  // Start iterating from the current tracked position
+  size_t seg_idx = current_segment_index_;
+  size_t pt_idx = closestPosition->index;
+
+  // Integrate curvature along the path up to lookahead distance
+  while (dist < lookahead_distance && seg_idx < currentPath->segments.size()) {
+    const auto &segment = currentPath->segments[seg_idx];
+
+    for (; pt_idx < segment.getSize() - 1; ++pt_idx) {
+      // Accumulate absolute curvature
+      curvature_sum += std::abs(segment.getCurvature(pt_idx));
+
+      // Accumulate distance
+      double ds = Path::Path::distance(segment.getIndex(pt_idx),
+                                       segment.getIndex(pt_idx + 1));
+      dist += ds;
+
+      if (dist >= lookahead_distance)
+        break;
+    }
+
+    // Move to next segment if needed
+    if (pt_idx >= segment.getSize() - 1) {
+      seg_idx++;
+      pt_idx = 0;
+    } else {
+      break;
+    }
+  }
+
+  // Calculate exponential factor
+  // factor = exp(-(speed_reg_curvature * sum(|K|) + speed_reg_rotation *
+  // |omega|))
+  double exponent = (speed_reg_curvature * curvature_sum) +
+                    (speed_reg_rotation * std::abs(current_angular_vel));
+
+  // restrict by the minimum allowed speed regulation factor
+  return std::max(std::exp(-exponent), min_speed_regulation_factor);
 }
 
 // Get the control commands

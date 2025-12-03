@@ -34,6 +34,18 @@ public:
           Parameter(1.0, 0.0,
                     1000.0)); // [m] Lookahead distance used to find the next
                               // point to reach (normally be same as wheelbase)
+      // Speed control parameters
+      addParameter(
+          "speed_regulation_curvature",
+          Parameter(0.5, 0.0,
+                    1.0)); // Curvature-based linear velocity speed regulation parameter
+      addParameter("speed_regulation_angular",
+                   Parameter(0.5, 0.0,
+                             1.0)); // Angular velocity-based speed
+                                    // regulation parameter
+      addParameter("min_speed_regulation_factor",
+                   Parameter(0.1, 1e-3,
+                             1.0)); // Minimum value of the final speed regulation factor
       addParameter(
           "goal_dist_tolerance",
           Parameter(0.1, 0.001, 1000.0)); // [m] Tolerance to consider the robot
@@ -70,7 +82,9 @@ public:
   // Constructor
   Follower();
 
-  Follower(FollowerParameters config);
+  Follower(const FollowerParameters &config);
+
+  void setParams(const FollowerParameters &config);
 
   // Destructor
   virtual ~Follower() = default;
@@ -191,7 +205,19 @@ public:
   const double calculateDistance(const Path::State &state1,
                                  const Path::State &state2) const;
 
+  /**
+   * @brief Calculates an exponential speed factor [0, 1] based on path
+   * properties.
+   *
+   * @param current_angular_vel
+   * @return double
+   */
+  double calculateExponentialSpeedFactor(double current_angular_vel) const;
+
 protected:
+  // Speed Control Parameters
+  double speed_reg_curvature{0.0}; // Curvature factor
+  double speed_reg_rotation{0.0};    // Rotation factor
   std::unique_ptr<Path::Path> currentPath = nullptr;
   std::unique_ptr<Path::Path> refPath = nullptr;
   std::unique_ptr<Path::PathPosition> closestPosition = std::make_unique<Path::PathPosition>();
@@ -202,11 +228,12 @@ protected:
   double lookahead_distance{0.0};
   bool enable_reverse_driving{false};
   double path_segment_length{0.0};
+  double min_speed_regulation_factor{0.0};
   double maxDist{0.0};
   size_t maxSegmentSize;
   Path::InterpolationType interpolationType = Path::InterpolationType::LINEAR;
 
-  FollowerParameters config;
+  FollowerParameters config = FollowerParameters();
 
   /**
    * @brief Finds closestPosition on the currentPath to the currentState
