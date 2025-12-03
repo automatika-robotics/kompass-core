@@ -8,6 +8,7 @@
 #include "controllers/dwa.h"
 #include "controllers/follower.h"
 #include "controllers/pid.h"
+#include "controllers/pure_pursuit.h"
 #include "controllers/rgb_follower.h"
 #include "controllers/stanley.h"
 #include "controllers/vision_dwa.h"
@@ -154,6 +155,31 @@ void bindings_control(py::module_ &m) {
            py::arg("kd"), "Init PID controller with parameters")
       .def("compute", &Control::PID::compute, py::arg("target"),
            py::arg("current"), py::arg("dt"));
+
+  // PurePursuit
+  // Bind PurePursuitConfig
+  py::class_<Control::PurePursuit::PurePursuitConfig,
+             Control::Follower::FollowerParameters>(m_control,
+                                                    "PurePursuitConfig")
+      .def(py::init<>());
+
+  // Bind PurePursuit
+  py::class_<Control::PurePursuit, Control::Follower>(m_control, "PurePursuit")
+      .def(py::init<const Control::ControlType &,
+                    const Control::ControlLimitsParams &,
+                    const Control::PurePursuit::PurePursuitConfig &>(),
+           "Init PurePursuit follower with custom config",
+           py::arg("control_type"), py::arg("control_limits"),
+           py::arg("config") = Control::PurePursuit::PurePursuitConfig())
+      .def("execute",
+           py::overload_cast<Path::State, double>(
+               &Control::PurePursuit::execute),
+           "Execute Pure Pursuit control step with state update",
+           py::arg("current_position"), py::arg("delta_time"))
+      .def("execute", py::overload_cast<double>(&Control::PurePursuit::execute),
+           "Execute Pure Pursuit control step (uses internal state)",
+           py::arg("delta_time"));
+  ;
 
   // Trajectory sampler control result
   py::class_<Control::TrajSearchResult>(m_control, "SamplingControlResult")

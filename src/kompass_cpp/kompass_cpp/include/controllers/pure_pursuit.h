@@ -48,13 +48,15 @@ public:
    */
   Controller::Result execute(Path::State currentPosition, double deltaTime);
 
-  private:
-    double wheel_base{0.0};
-    double lookahead_gain_forward{0.0};
+  Controller::Result execute(double deltaTime);
 
-    size_t last_found_index_ = 0;
+private:
+  double wheel_base{0.0};
+  double lookahead_gain_forward{0.0};
 
-    Path::Point findLookaheadPoint(double radius);
+  size_t last_found_index_ = 0;
+
+  Path::Point findLookaheadPoint(double radius);
 };
 
 } // namespace Control

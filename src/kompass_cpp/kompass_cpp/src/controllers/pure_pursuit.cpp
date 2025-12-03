@@ -19,10 +19,7 @@ PurePursuit::PurePursuit(const ControlType &robotCtrlType,
   lookahead_gain_forward = cfg.getParameter<double>("lookahead_gain_forward");
 }
 
-Controller::Result PurePursuit::execute(Path::State currentPosition,
-                                        double deltaTime) {
-  setCurrentState(currentPosition);
-
+Controller::Result PurePursuit::execute(double deltaTime) {
   if (!path_processing_) {
     return {(reached_goal_ ? Result::Status::GOAL_REACHED
                            : Result::Status::NO_COMMAND_POSSIBLE),
@@ -72,8 +69,7 @@ Controller::Result PurePursuit::execute(Path::State currentPosition,
 
       double omega = cmd_v * curvature;
       cmd = Velocity2D(cmd_v, 0.0, omega);
-    }
-    else{
+    } else {
       // Velocity vector in robot frame
       double vx = cmd_v * std::cos(alpha_robot);
       double vy = cmd_v * std::sin(alpha_robot);
@@ -126,6 +122,12 @@ Controller::Result PurePursuit::execute(Path::State currentPosition,
   }
 
   return {Result::Status::COMMAND_FOUND, cmd};
+}
+
+Controller::Result PurePursuit::execute(Path::State currentPosition,
+                                        double deltaTime) {
+  setCurrentState(currentPosition);
+  return execute(deltaTime);
 }
 
 Path::Point PurePursuit::findLookaheadPoint(double radius) {
