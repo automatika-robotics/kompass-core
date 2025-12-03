@@ -217,7 +217,9 @@ class DWA(FollowerTemplate):
         self._config = config or DWAConfig()
 
         if config_file:
-            self._config.from_file(file_path=config_file, nested_root_name=config_root_name)
+            self._config.from_file(
+                file_path=config_file, nested_root_name=config_root_name
+            )
 
         if control_time_step:
             self._config.control_time_step = control_time_step

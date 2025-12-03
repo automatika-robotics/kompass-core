@@ -13,7 +13,70 @@ from kompass_cpp.types import PathInterpolationType
 @define
 class FollowerConfig(BaseAttrs):
     """
-    General path follower parameters
+    Path Follower Parameters
+
+    ```{list-table}
+    :widths: 10 10 10 70
+    :header-rows: 1
+
+    * - Name
+      - Type
+      - Default
+      - Description
+    * - wheel_base
+      - `float`
+      - `0.34`
+      - Distance between the front and rear axles of the robot. Must be between `0.0` and `100.0`.
+    * - lookahead_gain_forward
+      - `float`
+      - `0.8`
+      - Gain for lookahead distance calculation (k * v). Must be between `0.1` and `5.0`.
+    * - lookahead_min
+      - `float`
+      - `0.5`
+      - Minimum lookahead distance. Must be between `0.0` and `10.0`.
+    * - control_time_step
+      - `float`
+      - `0.1`
+      - Time interval between control actions. Must be between `1e-6` and `1e3`.
+    * - goal_dist_tolerance
+      - `float`
+      - `0.1`
+      - Distance tolerance to consider the goal reached. Must be between `1e-4` and `1e3`.
+    * - goal_orientation_tolerance
+      - `float`
+      - `0.1`
+      - Orientation tolerance to consider the goal reached. Must be between `1e-4` and `2*PI`.
+    * - path_segment_length
+      - `float`
+      - `1.0`
+      - Length of path segments used for processing. Must be between `1e-3` and `1e3`.
+    * - max_point_interpolation_distance
+      - `float`
+      - `0.01`
+      - Maximum distance between interpolated points. Must be between `1e-4` and `1e3`.
+    * - enable_reverse_driving
+      - `bool`
+      - `False`
+      - Whether to allow reverse driving.
+    * - lookahead_distance
+      - `float`
+      - `1.0`
+      - Lookahead distance. Must be between `0.0` and `100.0`.
+    * - speed_regulation_curvature
+      - `float`
+      - `0.5`
+      - Speed regulation curvature factor. Must be between `1e-3` and `1.0`.
+    * - speed_regulation_angular
+      - `float`
+      - `0.5`
+      - Speed regulation rotation factor. Must be between `1e-3` and `1.0`.
+    * - min_speed_regulation_factor
+      - `float`
+      - `0.1`
+      - Minimum speed regulation factor. Must be between `1e-3` and `1.0`.
+
+    ```
     """
 
     max_point_interpolation_distance: float = field(
@@ -38,6 +101,15 @@ class FollowerConfig(BaseAttrs):
 
     loosing_goal_distance: float = field(
         default=0.2, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
+    )
+    speed_regulation_curvature: float = field(
+        default=0.5, validator=base_validators.in_range(min_value=1e-3, max_value=1.0)
+    )
+    speed_regulation_angular: float = field(
+        default=0.5, validator=base_validators.in_range(min_value=1e-3, max_value=1.0)
+    )
+    min_speed_regulation_factor: float = field(
+        default=0.1, validator=base_validators.in_range(min_value=1e-3, max_value=1.0)
     )
 
 

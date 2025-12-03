@@ -128,16 +128,17 @@ def _transform_pose(pose: PoseData, reference_pose: PoseData) -> PoseData:
     :return: PoseData in global frame
     :rtype: PoseData
     """
-    rotated_position = _rotate_vector_by_quaternion(reference_pose.get_orientation(), pose.get_position().tolist())
+    rotated_position = _rotate_vector_by_quaternion(
+        reference_pose.get_orientation(), pose.get_position().tolist()
+    )
     translated_position = reference_pose.get_position() + np.array(rotated_position)
 
-    combined_orientation = _np_quaternion_multiply(reference_pose.get_orientation(), pose.get_orientation())
+    combined_orientation = _np_quaternion_multiply(
+        reference_pose.get_orientation(), pose.get_orientation()
+    )
 
     result = PoseData()
-    result.set_pose(
-        *translated_position,
-        *combined_orientation
-    )
+    result.set_pose(*translated_position, *combined_orientation)
     return result
 
 
@@ -151,16 +152,18 @@ def _inverse_pose(pose: PoseData) -> PoseData:
     :rtype: PoseData
     """
     inv_orientation = _np_quaternion_conjugate(pose.get_orientation())
-    inv_position = _rotate_vector_by_quaternion(inv_orientation, (-pose.get_position()).tolist())
+    inv_position = _rotate_vector_by_quaternion(
+        inv_orientation, (-pose.get_position()).tolist()
+    )
 
     result = PoseData()
-    result.set_pose(
-        *inv_position,
-        *inv_orientation
-    )
+    result.set_pose(*inv_position, *inv_orientation)
     return result
 
-def transform_point_from_local_to_global(point_pose_in_local: PoseData, robot_pose_in_global: PoseData) -> PoseData:
+
+def transform_point_from_local_to_global(
+    point_pose_in_local: PoseData, robot_pose_in_global: PoseData
+) -> PoseData:
     """Transforms a point from the robot frame to the global frame.
 
     :param point_pose_in_local: Target point in robot frame
@@ -171,6 +174,7 @@ def transform_point_from_local_to_global(point_pose_in_local: PoseData, robot_po
     :rtype: PoseData
     """
     return _transform_pose(point_pose_in_local, robot_pose_in_global)
+
 
 def get_relative_pose(pose_1_in_ref: PoseData, pose_2_in_ref: PoseData) -> PoseData:
     """

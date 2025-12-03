@@ -20,6 +20,8 @@ from kompass_core.control import (
     DWA,
     StanleyConfig,
     Stanley,
+    PurePursuit,
+    PurePursuitConfig,
     VisionRGBDFollower,
     VisionRGBDFollowerConfig,
     VisionRGBFollower,
@@ -92,7 +94,10 @@ def plot_path(
 ):
     """Plot Test Results"""
     try:
+        import matplotlib
         import matplotlib.pyplot as plt
+
+        matplotlib.use("Agg")  # avoid Qt errors, no GUI
     except ImportError:
         logger.warning(
             "Matplotlib is required for visualization. Figures will not be generated. To generate test figures, install it using 'pip install matplotlib'."
@@ -445,6 +450,39 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
     assert reached_end is True
 
 
+def test_pure_pursuit(
+    plot: bool = False,
+    figure_name: str = "pure_pursuit",
+    figure_tag: str = "pure_pursuit",
+):
+    """Run Pure Pursuit pytest and assert reaching end"""
+    global global_path, my_robot, robot_ctr_limits, control_time_step
+
+    config = PurePursuitConfig(
+        wheel_base=my_robot.wheelbase,
+        lookahead_gain_forward=1.0,
+    )
+
+    controller = PurePursuit(
+        robot=my_robot,
+        ctrl_limits=robot_ctr_limits,
+        config=config,
+        control_time_step=control_time_step,
+    )
+
+    reached_end = run_control(
+        controller,
+        global_path,
+        my_robot,
+        control_time_step,
+        plot_results=plot,
+        figure_name=figure_name,
+        figure_tag=figure_tag,
+    )
+
+    assert reached_end is True
+
+
 def test_vision_dwa_with_depth_img():
     """Run VisionRGBDFollower pytest and assert reaching end"""
     global global_path, my_robot, robot_ctr_limits, control_time_step
@@ -713,34 +751,42 @@ def main():
 
     control_time_step = 0.1
 
-    print("RUNNING PATH INTERPOLATION TEST")
-    test_path_interpolation(plot=True)
+    # print("RUNNING PATH INTERPOLATION TEST")
+    # test_path_interpolation(plot=True)
 
-    ## TESTING STANLEY ##
-    print("RUNNING STANLEY CONTROLLER TEST")
-    test_stanley(
-        plot=True, figure_name="stanley", figure_tag="Stanley Controller Test Results"
+    # ## TESTING STANLEY ##
+    # print("RUNNING STANLEY CONTROLLER TEST")
+    # test_stanley(
+    #     plot=True, figure_name="stanley", figure_tag="Stanley Controller Test Results"
+    # )
+
+    ## TESTING PURE PURSUIT ##
+    print("RUNNING PURE PURSUIT CONTROLLER TEST")
+    test_pure_pursuit(
+        plot=True,
+        figure_name="pure_pursuit",
+        figure_tag="Pure Pursuit Controller Test Results",
     )
 
-    ## TESTING DVZ ##
-    print("RUNNING DVZ CONTROLLER TEST")
-    test_dvz(plot=True, figure_name="dvz", figure_tag="DVZ Controller Test Results")
+    # ## TESTING DVZ ##
+    # print("RUNNING DVZ CONTROLLER TEST")
+    # test_dvz(plot=True, figure_name="dvz", figure_tag="DVZ Controller Test Results")
 
-    ## TESTING DWA DEBUG MODE ##
-    print("RUNNING ONE DWA CONTROLLER DEBUG STEP TEST")
-    test_dwa_debug()
+    # ## TESTING DWA DEBUG MODE ##
+    # print("RUNNING ONE DWA CONTROLLER DEBUG STEP TEST")
+    # test_dwa_debug()
 
-    ## TESTING DWA ##
-    print("RUNNING DWA CONTROLLER TEST")
-    test_dwa(plot=True, figure_name="dwa", figure_tag="DWA Controller Test Results")
+    # ## TESTING DWA ##
+    # print("RUNNING DWA CONTROLLER TEST")
+    # test_dwa(plot=True, figure_name="dwa", figure_tag="DWA Controller Test Results")
 
-    ## TESTING VISION RGBD Follower (VISION DWA) ##
-    print("RUNNING VISION DWA CONTROLLER TEST")
-    test_vision_dwa_with_depth_img()
+    # ## TESTING VISION RGBD Follower (VISION DWA) ##
+    # print("RUNNING VISION DWA CONTROLLER TEST")
+    # test_vision_dwa_with_depth_img()
 
-    ## TESTING VISION RGB Follower ##
-    print("RUNNING VISION RGB FOLLOWER TEST")
-    test_vision_rgb_follower()
+    # ## TESTING VISION RGB Follower ##
+    # print("RUNNING VISION RGB FOLLOWER TEST")
+    # test_vision_rgb_follower()
 
 
 if __name__ == "__main__":

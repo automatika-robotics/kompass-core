@@ -10,6 +10,7 @@ from ._trajectory_ import TrajectoryCostsWeights
 from .dvz import DVZ, DVZConfig
 from .dwa import DWA, DWAConfig
 from .stanley import StanleyConfig, Stanley
+from .pure_pursuit import PurePursuitConfig, PurePursuit
 from .rgb_follower import VisionRGBFollower, VisionRGBFollowerConfig
 from .rgbd_follower import VisionRGBDFollower, VisionRGBDFollowerConfig
 
@@ -73,6 +74,7 @@ class ControllersID(StrEnum):
     DVZ = "DVZ"
     VISION_IMG = "VisionRGBFollower"
     VISION_DEPTH = "VisionRGBDFollower"
+    PURE_PURSUIT = "PurePursuit"
 
 
 ControlClasses = {
@@ -81,6 +83,7 @@ ControlClasses = {
     ControllersID.DWA: DWA,
     ControllersID.VISION_IMG: VisionRGBFollower,
     ControllersID.VISION_DEPTH: VisionRGBDFollower,
+    ControllersID.PURE_PURSUIT: PurePursuit,
 }
 
 ControlConfigClasses = {
@@ -89,6 +92,7 @@ ControlConfigClasses = {
     ControllersID.DWA: DWAConfig,
     ControllersID.VISION_IMG: VisionRGBFollowerConfig,
     ControllersID.VISION_DEPTH: VisionRGBDFollowerConfig,
+    ControllersID.PURE_PURSUIT: PurePursuitConfig,
 }
 
 
@@ -102,6 +106,8 @@ __all__ = [
     "ControlConfigClasses",
     "Stanley",
     "StanleyConfig",
+    "PurePursuit",
+    "PurePursuitConfig",
     "FollowingStatus",
     "DWA",
     "DWAConfig",
