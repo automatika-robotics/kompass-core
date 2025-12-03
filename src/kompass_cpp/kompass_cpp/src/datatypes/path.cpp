@@ -23,6 +23,7 @@ Path::Path(const std::vector<Point> &points, const size_t new_max_size) {
     X_(i) = points[i].x();
     Y_(i) = points[i].y();
     Z_(i) = points[i].z();
+    Curvature_(i) = 0.0f;
   }
 }
 
@@ -59,6 +60,7 @@ const Eigen::VectorXf Path::getZ() const {
   return Z_.segment(0, current_size_);
 }
 
+
 size_t Path::getSize() const { return current_size_; }
 
 void Path::setMaxLength(double max_length) { max_path_length_ = max_length; }
@@ -68,6 +70,7 @@ void Path::resize(const size_t new_max_size) {
   X_.resize(max_size_);
   Y_.resize(max_size_);
   Z_.resize(max_size_);
+  Curvature_.resize(max_size_);
   if (current_size_ > max_size_) {
     current_size_ = max_size_;
   }
@@ -102,6 +105,9 @@ Path Path::getPart(const size_t start, const size_t end,
   Path part(X_.segment(start, end - start + 1),
             Y_.segment(start, end - start + 1),
             Z_.segment(start, end - start + 1), part_size);
+  // Copy curvature segment
+  part.Curvature_.head(end - start + 1) =
+      Curvature_.segment(start, end - start + 1);
   return part;
 }
 
@@ -126,6 +132,12 @@ float Path::getEndOrientation() const {
   float angle = atan2(dy, dx);
 
   return angle;
+}
+
+double Path::getCurvature(const size_t index) const {
+  if (index >= current_size_)
+    return 0.0;
+  return Curvature_(index);
 }
 
 float Path::getStartOrientation() const {
@@ -213,6 +225,7 @@ void Path::interpolate(double max_interpolation_point_dist,
     throw invalid_argument(
         "At least two points are required to perform interpolation.");
   }
+
   // Get copies of X and Y vectors effective points
   Eigen::VectorXf x = X_.segment(0, current_size_);
   Eigen::VectorXf y = Y_.segment(0, current_size_);
@@ -222,6 +235,10 @@ void Path::interpolate(double max_interpolation_point_dist,
   auto maxSize = static_cast<size_t>(this->max_path_length_ /
                                      this->max_interpolation_dist_);
   resize(maxSize);
+
+  // Set Curvature vector to zero
+  Curvature_.setZero(maxSize);
+
   // Remaining iteration when interpolating the path (interpolation points
   // between each two path points)
   max_interpolation_iterations_ =
@@ -274,8 +291,17 @@ void Path::interpolate(double max_interpolation_point_dist,
       x_e = x[i] + j * (x[i + 1] - x[i]) * max_interpolation_point_dist;
 
       y_e = spline_->operator()(x_e);
+
+      // Compute Curvature
+      // k = y'' / (1 + y'^2)^(1.5)
+      double dy = spline_->deriv(1, x_e);
+      double ddy = spline_->deriv(2, x_e);
+      double k = ddy / std::pow(1.0 + dy * dy, 1.5);
+
       X_(current_size_) = x_e;
       Y_(current_size_) = y_e;
+      Curvature_(current_size_) = static_cast<float>(k);
+
       current_size_++;
       dist = distance({x_e, y_e, 0.0}, {x[i + 1], y[i + 1], 0.0});
       j++;
@@ -335,20 +361,17 @@ void Path::segmentBySegmentNumber(int numSegments) {
   this->max_segment_size = current_size_ / numSegments;
   int remainder = current_size_ % numSegments;
 
-  auto it_x = X_.begin();
-  auto it_y = Y_.begin();
-  auto it_z = Z_.begin();
+  size_t start_idx = 0;
   for (int i = 0; i < numSegments; ++i) {
-    std::vector<Point> segment_points;
-    for (int j = 0; j < this->max_segment_size; ++j) {
-      segment_points.push_back({*it_x++, *it_y++, *it_z++});
-    }
-    if (remainder > 0) {
-      segment_points.push_back({*it_x++, *it_y++, *it_z++});
+    size_t segment_len = this->max_segment_size + (remainder > 0 ? 1 : 0);
+    if (remainder > 0)
       --remainder;
-    }
-    auto new_segment = Path(segment_points, segment_points.size());
+
+    Path new_segment =
+        getPart(start_idx, start_idx + segment_len - 1, segment_len);
     segments.push_back(new_segment);
+
+    start_idx += segment_len;
   }
 }
 
