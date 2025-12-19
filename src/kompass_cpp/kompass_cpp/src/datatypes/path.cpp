@@ -1,5 +1,7 @@
 #include "datatypes/path.h"
 #include "utils/logger.h"
+#include <cmath>
+#include <cstdlib>
 #include <stdexcept>
 #include <vector>
 
@@ -59,7 +61,6 @@ const Eigen::VectorXf Path::getY() const {
 const Eigen::VectorXf Path::getZ() const {
   return Z_.segment(0, current_size_);
 }
-
 
 size_t Path::getSize() const { return current_size_; }
 
@@ -247,7 +248,7 @@ void Path::interpolate(double max_interpolation_point_dist,
   Z_ = Eigen::VectorXf::Zero(max_size_);
   current_size_ = 0;
 
-  float dist, x_e, y_e;
+  float x_e, y_e, dist = 0.0f;
 
   for (size_t i = 0; i < x.size() - 1; ++i) {
     // Add the first point
@@ -292,15 +293,8 @@ void Path::interpolate(double max_interpolation_point_dist,
 
       y_e = spline_->operator()(x_e);
 
-      // Compute Curvature
-      // k = y'' / (1 + y'^2)^(1.5)
-      double dy = spline_->deriv(1, x_e);
-      double ddy = spline_->deriv(2, x_e);
-      double k = ddy / std::pow(1.0 + dy * dy, 1.5);
-
-      X_(current_size_) = x_e;
-      Y_(current_size_) = y_e;
-      Curvature_(current_size_) = static_cast<float>(k);
+      X_[current_size_] = x_e;
+      Y_[current_size_] = y_e;
 
       current_size_++;
       dist = distance({x_e, y_e, 0.0}, {x[i + 1], y[i + 1], 0.0});
@@ -321,6 +315,30 @@ void Path::interpolate(double max_interpolation_point_dist,
     X_(current_size_) = x(x.size() - 1);
     Y_(current_size_) = y(y.size() - 1);
     current_size_++;
+  }
+  // compute curvature
+  float k = 0.0f, dx = 0.0f, dx_old = 0.0f, dy = 0.0f, dy_old = 0.0f,
+        ddy = 0.0f, ddx = 0.0f;
+  for (size_t idx = 1; idx < this->max_size_ - 1; ++idx) {
+    dx = X_[idx] - X_[idx - 1];
+    dy = Y_[idx] - Y_[idx - 1];
+    // Previous velocity based on step from prev2 -> prev
+    ddx = dx - dx_old;
+    ddy = dy - dy_old;
+
+    // Calculate Curvature
+    // k = (dx * ddy - ddx * dy) / (dx^2 + dy^2)^1.5
+    float denominator = std::pow(dx * dx + dy * dy, 1.5);
+    if (denominator > 1e-3) {
+      k = (dx * ddy - ddx * dy) / denominator;
+    } else {
+      k = 0.0f;
+    }
+
+    Curvature_[idx] = k;
+
+    dx_old = dx;
+    dy_old = dy;
   }
 }
 
