@@ -28,7 +28,7 @@ def read_path_from_json(filename: str):
         print(f"Read file error: {e}")
 
 
-def plot_samples(figure_name, trajectories, reference=None):
+def plot_samples(figure_name, trajectories, reference=None, obstacles=None):
     try:
         import matplotlib.pyplot as plt
     except ImportError:
@@ -50,11 +50,20 @@ def plot_samples(figure_name, trajectories, reference=None):
         y_coords = [point["y"] for point in path]
         plt.plot(x_coords, y_coords, marker="o")
 
+    if obstacles:
+        obs_path = obstacles["points"]
+        x_coords = [point["x"] for point in obs_path]
+        y_coords = [point["y"] for point in obs_path]
+        plt.scatter(x_coords, y_coords, c="r", marker="x", label="obstacles")
+        name = figure_name[figure_name.rindex("/") + 1 :] + "_with_obstacles"
+    else:
+        name = figure_name[figure_name.rindex("/") + 1 :]
+
     plt.xlabel("X")
     plt.ylabel("Y")
-    plt.title(figure_name[figure_name.rindex("/") + 1 :])
+    plt.title(name)
     plt.grid(True)
-    plt.savefig(f"./{figure_name[figure_name.rindex('/') + 1 :]}.png")
+    plt.savefig(f"./{name}.png")
 
 
 def main():
@@ -74,6 +83,12 @@ def main():
         required=False,
         help="Reference path JSON file name in the current directory",
     )
+    parser.add_argument(
+        "--obstacles",
+        type=str,
+        required=False,
+        help="Obstacles JSON file name in the current directory",
+    )
 
     # Parse the arguments
     args = parser.parse_args()
@@ -88,8 +103,12 @@ def main():
         read_path_from_json(f"{reference_file}.json") if reference_file else None
     )
 
-    # print(trajectories)
-    plot_samples(samples_file, trajectories, reference)
+    obstacles_file = args.obstacles
+    obstacles = None
+    if obstacles_file:
+        obstacles = read_path_from_json(f"{obstacles_file}.json")
+
+    plot_samples(samples_file, trajectories, reference, obstacles)
 
 
 if __name__ == "__main__":

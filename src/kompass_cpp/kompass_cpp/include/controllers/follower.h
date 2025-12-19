@@ -44,7 +44,7 @@ public:
                              1.0)); // Angular velocity-based speed
                                     // regulation parameter
       addParameter("min_speed_regulation_factor",
-                   Parameter(0.1, 1e-3,
+                   Parameter(0.5, 1e-3,
                              1.0)); // Minimum value of the final speed regulation factor
       addParameter(
           "goal_dist_tolerance",
