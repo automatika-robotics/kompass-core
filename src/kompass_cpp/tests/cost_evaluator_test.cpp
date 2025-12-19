@@ -14,10 +14,28 @@
 using namespace Kompass;
 using namespace Kompass::Control;
 
+// Helper to generate a dense 360-point LaserScan for stress testing
+LaserScan generate_dense_scan(size_t num_points = 360, double range = 5.0) {
+  std::vector<double> ranges;
+  std::vector<double> angles;
+  ranges.reserve(num_points);
+  angles.reserve(num_points);
+
+  double angle_step = (2.0 * M_PI) / static_cast<double>(num_points);
+  for (size_t i = 0; i < num_points; ++i) {
+    ranges.push_back(range);
+    angles.push_back(i * angle_step);
+  }
+  return LaserScan(ranges, angles);
+}
+
 std::unique_ptr<TrajectorySamples2D>
 generate_ref_path_test_samples(double predictionHorizon, double timeStep) {
   size_t number_of_points = predictionHorizon / timeStep;
-  float vel_1 = 1.0, vel_2 = 0.5, ang = 1.0;
+  float vel = 1.0, ang = 1.0;
+
+  std::unique_ptr<TrajectorySamples2D> samples =
+      std::make_unique<TrajectorySamples2D>(3, number_of_points);
 
   TrajectoryPath sample1(number_of_points), sample2(number_of_points),
       sample3(number_of_points);
@@ -26,28 +44,26 @@ generate_ref_path_test_samples(double predictionHorizon, double timeStep) {
 
   for (size_t i = 0; i < number_of_points; ++i) {
     // sample 1 along the x-axis
-    sample1.add(i, Path::Point(timeStep * vel_1 * i, 0.0, 0.0));
+    sample1.add(i, Path::Point(timeStep * vel * i, 0.0, 0.0));
 
     // sample 2: positive ang
     sample2.add(i,
-                Path::Point(timeStep * vel_2 * i * std::cos(ang * timeStep * i),
-                            timeStep * vel_2 * i * std::sin(ang * timeStep * i),
+                Path::Point(timeStep * vel * i * std::cos(ang),
+                            timeStep * vel * i * std::sin(ang),
                             0.0));
     // sample 3: negative ang
     sample3.add(
         i,
-        Path::Point(timeStep * vel_2 * i * std::cos(-ang * timeStep * i),
-                    timeStep * vel_2 * i * std::sin(-ang * timeStep * i), 0.0));
+        Path::Point(timeStep * vel * i * std::cos(-ang),
+                    timeStep * vel * i * std::sin(-ang), 0.0));
 
     if (i < number_of_points - 1) {
-      sample1_vel.add(i, Velocity2D(vel_1, 0.0, 0.0));
-      sample2_vel.add(i, Velocity2D(vel_2, 0.0, ang));
-      sample3_vel.add(i, Velocity2D(vel_2, 0.0, -ang));
+      sample1_vel.add(i, Velocity2D(vel, 0.0, 0.0));
+      sample2_vel.add(i, Velocity2D(vel, 0.0, ang));
+      sample3_vel.add(i, Velocity2D(vel, 0.0, -ang));
     }
   }
 
-  std::unique_ptr<TrajectorySamples2D> samples =
-      std::make_unique<TrajectorySamples2D>(3, number_of_points);
   samples->push_back(sample1_vel, sample1);
   samples->push_back(sample2_vel, sample2);
   samples->push_back(sample3_vel, sample3);
@@ -67,8 +83,8 @@ generate_smoothness_test_samples(double predictionHorizon, double timeStep) {
   for (size_t i = 0; i < number_of_points; ++i) {
     // Sample 1: Constant velocity v_1 and constant angular velocity ang1
     sample1.add(i,
-                Path::Point(timeStep * v_1 * i * std::cos(ang1 * timeStep * i),
-                            timeStep * v_1 * i * std::sin(ang1 * timeStep * i),
+                Path::Point(timeStep * v_1 * i * std::cos(ang1),
+                            timeStep * v_1 * i * std::sin(ang1),
                             0.0));
 
     // Sample 2: Fluctuations in linear velocity
@@ -81,8 +97,8 @@ generate_smoothness_test_samples(double predictionHorizon, double timeStep) {
     // Sample 3: Fluctuations in angular velocity
     double fluctuation_ang3 =
         ang1 + 0.1 * std::cos(2 * M_PI * i / number_of_points);
-    double x3 = timeStep * v_1 * i * std::cos(fluctuation_ang3 * timeStep * i);
-    double y3 = timeStep * v_1 * i * std::sin(fluctuation_ang3 * timeStep * i);
+    double x3 = timeStep * v_1 * i * std::cos(fluctuation_ang3);
+    double y3 = timeStep * v_1 * i * std::sin(fluctuation_ang3);
     sample3.add(i, Path::Point(x3, y3, 0.0));
 
     if (i < number_of_points - 1) {
@@ -121,14 +137,17 @@ Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
   costEval.updateCostWeights(costWeights);
 
   if (add_obstacles) {
-    // Robot laserscan value (empty)
-    LaserScan robotScan({10.0, 0.5, 0.5}, {0, M_PI_4, 2 * M_PI - M_PI_4});
-    float maxObstaclesDist = 10.0;
+    // Generate a dense scan (360 points) to stress the GPU kernel
+    // place obstacles at 5.0m. Trajs go up to ~10m
+    LaserScan robotScan = generate_dense_scan(360, 5.0);
+    float maxObstaclesDist = 10.0f;
+
+    // This converts LaserScan (Polar) -> PointCloud (Cartesian)
     costEval.setPointScan(robotScan, Path::State(), maxObstaclesDist);
   }
 
-  TrajSearchResult result =
-      costEval.getMinTrajectoryCost(samples, &reference_path, reference_path.segments[current_segment_index]);
+  TrajSearchResult result = costEval.getMinTrajectoryCost(
+      samples, &reference_path, reference_path.segments[current_segment_index]);
 
   BOOST_TEST(result.isTrajFound,
              "Minimum reference path cost trajectory is not found!");
@@ -181,11 +200,11 @@ struct TestConfig {
   CostEvaluator costEval;
 
   TestConfig()
-      : points{Path::Point(0.0, 0.0, 0.0), Path::Point(1.0, 0.0, 0.0),
-               Path::Point(2.0, 0.0, 0.0)},
+      : points{Path::Point(0.0, 0.0, 0.0), Path::Point(5.0, 0.0, 0.0),
+               Path::Point(10.0, 0.0, 0.0)},
         reference_path(points, 500), max_path_length(10.0),
         max_interpolation_point_dist(0.01), current_segment_index(0),
-        timeStep(0.1), predictionHorizon(1.0), maxNumThreads(10),
+        timeStep(0.1), predictionHorizon(10.0), maxNumThreads(10),
         x_params(1, 3, 5), y_params(1, 3, 5), angular_params(3.14, 3, 5, 8),
         controlLimits(x_params, y_params, angular_params),
         robotShapeType(CollisionChecker::ShapeType::BOX),
@@ -203,84 +222,73 @@ struct TestConfig {
 BOOST_FIXTURE_TEST_SUITE(s, TestConfig)
 
 BOOST_AUTO_TEST_CASE(test_all_costs) {
-  // Create timer
-  Timer time;
-  LOG_INFO("Running Reference Path Cost Test");
-  // Generate test trajectory samples
-  std::unique_ptr<TrajectorySamples2D> samples =
-      generate_ref_path_test_samples(predictionHorizon, timeStep);
+  {
+    LOG_INFO("Running Reference Path Cost Test");
+    Timer t;
+    auto samples = generate_ref_path_test_samples(predictionHorizon, timeStep);
+    Trajectory2D min_traj =
+        run_test(costEval, reference_path, samples, current_segment_index, 1.0,
+                 0.0, 0.0, 0.0, 0.0);
 
-  Trajectory2D minimum_cost_traj = run_test(costEval, reference_path, samples,
-                               current_segment_index, 1.0, 0.0, 0.0, 0.0, 0.0);
-  // In the generated samples the first sample contains the minimum cost path
-  Trajectory2D sample = samples->getIndex(0);
-  bool check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
-  BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
-                    "equal to the correct minimum! "
-                        << minimum_cost_traj.path.x);
-  if (check) {
-    LOG_INFO("Test Passed!");
+    // Validation (sample 0 is the best)
+    BOOST_TEST(
+        check_sample_equal_result(samples->getIndex(0).path, min_traj.path),
+        "Minimum reference path cost trajectory is found but not "
+        "equal to the correct minimum!");
   }
 
-  LOG_INFO("Running Goal Cost Test");
-  // Generate test trajectory samples
-  samples = generate_ref_path_test_samples(predictionHorizon, timeStep);
-
-  minimum_cost_traj = run_test(costEval, reference_path, samples,
-                               current_segment_index, 0.0, 1.0, 0.0, 0.0, 0.0);
-  sample = samples->getIndex(0);
-  check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
-  BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
-                    "equal to the correct minimum! "
-                        << minimum_cost_traj.path.x);
-  if (check) {
-    LOG_INFO("Test Passed!");
+  {
+    LOG_INFO("Running Goal Cost Test");
+    Timer t;
+    auto samples = generate_ref_path_test_samples(predictionHorizon, timeStep);
+    Trajectory2D min_traj =
+        run_test(costEval, reference_path, samples, current_segment_index, 0.0,
+                 1.0, 0.0, 0.0, 0.0);
+    BOOST_TEST(
+        check_sample_equal_result(samples->getIndex(0).path, min_traj.path),
+        "Minimum goal cost trajectory is found but not "
+        "equal to the correct minimum!");
   }
 
-  LOG_INFO("Running Smoothness Cost Test");
-  // Generate test trajectory samples
-  samples = generate_smoothness_test_samples(predictionHorizon, timeStep);
-
-  minimum_cost_traj = run_test(costEval, reference_path, samples,
-                               current_segment_index, 0.0, 0.0, 0.0, 1.0, 0.0);
-  sample = samples->getIndex(0);
-  check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
-  BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
-                    "equal to the correct minimum! "
-                        << minimum_cost_traj.path.x);
-  if (check) {
-    LOG_INFO("Test Passed!");
+  {
+    LOG_INFO("Running Smoothness Cost Test");
+    Timer t;
+    auto samples =
+        generate_smoothness_test_samples(predictionHorizon, timeStep);
+    Trajectory2D min_traj =
+        run_test(costEval, reference_path, samples, current_segment_index, 0.0,
+                 0.0, 0.0, 1.0, 0.0);
+    BOOST_TEST(
+        check_sample_equal_result(samples->getIndex(0).path, min_traj.path),
+        "Minimum smoothness cost trajectory is found but not "
+        "equal to the correct minimum!");
   }
 
-  LOG_INFO("Running Jerk Cost Test");
-  // Generate test trajectory samples
-  samples = generate_smoothness_test_samples(predictionHorizon, timeStep);
-
-  minimum_cost_traj = run_test(costEval, reference_path, samples,
-                               current_segment_index, 0.0, 0.0, 0.0, 0.0, 1.0);
-  sample = samples->getIndex(0);
-  check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
-  BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
-                    "equal to the correct minimum! "
-                        << minimum_cost_traj.path.x);
-  if (check) {
-    LOG_INFO("Test Passed!");
+  {
+    LOG_INFO("Running Jerk Cost Test");
+    Timer t;
+    auto samples =
+        generate_smoothness_test_samples(predictionHorizon, timeStep);
+    Trajectory2D min_traj =
+        run_test(costEval, reference_path, samples, current_segment_index, 0.0,
+                 0.0, 0.0, 0.0, 1.0);
+    BOOST_TEST(
+        check_sample_equal_result(samples->getIndex(0).path, min_traj.path),
+        "Minimum jerk cost trajectory is found but not "
+        "equal to the correct minimum!");
   }
-
-  LOG_INFO("Running Obstacles Cost Test");
-  // Generate test trajectory samples
-  samples = generate_ref_path_test_samples(predictionHorizon, timeStep);
-
-  minimum_cost_traj =
-      run_test(costEval, reference_path, samples, current_segment_index, 0.0,
-               0.0, 1.0, 0.0, 0.0, true);
-  sample = samples->getIndex(0);
-  check = check_sample_equal_result(sample.path, minimum_cost_traj.path);
-  BOOST_TEST(check, "Minimum reference path cost trajectory is found but not "
-                    "equal to the correct minimum! "
-                        << minimum_cost_traj.path.x);
-  if (check) {
-    LOG_INFO("Test Passed!");
+  {
+    LOG_INFO("Running Obstacles Cost Test");
+    Timer t;
+    auto samples = generate_ref_path_test_samples(predictionHorizon, timeStep);
+    // We set 1.0 weight for obstacles
+    Trajectory2D min_traj =
+        run_test(costEval, reference_path, samples, current_segment_index, 0.0,
+                 0.0, 1.0, 0.0, 0.0, true);
+    BOOST_TEST(
+        check_sample_equal_result(samples->getIndex(0).path, min_traj.path),
+        "Minimum obstacle cost trajectory is found but not "
+        "equal to the correct minimum!");
   }
 }
 
