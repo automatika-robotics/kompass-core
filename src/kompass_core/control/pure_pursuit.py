@@ -4,7 +4,7 @@ from attrs import define, field
 from ..utils.common import base_validators
 
 import kompass_cpp
-from ..models import Robot, RobotCtrlLimits, RobotState, RobotType
+from ..models import Robot, RobotCtrlLimits, RobotState, RobotType, RobotGeometry
 from ._base_ import FollowerTemplate, FollowerConfig
 
 
@@ -29,6 +29,18 @@ class PurePursuitConfig(FollowerConfig):
       - `float`
       - `0.8`
       - Gain for lookahead distance calculation (k * v). Must be between `0.1` and `5.0`.
+    * - prediction_horizon
+      - `int`
+      - `10`
+      - Number of future steps for collision prediction. Must be between `0` and `100`.
+    * - path_search_step
+      - `float`
+      - `0.2`
+      - Offset step to search for a new path when doing obstacle avoidance.
+    * - max_search_candidates
+      - `int`
+      - `10`
+      - Number of search candidates to try for obstacle avoidance.
     ```
     """
 
@@ -38,6 +50,17 @@ class PurePursuitConfig(FollowerConfig):
     )
     lookahead_gain_forward: float = field(
         default=0.8, validator=base_validators.in_range(min_value=0.1, max_value=5.0)
+    )
+    # Collision avoidance params
+    prediction_horizon: int = field(
+        default=10, validator=base_validators.in_range(min_value=0, max_value=100)
+    )
+    path_search_step: float = field(
+        default=0.2,
+        validator=base_validators.in_range(min_value=0.001, max_value=1000.0),
+    )
+    max_search_candidates: int = field(
+        default=10, validator=base_validators.in_range(min_value=2, max_value=1000)
     )
 
     def to_kompass_cpp(self) -> kompass_cpp.control.PurePursuitConfig:
@@ -64,6 +87,9 @@ class PurePursuit(FollowerTemplate):
         config_file: Optional[str] = None,
         config_root_name: Optional[str] = None,
         control_time_step: float = 0.1,
+        sensor_position: Optional[List[float]] = None,
+        sensor_rotation: Optional[List[float]] = None,
+        octree_res: float = 0.1,
         **_,
     ):
         """
@@ -84,6 +110,12 @@ class PurePursuit(FollowerTemplate):
         """
         self._robot = robot
 
+        # Defaults for sensor transform if not provided
+        if sensor_position is None:
+            sensor_position = [0.0, 0.0, 0.0]
+        if sensor_rotation is None:
+            sensor_rotation = [0.0, 0.0, 0.0, 1.0]
+
         # Init and configure the follower
         if not config:
             config = PurePursuitConfig(wheel_base=robot.wheelbase)
@@ -95,8 +127,13 @@ class PurePursuit(FollowerTemplate):
         self._control_time_step = control_time_step
 
         self._planner = kompass_cpp.control.PurePursuit(
-            control_limits=ctrl_limits.to_kompass_cpp_lib(),
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
+            control_limits=ctrl_limits.to_kompass_cpp_lib(),
+            robot_shape_type=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
+            robot_dimensions=robot.dimensions,
+            sensor_position_body=sensor_position,
+            sensor_rotation_body=sensor_rotation,
+            octree_res=octree_res,
             config=config.to_kompass_cpp(),
         )
 
@@ -108,7 +145,7 @@ class PurePursuit(FollowerTemplate):
     def planner(self) -> kompass_cpp.control.Follower:
         return self._planner
 
-    def loop_step(self, *, current_state: RobotState, **_) -> bool:
+    def loop_step(self, *, current_state: RobotState, **kwargs) -> bool:
         """
         Implements a loop iteration of the controller
 
@@ -125,7 +162,25 @@ class PurePursuit(FollowerTemplate):
         self._planner.set_current_velocity(current_velocity)
 
         # Execute controller
-        self._result = self._planner.execute(self._control_time_step)
+        # Check for sensor data to determine which execute overload to call
+        if "local_map" in kwargs:
+            # Execute with PointCloud
+            self._result = self._planner.execute(
+                self._control_time_step, kwargs["local_map"]
+            )
+        if "laser_scan" in kwargs:
+            # Execute with LaserScan
+            self._result = self._planner.execute(
+                self._control_time_step, kwargs["laser_scan"]
+            )
+        elif "point_cloud" in kwargs:
+            # Execute with PointCloud
+            self._result = self._planner.execute(
+                self._control_time_step, kwargs["point_cloud"]
+            )
+        else:
+            # Execute Nominal (State Update + Control)
+            self._result = self._planner.execute(self._control_time_step)
 
         return self._result.status in [
             kompass_cpp.control.FollowingStatus.COMMAND_FOUND,

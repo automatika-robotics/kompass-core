@@ -63,12 +63,12 @@ def plot_pointcloud_from_json(file_path: str, output_image_path: str) -> PointCl
 
     # Read data similar to callback in ROS2
     pc = PointCloudData(
-            point_step=pc_json["point_step"],
-            row_step=pc_json["row_step"],
-            data=np.array(pc_json["data"], dtype=np.int8),
-            height=pc_json["height"],
-            width=pc_json["width"]
-        )
+        point_step=pc_json["point_step"],
+        row_step=pc_json["row_step"],
+        data=np.array(pc_json["data"], dtype=np.int8),
+        height=pc_json["height"],
+        width=pc_json["width"],
+    )
 
     # Extract raw byte data
     data = pc_json["data"]
@@ -136,8 +136,7 @@ def plot_pointcloud_from_json(file_path: str, output_image_path: str) -> PointCl
 
 
 def main():
-    """Main function to test point cloud to LaserScan conversion
-    """
+    """Main function to test point cloud to LaserScan conversion"""
     max_range = 10.0
     min_z = 1.6
     max_z = 1.8
@@ -146,8 +145,10 @@ def main():
     dir_name = os.path.dirname(os.path.abspath(__file__))
     resources_path = os.path.join(dir_name, "resources/mapping")
 
-    data = plot_pointcloud_from_json(file_path=os.path.join(resources_path, "livox_pointcloud_sample_1.json"),
-                                     output_image_path=os.path.join(resources_path, "pointcloud_plot.html"))
+    data = plot_pointcloud_from_json(
+        file_path=os.path.join(resources_path, "livox_pointcloud_sample_1.json"),
+        output_image_path=os.path.join(resources_path, "pointcloud_plot.html"),
+    )
     ranges, angles = pointcloud_to_laserscan_from_raw(
         data=data.data,
         point_step=data.point_step,
@@ -162,7 +163,9 @@ def main():
         max_z=max_z,
         angle_step=angle_step,
     )
-    plot_ranges_angles(angles, ranges, os.path.join(resources_path, "pointcloud_to_laserscan.png"))
+    plot_ranges_angles(
+        angles, ranges, os.path.join(resources_path, "pointcloud_to_laserscan.png")
+    )
 
 
 if __name__ == "__main__":
