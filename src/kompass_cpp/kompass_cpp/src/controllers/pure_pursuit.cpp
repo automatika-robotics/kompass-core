@@ -3,23 +3,44 @@
 #include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "utils/angles.h"
-#include "utils/logger.h"
 
 namespace Kompass {
 namespace Control {
 
 PurePursuit::PurePursuit(const ControlType &robotCtrlType,
                          const ControlLimitsParams &ctrlLimits,
-                         const PurePursuitConfig &cfg)
+                         const CollisionChecker::ShapeType robotShapeType,
+                         const std::vector<float> robotDimensions,
+                         const Eigen::Vector3f &sensor_position_body,
+                         const Eigen::Vector4f &sensor_rotation_body,
+                         const double octreeRes, const PurePursuitConfig &cfg)
     : Follower() {
   setParams(cfg);
   setControlType(robotCtrlType);
   ctrlimitsParams = ctrlLimits;
+  collision_checker_ = std::make_unique<CollisionChecker>(
+          robotShapeType, robotDimensions, sensor_position_body,
+          Eigen::Quaternionf(sensor_rotation_body), octreeRes);
   wheel_base = cfg.getParameter<double>("wheel_base");
   lookahead_gain_forward = cfg.getParameter<double>("lookahead_gain_forward");
+  prediction_horizon = cfg.getParameter<int>("prediction_horizon");
+
+  // Get pat search offsets
+  double path_search_step = cfg.getParameter<double>("path_search_step");
+  int max_search_candidates = cfg.getParameter<int>("max_search_candidates");
+  // max_search_candidates should be even number
+  if (max_search_candidates % 2 != 0) {
+    max_search_candidates += 1;
+  }
+  search_offsets_.resize(max_search_candidates);
+  for (size_t i = 0; i < max_search_candidates; i=i+2) {
+    search_offsets_[i] = path_search_step * (i + 1);
+    search_offsets_[i + 1] = - path_search_step * (i + 1);
+  }
+
 }
 
-Controller::Result PurePursuit::execute(double deltaTime) {
+Controller::Result PurePursuit::execute(const double deltaTime) {
   if (!path_processing_) {
     return {(reached_goal_ ? Result::Status::GOAL_REACHED
                            : Result::Status::NO_COMMAND_POSSIBLE),
@@ -37,7 +58,6 @@ Controller::Result PurePursuit::execute(double deltaTime) {
   // 'lookahead' meters away from the robot.
   Path::Point target_point = findLookaheadPoint(lookahead_val);
 
-  LOG_INFO("Target point", target_point.x(), ", ", target_point.y());
   // Transform Target to Robot Frame
   double dx = target_point.x() - currentState.x;
   double dy = target_point.y() - currentState.y;
@@ -54,13 +74,11 @@ Controller::Result PurePursuit::execute(double deltaTime) {
 
   // Apply exponential speed regulation based on path curvature
   double speed_factor = calculateExponentialSpeedFactor(currentVel.omega());
-  LOG_INFO("speed_factor: ", speed_factor);
   cmd_v *= speed_factor;
 
   Velocity2D cmd;
 
   if (ctrType == ControlType::OMNI) {
-    LOG_INFO("Alpha robot: ", alpha_robot, " cmd_v: ", cmd_v);
     if (std::abs(alpha_robot) > (M_PI * 0.9)) {
       // Use non-omni motion
       double safe_dist =
@@ -73,8 +91,6 @@ Controller::Result PurePursuit::execute(double deltaTime) {
       // Velocity vector in robot frame
       double vx = cmd_v * std::cos(alpha_robot);
       double vy = cmd_v * std::sin(alpha_robot);
-
-      LOG_INFO("vx: ", vx, " vy: ", vy);
 
       // Align with path heading or face target
       double omega = 2.0 * alpha_robot;
@@ -124,10 +140,53 @@ Controller::Result PurePursuit::execute(double deltaTime) {
   return {Result::Status::COMMAND_FOUND, cmd};
 }
 
-Controller::Result PurePursuit::execute(Path::State currentPosition,
-                                        double deltaTime) {
+Controller::Result PurePursuit::execute(const Path::State currentPosition,
+                                        const double deltaTime) {
   setCurrentState(currentPosition);
   return execute(deltaTime);
+}
+
+
+bool PurePursuit::checkCommandCollisions(const Velocity2D &cmd, double dt) {
+    Path::State sim_state = currentState;
+    for (int i = 0; i < prediction_horizon; ++i) {
+      collision_checker_->updateState(sim_state);
+      if (collision_checker_->checkCollisions()) {
+        return true;
+      }
+      sim_state.update(cmd, dt);
+    }
+    return false;
+}
+
+// Find a safe alternative command by exploring deviations
+Velocity2D PurePursuit::findSafeCommand(const Velocity2D &nominal, double dt) {
+  // Try deviations in steering/omega: +/- increasing offsets
+  // These offsets represent adjustments to the steering/rotation to "go around" the obstacle
+
+  Velocity2D candidate = nominal;
+  // double original_vx = nominal.vx();
+
+  for (double off : search_offsets_) {
+    candidate.setOmega(nominal.omega() + off);
+
+    // Check if this candidate is safe
+    if (!checkCommandCollisions(candidate, dt)) {
+      return candidate;
+    }
+
+    // If omni, also try lateral shifts
+    if (ctrType == ControlType::OMNI) {
+      candidate.setOmega(nominal.omega());
+      candidate.setVy(nominal.vy() + off);
+
+      if (!checkCommandCollisions(candidate, dt)) {
+        return candidate;
+      }
+    }
+  }
+  // No safe path found -> Stop and wait for the obstacle
+  return Velocity2D(0.0, 0.0, 0.0);
 }
 
 Path::Point PurePursuit::findLookaheadPoint(double radius) {
