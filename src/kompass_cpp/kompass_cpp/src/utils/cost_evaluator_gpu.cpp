@@ -682,67 +682,59 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
     auto obs_Y = m_devicePtrObstaclesY;
     auto costs = m_devicePtrCosts;
     const float costWeight = static_cast<float>(cost_weight);
-    const size_t trajsSize = trajs_size;
     const size_t pathSize = numPointsPerTrajectory_;
     const size_t obsSize = obstaclePointsX.size();
     const float maxObstacleDistance = maxObstaclesDist;
-    // local memory for storing per trajectory average cost
-    sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
+
+    // One work-group per trajectory
+    // local_size is pathSize (number of points in one trajectory)
     auto global_size = sycl::range<1>(trajs_size * pathSize);
-    auto workgroup_size = sycl::range<1>(pathSize);
-    // Kernel scope
+    auto local_size = sycl::range<1>(pathSize); // Kernel scope
     h.parallel_for<class obstaclesDistCostKernel>(
-        sycl::nd_range<1>(global_size, workgroup_size),
-        [=](sycl::nd_item<1> item) {
-          const size_t traj = item.get_group().get_group_id(0);
-          const size_t path_index = item.get_local_id();
+        sycl::nd_range<1>(global_size, local_size), [=](sycl::nd_item<1> item) {
+          const size_t traj_idx = item.get_group(0);
+          const size_t local_idx = item.get_local_id(0);
+          const size_t global_pt_idx = item.get_global_id(0);
 
-          // Initialize local memory once per work-group in the first thread
-          if (path_index == 0) {
-            for (size_t i = 0; i < trajsSize; ++i) {
-              trajCost[i] = DEFAULT_MIN_DIST;
-            }
-          }
-          // Synchronize to make sure initialization is complete
-          item.barrier(sycl::access::fence_space::local_space);
+          // Each thread finds the distance from its point to the CLOSEST
+          // obstacle
+          float min_dist_for_point = DEFAULT_MIN_DIST;
 
-          sycl::vec<float, 2> point;
-          sycl::vec<float, 2> ref_point;
-          float distance;
+          const float pt_x = X[global_pt_idx];
+          const float pt_y = Y[global_pt_idx];
 
+          // O(n) loop to calculate cost to each obstacle
+          // TODO: In case of too many obstacles, this loop is the bottleneck
+          // and should be handled with a tiling based implmenetation
           for (size_t i = 0; i < obsSize; ++i) {
-            point = {X[traj * pathSize + path_index],
-                     Y[traj * pathSize + path_index]};
-            ref_point = {obs_X[i], obs_Y[i]};
-
-            distance = sycl::distance(point, ref_point);
-            // Atomically add the computed min costs to the local cost for
-            // this trajectory
-            sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                             sycl::memory_scope::device,
-                             sycl::access::address_space::local_space>
-                atomic_min(trajCost[traj]);
-            atomic_min.fetch_min(distance);
+            float dx = pt_x - obs_X[i];
+            float dy = pt_y - obs_Y[i];
+            float d = sycl::sqrt(dx * dx + dy * dy);
+            min_dist_for_point = sycl::fmin(min_dist_for_point, d);
           }
 
-          // Synchronize again so that all atomic updates are finished
-          // before further processing
-          item.barrier(sycl::access::fence_space::local_space);
+          // Reduce the minimum across the entire trajectory
+          // Finds the single closest obstacle to ANY point in this trajectory.
+          float traj_min_dist = sycl::reduce_over_group(
+              item.get_group(), min_dist_for_point, sycl::minimum<float>());
 
-          // normalize the trajectory cost and add end point distance to it
-          if (path_index == 0) {
+          // normalize the cost and add to global cost of the trajectory
+          if (local_idx == 0) {
             // Atomically add the computed trajectory cost to the global cost
             // for this trajectory. Before adding normalize the cost to [0, 1]
             // based on the robot max local range for the obstacles. Minimum
             // cost is assigned at distance value maxObstaclesDist
+            float normalized_cost =
+                sycl::max((maxObstacleDistance - traj_min_dist), 0.0f) /
+                maxObstacleDistance;
+
+            // Apply weight and update global costs
             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
-                atomic_cost(costs[traj]);
-            atomic_cost.fetch_add(
-                costWeight *
-                (sycl::max((maxObstacleDistance - trajCost[traj]), 0.0f) /
-                 maxObstacleDistance));
+                atomic_cost(costs[traj_idx]);
+
+            atomic_cost.fetch_add(costWeight * normalized_cost);
           }
         });
   });
