@@ -1,5 +1,6 @@
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
+#include "json_export.h"
 #include "test.h"
 #include "utils/collision_check.h"
 #include "utils/cost_evaluator.h"
@@ -7,6 +8,8 @@
 #include <cstddef>
 #include <memory>
 #define BOOST_TEST_MODULE KOMPASS COSTS TESTS
+#include <boost/dll/runtime_symbol_info.hpp> // for program_location
+#include <boost/filesystem.hpp>
 #include <boost/test/included/unit_test.hpp>
 #include <cmath>
 #include <vector>
@@ -29,6 +32,16 @@ LaserScan generate_dense_scan(size_t num_points = 360, double range = 5.0) {
   return LaserScan(ranges, angles);
 }
 
+Path::Path generate_points_from_scan(const LaserScan &scan) {
+  std::vector<Path::Point> points;
+  for (size_t i = 0; i < scan.ranges.size(); ++i) {
+    double x = scan.ranges[i] * std::cos(scan.angles[i]);
+    double y = scan.ranges[i] * std::sin(scan.angles[i]);
+    points.emplace_back(x, y, 0.0);
+  }
+  return Path::Path(points, points.size() + 1); // +1 buffer
+}
+
 std::unique_ptr<TrajectorySamples2D>
 generate_ref_path_test_samples(double predictionHorizon, double timeStep) {
   size_t number_of_points = predictionHorizon / timeStep;
@@ -47,15 +60,11 @@ generate_ref_path_test_samples(double predictionHorizon, double timeStep) {
     sample1.add(i, Path::Point(timeStep * vel * i, 0.0, 0.0));
 
     // sample 2: positive ang
-    sample2.add(i,
-                Path::Point(timeStep * vel * i * std::cos(ang),
-                            timeStep * vel * i * std::sin(ang),
-                            0.0));
+    sample2.add(i, Path::Point(timeStep * vel * i * std::cos(ang),
+                               timeStep * vel * i * std::sin(ang), 0.0));
     // sample 3: negative ang
-    sample3.add(
-        i,
-        Path::Point(timeStep * vel * i * std::cos(-ang),
-                    timeStep * vel * i * std::sin(-ang), 0.0));
+    sample3.add(i, Path::Point(timeStep * vel * i * std::cos(-ang),
+                               timeStep * vel * i * std::sin(-ang), 0.0));
 
     if (i < number_of_points - 1) {
       sample1_vel.add(i, Velocity2D(vel, 0.0, 0.0));
@@ -73,7 +82,7 @@ generate_ref_path_test_samples(double predictionHorizon, double timeStep) {
 std::unique_ptr<TrajectorySamples2D>
 generate_smoothness_test_samples(double predictionHorizon, double timeStep) {
   size_t number_of_points = predictionHorizon / timeStep;
-  double v_1 = 1.0, ang1 = 0.1;
+  double v_1 = 1.0;
 
   TrajectoryPath sample1(number_of_points), sample2(number_of_points),
       sample3(number_of_points);
@@ -82,28 +91,22 @@ generate_smoothness_test_samples(double predictionHorizon, double timeStep) {
 
   for (size_t i = 0; i < number_of_points; ++i) {
     // Sample 1: Constant velocity v_1 and constant angular velocity ang1
-    sample1.add(i,
-                Path::Point(timeStep * v_1 * i * std::cos(ang1),
-                            timeStep * v_1 * i * std::sin(ang1),
-                            0.0));
+    sample1.add(i, Path::Point(timeStep * v_1 * i, 0.0, 0.0));
 
     // Sample 2: Fluctuations in linear velocity
-    double fluctuation_v2 =
-        v_1 + 0.1 * std::sin(2 * M_PI * i / number_of_points);
-    double x2 = timeStep * fluctuation_v2 * i;
-    double y2 = 0.0;
-    sample2.add(i, Path::Point(x2, y2, 0.0));
+    double fluctuation_v2 = 0.01 * std::sin(2 * M_PI * i / number_of_points);
+    sample2.add(i,
+                Path::Point(timeStep * v_1 * i, timeStep * fluctuation_v2 * i, 0.0));
 
     // Sample 3: Fluctuations in angular velocity
-    double fluctuation_ang3 =
-        ang1 + 0.1 * std::cos(2 * M_PI * i / number_of_points);
+    double fluctuation_ang3 = 0.01 * std::cos(2 * M_PI * i / number_of_points);
     double x3 = timeStep * v_1 * i * std::cos(fluctuation_ang3);
     double y3 = timeStep * v_1 * i * std::sin(fluctuation_ang3);
     sample3.add(i, Path::Point(x3, y3, 0.0));
 
     if (i < number_of_points - 1) {
-      sample1_vel.add(i, Velocity2D(v_1, 0.0, ang1));
-      sample2_vel.add(i, Velocity2D(fluctuation_v2, 0.0, 0.0));
+      sample1_vel.add(i, Velocity2D(v_1, 0.0, 0.0));
+      sample2_vel.add(i, Velocity2D(v_1, fluctuation_v2, 0.0));
       sample3_vel.add(i, Velocity2D(v_1, 0.0, fluctuation_ang3));
     }
   }
@@ -136,6 +139,24 @@ Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
   costWeights.setParameter("jerk_weight", jerk_weight);
   costEval.updateCostWeights(costWeights);
 
+  // Path for saving files
+  boost::filesystem::path executablePath = boost::dll::program_location();
+  std::string file_location = executablePath.parent_path().string();
+  std::string filename_base =
+      "cost_eval_ref_cost_" +
+      std::to_string(static_cast<int>(reference_path_distance_weight * 100)) +
+      "_goal_cost_" +
+      std::to_string(static_cast<int>(goal_distance_weight * 100)) +
+      "_smooth_cost_" +
+      std::to_string(static_cast<int>(smoothness_weight * 100)) +
+      "_jerk_cost_" + std::to_string(static_cast<int>(jerk_weight * 100)) +
+      "_obs_cost_" +
+      std::to_string(static_cast<int>(obstacles_distance_weight * 100));
+
+  std::string traj_file = file_location + "/" + filename_base + "_traj";
+  std::string ref_file = file_location + "/" + filename_base + "_ref";
+  std::string obs_file = file_location + "/" + filename_base + "_obs";
+
   if (add_obstacles) {
     // Generate a dense scan (360 points) to stress the GPU kernel
     // place obstacles at 5.0m. Trajs go up to ~10m
@@ -144,6 +165,9 @@ Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
 
     // This converts LaserScan (Polar) -> PointCloud (Cartesian)
     costEval.setPointScan(robotScan, Path::State(), maxObstaclesDist);
+    Path::Path obsPathObj = generate_points_from_scan(robotScan); // +1 buffer
+    // save obstacles for plotting
+    savePathToJson(obsPathObj, obs_file + ".json");
   }
 
   TrajSearchResult result = costEval.getMinTrajectoryCost(
@@ -159,6 +183,33 @@ Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
     throw std::logic_error(
         "Did not find any valid trajectory, this should not happen.");
   }
+
+  // PLOT THE RESULTING TRAJECTORIES
+
+  // Save the results to json
+  saveTrajectoriesToJson(*samples.get(), traj_file + ".json");
+  savePathToJson(reference_path, ref_file + ".json");
+
+  // Command for running the python plot script using the saved files
+  std::string command;
+  if (add_obstacles){
+    command = "python3 " + file_location +
+              "/trajectory_sampler_plt.py --samples \"" + traj_file +
+              "\" --reference \"" + ref_file + "\" --obstacles \"" + obs_file +
+              "\"";
+  }
+  else{
+    command = "python3 " + file_location +
+              "/trajectory_sampler_plt.py --samples \"" + traj_file +
+              "\" --reference \"" + ref_file + "\"";
+  }
+
+  // Run the command
+  int res = system(command.c_str());
+  if (res != 0)
+    throw std::system_error(res, std::generic_category(),
+                            "Python script failed with error code");
+
   return result.trajectory;
 }
 
