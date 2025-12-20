@@ -337,82 +337,89 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
     auto tracked_Y = m_devicePtrTrackedSegmentY;
     auto costs = m_devicePtrCosts;
     const float costWeight = static_cast<float>(cost_weight);
-    const size_t trajsSize = trajs_size;
     const size_t pathSize = numPointsPerTrajectory_;
-    const size_t trackedSegmentSize = tracked_segment_size;
-    const float trackedSegmentLength = tracked_segment_length;
-    // local memory for storing per trajectory average cost
-    sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
-    auto global_size = sycl::range<1>(trajs_size * pathSize);
-    auto workgroup_size = sycl::range<1>(pathSize);
+    const size_t refSize = tracked_segment_size;
+
+    // Pre-calculate inverses to avoid division
+    const float invRefLength =
+        (tracked_segment_length > 0) ? 1.0f / tracked_segment_length : 0.0f;
+    const float invPathSize = (pathSize > 0) ? 1.0f / pathSize : 0.0f;
+
+    // Configure kernel work-group size using device configuration
+    const size_t WG_SIZE = max_wg_size_;
+
+    // Global Size = Trajectories * WorkGroup Size
+    auto global_range = sycl::range<1>(trajs_size * WG_SIZE);
+    auto local_range = sycl::range<1>(WG_SIZE);
+
     // Kernel scope
     h.parallel_for<class refPathCostKernel>(
-        sycl::nd_range<1>(global_size, workgroup_size),
+        sycl::nd_range<1>(global_range, local_range),
         [=](sycl::nd_item<1> item) {
-          const size_t traj = item.get_group().get_group_id(0);
-          const size_t path_index = item.get_local_id();
+          const size_t traj_idx = item.get_group(0);
+          const size_t local_id = item.get_local_id(0);
 
-          // Initialize local memory once per work-group in the first thread
-          if (path_index == 0) {
-            for (size_t i = 0; i < trajsSize; ++i) {
-              trajCost[i] = 0.0f;
+          // Accumulator for the sum of minimum distances for this thread's
+          // points
+          float local_total_dist = 0.0f;
+
+          // ----------------------------------------------------------------
+          // Stride Loop over Trajectory Points (P)
+          // ----------------------------------------------------------------
+          // Each thread takes a point P, finds its closest neighbor in RefPath,
+          // and adds that distance to the accumulator.
+          for (size_t k = local_id; k < pathSize; k += WG_SIZE) {
+
+            float p_x = X[traj_idx * pathSize + k];
+            float p_y = Y[traj_idx * pathSize + k];
+
+            // Initialize min distance for point P to max value
+            float p_min_dist_sq = DEFAULT_MIN_DIST;
+
+            for (size_t i = 0; i < refSize; ++i) {
+              float r_x = tracked_X[i];
+              float r_y = tracked_Y[i];
+
+              float dx = p_x - r_x;
+              float dy = p_y - r_y;
+
+              float d2 = dx * dx + dy * dy;
+              p_min_dist_sq = sycl::fmin(p_min_dist_sq, d2);
             }
-          }
-          // Synchronize to make sure initialization is complete
-          item.barrier(sycl::access::fence_space::local_space);
 
-          sycl::vec<float, 2> point;
-          sycl::vec<float, 2> ref_point;
-          float minDist = DEFAULT_MIN_DIST;
-          float distance;
-
-          for (size_t i = 0; i < trackedSegmentSize; ++i) {
-            point = {X[traj * pathSize + path_index],
-                     Y[traj * pathSize + path_index]};
-            ref_point = {tracked_X[i], tracked_Y[i]};
-
-            distance = sycl::distance(point, ref_point);
-            if (distance < minDist) {
-              minDist = distance;
-            }
+            // Add the global minimum found for point P to the thread's total
+            local_total_dist += sycl::sqrt(p_min_dist_sq);
           }
 
-          // Atomically add the computed min costs to the local cost for
-          // this trajectory
-          sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                           sycl::memory_scope::device,
-                           sycl::access::address_space::local_space>
-              atomic_cost(trajCost[traj]);
-          atomic_cost.fetch_add(minDist);
-
-          // Synchronize again so that all atomic updates are finished
-          // before further processing
-          item.barrier(sycl::access::fence_space::local_space);
+          // Reduction, sum up the total costs from all threads to get the
+          // trajectory total
+          float traj_total_dist = sycl::reduce_over_group(
+              item.get_group(), local_total_dist, sycl::plus<float>());
 
           // normalize the trajectory cost and add end point distance to it
-          if (path_index == pathSize - 1) {
-            sycl::vec<float, 2> last_path_point = {
-                X[traj * pathSize + path_index],
-                Y[traj * pathSize + path_index]};
-            sycl::vec<float, 2> last_ref_point = {
-                tracked_X[trackedSegmentSize - 1],
-                tracked_Y[trackedSegmentSize - 1]};
+          if (local_id == 0) {
+            // average path cost
+            float avg_path_dist = traj_total_dist * invPathSize;
 
-            // get distance between two last points
-            float end_point_distance =
-                sycl::distance(last_path_point, last_ref_point) /
-                trackedSegmentLength;
-            trajCost[traj] =
-                costWeight *
-                ((trajCost[traj] / pathSize + end_point_distance) / 2);
+            // end-point cost
+            size_t last_traj_idx = traj_idx * pathSize + (pathSize - 1);
+            size_t last_ref_idx = refSize - 1;
+
+            float end_dx = X[last_traj_idx] - tracked_X[last_ref_idx];
+            float end_dy = Y[last_traj_idx] - tracked_Y[last_ref_idx];
+            float end_dist =
+                sycl::sqrt(end_dx * end_dx + end_dy * end_dy) * invRefLength;
+
+            // final cost
+            float final_val = costWeight * ((avg_path_dist + end_dist) * 0.5f);
 
             // Atomically add the computed trajectory costs to the global cost
             // for this trajectory
             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
-                atomic_cost(costs[traj]);
-            atomic_cost.fetch_add(trajCost[traj]);
+                atomic_cost(costs[traj_idx]);
+            atomic_cost.fetch_add(final_val);
           }
         });
   });
