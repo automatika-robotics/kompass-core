@@ -227,8 +227,8 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
       if ((weight = costWeights->getParameter<double>("goal_distance_weight")) >
           0.0) {
         auto last_point = reference_path->getEnd();
-        events.push_back(goalCostFunc(trajs_size, ref_path_length, weight,
-                                      last_point.x(), last_point.y()));
+        events.push_back(goalCostFunc(trajs_size, ref_path_length,
+                                      last_point.x(), last_point.y(), weight));
       }
       if ((weight = costWeights->getParameter<double>(
                "reference_path_distance_weight")) > 0.0) {
@@ -421,9 +421,8 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
 // Compute the cost of trajectory based on distance to the goal point
 sycl::event CostEvaluator::goalCostFunc(const size_t trajs_size,
                                         const float ref_path_length,
-                                        const double cost_weight,
-                                        const float goal_x,
-                                        const float goal_y) {
+                                        const float goal_x, const float goal_y,
+                                        const double cost_weight) {
   // -----------------------------------------------------
   //  Parallelize over trajectories.
   //  Calculate distance of the last point in trajectory and reference path.
@@ -718,7 +717,7 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
           const size_t local_id = item.get_local_id(0);
 
           // Initialize per-thread minimum distance to max
-          float min_dist_for_point = DEFAULT_MIN_DIST;
+          float min_dist_sq_for_point = DEFAULT_MIN_DIST;
 
           // ---------------------------------------------------------
           // TILING LOOP: Iterate over obstacles in chunks
@@ -760,8 +759,8 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
                 float dy = py - oy;
 
                 // Euclidean distance
-                float d = sycl::sqrt(dx * dx + dy * dy);
-                min_dist_for_point = sycl::fmin(min_dist_for_point, d);
+                float d2 = dx * dx + dy * dy;
+                min_dist_sq_for_point = sycl::fmin(min_dist_sq_for_point, d2);
               }
             }
             // Synchronization: Wait for computation to finish before
@@ -771,8 +770,8 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
 
           // Reduce the minimum across the entire trajectory
           // Finds the single closest obstacle to ANY point in this trajectory.
-          float traj_min_dist = sycl::reduce_over_group(
-              item.get_group(), min_dist_for_point, sycl::minimum<float>());
+          float traj_min_dist_sq = sycl::reduce_over_group(
+              item.get_group(), min_dist_sq_for_point, sycl::minimum<float>());
 
           // normalize the cost and add to global cost of the trajectory
           if (local_id == 0) {
@@ -780,6 +779,7 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
             // for this trajectory. Before adding normalize the cost to [0, 1]
             // based on the robot max local range for the obstacles. Minimum
             // cost is assigned at distance value maxObstaclesDist
+            float traj_min_dist = sycl::sqrt(traj_min_dist_sq);
             float normalized_cost =
                 sycl::max((maxObstacleDistance - traj_min_dist), 0.0f) /
                 maxObstacleDistance;

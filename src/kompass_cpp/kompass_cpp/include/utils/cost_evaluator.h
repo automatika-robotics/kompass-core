@@ -231,8 +231,8 @@ private:
    * @param reference_path
    */
   sycl::event goalCostFunc(const size_t trajs_size, const float ref_path_length,
-                           const double cost_weight, const float goal_x,
-                           const float goal_y);
+                           const float goal_x, const float goal_y,
+                           const double cost_weight);
 
   /**
    * @brief Trajectory cost based on the smoothness along the trajectory
