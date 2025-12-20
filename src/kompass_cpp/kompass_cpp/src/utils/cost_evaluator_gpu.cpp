@@ -64,12 +64,13 @@ void CostEvaluator::initializeGPUMemory() {
   // Query maximum work-group size
   max_wg_size_ = dev.get_info<sycl::info::device::max_work_group_size>();
   if (numPointsPerTrajectory_ > max_wg_size_) {
-    LOG_WARNING("Number of points per sample trajectory should be less than:",
-                max_wg_size_,
-                "for your device. Please try to modify the control time step "
-                "and prediction horizon such that "
-                "prediction_horizon/control_time_step is less than",
-                max_wg_size_);
+    LOG_WARNING(
+        "Number of points per sample trajectory are more than", max_wg_size_,
+        "for your device. This will make the cost kernels run in "
+        "strides. For fastest execution try to modify the control time step "
+        "and prediction horizon such that "
+        "prediction_horizon/control_time_step is less than",
+        max_wg_size_);
   }
 
   // Data memory allocation
@@ -254,12 +255,6 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     if ((weight = costWeights->getParameter<double>(
              "obstacles_distance_weight")) > 0.0 &&
         (obs_size = obstaclePointsX.size()) > 0) {
-      if (obs_size > max_wg_size_) {
-        LOG_WARNING("The number of obstacles registered(", obs_size,
-                    ") are more than the maximum workgroup size(", max_wg_size_,
-                    "). Some obstacles will be dropped.");
-        obs_size = max_wg_size_;
-      }
       m_q.memcpy(m_devicePtrObstaclesX, obstaclePointsX.data(),
                  sizeof(float) * obs_size)
           .wait();
@@ -686,31 +681,73 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
     const size_t obsSize = obstaclePointsX.size();
     const float maxObstacleDistance = maxObstaclesDist;
 
-    // One work-group per trajectory
-    // local_size is pathSize (number of points in one trajectory)
-    auto global_size = sycl::range<1>(trajs_size * pathSize);
-    auto local_size = sycl::range<1>(pathSize); // Kernel scope
+    // Configure kernel workgroup size using Device Limits
+    const size_t WG_SIZE = max_wg_size_;
+
+    // Define Local Memory (Shared Memory) Accessors
+    // Size is dynamic based on the workgroup size to match 1-to-1 loading
+    sycl::local_accessor<float, 1> tile_obs_X(sycl::range<1>(WG_SIZE), h);
+    sycl::local_accessor<float, 1> tile_obs_Y(sycl::range<1>(WG_SIZE), h);
+
+    // Launch Config:
+    // Global Size = Number of Trajectories * WorkGroup Size
+    // Local Size  = WorkGroup Size
+    auto global_size = sycl::range<1>(trajs_size * WG_SIZE);
+    auto local_size = sycl::range<1>(WG_SIZE);
     h.parallel_for<class obstaclesDistCostKernel>(
         sycl::nd_range<1>(global_size, local_size), [=](sycl::nd_item<1> item) {
           const size_t traj_idx = item.get_group(0);
-          const size_t local_idx = item.get_local_id(0);
-          const size_t global_pt_idx = item.get_global_id(0);
+          const size_t local_id = item.get_local_id(0);
 
-          // Each thread finds the distance from its point to the CLOSEST
-          // obstacle
+          // Initialize per-thread minimum distance to max
           float min_dist_for_point = DEFAULT_MIN_DIST;
 
-          const float pt_x = X[global_pt_idx];
-          const float pt_y = Y[global_pt_idx];
+          // ---------------------------------------------------------
+          // TILING LOOP: Iterate over obstacles in chunks
+          // ---------------------------------------------------------
+          for (size_t tile_base = 0; tile_base < obsSize;
+               tile_base += WG_SIZE) {
 
-          // O(n) loop to calculate cost to each obstacle
-          // TODO: In case of too many obstacles, this loop is the bottleneck
-          // and should be handled with a tiling based implmenetation
-          for (size_t i = 0; i < obsSize; ++i) {
-            float dx = pt_x - obs_X[i];
-            float dy = pt_y - obs_Y[i];
-            float d = sycl::sqrt(dx * dx + dy * dy);
-            min_dist_for_point = sycl::fmin(min_dist_for_point, d);
+            // Threads load one obstacle each into Local Memory
+            size_t obs_idx = tile_base + local_id;
+
+            // Guard against reading past the end of the obstacle list
+            if (obs_idx < obsSize) {
+              tile_obs_X[local_id] = obs_X[obs_idx];
+              tile_obs_Y[local_id] = obs_Y[obs_idx];
+            }
+
+            // Wait for the entire tile to be loaded
+            item.barrier(sycl::access::fence_space::local_space);
+
+            // Compare trajectory points against this tile
+            // Calculate valid obstacles in this current tile
+            size_t current_tile_count = sycl::min(WG_SIZE, obsSize - tile_base);
+
+            // STRIDE LOOP: Handles pathSize > WG_SIZE
+            // Threads iterate in steps of WG_SIZE to cover the whole path.
+            for (size_t k = local_id; k < pathSize; k += WG_SIZE) {
+
+              // Load the specific point for this trajectory
+              float px = X[traj_idx * pathSize + k];
+              float py = Y[traj_idx * pathSize + k];
+
+              // Check distance against all cached obstacles in this tile
+              for (size_t j = 0; j < current_tile_count; ++j) {
+                float ox = tile_obs_X[j];
+                float oy = tile_obs_Y[j];
+
+                float dx = px - ox;
+                float dy = py - oy;
+
+                // Euclidean distance
+                float d = sycl::sqrt(dx * dx + dy * dy);
+                min_dist_for_point = sycl::fmin(min_dist_for_point, d);
+              }
+            }
+            // Synchronization: Wait for computation to finish before
+            // overwriting tile
+            item.barrier(sycl::access::fence_space::local_space);
           }
 
           // Reduce the minimum across the entire trajectory
@@ -719,7 +756,7 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
               item.get_group(), min_dist_for_point, sycl::minimum<float>());
 
           // normalize the cost and add to global cost of the trajectory
-          if (local_idx == 0) {
+          if (local_id == 0) {
             // Atomically add the computed trajectory cost to the global cost
             // for this trajectory. Before adding normalize the cost to [0, 1]
             // based on the robot max local range for the obstacles. Minimum
