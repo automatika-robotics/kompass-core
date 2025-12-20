@@ -211,7 +211,6 @@ private:
   float *m_devicePtrTempCosts = nullptr;
   LowestCost *m_minCost;
   sycl::queue m_q;
-  sycl::vec<float, 3> m_deviceRefPathEnd;
   void initializeGPUMemory();
   /**
    * @brief Trajectory cost based on the distance to a given reference path
@@ -232,7 +231,8 @@ private:
    * @param reference_path
    */
   sycl::event goalCostFunc(const size_t trajs_size, const float ref_path_length,
-                           const double cost_weight);
+                           const double cost_weight, const float goal_x,
+                           const float goal_y);
 
   /**
    * @brief Trajectory cost based on the smoothness along the trajectory
