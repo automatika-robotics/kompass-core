@@ -348,6 +348,15 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
     // Configure kernel work-group size using device configuration
     const size_t WG_SIZE = max_wg_size_;
 
+    // Tiling Accessors for local memory for caching ref path points
+    sycl::local_accessor<float, 1> tile_ref_X(sycl::range<1>(WG_SIZE), h);
+    sycl::local_accessor<float, 1> tile_ref_Y(sycl::range<1>(WG_SIZE), h);
+
+    // We round up pathSize to the nearest multiple of WG_SIZE.
+    // Guarantees that all threads execute the outer loop the same number
+    // of times.
+    size_t alignedPathSize = ((pathSize + WG_SIZE - 1) / WG_SIZE) * WG_SIZE;
+
     // Global Size = Trajectories * WorkGroup Size
     auto global_range = sycl::range<1>(trajs_size * WG_SIZE);
     auto local_range = sycl::range<1>(WG_SIZE);
@@ -367,28 +376,60 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
           // Stride Loop over Trajectory Points (P)
           // ----------------------------------------------------------------
           // Each thread takes a point P, finds its closest neighbor in RefPath,
-          // and adds that distance to the accumulator.
-          for (size_t k = local_id; k < pathSize; k += WG_SIZE) {
+          // and adds that distance to the accumulator. Iterates up to
+          // alignedPathSize so all threads participate in barriers
+          for (size_t k = local_id; k < alignedPathSize; k += WG_SIZE) {
 
-            float p_x = X[traj_idx * pathSize + k];
-            float p_y = Y[traj_idx * pathSize + k];
+            // Check if its a real point or just a helper thread for tiling
+            bool valid_point = (k < pathSize);
 
+            float p_x = 0.0f, p_y = 0.0f;
             // Initialize min distance for point P to max value
             float p_min_dist_sq = DEFAULT_MIN_DIST;
 
-            for (size_t i = 0; i < refSize; ++i) {
-              float r_x = tracked_X[i];
-              float r_y = tracked_Y[i];
+            // Only load global data if valid
+            if (valid_point) {
+              p_x = X[traj_idx * pathSize + k];
+              p_y = Y[traj_idx * pathSize + k];
+            }
+            // -----------------------------------------------------------
+            // Tiling Loop over Reference Path
+            // -----------------------------------------------------------
+            for (size_t tile_base = 0; tile_base < refSize;
+                 tile_base += WG_SIZE) {
 
-              float dx = p_x - r_x;
-              float dy = p_y - r_y;
+              // Cooperative Load
+              size_t ref_idx = tile_base + local_id;
+              if (ref_idx < refSize) {
+                tile_ref_X[local_id] = tracked_X[ref_idx];
+                tile_ref_Y[local_id] = tracked_Y[ref_idx];
+              }
 
-              float d2 = dx * dx + dy * dy;
-              p_min_dist_sq = sycl::fmin(p_min_dist_sq, d2);
+              // Wait for all local memory loads to finish
+              item.barrier(sycl::access::fence_space::local_space);
+
+              // Compute only for valid threads
+              if (valid_point) {
+                size_t current_tile_count =
+                    sycl::min(WG_SIZE, refSize - tile_base);
+
+                for (size_t r = 0; r < current_tile_count; ++r) {
+                  float dx = p_x - tile_ref_X[r];
+                  float dy = p_y - tile_ref_Y[r];
+
+                  float d2 = dx * dx + dy * dy;
+                  p_min_dist_sq = sycl::fmin(p_min_dist_sq, d2);
+                }
+              }
+              // Wait before overwriting tile
+              item.barrier(sycl::access::fence_space::local_space);
             }
 
             // Add the global minimum found for point P to the thread's total
-            local_total_dist += sycl::sqrt(p_min_dist_sq);
+            // only for valid threads
+            if (valid_point) {
+              local_total_dist += sycl::sqrt(p_min_dist_sq);
+            }
           }
 
           // Reduction, sum up the total costs from all threads to get the

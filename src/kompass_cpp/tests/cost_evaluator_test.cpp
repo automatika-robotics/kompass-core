@@ -410,6 +410,7 @@ BOOST_AUTO_TEST_CASE(test_all_costs) {
         "Minimum jerk cost trajectory is found but not "
         "equal to the correct minimum!");
   }
+
   {
     LOG_INFO("Running Obstacles Cost Test");
     auto samples = generate_ref_path_test_samples(predictionHorizon, timeStep,
