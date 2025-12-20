@@ -482,79 +482,77 @@ sycl::event CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
     auto velocitiesOmega = m_devicePtrVelocitiesOmega;
     auto costs = m_devicePtrCosts;
     const float costWeight = static_cast<float>(cost_weight);
-    const size_t trajsSize = trajs_size;
-    const size_t velocitiesSize = numPointsPerTrajectory_ - 1;
-    const sycl::vec<float, 3> accLimits = {accLimits_[0], accLimits_[1],
-                                           accLimits_[2]};
-    sycl::local_accessor<float, 1> trajCost(sycl::range<1>(trajs_size), h);
-    auto global_size = sycl::range<1>(trajs_size * velocitiesSize);
-    auto workgroup_size = sycl::range<1>(velocitiesSize);
+
+    // The input arrays have size (N-1) relative to points
+    const size_t velocitiesCount = numPointsPerTrajectory_ - 1;
+
+    // Pre-calculate Inverse Limits to convert Division -> Multiplication
+    // Avoid division by zero
+    const float invLimX = (accLimits_[0] > 0) ? 1.0f / accLimits_[0] : 0.0f;
+    const float invLimY = (accLimits_[1] > 0) ? 1.0f / accLimits_[1] : 0.0f;
+    const float invLimOmega = (accLimits_[2] > 0) ? 1.0f / accLimits_[2] : 0.0f;
+
+    // Configure kernel based on device work-group size
+    const size_t WG_SIZE = max_wg_size_;
+
+    // Global Size = Trajectories * Threads per Trajectory
+    auto global_size = sycl::range<1>(trajs_size * WG_SIZE);
+    auto local_size = sycl::range<1>(WG_SIZE);
     h.parallel_for<class smoothnessCostKernel>(
-        sycl::nd_range<1>(global_size, workgroup_size),
-        [=](sycl::nd_item<1> item) {
-          const size_t traj = item.get_group().get_group_id();
-          const size_t vel_item = item.get_local_id();
+        sycl::nd_range<1>(global_size, local_size), [=](sycl::nd_item<1> item) {
+          const size_t traj_idx = item.get_group(0);
+          const size_t local_id = item.get_local_id(0);
 
-          // Initialize local memory once per work-group in the first thread
-          if (vel_item == 0) {
-            for (size_t i = 0; i < trajsSize; ++i) {
-              trajCost[i] = 0.0f;
-            }
-          }
-          // Synchronize to make sure initialization is complete
-          item.barrier(sycl::access::fence_space::local_space);
+          // Each thread calculates a partial sum for its assigned points.
+          float local_cost_contrib = 0.0f;
 
-          // Process only if i is valid (skip i==0 since we need a previous
-          // sample)
-          if (vel_item >= 1 && vel_item < velocitiesSize) {
-            float cost_contrib = 0.0;
-            // Get the cost contribution for each point
-            if (accLimits[0] > 0) {
-              float delta_vx =
-                  velocitiesVx[traj * velocitiesSize + vel_item] -
-                  velocitiesVx[traj * velocitiesSize + (vel_item - 1)];
-              cost_contrib += (delta_vx * delta_vx) / accLimits[0];
-            }
-            if (accLimits[1] > 0) {
-              float delta_vy =
-                  velocitiesVy[traj * velocitiesSize + vel_item] -
-                  velocitiesVy[traj * velocitiesSize + (vel_item - 1)];
-              cost_contrib += (delta_vy * delta_vy) / accLimits[1];
-            }
-            if (accLimits[2] > 0) {
-              float delta_omega =
-                  velocitiesOmega[traj * velocitiesSize + vel_item] -
-                  velocitiesOmega[traj * velocitiesSize + (vel_item - 1)];
-              cost_contrib += (delta_omega * delta_omega) / accLimits[2];
-            }
+          // -----------------------------------------------------------
+          // STRIDE LOOP
+          // -----------------------------------------------------------
+          // We strictly skip i=0 inside the loop because we need (i-1).
+          for (size_t i = local_id; i < velocitiesCount; i += WG_SIZE) {
 
-            // Each work-item performs an atomic update for its trajectory
-            sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                             sycl::memory_scope::work_group,
-                             sycl::access::address_space::local_space>
-                atomicLocal(trajCost[traj]);
+            // Skip index 0 (cannot compute delta)
+            if (i == 0)
+              continue;
 
-            // atomically add cost_contrib to trajectory cost
-            atomicLocal.fetch_add(cost_contrib);
+            // Compute index
+            size_t curr_idx = traj_idx * velocitiesCount + i;
+            size_t prev_idx = curr_idx - 1;
+
+            // Load data (Expecting L2 cache hits for efficiency)
+            float vx_curr = velocitiesVx[curr_idx];
+            float vx_prev = velocitiesVx[prev_idx];
+            float dv_x = vx_curr - vx_prev;
+            local_cost_contrib += (dv_x * dv_x) * invLimX;
+
+            float vy_curr = velocitiesVy[curr_idx];
+            float vy_prev = velocitiesVy[prev_idx];
+            float dv_y = vy_curr - vy_prev;
+            local_cost_contrib += (dv_y * dv_y) * invLimY;
+
+            float w_curr = velocitiesOmega[curr_idx];
+            float w_prev = velocitiesOmega[prev_idx];
+            float dv_w = w_curr - w_prev;
+            local_cost_contrib += (dv_w * dv_w) * invLimOmega;
           }
 
-          // Synchronize again so that all atomic updates are finished
-          // before further processing
-          item.barrier(sycl::access::fence_space::local_space);
+          // Sum up the partial results from all threads in the work-group
+          float traj_total_cost = sycl::reduce_over_group(
+              item.get_group(), local_cost_contrib, sycl::plus<float>());
 
-          // normalize all costs using the first thread of the group and
+          // normalize average cost using the first thread of the group and
           // add them to global cost
-          if (vel_item == 0) {
-            trajCost[traj] =
-                costWeight * (trajCost[traj] / (3.0 * velocitiesSize));
-
+          if (local_id == 0) {
+            float final_val =
+                costWeight * (traj_total_cost / (3.0f * velocitiesCount));
             // Atomically add the computed trajectory cost to the global cost
             // for this trajectory
             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
-                atomic_cost(costs[traj]);
-            atomic_cost.fetch_add(trajCost[traj]);
+                atomic_cost(costs[traj_idx]);
+            atomic_cost.fetch_add(final_val);
           }
         });
   });
