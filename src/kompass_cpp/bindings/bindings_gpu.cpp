@@ -39,16 +39,17 @@ void bindings_mapping_gpu(py::module_ &m) {
 void bindings_utils_gpu(py::module_ &m) {
 
   py::class_<CriticalZoneCheckerGPU>(m, "CriticalZoneCheckerGPU")
-      .def(py::init<CollisionChecker::ShapeType, const std::vector<float> &,
-                    const Eigen::Vector3f &, const Eigen::Vector4f &,
-                    const float, const float, const float,
-                    const std::vector<double> &, const float, const float,
-                    const float>(),
-           py::arg("robot_shape"), py::arg("robot_dimensions"),
-           py::arg("sensor_position_body"), py::arg("sensor_rotation_body"),
-           py::arg("critical_angle"), py::arg("critical_distance"),
-           py::arg("slowdown_distance"), py::arg("scan_angles"),
-           py::arg("max_height"), py::arg("min_height"), py::arg("range_max"))
+      .def(py::init<CriticalZoneChecker::InputType, CollisionChecker::ShapeType,
+                    const std::vector<float> &, const Eigen::Vector3f &,
+                    const Eigen::Vector4f &, const float, const float,
+                    const float, const std::vector<double> &, const float,
+                    const float, const float>(),
+           py::arg("input_type"), py::arg("robot_shape"),
+           py::arg("robot_dimensions"), py::arg("sensor_position_body"),
+           py::arg("sensor_rotation_body"), py::arg("critical_angle"),
+           py::arg("critical_distance"), py::arg("slowdown_distance"),
+           py::arg("scan_angles"), py::arg("max_height"), py::arg("min_height"),
+           py::arg("range_max"))
 
       .def("check",
            py::overload_cast<const std::vector<double> &, bool>(
