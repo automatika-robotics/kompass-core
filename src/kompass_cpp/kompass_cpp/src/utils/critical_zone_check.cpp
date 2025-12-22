@@ -11,7 +11,7 @@ namespace Kompass {
  *
  */
 
-CriticalZoneChecker::CriticalZoneChecker(
+CriticalZoneChecker::CriticalZoneChecker(InputType input_type,
     const CollisionChecker::ShapeType robot_shape_type,
     const std::vector<float> &robot_dimensions,
     const Eigen::Vector3f &sensor_position_body,
@@ -19,6 +19,7 @@ CriticalZoneChecker::CriticalZoneChecker(
     const float critical_distance, const float slowdown_distance,
     const std::vector<double> &angles, const float min_height,
     const float max_height, const float range_max) {
+  input_type_ = input_type;
   min_height_ = min_height;
   max_height_ = max_height;
   range_max_ = range_max;
