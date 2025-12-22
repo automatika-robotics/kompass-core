@@ -334,14 +334,13 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
                                         const double cost_weight) {
 
   // -----------------------------------------------------
-  //  Parallelize over trajectories and path indices.
-  //  Calculate distance of each point with each point in reference path.
+  //  Parallelize over trajectories and RefPath indices.
+  //  For each point in Reference Path, find closest point in Trajectory.
   //  Atomically add lowest distance to the trajectory’s cost.
   // -----------------------------------------------------
 
-  // command scope
   return m_q.submit([&](sycl::handler &h) {
-    // local copies of class members to be used inside the kernel
+    // local copies of class members
     auto X = m_devicePtrPathsX;
     auto Y = m_devicePtrPathsY;
     auto tracked_X = m_devicePtrTrackedSegmentX;
@@ -351,122 +350,118 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
     const size_t pathSize = numPointsPerTrajectory_;
     const size_t refSize = tracked_segment_size;
 
-    // Pre-calculate inverses to avoid division
+    // Pre-calculate inverses
     const float invRefLength =
         (tracked_segment_length > 0) ? 1.0f / tracked_segment_length : 0.0f;
-    const float invPathSize = (pathSize > 0) ? 1.0f / pathSize : 0.0f;
+    const float invRefSizeCount = (refSize > 0) ? 1.0f / refSize : 0.0f;
 
-    // Configure kernel work-group size using device configuration
+    // Configure kernel work-group size
     const size_t WG_SIZE = maxWGSize_;
 
-    // Tiling Accessors for local memory for caching ref path points
-    sycl::local_accessor<float, 1> tile_ref_X(sycl::range<1>(WG_SIZE), h);
-    sycl::local_accessor<float, 1> tile_ref_Y(sycl::range<1>(WG_SIZE), h);
+    // Tiling Accessors for local memory to cache TRAJECTORY points
+    sycl::local_accessor<float, 1> tile_traj_X(sycl::range<1>(WG_SIZE), h);
+    sycl::local_accessor<float, 1> tile_traj_Y(sycl::range<1>(WG_SIZE), h);
 
-    // We round up pathSize to the nearest multiple of WG_SIZE.
-    // Guarantees that all threads execute the outer loop the same number
-    // of times.
-    size_t alignedPathSize = ((pathSize + WG_SIZE - 1) / WG_SIZE) * WG_SIZE;
+    // Round up refSize (outer loop) to the nearest multiple of WG_SIZE.
+    size_t alignedRefSize = ((refSize + WG_SIZE - 1) / WG_SIZE) * WG_SIZE;
 
     // Global Size = Trajectories * WorkGroup Size
     auto global_range = sycl::range<1>(trajs_size * WG_SIZE);
     auto local_range = sycl::range<1>(WG_SIZE);
 
-    // Kernel scope
     h.parallel_for<class refPathCostKernel>(
         sycl::nd_range<1>(global_range, local_range),
         [=](sycl::nd_item<1> item) {
           const size_t traj_idx = item.get_group(0);
           const size_t local_id = item.get_local_id(0);
 
-          // Accumulator for the sum of minimum distances for this thread's
-          // points
+          // Accumulator for the sum of minimum distances
           float local_total_dist = 0.0f;
 
           // ----------------------------------------------------------------
-          // Stride Loop over Trajectory Points (P)
+          // STRIDE LOOP over Reference Path Points (R)
           // ----------------------------------------------------------------
-          // Each thread takes a point P, finds its closest neighbor in RefPath,
-          // and adds that distance to the accumulator. Iterates up to
-          // alignedPathSize so all threads participate in barriers
-          for (size_t k = local_id; k < alignedPathSize; k += WG_SIZE) {
+          // Each thread takes a point R from the Reference Path, finds its
+          // closest neighbor in the Trajectory, and adds that distance.
+          for (size_t k = local_id; k < alignedRefSize; k += WG_SIZE) {
 
-            // Check if its a real point or just a helper thread for tiling
-            bool valid_point = (k < pathSize);
+            // Check if it's a real reference point
+            bool valid_ref_point = (k < refSize);
 
-            float p_x = 0.0f, p_y = 0.0f;
-            // Initialize min distance for point P to max value
-            float p_min_dist_sq = DEFAULT_MIN_DIST;
+            float r_x = 0.0f, r_y = 0.0f;
+            // Initialize min distance for point R to max value
+            float r_min_dist_sq = DEFAULT_MIN_DIST;
 
-            // Only load global data if valid
-            if (valid_point) {
-              p_x = X[traj_idx * pathSize + k];
-              p_y = Y[traj_idx * pathSize + k];
+            // Load global Reference point data
+            if (valid_ref_point) {
+              r_x = tracked_X[k];
+              r_y = tracked_Y[k];
             }
+
             // -----------------------------------------------------------
-            // Tiling Loop over Reference Path
+            // TILING LOOP over Trajectory Points
             // -----------------------------------------------------------
-            for (size_t tile_base = 0; tile_base < refSize;
+            for (size_t tile_base = 0; tile_base < pathSize;
                  tile_base += WG_SIZE) {
 
-              // Cooperative Load
-              size_t ref_idx = tile_base + local_id;
-              if (ref_idx < refSize) {
-                tile_ref_X[local_id] = tracked_X[ref_idx];
-                tile_ref_Y[local_id] = tracked_Y[ref_idx];
+              // Cooperative Load of Trajectory Points
+              size_t traj_pt_idx = tile_base + local_id;
+              if (traj_pt_idx < pathSize) {
+                // Calculate absolute index in the flattened trajectory array
+                size_t global_traj_idx = traj_idx * pathSize + traj_pt_idx;
+                tile_traj_X[local_id] = X[global_traj_idx];
+                tile_traj_Y[local_id] = Y[global_traj_idx];
               }
 
               // Wait for all local memory loads to finish
               item.barrier(sycl::access::fence_space::local_space);
 
-              // Compute only for valid threads
-              if (valid_point) {
+              // Compute closest point in this tile for the current ref point
+              if (valid_ref_point) {
                 size_t current_tile_count =
-                    sycl::min(WG_SIZE, refSize - tile_base);
+                    sycl::min(WG_SIZE, pathSize - tile_base);
 
-                for (size_t r = 0; r < current_tile_count; ++r) {
-                  float dx = p_x - tile_ref_X[r];
-                  float dy = p_y - tile_ref_Y[r];
+                for (size_t t = 0; t < current_tile_count; ++t) {
+                  float dx = r_x - tile_traj_X[t];
+                  float dy = r_y - tile_traj_Y[t];
 
                   float d2 = dx * dx + dy * dy;
-                  p_min_dist_sq = sycl::fmin(p_min_dist_sq, d2);
+                  r_min_dist_sq = sycl::fmin(r_min_dist_sq, d2);
                 }
               }
-              // Wait before overwriting tile
+              // Wait before overwriting tile for next iteration
               item.barrier(sycl::access::fence_space::local_space);
             }
 
-            // Add the global minimum found for point P to the thread's total
-            // only for valid threads
-            if (valid_point) {
-              local_total_dist += sycl::sqrt(p_min_dist_sq);
+            // Add the global minimum found for reference point R to accumulator
+            if (valid_ref_point) {
+              local_total_dist += sycl::sqrt(r_min_dist_sq);
             }
           }
 
-          // Reduction, sum up the total costs from all threads to get the
-          // trajectory total
-          float traj_total_dist = sycl::reduce_over_group(
+          // Reduction: sum up total costs from all threads
+          float total_dist_sum = sycl::reduce_over_group(
               item.get_group(), local_total_dist, sycl::plus<float>());
 
-          // normalize the trajectory cost and add end point distance to it
+          // normalize the referenc path cost and add end point distance to it
           if (local_id == 0) {
-            // average path cost
-            float avg_path_dist = traj_total_dist * invPathSize;
+            // Average over the reference path size
+            float avg_path_dist = total_dist_sum * invRefSizeCount;
 
-            // end-point cost
+            // End-point cost (Last Traj Point <-> Last Ref Point)
             size_t last_traj_idx = traj_idx * pathSize + (pathSize - 1);
             size_t last_ref_idx = refSize - 1;
 
             float end_dx = X[last_traj_idx] - tracked_X[last_ref_idx];
             float end_dy = Y[last_traj_idx] - tracked_Y[last_ref_idx];
+
             float end_dist =
                 sycl::sqrt(end_dx * end_dx + end_dy * end_dy) * invRefLength;
 
-            // final cost
+            // Final cost
             float final_val = costWeight * ((avg_path_dist + end_dist) * 0.5f);
 
-            // Atomically add the computed trajectory costs to the global cost
-            // for this trajectory
+            // Atomic add to global cost
             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
