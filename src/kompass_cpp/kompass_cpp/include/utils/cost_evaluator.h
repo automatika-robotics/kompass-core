@@ -198,12 +198,12 @@ private:
   size_t numPointsPerTrajectory_;
   size_t maxRefPathSegmentSize_;
   size_t max_wg_size_;
-  float *m_devicePtrPathsX;
-  float *m_devicePtrPathsY;
-  float *m_devicePtrVelocitiesVx;
-  float *m_devicePtrVelocitiesVy;
-  float *m_devicePtrVelocitiesOmega;
-  float *m_devicePtrCosts;
+  float *m_devicePtrPathsX = nullptr;
+  float *m_devicePtrPathsY = nullptr;
+  float *m_devicePtrVelocitiesVx = nullptr;
+  float *m_devicePtrVelocitiesVy = nullptr;
+  float *m_devicePtrVelocitiesOmega = nullptr;
+  float *m_devicePtrCosts = nullptr;
   float *m_devicePtrTrackedSegmentX = nullptr;
   float *m_devicePtrTrackedSegmentY = nullptr;
   float *m_devicePtrObstaclesX = nullptr;
