@@ -62,15 +62,17 @@ void CostEvaluator::initializeGPUMemory() {
   }
 
   // Query maximum work-group size
-  max_wg_size_ = dev.get_info<sycl::info::device::max_work_group_size>();
-  if (numPointsPerTrajectory_ > max_wg_size_) {
+  maxWGSize_ = dev.get_info<sycl::info::device::max_work_group_size>();
+  // Set max number of obstacle points to work-group size for initialization
+  maxObstaclePoints_ = maxWGSize_;
+  if (numPointsPerTrajectory_ > maxWGSize_) {
     LOG_WARNING(
-        "Number of points per sample trajectory are more than", max_wg_size_,
+        "Number of points per sample trajectory are more than", maxWGSize_,
         "for your device. This will make the cost kernels run in "
         "strides. For fastest execution try to modify the control time step "
         "and prediction horizon such that "
         "prediction_horizon/control_time_step is less than",
-        max_wg_size_);
+        maxWGSize_);
   }
 
   // Data memory allocation
@@ -95,8 +97,8 @@ void CostEvaluator::initializeGPUMemory() {
         sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
   };
   if (costWeights->getParameter<double>("obstacles_distance_weight") > 0.0) {
-    m_devicePtrObstaclesX = sycl::malloc_device<float>(max_wg_size_, m_q);
-    m_devicePtrObstaclesY = sycl::malloc_device<float>(max_wg_size_, m_q);
+    m_devicePtrObstaclesX = sycl::malloc_device<float>(maxWGSize_, m_q);
+    m_devicePtrObstaclesY = sycl::malloc_device<float>(maxWGSize_, m_q);
   }
   if (customTrajCostsPtrs_.size() > 0) {
     m_devicePtrTempCosts = sycl::malloc_shared<float>(numTrajectories_, m_q);
@@ -132,8 +134,8 @@ void CostEvaluator::updateCostWeights(TrajectoryCostsWeights &newCostsWeights) {
     if (m_devicePtrObstaclesY) {
       sycl::free(m_devicePtrObstaclesY, m_q);
     }
-    m_devicePtrObstaclesX = sycl::malloc_device<float>(max_wg_size_, m_q);
-    m_devicePtrObstaclesY = sycl::malloc_device<float>(max_wg_size_, m_q);
+    m_devicePtrObstaclesX = sycl::malloc_device<float>(maxWGSize_, m_q);
+    m_devicePtrObstaclesY = sycl::malloc_device<float>(maxWGSize_, m_q);
   }
   if (customTrajCostsPtrs_.size() > 0 && !m_devicePtrTempCosts) {
     if (m_devicePtrTempCosts) {
@@ -254,6 +256,15 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     if ((weight = costWeights->getParameter<double>(
              "obstacles_distance_weight")) > 0.0 &&
         (obs_size = obstaclePointsX.size()) > 0) {
+      if (obs_size > maxObstaclePoints_) {
+        if (m_devicePtrObstaclesX)
+          sycl::free(m_devicePtrObstaclesX, m_q);
+        if (m_devicePtrObstaclesY)
+          sycl::free(m_devicePtrObstaclesY, m_q);
+        m_devicePtrObstaclesX = sycl::malloc_device<float>(obs_size, m_q);
+        m_devicePtrObstaclesY = sycl::malloc_device<float>(obs_size, m_q);
+        maxObstaclePoints_ = obs_size;
+      }
       m_q.memcpy(m_devicePtrObstaclesX, obstaclePointsX.data(),
                  sizeof(float) * obs_size)
           .wait();
@@ -346,7 +357,7 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
     const float invPathSize = (pathSize > 0) ? 1.0f / pathSize : 0.0f;
 
     // Configure kernel work-group size using device configuration
-    const size_t WG_SIZE = max_wg_size_;
+    const size_t WG_SIZE = maxWGSize_;
 
     // Tiling Accessors for local memory for caching ref path points
     sycl::local_accessor<float, 1> tile_ref_X(sycl::range<1>(WG_SIZE), h);
@@ -494,7 +505,7 @@ sycl::event CostEvaluator::goalCostFunc(const size_t trajs_size,
         (ref_path_length > 0.0f) ? 1.0f / ref_path_length : 0.0f;
 
     // Set work-group size as per device limit to manage thread warps
-    const size_t WG_SIZE = max_wg_size_;
+    const size_t WG_SIZE = maxWGSize_;
 
     // Round up global size to multiple of work-group size
     size_t padded_global = ((trajs_size + WG_SIZE - 1) / WG_SIZE) * WG_SIZE;
@@ -561,7 +572,7 @@ sycl::event CostEvaluator::smoothnessCostFunc(const size_t trajs_size,
     const float invLimOmega = (accLimits_[2] > 0) ? 1.0f / accLimits_[2] : 0.0f;
 
     // Configure kernel based on device work-group size
-    const size_t WG_SIZE = max_wg_size_;
+    const size_t WG_SIZE = maxWGSize_;
 
     // Global Size = Trajectories * Threads per Trajectory
     auto global_size = sycl::range<1>(trajs_size * WG_SIZE);
@@ -654,7 +665,7 @@ sycl::event CostEvaluator::jerkCostFunc(const size_t trajs_size,
     const float invLimOmega = (accLimits_[2] > 0) ? 1.0f / accLimits_[2] : 0.0f;
 
     // Configure kernel based on device work-group size
-    const size_t WG_SIZE = max_wg_size_;
+    const size_t WG_SIZE = maxWGSize_;
 
     // Global Size = Trajectories * Threads per Trajectory
     auto global_size = sycl::range<1>(trajs_size * WG_SIZE);
@@ -747,7 +758,7 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
     const float maxObstacleDistance = maxObstaclesDist;
 
     // Configure kernel workgroup size using Device Limits
-    const size_t WG_SIZE = max_wg_size_;
+    const size_t WG_SIZE = maxWGSize_;
 
     // Define Local Memory (Shared Memory) Accessors
     // Size is dynamic based on the workgroup size to match 1-to-1 loading
