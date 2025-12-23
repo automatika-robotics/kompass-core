@@ -118,6 +118,8 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
   Timer time;
 
   auto robotShapeType = CollisionChecker::ShapeType::BOX;
+  CriticalZoneChecker::InputType inputType =
+      CriticalZoneChecker::InputType::LASERSCAN;
   std::vector<float> robotDimensions{0.51, 0.27, 0.4};
 
   const Eigen::Vector3f sensor_position_body{0.22, 0.0, 0.4};
@@ -132,10 +134,10 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
   float critical_angle = 160.0, critical_distance = 0.3,
         slowdown_distance = 0.6;
 
-  CriticalZoneChecker zoneChecker(robotShapeType, robotDimensions,
-                                  sensor_position_body, sensor_rotation_body,
-                                  critical_angle, critical_distance,
-                                  slowdown_distance, scan_angles, 0.0, 0.0, 20.0);
+  CriticalZoneChecker zoneChecker(
+      inputType, robotShapeType, robotDimensions, sensor_position_body,
+      sensor_rotation_body, critical_angle, critical_distance,
+      slowdown_distance, scan_angles, 0.0, 0.0, 20.0);
 
   LOG_INFO("Testing Emergency Stop with CPU");
 
