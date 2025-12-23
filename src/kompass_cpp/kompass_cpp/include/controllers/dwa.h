@@ -161,9 +161,7 @@ public:
         global_vel, currentState, scan_points);
   };
 
-Path getTrackedSegment(){
-  return trackedRefPathSegment_;
-}
+  Path::Path getTrackedSegment() { return trackedRefPathSegment_; }
 
 protected:
   std::unique_ptr<TrajectorySampler> trajSampler;
