@@ -161,6 +161,10 @@ public:
         global_vel, currentState, scan_points);
   };
 
+Path getTrackedSegment(){
+  return trackedRefPathSegment_;
+}
+
 protected:
   std::unique_ptr<TrajectorySampler> trajSampler;
   std::unique_ptr<CostEvaluator> trajCostEvaluator;
@@ -208,11 +212,11 @@ protected:
 
     trajCostEvaluator->setPointScan(scan_points, currentState, maxLocalRange_);
 
-    Path::Path trackedRefPathSegment = findTrackedPathSegment();
+    trackedRefPathSegment_ = findTrackedPathSegment();
 
     // Evaluate the samples and get the sample with the minimum cost
     return trajCostEvaluator->getMinTrajectoryCost(samples_, currentPath.get(),
-                                                   trackedRefPathSegment);
+                                                   trackedRefPathSegment_);
   };
 
 private:
@@ -222,6 +226,7 @@ private:
   float maxLocalRange_ =
       10.0; // Max range of the robot sensor or local map in meters. Used to
             // calculate the cost of coming close to obstacles
+  Path::Path trackedRefPathSegment_;
 
   /**
    * @brief get maximum reference path length
