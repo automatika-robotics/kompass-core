@@ -106,10 +106,10 @@ public:
   TrajSearchResult
   getMinTrajectoryCost(const std::unique_ptr<TrajectorySamples2D> &trajs,
                        const Path::Path *reference_path,
-                       const Path::Path &tracked_segment);
+                       const Path::Path::View &tracked_segment);
 
   /**
-   * @brief Adds a new custome cost to be used in the trajectory evaluation
+   * @brief Adds a new custom cost to be used in the trajectory evaluation
    *
    * @param weight
    * @param custom_cost_function
@@ -121,7 +121,7 @@ public:
   };
 
   /**
-   * @brief Set the point scan with either lazerscan or vector of points
+   * @brief Set the point scan with either laserscan or vector of points
    *
    * @param scan / point cloud
    * @param current_state
@@ -273,7 +273,7 @@ private:
    * @return float
    */
   float pathCostFunc(const Trajectory2D &trajectory,
-                     const Path::Path &tracked_segment,
+                     const Path::Path::View &tracked_segment,
                      const float tracked_segment_length);
 
   /**

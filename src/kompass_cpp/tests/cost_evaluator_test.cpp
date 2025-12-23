@@ -245,7 +245,7 @@ Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
   }
 
   TrajSearchResult result = costEval.getMinTrajectoryCost(
-      samples, &reference_path, reference_path.segments[current_segment_index]);
+      samples, &reference_path, reference_path.getSegment(current_segment_index));
 
   BOOST_TEST(result.isTrajFound,
              "Minimum reference path cost trajectory is not found!");

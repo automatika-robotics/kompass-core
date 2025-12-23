@@ -94,7 +94,7 @@ void Follower::setCurrentPath(const Path::Path &path, const bool interpolate) {
   currentPath->segment(path_segment_length);
 
   // Get max number of segments in the path
-  max_segment_index_ = currentPath->getMaxNumSegments();
+  max_segment_index_ = currentPath->getNumSegments() - 1;
 
   path_processing_ = true;
   current_segment_index_ = 0;
@@ -173,6 +173,7 @@ Path::PathPosition Follower::findClosestPathPoint() {
 
 // Method to find the closest segment index using a binary search-like approach
 size_t Follower::findClosestSegmentIndex(size_t left, size_t right) {
+
   if (left == right) {
     return left;
   }
@@ -182,9 +183,9 @@ size_t Follower::findClosestSegmentIndex(size_t left, size_t right) {
   // In case only two points are available
   if (mid == right || mid == left) {
     double left_distance =
-        calculateDistance(currentState, currentPath->segments[left].getStart());
-    double right_distance = calculateDistance(
-        currentState, currentPath->segments[right].getStart());
+        calculateDistance(currentState, currentPath->getSegmentStart(left));
+    double right_distance =
+        calculateDistance(currentState, currentPath->getSegmentEnd(right));
     if (left_distance <= right_distance) {
       return left;
     } else {
@@ -193,9 +194,9 @@ size_t Follower::findClosestSegmentIndex(size_t left, size_t right) {
   }
 
   double left_distance =
-      calculateDistance(currentState, currentPath->segments[left].getStart());
+      calculateDistance(currentState, currentPath->getSegmentStart(left));
   double right_distance =
-      calculateDistance(currentState, currentPath->segments[right].getStart());
+      calculateDistance(currentState, currentPath->getSegmentEnd(right));
 
   if (left_distance <= right_distance) {
     return findClosestSegmentIndex(left, mid);
@@ -220,14 +221,14 @@ Path::State Follower::projectPointOnSegment(const Path::Point &a,
 
 Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 
-  const Path::Path &segment_path = currentPath->segments[segment_index];
+  const Path::Path::View &segment_path = currentPath->getSegment(segment_index);
   double min_distance = std::numeric_limits<double>::max();
   Path::State closest_point;
   double segment_position = 0.0; // in [0, 1]
-  size_t point_index = 0;
+  size_t point_index = currentPath->getSegmentStartIndex(segment_index);
   // Get current segment start, end to calculate length and orientation
-  Path::Point start = currentPath->segments[segment_index].getStart();
-  Path::Point end = currentPath->segments[segment_index].getEnd();
+  Path::Point start = currentPath->getSegmentStart(segment_index);
+  Path::Point end = currentPath->getSegmentEnd(segment_index);
 
   double segment_heading = std::atan2(end.y() - start.y(), end.x() - start.x());
 
@@ -272,16 +273,16 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 void Follower::determineTarget() {
 
   currentTrackedTarget_ = std::make_unique<Target>();
-  LOG_DEBUG("Closest point index on segment ", closestPosition->index,
-            " max index on segment is",
-            currentPath->segments[current_segment_index_].getSize() - 1,
+  LOG_DEBUG("Closest point global index", closestPosition->index,
+            ", current segment index: ", current_segment_index_,
+            ", max path segments: ", currentPath->getNumSegments(),
             " its segment length = ", closestPosition->segment_length);
   // If closest position is never updated
   // OR If we reached end of a segment or end of the path -> Find new segment
   // then new point on segment
   if ((closestPosition->segment_length <= 0.0) ||
       (closestPosition->index >=
-       currentPath->segments[current_segment_index_].getSize() - 1) ||
+       currentPath->getSegmentEndIndex(current_segment_index_)) ||
       (closestPosition->segment_length >= 1.0)) {
     *closestPosition = findClosestPathPoint();
   }
@@ -327,33 +328,20 @@ Follower::calculateExponentialSpeedFactor(double current_angular_vel) const {
   double dist = 0.0;
 
   // Start iterating from the current tracked position
-  size_t seg_idx = current_segment_index_;
   size_t pt_idx = closestPosition->index;
 
   // Integrate curvature along the path up to lookahead distance
-  while (dist < lookahead_distance && seg_idx < currentPath->segments.size()) {
-    const auto &segment = currentPath->segments[seg_idx];
+  for (; pt_idx < currentPath->getSize() - 1; ++pt_idx) {
+    // Accumulate absolute curvature
+    curvature_sum += std::abs(currentPath->getCurvature(pt_idx));
 
-    for (; pt_idx < segment.getSize() - 1; ++pt_idx) {
-      // Accumulate absolute curvature
-      curvature_sum += std::abs(segment.getCurvature(pt_idx));
+    // Accumulate distance
+    double ds = Path::Path::distance(currentPath->getIndex(pt_idx),
+                                     currentPath->getIndex(pt_idx + 1));
+    dist += ds;
 
-      // Accumulate distance
-      double ds = Path::Path::distance(segment.getIndex(pt_idx),
-                                       segment.getIndex(pt_idx + 1));
-      dist += ds;
-
-      if (dist >= lookahead_distance)
-        break;
-    }
-
-    // Move to next segment if needed
-    if (pt_idx >= segment.getSize() - 1) {
-      seg_idx++;
-      pt_idx = 0;
-    } else {
+    if (dist >= lookahead_distance)
       break;
-    }
   }
 
   // Calculate exponential factor

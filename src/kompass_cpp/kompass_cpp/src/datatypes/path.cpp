@@ -86,8 +86,6 @@ bool Path::endReached(State currentState, double minDist) {
 
 size_t Path::getMaxSize() const { return max_size_; }
 
-size_t Path::getMaxNumSegments() { return segments.size() - 1; }
-
 Point Path::getEnd() const { return getIndex(current_size_ - 1); }
 
 Point Path::getStart() const { return getIndex(0); }
@@ -97,24 +95,44 @@ Point Path::getIndex(const size_t index) const {
   return Point(X_(index), Y_(index), Z_(index));
 }
 
-Path Path::getPart(const size_t start, const size_t end,
-                   const size_t max_part_size) const {
-  if (start >= current_size_ || end >= current_size_ || start >= end) {
-    throw std::out_of_range("Invalid range for path part.");
+Path::View Path::getSegment(size_t segment_index) const {
+  if (segment_index >= segment_indices_.size()) {
+    throw std::out_of_range(
+        "Invalid segment index. Maximum number of segments is " +
+        std::to_string(segment_indices_.size() - 1) +
+        ", but requested segment index is " + std::to_string(segment_index));
   }
-  auto part_size = std::max(max_part_size, end - start + 1);
-  Path part(X_.segment(start, end - start + 1),
-            Y_.segment(start, end - start + 1),
-            Z_.segment(start, end - start + 1), part_size);
-  // Copy curvature segment
-  part.Curvature_.head(end - start + 1) =
-      Curvature_.segment(start, end - start + 1);
-  return part;
+
+  size_t start_idx = segment_indices_[segment_index];
+  size_t end_idx;
+
+  if (segment_index + 1 < segment_indices_.size()) {
+    end_idx = segment_indices_[segment_index + 1] - 1;
+  } else {
+    end_idx = current_size_ - 1;
+  }
+
+  return getPart(start_idx, end_idx);
+}
+
+Path::View Path::getPart(const size_t start, const size_t end) const {
+  if (start >= current_size_ || end >= current_size_ || start > end) {
+    throw std::out_of_range(
+        "Invalid range for path part. Maximum path size is " +
+        std::to_string(current_size_) + ", but requested part start= " +
+        std::to_string(start) + ", and requested end= " + std::to_string(end));
+  }
+
+  size_t length = end - start + 1;
+
+  return Path::View(*this, start, length);
 }
 
 void Path::pushPoint(const Point &point) {
   if (current_size_ >= max_size_) {
-    throw std::out_of_range("Path is full. Cannot add more points.");
+    throw std::out_of_range(
+        "Path is full and reached maximum allowed size (max size = " +
+        std::to_string(max_size_) + "). Cannot add more points.");
   }
   X_(current_size_) = point.x();
   Y_(current_size_) = point.y();
@@ -344,71 +362,104 @@ void Path::interpolate(double max_interpolation_point_dist,
 
 // Segment the path by a given segment path length [m]
 void Path::segment(double pathSegmentLength) {
+  if (current_size_ == 0)
+    return;
   if (max_interpolation_dist_ > 0.0) {
     this->max_segment_size =
         static_cast<int>(pathSegmentLength / max_interpolation_dist_) + 1;
   }
-  segments.clear();
+
+  segment_indices_.clear();
   double totalLength = totalPathLength();
-  if (pathSegmentLength >= totalLength) {
-    // Add the whole path as a single segment
-    auto new_segment = *this;
-    new_segment.resize(this->max_segment_size);
-    segments.push_back(new_segment);
+
+  // single point or single segment
+  if (pathSegmentLength >= totalLength || current_size_ == 1) {
+    segment_indices_.push_back(0);
+    return;
   } else {
-    int segmentsNumber =
-        max(static_cast<int>(totalLength / pathSegmentLength), 1);
-    if (segmentsNumber == 1) {
-      auto new_segment = *this;
-      new_segment.resize(this->max_segment_size);
-      segments.push_back(new_segment);
-      return;
+    size_t segmentsNumber =
+        static_cast<size_t>(totalLength / pathSegmentLength);
+    if (segmentsNumber > current_size_) {
+      segmentsNumber = current_size_;
     }
-    segmentBySegmentNumber(segmentsNumber);
-  }
-}
 
-// Segment using a number of segments
-void Path::segmentBySegmentNumber(int numSegments) {
-  segments.clear();
-  if (numSegments <= 0 || current_size_ <= 0) {
-    throw std::invalid_argument(
-        "Invalid number of segments or empty points vector.");
-  }
-
-  this->max_segment_size = current_size_ / numSegments;
-  int remainder = current_size_ % numSegments;
-
-  size_t start_idx = 0;
-  for (int i = 0; i < numSegments; ++i) {
-    size_t segment_len = this->max_segment_size + (remainder > 0 ? 1 : 0);
-    if (remainder > 0)
-      --remainder;
-
-    Path new_segment =
-        getPart(start_idx, start_idx + segment_len - 1, segment_len);
-    segments.push_back(new_segment);
-
-    start_idx += segment_len;
-  }
-}
-
-// Segment using a segment points number
-void Path::segmentByPointsNumber(int segmentLength) {
-  this->max_segment_size = segmentLength;
-  segments.clear();
-  if (segmentLength <= 0 || current_size_ <= 0) {
-    throw std::invalid_argument(
-        "Invalid segment length or empty points vector.");
-  }
-  for (size_t i = 0; i < current_size_; i += segmentLength) {
-    std::vector<Point> segment_points;
-    for (size_t j = i; j < i + segmentLength && j < current_size_; ++j) {
-      segment_points.push_back(getIndex(j));
+    for (size_t i = 0; i < segmentsNumber; ++i) {
+      segment_indices_.push_back((i * current_size_) / segmentsNumber);
     }
-    auto new_segment = Path(segment_points, segment_points.size());
-    new_segment.max_size_ = this->max_segment_size;
-    segments.push_back(new_segment);
   }
+  LOG_INFO("Got number of segments: ", segment_indices_.size());
 }
+
+Point Path::getSegmentStart(size_t segment_index) const {
+  if (segment_index >= segment_indices_.size()) {
+    throw std::out_of_range("Invalid segment index.");
+  }
+
+  size_t start_idx = segment_indices_[segment_index];
+  return getIndex(start_idx);
+}
+
+Point Path::getSegmentEnd(size_t segment_index) const {
+  if (segment_index >= segment_indices_.size()) {
+    throw std::out_of_range("Invalid segment index.");
+  }
+  size_t end_idx;
+
+  if (segment_index + 1 < segment_indices_.size()) {
+    end_idx = segment_indices_[segment_index + 1] - 1;
+  } else {
+    end_idx = current_size_ - 1;
+  }
+  return getIndex(end_idx);
+}
+
+size_t Path::getSegmentSize(size_t segment_index) const {
+  if (segment_index >= segment_indices_.size()) {
+    throw std::out_of_range(
+        "Invalid segment index. Maximum number of segments is " +
+        std::to_string(segment_indices_.size() - 1) +
+        ", but requested segment index is " + std::to_string(segment_index));
+  }
+  size_t start_idx = segment_indices_[segment_index];
+  size_t end_idx;
+
+  if (segment_index + 1 < segment_indices_.size()) {
+    end_idx = segment_indices_[segment_index + 1] - 1;
+  } else {
+    end_idx = current_size_ - 1;
+  }
+  return end_idx - start_idx + 1;
+}
+
+size_t Path::getNumSegments() const {
+  return segment_indices_.size();
+}
+
+size_t Path::getSegmentStartIndex(size_t segment_index) const {
+  if (segment_index >= segment_indices_.size()) {
+    throw std::out_of_range(
+        "Invalid segment index. Maximum number of segments is " +
+        std::to_string(segment_indices_.size() - 1) +
+        ", but requested segment index is " + std::to_string(segment_index));
+  }
+  return segment_indices_[segment_index];
+}
+
+size_t Path::getSegmentEndIndex(size_t segment_index) const {
+  if (segment_index >= segment_indices_.size()) {
+    throw std::out_of_range(
+        "Invalid segment index. Maximum number of segments is " +
+        std::to_string(segment_indices_.size() - 1) +
+        ", but requested segment index is " + std::to_string(segment_index));
+  }
+  size_t end_idx;
+
+  if (segment_index + 1 < segment_indices_.size()) {
+    end_idx = segment_indices_[segment_index + 1] - 1;
+  } else {
+    end_idx = current_size_ - 1;
+  }
+  return end_idx;
+}
+
 } // namespace Path

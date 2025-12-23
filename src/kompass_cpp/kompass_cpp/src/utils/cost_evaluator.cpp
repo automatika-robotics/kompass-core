@@ -48,7 +48,7 @@ CostEvaluator::~CostEvaluator() {
 
 TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     const std::unique_ptr<TrajectorySamples2D> &trajs,
-    const Path::Path *reference_path, const Path::Path &tracked_segment) {
+    const Path::Path *reference_path, const Path::Path::View &tracked_segment) {
   double weight;
   float total_cost;
   float ref_path_length;
@@ -68,7 +68,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
       if ((weight = costWeights->getParameter<double>(
                "reference_path_distance_weight")) > 0.0) {
         float refPathCost = pathCostFunc(traj, tracked_segment,
-                                         tracked_segment.totalPathLength());
+                                         tracked_segment.totalSegmentLength());
         total_cost += weight * refPathCost;
       }
     }
@@ -109,7 +109,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
 }
 
 float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
-                                  const Path::Path &tracked_segment,
+                                  const Path::Path::View &tracked_segment,
                                   const float tracked_segment_length) {
   float total_cost = 0.0;
 
@@ -133,7 +133,9 @@ float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
 
   // end point distance
   float end_dist_error =
-      Path::Path::distance(trajectory.path.getEnd(), tracked_segment.getEnd()) /
+      Path::Path::distance(
+          trajectory.path.getEnd(),
+          tracked_segment.getIndex(tracked_segment.getSize() - 1)) /
       tracked_segment_length;
 
   // Divide by number of points to get average distance

@@ -192,7 +192,7 @@ CostEvaluator::~CostEvaluator() {
 
 TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     const std::unique_ptr<TrajectorySamples2D> &trajs,
-    const Path::Path *reference_path, const Path::Path &tracked_segment) {
+    const Path::Path *reference_path, const Path::Path::View &tracked_segment) {
 
   try {
     double weight;
@@ -235,14 +235,14 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
       if ((weight = costWeights->getParameter<double>(
                "reference_path_distance_weight")) > 0.0) {
         size_t tracked_segment_size = tracked_segment.getSize();
-        m_q.memcpy(m_devicePtrTrackedSegmentX, tracked_segment.getX().data(),
+        m_q.memcpy(m_devicePtrTrackedSegmentX, tracked_segment.getXPointer(),
                    sizeof(float) * tracked_segment_size)
             .wait();
-        m_q.memcpy(m_devicePtrTrackedSegmentY, tracked_segment.getY().data(),
+        m_q.memcpy(m_devicePtrTrackedSegmentY, tracked_segment.getYPointer(),
                    sizeof(float) * tracked_segment_size)
             .wait();
         events.push_back(pathCostFunc(trajs_size, tracked_segment_size,
-                                      tracked_segment.totalPathLength(),
+                                      tracked_segment.totalSegmentLength(),
                                       weight));
       }
     }
