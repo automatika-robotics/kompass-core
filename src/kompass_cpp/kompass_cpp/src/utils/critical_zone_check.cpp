@@ -11,8 +11,8 @@ namespace Kompass {
  *
  */
 
-CriticalZoneChecker::CriticalZoneChecker(InputType input_type,
-    const CollisionChecker::ShapeType robot_shape_type,
+CriticalZoneChecker::CriticalZoneChecker(
+    InputType input_type, const CollisionChecker::ShapeType robot_shape_type,
     const std::vector<float> &robot_dimensions,
     const Eigen::Vector3f &sensor_position_body,
     const Eigen::Vector4f &sensor_rotation_body, const float critical_angle,
@@ -32,6 +32,10 @@ CriticalZoneChecker::CriticalZoneChecker(InputType input_type,
     robotRadius_ = std::sqrt(pow(robot_dimensions.at(0), 2) +
                              pow(robot_dimensions.at(1), 2)) /
                    2;
+
+  } else if (robot_shape_type == CollisionChecker::ShapeType::SPHERE) {
+    robotHeight_ = robot_dimensions.at(0);
+    robotRadius_ = robot_dimensions.at(0);
   } else {
     throw std::invalid_argument("Invalid robot geometry type");
   }
