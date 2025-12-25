@@ -1,7 +1,6 @@
 #pragma once
 
 #include "datatypes/control.h"
-#include "utils/spline.h"
 #include <Eigen/Dense>
 #include <cmath>
 #include <cstddef>
@@ -241,7 +240,6 @@ private:
   // Max interpolation distance and total path distance are updated from user
   // config
   float max_path_length_{10.0}, max_interpolation_dist_{0.0};
-  tk::spline *spline_;
   size_t max_size_{10};
 };
 

@@ -1,7 +1,9 @@
 #include "datatypes/path.h"
 #include "utils/logger.h"
+#include "utils/spline.h"
 #include <cmath>
 #include <cstdlib>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 
@@ -263,6 +265,9 @@ void Path::interpolate(double max_interpolation_point_dist,
   max_interpolation_iterations_ =
       static_cast<size_t>((maxSize - current_size_) / (current_size_));
 
+  // Reset to zero in order to re-fill with interpolated points
+  X_ = Eigen::VectorXf::Zero(max_size_);
+  Y_ = Eigen::VectorXf::Zero(max_size_);
   Z_ = Eigen::VectorXf::Zero(max_size_);
   current_size_ = 0;
 
@@ -292,12 +297,16 @@ void Path::interpolate(double max_interpolation_point_dist,
     }
 
     // Create the spline object and set the x and y values
+    std::unique_ptr<tk::spline> spline;
     if (type == InterpolationType::LINEAR) {
-      spline_ = new tk::spline(x_points, y_points, tk::spline::linear);
+      spline =
+          std::make_unique<tk::spline>(x_points, y_points, tk::spline::linear);
     } else if (type == InterpolationType::CUBIC_SPLINE) {
-      spline_ = new tk::spline(x_points, y_points, tk::spline::cspline);
+      spline =
+          std::make_unique<tk::spline>(x_points, y_points, tk::spline::cspline);
     } else {
-      spline_ = new tk::spline(x_points, y_points, tk::spline::cspline_hermite);
+      spline = std::make_unique<tk::spline>(x_points, y_points,
+                                            tk::spline::cspline_hermite);
     }
 
     x_e = x[i];
@@ -309,7 +318,7 @@ void Path::interpolate(double max_interpolation_point_dist,
            j < max_interpolation_iterations_) {
       x_e = x[i] + j * (x[i + 1] - x[i]) * max_interpolation_point_dist;
 
-      y_e = spline_->operator()(x_e);
+      y_e = spline->operator()(x_e);
 
       X_[current_size_] = x_e;
       Y_[current_size_] = y_e;
@@ -431,9 +440,7 @@ size_t Path::getSegmentSize(size_t segment_index) const {
   return end_idx - start_idx + 1;
 }
 
-size_t Path::getNumSegments() const {
-  return segment_indices_.size();
-}
+size_t Path::getNumSegments() const { return segment_indices_.size(); }
 
 size_t Path::getSegmentStartIndex(size_t segment_index) const {
   if (segment_index >= segment_indices_.size()) {
