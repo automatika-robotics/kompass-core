@@ -193,10 +193,6 @@ float Path::getOrientation(const size_t index) const {
   return angle;
 }
 
-float Path::distance(const Point &p1, const Point &p2) {
-  return sqrt(pow((p2.x() - p1.x()), 2) + pow((p2.y() - p1.y()), 2));
-}
-
 // Function to compute the total path length
 float Path::totalPathLength() const {
 
@@ -349,7 +345,6 @@ void Path::interpolate(double max_interpolation_point_dist,
     float ddx = dx - dx_old;
     float ddy = dy - dy_old;
 
-    // Optimization: avoid pow(..., 1.5)
     float val = dx * dx + dy * dy;
     float denominator = val * std::sqrt(val);
 

@@ -19,7 +19,7 @@ struct State {
 
   State(double poseX = 0.0, double poseY = 0.0, double PoseYaw = 0.0,
         double speedValue = 0.0)
-      : x(poseX), y(poseY), yaw(PoseYaw), speed(speedValue){};
+      : x(poseX), y(poseY), yaw(PoseYaw), speed(speedValue) {};
 
   void update(const Kompass::Control::Velocity2D &vel, const float timeStep) {
     this->x +=
@@ -170,7 +170,15 @@ struct Path {
   // Get curvature at index
   double getCurvature(const size_t index) const;
 
-  static float distance(const Point &p1, const Point &p2);
+  // distance between two points
+  static inline float distance(const Point &p1, const Point &p2) {
+    return (p1 - p2).norm();
+  }
+
+  // Squared distance between two points (faster for comparison)
+  static inline float distanceSquared(const Point &p1, const Point &p2) {
+    return (p1 - p2).squaredNorm();
+  }
 
   // Function to compute the total path length
   float totalPathLength() const;
@@ -197,7 +205,6 @@ struct Path {
   Point getSegmentStart(size_t segment_index) const;
 
   Point getSegmentEnd(size_t segment_index) const;
-
 
   struct Iterator {
     using iterator_category = std::forward_iterator_tag;
@@ -234,7 +241,7 @@ private:
   // on the path If segment_indices_ = {i, j , k} -> the path would contain
   // three segments [i, j-1], [j, k-1], [k, end_of_path_index]
   std::vector<size_t> segment_indices_;
-  size_t current_size_{0};              // Current size of the path
+  size_t current_size_{0}; // Current size of the path
   // Max interpolation distance and total path distance are updated from user
   // config
   float max_path_length_{10.0}, max_interpolation_dist_{0.0};
