@@ -235,8 +235,6 @@ private:
   // three segments [i, j-1], [j, k-1], [k, end_of_path_index]
   std::vector<size_t> segment_indices_;
   size_t current_size_{0};              // Current size of the path
-  size_t max_interpolation_iterations_; // Max number of iterations for
-                                        // interpolation between two path points
   // Max interpolation distance and total path distance are updated from user
   // config
   float max_path_length_{10.0}, max_interpolation_dist_{0.0};
