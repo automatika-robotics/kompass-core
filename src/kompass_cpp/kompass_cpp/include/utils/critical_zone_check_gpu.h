@@ -93,7 +93,7 @@ public:
       m_q.wait(); // Finish transfers
     } else {
       // --- PointCloud Setup ---
-      // We defer large buffer allocation to the first 'check' call
+      // Defer large buffer allocation to the first 'check' call
       // to know the exact size.
       m_rawCapacity = 0;
       m_devicePtrRawBytes = nullptr;

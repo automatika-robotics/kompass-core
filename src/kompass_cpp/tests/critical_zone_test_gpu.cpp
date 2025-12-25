@@ -170,47 +170,61 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
   LOG_INFO("Testing Emergency Stop with GPU (POINTCLOUD)");
 
   // Instantiate a separate checker for PointCloud mode
-  // Using simplified geometry (Circle) and Identity TF for easier math
-  // validation
   auto pcShapeType = CollisionChecker::ShapeType::SPHERE;
   std::vector<float> pcDims{0.5}; // Radius = 0.5
   Eigen::Vector3f pcPos{0.0, 0.0, 0.0};
   Eigen::Vector4f pcRot{0.0, 0.0, 0.0, 1.0};
-  std::vector<double> empty_angles; // Not used for PC
+
+  std::vector<double> pc_angles;
+  std::vector<double> dummy_ranges;
+  initLaserscan(360, 10.0, dummy_ranges, pc_angles); // 1-degree resolution
 
   CriticalZoneCheckerGPU pcChecker(
       CriticalZoneChecker::InputType::POINTCLOUD, pcShapeType, pcDims, pcPos,
-      pcRot, critical_angle, 0.5 /*crit_dist*/, 1.0 /*slow_dist*/, empty_angles,
+      pcRot, critical_angle, 0.5 /*crit_dist*/, 1.0 /*slow_dist*/,
+      pc_angles, //
       0.1 /*min_h*/, 2.0 /*max_h*/, 20.0);
 
-  // Shared PointCloud Config
   std::vector<int8_t> cloud_data;
-  int point_step = 16;
-  int height = 1;
-  float x_off = 0, y_off = 4, z_off = 8;
+
+  int point_step = sizeof(PointXYZ);
+  int x_off = offsetof(PointXYZ, x);
+  int y_off = offsetof(PointXYZ, y);
+  int z_off = offsetof(PointXYZ, z);
+
+  // Helper lambda to run check with dynamic width calculation
+  // (Prevents errors if you add more than 1 point)
+  auto run_pc_check = [&](bool forward) -> float {
+    int num_points = cloud_data.size() / point_step;
+    int width = num_points;
+    int height = 1;
+    int row_step = width * point_step;
+
+    return pcChecker.check(cloud_data, point_step, row_step, height, width,
+                           x_off, y_off, z_off, forward);
+  };
 
   // --- Test 8: Empty Cloud (Safe) ---
   {
     Timer time;
-    bool forward = true;
-    float result = pcChecker.check(cloud_data, point_step, 0, height, 0, x_off,
-                                   y_off, z_off, forward);
+    cloud_data.clear();
+    // width will be 0, safe
+    float result = run_pc_check(true);
     BOOST_TEST(result == 1.0, "Empty PointCloud should be safe (1.0)");
   }
 
   // --- Test 9: Critical Obstacle (Front) ---
   {
     Timer time;
-    bool forward = true;
     cloud_data.clear();
     // Front: x=0.8, y=0, z=0.5.
     // Dist = 0.8. RobotRad(0.5) + Crit(0.5) = 1.0. -> 0.8 < 1.0 -> Critical.
-    addPointToCloud(cloud_data, 0.8f, 0.0f, 0.5f, point_step, x_off, y_off,
-                    z_off);
+    // Using new simplified signature from test.h
+    addPointToCloud(cloud_data, 0.8f, 0.0f, 0.5f);
 
-    float result = pcChecker.check(cloud_data, point_step, point_step, height,
-                                   1, x_off, y_off, z_off, forward);
+    float result = run_pc_check(true);
     BOOST_TEST(result == 0.0, "Point at 0.8m should trigger stop (0.0)");
+
     if (result == 0.0)
       LOG_INFO("Test9 PASSED: PointCloud Critical Stop");
   }
@@ -218,15 +232,13 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
   // --- Test 10: Height Filter (Too High) ---
   {
     Timer time;
-    bool forward = true;
     cloud_data.clear();
     // Same X,Y but Z=3.0 (Max Height is 2.0)
-    addPointToCloud(cloud_data, 0.8f, 0.0f, 3.0f, point_step, x_off, y_off,
-                    z_off);
+    addPointToCloud(cloud_data, 0.8f, 0.0f, 3.0f);
 
-    float result = pcChecker.check(cloud_data, point_step, point_step, height,
-                                   1, x_off, y_off, z_off, forward);
+    float result = run_pc_check(true);
     BOOST_TEST(result == 1.0, "High point (>max_z) should be ignored");
+
     if (result == 1.0)
       LOG_INFO("Test10 PASSED: PointCloud Height Filter");
   }
@@ -234,18 +246,15 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
   // --- Test 11: Slowdown Zone ---
   {
     Timer time;
-    bool forward = true;
     cloud_data.clear();
     // x=1.25. Dist to robot surface = 1.25 - 0.5 = 0.75.
-    // Slowdown range [0.5, 1.0]. 0.75 is exactly in middle.
-    // Factor = (0.75 - 0.5) / (1.0 - 0.5) = 0.5.
-    addPointToCloud(cloud_data, 1.25f, 0.0f, 0.5f, point_step, x_off, y_off,
-                    z_off);
+    // Slowdown range [0.5, 1.0]. 0.75 is middle -> ~0.5 factor.
+    addPointToCloud(cloud_data, 1.25f, 0.0f, 0.5f);
 
-    float result = pcChecker.check(cloud_data, point_step, point_step, height,
-                                   1, x_off, y_off, z_off, forward);
+    float result = run_pc_check(true);
     BOOST_TEST((result > 0.4 && result < 0.6),
                "Point in slowdown zone should return approx 0.5");
+
     if (result > 0.4 && result < 0.6)
       LOG_INFO("Test11 PASSED: PointCloud Slowdown Factor: ", result);
   }

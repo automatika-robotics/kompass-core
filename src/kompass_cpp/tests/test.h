@@ -94,17 +94,23 @@ inline void setLaserscanAtAngle(double angle, double rangeValue,
   }
 }
 
-// Helper for creating Fake PointCloud Data
-inline void addPointToCloud(std::vector<int8_t> &cloud_data, float x, float y, float z,
-                     int point_step, int x_offset, int y_offset, int z_offset) {
-  size_t current_size = cloud_data.size();
-  cloud_data.resize(current_size + point_step, 0);
+// Define a struct that matches the PointCloud2 memory layout
+// standard alignment: x(4) + y(4) + z(4) + padding(4) = 16 bytes
+struct PointXYZ {
+    float x;
+    float y;
+    float z;
+    float padding; // Essential for 16-byte alignment
+};
 
-  int8_t *point_ptr = cloud_data.data() + current_size;
+inline void addPointToCloud(std::vector<int8_t> &cloud_data, float x, float y, float z) {
+    PointXYZ pt;
+    pt.x = x;
+    pt.y = y;
+    pt.z = z;
+    pt.padding = 0.0f;
 
-  // Copy floats to raw bytes
-  std::memcpy(point_ptr + x_offset, &x, sizeof(float));
-  std::memcpy(point_ptr + y_offset, &y, sizeof(float));
-  std::memcpy(point_ptr + z_offset, &z, sizeof(float));
+    // Append raw bytes to vector
+    const int8_t* raw = reinterpret_cast<const int8_t*>(&pt);
+    cloud_data.insert(cloud_data.end(), raw, raw + sizeof(PointXYZ));
 }
-
