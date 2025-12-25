@@ -277,4 +277,54 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
     if (result > 0.4 && result < 0.6)
       LOG_INFO("Test12 PASSED: PointCloud Slowdown Factor: ", result);
   }
+
+  // --- Test 13: More complex point cloud data ---
+  {
+    Timer time;
+    cloud_data.clear();
+    // x=0.95. Dist to robot surface = 0.95 - 0.5 = 0.45
+    // Slowdown points: range [0.3, 0.6]. 0.45 is middle -> ~0.5 factor.
+    addPointToCloud(cloud_data, 0.95f, 0.0f, 0.5f);
+    addPointToCloud(cloud_data, 1.0f, 1.0f, 0.5f);
+    addPointToCloud(cloud_data, -1.0f, -1.0f, 0.5f);
+    // points to be discarded
+    addPointToCloud(cloud_data, -0.1f, -0.1f, 3.0f);
+    addPointToCloud(cloud_data, -0.1f, -0.1f, -3.0f);
+    addPointToCloud(cloud_data, 0.1f, 0.2f, 4.0f);
+    addPointToCloud(cloud_data, 0.1f, 0.2f, -4.0f);
+    // Stop points
+    addPointToCloud(cloud_data, 0.75f, 0.0f, 0.5f);
+
+    float result = run_pc_check(true);
+    BOOST_TEST((result == 0),
+               "Point in stop zone should return 0, returned " << result);
+
+    if (result == 0)
+      LOG_INFO("Test13 PASSED: Complex PointCloud STOP");
+  }
+
+  // --- Test 14: More complex point cloud data - slowdown ---
+  {
+    Timer time;
+    cloud_data.clear();
+    // x=0.95. Dist to robot surface = 0.95 - 0.5 = 0.45
+    // Slowdown points: range [0.3, 0.6]. 0.45 is middle -> ~0.5 factor.
+    addPointToCloud(cloud_data, 0.95f, 0.0f, 0.5f);
+    addPointToCloud(cloud_data, -0.95f, 0.0f, 0.5f);
+    addPointToCloud(cloud_data, 1.0f, 1.0f, 0.5f);
+    addPointToCloud(cloud_data, -1.0f, -1.0f, 0.5f);
+    // points to be discarded
+    addPointToCloud(cloud_data, -0.1f, -0.1f, 3.0f);
+    addPointToCloud(cloud_data, -0.1f, -0.1f, -3.0f);
+    addPointToCloud(cloud_data, 0.1f, 0.2f, 4.0f);
+    addPointToCloud(cloud_data, 0.1f, 0.2f, -4.0f);
+
+    float result = run_pc_check(false);
+    BOOST_TEST((result > 0.4 && result < 0.6),
+               "Point in slowdown zone should return approx 0.5, returned "
+                   << result);
+
+    if (result > 0.4 && result < 0.6)
+      LOG_INFO("Test14 PASSED: PointCloud Slowdown Factor: ", result);
+  }
 }
