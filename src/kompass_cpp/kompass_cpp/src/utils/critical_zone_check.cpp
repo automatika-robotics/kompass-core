@@ -106,6 +106,7 @@ float CriticalZoneChecker::check(const std::vector<double> &ranges,
     indicies = &indicies_backward_;
   }
   // If sensor data has been preset then use the indicies directly
+  float slowdown_factor = 1.0f;
   for (size_t index : *indicies) {
     x = ranges[index] * cos_angles_[index];
     y = ranges[index] * sin_angles_[index];
@@ -120,11 +121,12 @@ float CriticalZoneChecker::check(const std::vector<double> &ranges,
     if (distance <= critical_distance_) {
       return 0.0;
     } else if (distance <= slowdown_distance_) {
-      return (distance - critical_distance_) /
-             (slowdown_distance_ - critical_distance_);
+      slowdown_factor = std::min(slowdown_factor,
+                                 (distance - critical_distance_) /
+                                     (slowdown_distance_ - critical_distance_));
     }
   }
-  return 1.0;
+  return slowdown_factor;
 }
 
 float CriticalZoneChecker::check(const std::vector<int8_t> &data,

@@ -10,8 +10,8 @@
 
 BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
   // Shared Setup
-  auto robotShapeType = CollisionChecker::ShapeType::BOX;
-  std::vector<float> robotDimensions{0.51, 0.27, 0.4};
+  auto robotShapeType = CollisionChecker::ShapeType::CYLINDER;
+  std::vector<float> robotDimensions{0.51, 2.0};
 
   const Eigen::Vector3f sensor_position_body{0.22, 0.0, 0.4};
   const Eigen::Vector4f sensor_rotation_body{0, 0, 0.99, 0.0};
@@ -128,7 +128,7 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
     Timer time;
     bool forward_motion = false;
     initLaserscan(360, 10.0, scan_ranges, scan_angles);
-    setLaserscanAtAngle(0.0, 1.0, scan_ranges, scan_angles);
+    setLaserscanAtAngle(0.0, 1.3, scan_ranges, scan_angles);
 
     float result = zoneChecker.check(scan_ranges, forward_motion);
     BOOST_TEST(
@@ -144,11 +144,31 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
     }
   }
 
-  // --- Test 7: Front Slowdown & Moving Forward ---
+  // --- Test 7: Back Slowdown & Moving Forward ---
   {
     Timer time;
     bool forward_motion = true;
-    setLaserscanAtAngle(M_PI, 0.5, scan_ranges, scan_angles);
+    // Ranges are still set from Test 6
+
+    float result = zoneChecker.check(scan_ranges, forward_motion);
+    BOOST_TEST(
+        result == 1.0,
+        "Angles are in back and in the slowdown zone and robot is moving "
+        "forward -> Critical zone result should be between 1.0, returned "
+            << result);
+    if (result == 1.0) {
+      LOG_INFO("Test7 PASSED: Angles are in back and in the slowdown zone and "
+               "robot is moving "
+               "forward, slowdown factor = ",
+               result);
+    }
+  }
+
+  // --- Test 8: Front Slowdown & Moving Forward ---
+  {
+    Timer time;
+    bool forward_motion = true;
+    setLaserscanAtAngle(M_PI, 0.7, scan_ranges, scan_angles);
 
     float result = zoneChecker.check(scan_ranges, forward_motion);
     BOOST_TEST(
@@ -157,8 +177,9 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
         "forward -> Critical zone result should be between [0, 1], returned "
             << result);
     if (result > 0.0 and result < 1.0) {
-      LOG_INFO("Test7 PASSED: Angles are in front and in the slowdown zone and "
-               "robot is moving forward, slowdown factor = ",
+      LOG_INFO("Test8 PASSED: Angles are in front and in the slowdown zone and "
+               "robot is moving "
+               "forward, slowdown factor = ",
                result);
     }
   }
@@ -170,8 +191,6 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
   LOG_INFO("Testing Emergency Stop with GPU (POINTCLOUD)");
 
   // Instantiate a separate checker for PointCloud mode
-  auto pcShapeType = CollisionChecker::ShapeType::SPHERE;
-  std::vector<float> pcDims{0.5}; // Radius = 0.5
   Eigen::Vector3f pcPos{0.0, 0.0, 0.0};
   Eigen::Vector4f pcRot{0.0, 0.0, 0.0, 1.0};
 
@@ -180,8 +199,8 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
   initLaserscan(360, 10.0, dummy_ranges, pc_angles); // 1-degree resolution
 
   CriticalZoneCheckerGPU pcChecker(
-      CriticalZoneChecker::InputType::POINTCLOUD, pcShapeType, pcDims, pcPos,
-      pcRot, critical_angle, 0.5 /*crit_dist*/, 1.0 /*slow_dist*/,
+      CriticalZoneChecker::InputType::POINTCLOUD, robotShapeType, robotDimensions, pcPos,
+      pcRot, critical_angle, critical_distance /*crit_dist*/, slowdown_distance /*slow_dist*/,
       pc_angles, //
       0.1 /*min_h*/, 2.0 /*max_h*/, 20.0);
 
@@ -204,7 +223,7 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
                            x_off, y_off, z_off, forward);
   };
 
-  // --- Test 8: Empty Cloud (Safe) ---
+  // --- Test 9: Empty Cloud (Safe) ---
   {
     Timer time;
     cloud_data.clear();
@@ -213,49 +232,49 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
     BOOST_TEST(result == 1.0, "Empty PointCloud should be safe (1.0)");
   }
 
-  // --- Test 9: Critical Obstacle (Front) ---
+  // --- Test 10: Critical Obstacle (Front) ---
   {
     Timer time;
     cloud_data.clear();
     // Front: x=0.8, y=0, z=0.5.
-    // Dist = 0.8. RobotRad(0.5) + Crit(0.5) = 1.0. -> 0.8 < 1.0 -> Critical.
-    // Using new simplified signature from test.h
-    addPointToCloud(cloud_data, 0.8f, 0.0f, 0.5f);
+    // Dist = 0.8. RobotRad(0.5) + Crit(0.3) = 0.8 -> 0.7 < 0.8 -> Critical.
+    addPointToCloud(cloud_data, 0.7f, 0.0f, 0.5f);
 
     float result = run_pc_check(true);
-    BOOST_TEST(result == 0.0, "Point at 0.8m should trigger stop (0.0)");
+    BOOST_TEST(result == 0.0, "Point at 0.7m, should trigger stop (0.0)");
 
     if (result == 0.0)
-      LOG_INFO("Test9 PASSED: PointCloud Critical Stop");
+      LOG_INFO("Test10 PASSED: PointCloud Critical Stop");
   }
 
-  // --- Test 10: Height Filter (Too High) ---
+  // --- Test 11: Height Filter (Too High) ---
   {
     Timer time;
     cloud_data.clear();
     // Same X,Y but Z=3.0 (Max Height is 2.0)
-    addPointToCloud(cloud_data, 0.8f, 0.0f, 3.0f);
+    addPointToCloud(cloud_data, 0.7f, 0.0f, 3.0f);
 
     float result = run_pc_check(true);
     BOOST_TEST(result == 1.0, "High point (>max_z) should be ignored");
 
     if (result == 1.0)
-      LOG_INFO("Test10 PASSED: PointCloud Height Filter");
+      LOG_INFO("Test11 PASSED: PointCloud Height Filter");
   }
 
-  // --- Test 11: Slowdown Zone ---
+  // --- Test 12: Slowdown Zone ---
   {
     Timer time;
     cloud_data.clear();
-    // x=1.25. Dist to robot surface = 1.25 - 0.5 = 0.75.
-    // Slowdown range [0.5, 1.0]. 0.75 is middle -> ~0.5 factor.
-    addPointToCloud(cloud_data, 1.25f, 0.0f, 0.5f);
+    // x=0.95. Dist to robot surface = 0.95 - 0.5 = 0.45
+    // Slowdown range [0.3, 0.6]. 0.45 is middle -> ~0.5 factor.
+    addPointToCloud(cloud_data, 0.95f, 0.0f, 0.5f);
 
     float result = run_pc_check(true);
     BOOST_TEST((result > 0.4 && result < 0.6),
-               "Point in slowdown zone should return approx 0.5");
+               "Point in slowdown zone should return approx 0.5, returned "
+                   << result);
 
     if (result > 0.4 && result < 0.6)
-      LOG_INFO("Test11 PASSED: PointCloud Slowdown Factor: ", result);
+      LOG_INFO("Test12 PASSED: PointCloud Slowdown Factor: ", result);
   }
 }
