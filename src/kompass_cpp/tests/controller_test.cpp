@@ -116,6 +116,7 @@ BOOST_AUTO_TEST_CASE(test_PurePursuit_All_Scenarios) {
                          0.5); // Speed regulation parameters
   pp_config.setParameter("speed_regulation_angular", 0.5);
   pp_config.setParameter("max_point_interpolation_distance", 0.05);
+  pp_config.setParameter("max_path_length", 100.0);
   pp_config.setParameter("path_segment_length", 1.0);
   pp_config.setParameter("goal_dist_tolerance", 0.3);
 
@@ -228,9 +229,6 @@ BOOST_AUTO_TEST_CASE(test_PurePursuit_All_Scenarios) {
           // Apply control
           controller.setCurrentVelocity(result.velocity_command);
           applyControl(robotState, result.velocity_command, timeStep);
-          LOG_INFO("Got Control: ", result.velocity_command.vx(), ", ",
-                   result.velocity_command.vy(), ", ",
-                   result.velocity_command.omega());
           step++;
         }
 
