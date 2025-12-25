@@ -45,15 +45,22 @@ CriticalZoneChecker::CriticalZoneChecker(
       getTransformation(sensor_rotation_body, sensor_position_body);
   // Compute the critical zone angles min,max
   float angle_rad = critical_angle * M_PI / 180.0;
-  angle_right_forward_ = angle_rad / 2;
-  angle_left_forward_ = (2 * M_PI) - (angle_rad / 2);
-  angle_right_backward_ = Angle::normalizeTo0Pi(M_PI + angle_right_forward_);
-  angle_left_backward_ = Angle::normalizeTo0Pi(M_PI + angle_left_forward_);
+  float angle_right_forward_ = angle_rad / 2;
+  float angle_left_forward_ = (2 * M_PI) - (angle_rad / 2);
+  float angle_right_backward_ =
+      Angle::normalizeTo0Pi(M_PI + angle_right_forward_);
+  float angle_left_backward_ =
+      Angle::normalizeTo0Pi(M_PI + angle_left_forward_);
 
   LOG_DEBUG("Critical zone forward angles: [", angle_right_forward_, ", ",
             angle_left_forward_, "]");
   LOG_DEBUG("Critical zone backward angles: [", angle_right_backward_, ", ",
             angle_left_backward_, "]");
+
+  angle_max_forward_ = std::max(angle_left_forward_, angle_right_forward_);
+  angle_min_forward_ = std::min(angle_left_forward_, angle_right_forward_);
+  angle_max_backward_ = std::max(angle_left_backward_, angle_right_backward_);
+  angle_min_backward_ = std::min(angle_left_backward_, angle_right_backward_);
 
   preset(angles);
 
@@ -84,12 +91,10 @@ void CriticalZoneChecker::preset(const std::vector<double> &angles) {
     theta = Angle::normalizeTo0Pi(
         std::atan2(cartesianPoint.y(), cartesianPoint.x()));
 
-    if (theta >= std::max(angle_left_forward_, angle_right_forward_) ||
-        theta <= std::min(angle_left_forward_, angle_right_forward_)) {
+    if (theta >= angle_max_forward_ || theta <= angle_min_forward_) {
       indicies_forward_.push_back(i);
     }
-    if (theta >= std::min(angle_left_backward_, angle_right_backward_) &&
-        theta <= std::max(angle_left_backward_, angle_right_backward_)) {
+    if (theta >= angle_min_backward_ && theta <= angle_max_forward_) {
       indicies_backward_.push_back(i);
     }
   }

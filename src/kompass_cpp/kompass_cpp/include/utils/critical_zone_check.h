@@ -79,8 +79,8 @@ protected:
   InputType input_type_;
   double robotHeight_{1.0}, robotRadius_;
   float min_height_, max_height_, range_max_;
-  float angle_right_forward_, angle_left_forward_, angle_right_backward_,
-      angle_left_backward_;
+  float angle_max_forward_, angle_min_forward_, angle_max_backward_,
+      angle_min_backward_;
   std::vector<float> sin_angles_;
   std::vector<float> cos_angles_;
   std::vector<size_t> indicies_forward_, indicies_backward_;

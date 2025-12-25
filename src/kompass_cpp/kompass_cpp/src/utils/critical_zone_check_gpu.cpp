@@ -62,10 +62,10 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
       float inv_dist_range = (dist_range > 1e-5f) ? 1.0f / dist_range : 0.0f;
 
       // Angular Limits
-      float angle_right_forward = angle_right_forward_;
-      float angle_left_forward = angle_left_forward_;
-      float angle_right_backward = angle_right_backward_;
-      float angle_left_backward = angle_left_backward_;
+      float forward_max_angle = angle_max_forward_;
+      float forward_min_angle = angle_min_forward_;
+      float backward_min_angle = angle_min_backward_;
+      float backward_max_angle = angle_max_backward_;
 
       bool check_forward = forward;
 
@@ -130,13 +130,12 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
               bool in_zone = false;
               if (check_forward) {
                 // Forward check: is angle within [-crit, +crit]?
-                if (angle <= angle_right_forward || angle > angle_left_forward)
+                if (angle >= forward_max_angle || angle <= forward_min_angle)
                   in_zone = true;
               } else {
                 // Backward check: is angle > (PI - crit) OR angle < (-PI +
                 // crit)
-                if (angle >= angle_right_backward &&
-                    angle < angle_left_backward)
+                if (angle >= backward_min_angle && angle <= backward_max_angle)
                   in_zone = true;
               }
 
