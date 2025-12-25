@@ -19,6 +19,11 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
                                     int point_step, int row_step, int height,
                                     int width, float x_offset, float y_offset,
                                     float z_offset, const bool forward) {
+  // Handle Empty Cloud
+  if (data.empty() || width * height == 0) {
+    return 1.0f; // No points -> Safe
+  }
+
   try {
     // Data Transfer
     // Copy the vector to the GPU
