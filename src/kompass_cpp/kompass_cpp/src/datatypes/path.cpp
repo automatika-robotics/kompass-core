@@ -51,22 +51,6 @@ Path::Path(const Eigen::VectorXf &x_points, const Eigen::VectorXf &y_points,
   Z_.head(current_size_) = z_points;
 }
 
-const Eigen::VectorXf Path::getX() const {
-  return X_.segment(0, current_size_);
-}
-
-const Eigen::VectorXf Path::getY() const {
-  return Y_.segment(0, current_size_);
-}
-
-const Eigen::VectorXf Path::getZ() const {
-  return Z_.segment(0, current_size_);
-}
-
-size_t Path::getSize() const { return current_size_; }
-
-void Path::setMaxLength(double max_length) { max_path_length_ = max_length; }
-
 void Path::resize(const size_t new_max_size) {
   max_size_ = new_max_size;
   X_.resize(max_size_);
@@ -84,17 +68,6 @@ bool Path::endReached(State currentState, double minDist) {
   double dist = sqrt(pow(endPoint.x() - currentState.x, 2) +
                      pow(endPoint.y() - currentState.y, 2));
   return dist <= minDist;
-}
-
-size_t Path::getMaxSize() const { return max_size_; }
-
-Point Path::getEnd() const { return getIndex(current_size_ - 1); }
-
-Point Path::getStart() const { return getIndex(0); }
-
-Point Path::getIndex(const size_t index) const {
-  assert(index < current_size_ && "Index out of range");
-  return Point(X_(index), Y_(index), Z_(index));
 }
 
 Path::View Path::getSegment(size_t segment_index) const {
@@ -153,12 +126,6 @@ float Path::getEndOrientation() const {
   float angle = atan2(dy, dx);
 
   return angle;
-}
-
-double Path::getCurvature(const size_t index) const {
-  if (index >= current_size_)
-    return 0.0;
-  return Curvature_(index);
 }
 
 float Path::getStartOrientation() const {
@@ -414,8 +381,6 @@ size_t Path::getSegmentSize(size_t segment_index) const {
   }
   return end_idx - start_idx + 1;
 }
-
-size_t Path::getNumSegments() const { return segment_indices_.size(); }
 
 size_t Path::getSegmentStartIndex(size_t segment_index) const {
   if (segment_index >= segment_indices_.size()) {

@@ -76,7 +76,7 @@ struct Path {
       return length;
     }
 
-    // --- Iterator Implementation ---
+    // --- Segment points Iterator ---
     struct Iterator {
       using iterator_category = std::forward_iterator_tag;
       using value_type = Point;
@@ -118,21 +118,17 @@ struct Path {
       size_t index;
     };
 
-    // --- Begin/End Support ---
+    // Begin/End Support
 
     Iterator begin() const { return Iterator(*this, 0); }
     Iterator end() const { return Iterator(*this, getSize()); }
   };
 
-  // get all x values from points
-  const Eigen::VectorXf getX() const;
-  // get all y values from points
-  const Eigen::VectorXf getY() const;
-  // get all z values from points
-  const Eigen::VectorXf getZ() const;
   // Max segment size and max total path points size is calculated after
   // interpolation
   int max_segment_size{10};
+
+  // --- Constructors ---
 
   Path(const Path &other) = default;
 
@@ -141,34 +137,50 @@ struct Path {
   Path(const Eigen::VectorXf &x_points, const Eigen::VectorXf &y_points,
        const Eigen::VectorXf &z_points, const size_t new_max_size = 10);
 
-  void setMaxLength(double max_length);
+  // --- Inlined functions ---
 
-  void resize(const size_t max_new_size);
+  // get all x values from points
+  inline const Eigen::VectorXf getX() const {
+    return X_.segment(0, current_size_);
+  }
 
-  bool endReached(State currentState, double minDist);
+  // get all y values from points
+  inline const Eigen::VectorXf getY() const {
+    return Y_.segment(0, current_size_);
+  }
 
-  Point getEnd() const;
+  // get all z values from points
+  inline const Eigen::VectorXf getZ() const {
+    return Z_.segment(0, current_size_);
+  }
 
-  Point getStart() const;
+  // get path size in points
+  inline size_t getSize() const { return current_size_; }
 
-  Point getIndex(const size_t index) const;
+  // get max path length
+  inline void setMaxLength(double max_length) { max_path_length_ = max_length; }
 
-  Path::View getPart(const size_t start, const size_t end) const;
+  // get max size of the path in number of points
+  inline size_t getMaxSize() const { return max_size_; }
 
-  void pushPoint(const Point &point);
+  // get last point in the path
+  inline Point getEnd() const { return getIndex(current_size_ - 1); }
 
-  size_t getSize() const;
+  // get first point in the path
+  inline Point getStart() const { return getIndex(0); }
 
-  size_t getMaxSize() const;
-
-  float getEndOrientation() const;
-
-  float getStartOrientation() const;
-
-  float getOrientation(const size_t index) const;
+  // get point at given index the path
+  inline Point getIndex(const size_t index) const {
+    assert(index < current_size_ && "Index out of range");
+    return Point(X_(index), Y_(index), Z_(index));
+  }
 
   // Get curvature at index
-  double getCurvature(const size_t index) const;
+  inline double getCurvature(const size_t index) const {
+    if (index >= current_size_)
+      return 0.0;
+    return Curvature_(index);
+  }
 
   // distance between two points
   static inline float distance(const Point &p1, const Point &p2) {
@@ -180,14 +192,33 @@ struct Path {
     return (p1 - p2).squaredNorm();
   }
 
-  static inline float distanceSquared(const State &state,
-                                      const Point &point) {
+  // Squared distance overload with state and point
+  static inline float distanceSquared(const State &state, const Point &point) {
 
     return (Point(state.x, state.y, 0.0) - point).squaredNorm();
   }
 
+  // --- Function Signatures ---
+
+  void resize(const size_t max_new_size);
+
+  bool endReached(State currentState, double minDist);
+
+  Path::View getPart(const size_t start, const size_t end) const;
+
+  void pushPoint(const Point &point);
+
+  float getEndOrientation() const;
+
+  float getStartOrientation() const;
+
+  float getOrientation(const size_t index) const;
+
   // Function to compute the total path length
   float totalPathLength() const;
+
+  // get number of segments in the path
+  inline size_t getNumSegments() const { return segment_indices_.size(); }
 
   Path::View getSegment(size_t segment_index) const;
 
@@ -197,8 +228,6 @@ struct Path {
 
   size_t getSegmentEndIndex(size_t segment_index) const;
 
-  size_t getNumSegments() const;
-
   void interpolate(double max_interpolation_point_dist, InterpolationType type);
 
   // Segment the path by a given segment path length [m]
@@ -207,6 +236,8 @@ struct Path {
   Point getSegmentStart(size_t segment_index) const;
 
   Point getSegmentEnd(size_t segment_index) const;
+
+  // --- Path points Iterator ---
 
   struct Iterator {
     using iterator_category = std::forward_iterator_tag;
