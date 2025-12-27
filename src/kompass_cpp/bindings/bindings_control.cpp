@@ -174,7 +174,7 @@ void bindings_control(py::module_ &m) {
            "Init PurePursuit follower with collision avoidance configuration",
            py::arg("control_type"), py::arg("control_limits"),
            py::arg("robot_shape_type"), py::arg("robot_dimensions"),
-           py::arg("sensor_position_body"), py::arg("sensor_rotation_body"),
+           py::arg("sensor_position_robot"), py::arg("sensor_rotation_robot"),
            py::arg("octree_res") = 0.1,
            py::arg("config") = Control::PurePursuit::PurePursuitConfig())
       .def("execute",

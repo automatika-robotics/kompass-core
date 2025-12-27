@@ -1,5 +1,6 @@
 from typing import Optional, List
 import logging
+import numpy as np
 from attrs import define, field
 from ..utils.common import base_validators
 
@@ -61,6 +62,14 @@ class PurePursuitConfig(FollowerConfig):
     )
     max_search_candidates: int = field(
         default=10, validator=base_validators.in_range(min_value=2, max_value=1000)
+    )
+
+    proximity_sensor_position_to_robot: np.ndarray = field(
+        default=np.array([0.0, 0.0, 0.0], dtype=np.float32)
+    )
+
+    proximity_sensor_rotation_to_robot: np.ndarray = field(
+        default=np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
     )
 
     def to_kompass_cpp(self) -> kompass_cpp.control.PurePursuitConfig:
@@ -130,9 +139,9 @@ class PurePursuit(FollowerTemplate):
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
             robot_shape_type=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
-            robot_dimensions=robot.dimensions,
-            sensor_position_body=sensor_position,
-            sensor_rotation_body=sensor_rotation,
+            robot_dimensions=robot.geometry_params.tolist(),
+            sensor_position_robot=config.proximity_sensor_position_to_robot,
+            sensor_rotation_robot=config.proximity_sensor_rotation_to_robot,
             octree_res=octree_res,
             config=config.to_kompass_cpp(),
         )
@@ -170,14 +179,14 @@ class PurePursuit(FollowerTemplate):
             )
         if "laser_scan" in kwargs:
             # Execute with LaserScan
-            self._result = self._planner.execute(
-                self._control_time_step, kwargs["laser_scan"]
+            sensor_data = kompass_cpp.types.LaserScan(
+                ranges=kwargs["laser_scan"].ranges, angles=kwargs["laser_scan"].angles
             )
+            self._result = self._planner.execute(self._control_time_step, sensor_data)
         elif "point_cloud" in kwargs:
             # Execute with PointCloud
-            self._result = self._planner.execute(
-                self._control_time_step, kwargs["point_cloud"]
-            )
+            sensor_data = kwargs["point_cloud"].data
+            self._result = self._planner.execute(self._control_time_step, sensor_data)
         else:
             # Execute Nominal (State Update + Control)
             self._result = self._planner.execute(self._control_time_step)
