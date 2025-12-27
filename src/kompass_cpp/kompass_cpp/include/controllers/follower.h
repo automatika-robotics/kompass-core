@@ -176,36 +176,6 @@ public:
   const Path::Path getCurrentPath() const;
 
   /**
-   * @brief Helper method to calculate the distance between a state and a point
-   *
-   * @param state
-   * @param point
-   * @return const double
-   */
-  const double calculateDistance(const Path::State &state,
-                                 const Path::Point &point) const;
-
-  /**
-   * @brief Helper method to calculate the distance between two points
-   *
-   * @param point1
-   * @param point2
-   * @return const double
-   */
-  const double calculateDistance(const Path::Point &point1,
-                                 const Path::Point &point2) const;
-
-  /**
-   * @brief Helper method to calculate the distance between two states
-   *
-   * @param state1
-   * @param state2
-   * @return const double
-   */
-  const double calculateDistance(const Path::State &state1,
-                                 const Path::State &state2) const;
-
-  /**
    * @brief Calculates an exponential speed factor [0, 1] based on path
    * properties.
    *

@@ -76,6 +76,7 @@ void Path::resize(const size_t new_max_size) {
   if (current_size_ > max_size_) {
     current_size_ = max_size_;
   }
+  interpolated_ = false;
 }
 
 bool Path::endReached(State currentState, double minDist) {
@@ -200,6 +201,11 @@ float Path::totalPathLength() const {
     return 0.0;
   }
 
+  // If path is already interpolated -> length was already calculated
+  if(interpolated_){
+    return current_total_length_;
+  }
+
   float totalLength = 0.0;
   for (size_t i = 1; i < current_size_; ++i) {
     totalLength += distance(getIndex(i - 1), getIndex(i));
@@ -208,32 +214,6 @@ float Path::totalPathLength() const {
   return totalLength;
 }
 
-Point Path::getPointAtLength(const double length) const {
-  float totalLength = totalPathLength();
-  if (length <= totalLength or current_size_ > 2) {
-    float accumLength = 0.0;
-    float twoPointDist = distance(getIndex(0), getIndex(1));
-    for (size_t i = 1; i < current_size_; ++i) {
-      accumLength += distance(getIndex(i - 1), getIndex(i));
-      if (abs(accumLength - totalLength) < twoPointDist) {
-        return getIndex(i - 1);
-      }
-    }
-  }
-  return getEnd();
-}
-
-size_t Path::getNumberPointsInLength(double length) const {
-  double totalLength = 0.0;
-
-  for (size_t i = 1; i < current_size_; ++i) {
-    totalLength += distance(getIndex(i - 1), getIndex(i));
-    if (totalLength >= length) {
-      return i;
-    }
-  }
-  return current_size_;
-}
 
 void Path::interpolate(double max_interpolation_point_dist,
                        InterpolationType type) {
@@ -253,25 +233,26 @@ void Path::interpolate(double max_interpolation_point_dist,
   x_vals.reserve(current_size_);
   y_vals.reserve(current_size_);
 
-  double current_dist = 0.0;
-
   // Push the first point
   s_vals.push_back(0.0);
   x_vals.push_back(X_[0]);
   y_vals.push_back(Y_[0]);
 
+  // Reset the effective path length (meters)
+  current_total_length_ = 0.0;
+
   for (size_t i = 1; i < current_size_; ++i) {
     // Calculate the segment distance
     double seg_dist = std::hypot(X_[i] - X_[i - 1], Y_[i] - Y_[i - 1]);
-    current_dist += seg_dist;
+    current_total_length_ += seg_dist;
 
     // Push points
-    s_vals.push_back(current_dist);
+    s_vals.push_back(current_total_length_);
     x_vals.push_back(X_[i]);
     y_vals.push_back(Y_[i]);
   }
 
-  double total_input_length = current_dist;
+  double total_input_length = current_total_length_;
 
   // --- Global Spline Construction ---
   tk::spline spline_x, spline_y;
@@ -326,6 +307,8 @@ void Path::interpolate(double max_interpolation_point_dist,
     Y_[idx] = static_cast<float>(spline_y(effective_len));
     idx++;
   }
+
+  interpolated_ = true;
 
   current_size_ = idx;
 

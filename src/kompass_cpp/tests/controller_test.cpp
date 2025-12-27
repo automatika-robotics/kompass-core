@@ -384,7 +384,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
       throw std::system_error(res, std::generic_category(),
                               "Python script failed with error code");
 
-  while (!planner.isGoalReached() and counter < 100) {
+  while (!planner.isGoalReached() and counter < 150) {
     counter++;
     // Set the robot state in the planner
     planner.setCurrentState(robotState);

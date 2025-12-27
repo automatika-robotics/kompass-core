@@ -180,12 +180,14 @@ struct Path {
     return (p1 - p2).squaredNorm();
   }
 
+  static inline float distanceSquared(const State &state,
+                                      const Point &point) {
+
+    return (Point(state.x, state.y, 0.0) - point).squaredNorm();
+  }
+
   // Function to compute the total path length
   float totalPathLength() const;
-
-  Point getPointAtLength(const double length) const;
-
-  size_t getNumberPointsInLength(double length) const;
 
   Path::View getSegment(size_t segment_index) const;
 
@@ -245,6 +247,8 @@ private:
   // Max interpolation distance and total path distance are updated from user
   // config
   float max_path_length_{10.0}, max_interpolation_dist_{0.0};
+  float current_total_length_{0.0};
+  bool interpolated_ = false;
   size_t max_size_{10};
 };
 

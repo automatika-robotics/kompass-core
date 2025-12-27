@@ -89,6 +89,8 @@ void Follower::setCurrentPath(const Path::Path &path, const bool interpolate) {
 
   if (interpolate) {
     currentPath->interpolate(maxDist, interpolationType);
+    // std::cout << "Path X: " << currentPath->getX() << "\n";
+    // std::cout << "Path Y: " << currentPath->getY() << "\n";
   }
   // Segment path
   currentPath->segment(path_segment_length);
@@ -150,21 +152,6 @@ void Follower::setInterpolationType(Path::InterpolationType type) {
   interpolationType = type;
 }
 
-const double Follower::calculateDistance(const Path::State &state,
-                                         const Path::Point &point) const {
-  return std::hypot(state.x - point.x(), state.y - point.y());
-}
-
-const double Follower::calculateDistance(const Path::Point &point1,
-                                         const Path::Point &point2) const {
-  return std::hypot(point1.x() - point2.x(), point1.y() - point2.y());
-}
-
-const double Follower::calculateDistance(const Path::State &state1,
-                                         const Path::State &state2) const {
-  return std::hypot(state1.x - state2.x, state1.y - state2.y);
-}
-
 // Method to find the closest point on the path to the current position
 Path::PathPosition Follower::findClosestPathPoint() {
   current_segment_index_ = findClosestSegmentIndex(0, max_segment_index_);
@@ -180,12 +167,13 @@ size_t Follower::findClosestSegmentIndex(size_t left, size_t right) {
 
   size_t mid = (left + right) / 2;
 
+  float left_distance = currentPath->distanceSquared(
+      currentState, currentPath->getSegmentStart(left));
+  float right_distance = currentPath->distanceSquared(
+      currentState, currentPath->getSegmentStart(right));
+
   // In case only two points are available
   if (mid == right || mid == left) {
-    double left_distance =
-        calculateDistance(currentState, currentPath->getSegmentStart(left));
-    double right_distance =
-        calculateDistance(currentState, currentPath->getSegmentEnd(right));
     if (left_distance <= right_distance) {
       return left;
     } else {
@@ -193,11 +181,7 @@ size_t Follower::findClosestSegmentIndex(size_t left, size_t right) {
     }
   }
 
-  double left_distance =
-      calculateDistance(currentState, currentPath->getSegmentStart(left));
-  double right_distance =
-      calculateDistance(currentState, currentPath->getSegmentEnd(right));
-
+  // Check closest segment of the closer end
   if (left_distance <= right_distance) {
     return findClosestSegmentIndex(left, mid);
   } else {
@@ -222,7 +206,7 @@ Path::State Follower::projectPointOnSegment(const Path::Point &a,
 Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 
   const Path::Path::View &segment_path = currentPath->getSegment(segment_index);
-  double min_distance = std::numeric_limits<double>::max();
+  double min_distance = std::numeric_limits<float>::max();
   Path::State closest_point;
   double segment_position = 0.0; // in [0, 1]
   size_t point_index = currentPath->getSegmentStartIndex(segment_index);
@@ -231,9 +215,11 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
   Path::Point end = currentPath->getSegmentEnd(segment_index);
 
   double segment_heading = std::atan2(end.y() - start.y(), end.x() - start.x());
+  double distance = 0.0f;
 
   for (auto projected_point : segment_path) {
-    double distance = calculateDistance(currentState, projected_point);
+    // find distance squared for faster comparision
+    distance = currentPath->distanceSquared(currentState, projected_point);
 
     if (distance < min_distance) {
       min_distance = distance;
@@ -250,7 +236,7 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
   closest_position.segment_index = segment_index;
   closest_position.segment_length = segment_position;
   closest_position.state = closest_point;
-  closest_position.normal_distance = min_distance;
+  closest_position.normal_distance = std::sqrt(min_distance);
 
   // Compute parallel distance (signed lateral distance)
   double vec_x = currentState.x - closest_point.x;
@@ -308,7 +294,7 @@ void Follower::determineTarget() {
 bool Follower::isForwardSegment(const Path::Path &segment1,
                                 const Path::Path &segment2) const {
 
-  const double angle_between_points =
+  const float angle_between_points =
       std::atan2(segment2.getStart().y() - segment1.getStart().y(),
                  segment2.getStart().x() - segment1.getStart().x());
 
