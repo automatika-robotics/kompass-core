@@ -153,33 +153,9 @@ Path::Path::View DWA::findTrackedPathSegment() {
     global_start_index = currentPath->getSize() - 1;
   }
 
-  // Find the End (Lookahead) Index based on max_forward_distance_ and
-  // maxSegmentSize
-  size_t global_end_index = global_start_index;
-  float accumulated_distance = 0.0f;
-  size_t points_count = 1;
-
-  // Loop conditions:
-  // - Don't go past the end of the entire path
-  // - Don't exceed max points allowed in a local plan
-  // - Don't exceed the lookahead distance (max_forward_distance_)
-  while ((global_end_index + 1) < currentPath->getSize() &&
-         points_count < this->max_segment_size_) {
-
-    // Calculate distance to the NEXT point
-    float dist =
-        Path::Path::distance(currentPath->getIndex(global_end_index),
-                             currentPath->getIndex(global_end_index + 1));
-
-    if (accumulated_distance + dist > max_forward_distance_) {
-      break;
-    }
-
-    accumulated_distance += dist;
-    global_end_index++;
-    points_count++;
-  }
-
+  // Lookahead index
+  size_t global_end_index = std::min(global_start_index + max_segment_size_,
+                                    currentPath->getSize() - 1);
   // Create and Return the View
   return currentPath->getPart(global_start_index, global_end_index);
 }

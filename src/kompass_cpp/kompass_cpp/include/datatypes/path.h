@@ -19,7 +19,7 @@ struct State {
 
   State(double poseX = 0.0, double poseY = 0.0, double PoseYaw = 0.0,
         double speedValue = 0.0)
-      : x(poseX), y(poseY), yaw(PoseYaw), speed(speedValue) {};
+      : x(poseX), y(poseY), yaw(PoseYaw), speed(speedValue){};
 
   void update(const Kompass::Control::Velocity2D &vel, const float timeStep) {
     this->x +=
@@ -172,6 +172,13 @@ struct Path {
     return Curvature_(index);
   }
 
+  // Get accumulated distance at index
+  inline float getDistanceAtIndex(const size_t index) const {
+    if (index >= accumulated_path_length_.size())
+      return 0.0;
+    return accumulated_path_length_[index];
+  }
+
   // distance between two points
   static inline float distance(const Point &p1, const Point &p2) {
     return (p1 - p2).norm();
@@ -266,6 +273,7 @@ private:
   std::vector<size_t> segment_indices_;
   size_t current_size_{0}; // Current size of the path
   float current_total_length_ = 0.0f;
+  std::vector<float> accumulated_path_length_;
   bool interpolated_ = false;
 };
 

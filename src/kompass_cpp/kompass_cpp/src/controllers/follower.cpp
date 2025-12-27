@@ -2,7 +2,6 @@
 #include <cmath>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "controllers/follower.h"
 #include "utils/angles.h"
@@ -46,9 +45,8 @@ void Follower::setParams(const FollowerParameters &config) {
   max_segment_size_ = getMaxSegmentSize();
 }
 
-Follower::Follower(const FollowerParameters &config) : Controller() {
+Follower::Follower(const FollowerParameters &config) : Follower() {
   setParams(config);
-  Follower();
 }
 
 size_t Follower::getMaxSegmentSize() const {
@@ -81,9 +79,8 @@ void Follower::setCurrentPath(const Path::Path &path, const bool interpolate) {
   currentPath = std::make_unique<Path::Path>(path);
 
   if (interpolate) {
-    currentPath->interpolate(max_point_interpolation_distance_, interpolationType);
-    // std::cout << "Path X: " << currentPath->getX() << "\n";
-    // std::cout << "Path Y: " << currentPath->getY() << "\n";
+    currentPath->interpolate(max_point_interpolation_distance_,
+                             interpolationType);
   }
 
   // Segment path
@@ -200,37 +197,45 @@ Path::State Follower::projectPointOnSegment(const Path::Point &a,
 Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 
   const Path::Path::View &segment_path = currentPath->getSegment(segment_index);
-  double min_distance = std::numeric_limits<float>::max();
+
+  double min_distance_squared = std::numeric_limits<float>::max();
+
   Path::State closest_point;
+
   double segment_position = 0.0; // in [0, 1]
-  size_t point_index = currentPath->getSegmentStartIndex(segment_index);
+
+  size_t start_index = currentPath->getSegmentStartIndex(segment_index);
+  size_t point_index = 0;
+  size_t closest_point_index = 0;
+
   // Get current segment start, end to calculate length and orientation
   Path::Point start = currentPath->getSegmentStart(segment_index);
   Path::Point end = currentPath->getSegmentEnd(segment_index);
 
   double segment_heading = std::atan2(end.y() - start.y(), end.x() - start.x());
-  double distance = 0.0f;
+  double distance_squared = 0.0f;
 
   for (auto projected_point : segment_path) {
     // find distance squared for faster comparision
-    distance = currentPath->distanceSquared(currentState, projected_point);
+    distance_squared = currentPath->distanceSquared(currentState, projected_point);
 
-    if (distance < min_distance) {
-      min_distance = distance;
+    if (distance_squared <= min_distance_squared) {
+      min_distance_squared = distance_squared;
       closest_point = {projected_point.x(), projected_point.y(),
                        segment_heading};
+      closest_point_index = point_index;
       segment_position =
           static_cast<double>(point_index) / (segment_path.getSize() - 1);
-      point_index++;
     }
+    point_index++;
   }
 
   Path::PathPosition closest_position;
-  closest_position.index = point_index;
+  closest_position.index = closest_point_index + start_index;
   closest_position.segment_index = segment_index;
   closest_position.segment_length = segment_position;
   closest_position.state = closest_point;
-  closest_position.normal_distance = std::sqrt(min_distance);
+  closest_position.normal_distance = std::sqrt(min_distance_squared);
 
   // Compute parallel distance (signed lateral distance)
   double vec_x = currentState.x - closest_point.x;
@@ -244,8 +249,9 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
   // point
   double crossProduct = cos_direction * vec_y - sin_direction * vec_x;
 
-  closest_position.parallel_distance =
-      crossProduct > 0 ? min_distance : -min_distance;
+  closest_position.parallel_distance = crossProduct > 0
+                                           ? closest_position.normal_distance
+                                           : -closest_position.normal_distance;
 
   return closest_position;
 }
@@ -254,8 +260,6 @@ void Follower::determineTarget() {
 
   currentTrackedTarget_ = std::make_unique<Target>();
   LOG_DEBUG("Closest point global index", closestPosition->index,
-            ", current segment index: ", current_segment_index_,
-            ", max path segments: ", currentPath->getNumSegments(),
             " its segment length = ", closestPosition->segment_length);
   // If closest position is never updated
   // OR If we reached end of a segment or end of the path -> Find new segment

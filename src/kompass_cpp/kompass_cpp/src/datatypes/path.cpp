@@ -230,15 +230,18 @@ void Path::interpolate(double max_interpolation_point_dist,
 
   // Resize Eigen vectors (this resets data, but we saved it in x_vals/y_vals)
   resize(new_size);
+  accumulated_path_length_.resize(new_size);
 
   // Reset Curvature
   Curvature_.setZero(new_size);
+  Z_.setZero(new_size);
 
   // --- Interpolation Loop ---
   size_t idx = 0;
   // Iterate by distance arc distance 's'
   for (double s = 0.0; s <= current_total_length_ && idx < new_size;
        s += max_interpolation_point_dist) {
+    accumulated_path_length_[idx] = s;
     X_[idx] = static_cast<float>(spline_x(s));
     Y_[idx] = static_cast<float>(spline_y(s));
     idx++;
@@ -286,42 +289,39 @@ void Path::interpolate(double max_interpolation_point_dist,
   }
 }
 
-// Segment the path by a given segment path length [m]
 void Path::segment(double pathSegmentLength, size_t maxPointsPerSegment) {
+
   if (current_size_ < 2)
     return;
 
   segment_indices_.clear();
-
-  // Always start with the first point
   segment_indices_.push_back(0);
 
-  double accumulatedLength = 0.0;
-  size_t pointsInSegment = 1;
-  size_t lastSegmentStart = 0;
+  const float totalLength = accumulated_path_length_.back();
+
+  size_t segmentStartIdx = 0;
+  float segmentStartLength = accumulated_path_length_[0];
 
   for (size_t i = 1; i < current_size_; ++i) {
-    // Distance from previous point
-    accumulatedLength += distance(getIndex(i - 1), getIndex(i));
-    pointsInSegment++;
+    const size_t pointsInSegment = i - segmentStartIdx + 1;
+    const float segmentLength =
+        accumulated_path_length_[i] - segmentStartLength;
 
-    bool lengthExceeded =
-        (pathSegmentLength > 0.0 && accumulatedLength >= pathSegmentLength);
+    const bool lengthExceeded =
+        (pathSegmentLength > 0.0 && segmentLength >= pathSegmentLength);
 
-    bool pointsExceeded =
+    const bool pointsExceeded =
         (maxPointsPerSegment > 0 && pointsInSegment > maxPointsPerSegment);
 
-    // Start a new segment if any constraint is violated
+    // Start a new segment at i
     if (lengthExceeded || pointsExceeded) {
       segment_indices_.push_back(i);
-      // Reset counters for new segment
-      accumulatedLength = 0.0;
-      pointsInSegment = 1;
-      lastSegmentStart = i;
+
+      segmentStartIdx = i;
+      segmentStartLength = accumulated_path_length_[i];
     }
   }
 
-  LOG_INFO("Got number of segments: ", segment_indices_.size());
 }
 
 Point Path::getSegmentStart(size_t segment_index) const {

@@ -437,7 +437,7 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
         goal_distance_weight=1.0,
         smoothness_weight=0.0,
         jerk_weight=0.0,
-        obstacles_distance_weight=1.0,
+        obstacles_distance_weight=0.0,
     )
     config = DWAConfig(
         max_linear_samples=4,
@@ -524,8 +524,8 @@ def test_vision_dwa_with_depth_img():
     principal_point = [643.06, 366.72]
 
     cost_weights = TrajectoryCostsWeights(
-        reference_path_distance_weight=1.0,
-        goal_distance_weight=0.0,
+        reference_path_distance_weight=2.0,
+        goal_distance_weight=1.0,
         smoothness_weight=0.0,
         jerk_weight=0.0,
         obstacles_distance_weight=0.0,
@@ -644,11 +644,11 @@ def test_dwa_debug():
     global global_path, my_robot, robot_ctr_limits, control_time_step
 
     cost_weights = TrajectoryCostsWeights(
-        reference_path_distance_weight=3.0,
+        reference_path_distance_weight=1.0,
         goal_distance_weight=1.0,
         smoothness_weight=0.0,
         jerk_weight=0.0,
-        obstacles_distance_weight=1.0,
+        obstacles_distance_weight=0.0,
     )
     config = DWAConfig(
         max_linear_samples=21,
