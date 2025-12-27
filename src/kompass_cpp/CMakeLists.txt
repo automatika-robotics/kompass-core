@@ -15,7 +15,13 @@ if (NOT SKBUILD)
   add_subdirectory(tests)
 endif()
 
-# Add bindings if skbuild
+# Add bindings if skbuild or debugging
 if (SKBUILD OR CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_subdirectory(bindings)
 endif()
+
+# Build benchmarking if building with cmake and not debugging
+if (NOT SKBUILD AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_subdirectory(benchmarks)
+endif()
+
