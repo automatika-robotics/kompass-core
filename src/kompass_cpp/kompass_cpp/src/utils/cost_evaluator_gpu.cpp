@@ -256,14 +256,26 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     if ((weight = costWeights->getParameter<double>(
              "obstacles_distance_weight")) > 0.0 &&
         (obs_size = obstaclePointsX.size()) > 0) {
+      // Check if we need to reallocate
       if (obs_size > maxObstaclePoints_) {
+        // Free old memory
         if (m_devicePtrObstaclesX)
           sycl::free(m_devicePtrObstaclesX, m_q);
         if (m_devicePtrObstaclesY)
           sycl::free(m_devicePtrObstaclesY, m_q);
-        m_devicePtrObstaclesX = sycl::malloc_device<float>(obs_size, m_q);
-        m_devicePtrObstaclesY = sycl::malloc_device<float>(obs_size, m_q);
-        maxObstaclePoints_ = obs_size;
+
+        // Round up to the next multiple of WG_SIZE to prevent frequent
+        // realloc and ensure optimal alignment
+        // NOTE: We never reduce this memory which can cause bottlenecks on very
+        // long paths
+        size_t new_capacity =
+            ((obs_size + maxWGSize_ - 1) / maxWGSize_) * maxWGSize_;
+
+        m_devicePtrObstaclesX = sycl::malloc_device<float>(new_capacity, m_q);
+        m_devicePtrObstaclesY = sycl::malloc_device<float>(new_capacity, m_q);
+
+        // Update capacity tracker
+        maxObstaclePoints_ = new_capacity;
       }
       m_q.memcpy(m_devicePtrObstaclesX, obstaclePointsX.data(),
                  sizeof(float) * obs_size)
@@ -752,6 +764,9 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
     const size_t obsSize = obstaclePointsX.size();
     const float maxObstacleDistance = maxObstaclesDist;
 
+    // Infinity to effectively ignore padding obstacles
+    const float INF_DIST = std::numeric_limits<float>::infinity();
+
     // Configure kernel workgroup size using Device Limits
     const size_t WG_SIZE = maxWGSize_;
 
@@ -786,14 +801,14 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
             if (obs_idx < obsSize) {
               tile_obs_X[local_id] = obs_X[obs_idx];
               tile_obs_Y[local_id] = obs_Y[obs_idx];
+            } else {
+              // PADDING: Determine that this is garbage memory and neutralize it
+              tile_obs_X[local_id] = INF_DIST;
+              tile_obs_Y[local_id] = INF_DIST;
             }
 
             // Wait for the entire tile to be loaded
             item.barrier(sycl::access::fence_space::local_space);
-
-            // Compare trajectory points against this tile
-            // Calculate valid obstacles in this current tile
-            size_t current_tile_count = sycl::min(WG_SIZE, obsSize - tile_base);
 
             // -----------------------------------------------------------
             // STRIDE LOOP
@@ -805,7 +820,8 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
               float py = Y[traj_idx * pathSize + k];
 
               // Check distance against all cached obstacles in this tile
-              for (size_t j = 0; j < current_tile_count; ++j) {
+              // This loop should be unrolled
+              for (size_t j = 0; j < WG_SIZE; ++j) {
                 float ox = tile_obs_X[j];
                 float oy = tile_obs_Y[j];
 
@@ -814,6 +830,7 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
 
                 // Euclidean distance
                 float d2 = dx * dx + dy * dy;
+                // Infinities would be ignored here
                 min_dist_sq_for_point = sycl::fmin(min_dist_sq_for_point, d2);
               }
             }
