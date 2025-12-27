@@ -235,6 +235,24 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
       if ((weight = costWeights->getParameter<double>(
                "reference_path_distance_weight")) > 0.0) {
         size_t tracked_segment_size = tracked_segment.getSize();
+
+        // For safety check if incoming path segment exceeds allocated capacity
+        if (tracked_segment_size > maxRefPathSegmentSize_) {
+          // Free old memory
+          if (m_devicePtrTrackedSegmentX)
+            sycl::free(m_devicePtrTrackedSegmentX, m_q);
+          if (m_devicePtrTrackedSegmentY)
+            sycl::free(m_devicePtrTrackedSegmentY, m_q);
+
+          // Update capacity
+          maxRefPathSegmentSize_ = tracked_segment_size;
+
+          // Reallocate
+          m_devicePtrTrackedSegmentX =
+              sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
+          m_devicePtrTrackedSegmentY =
+              sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
+        }
         m_q.memcpy(m_devicePtrTrackedSegmentX, tracked_segment.getXPointer(),
                    sizeof(float) * tracked_segment_size)
             .wait();
@@ -267,7 +285,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
         // Round up to the next multiple of WG_SIZE to prevent frequent
         // realloc and ensure optimal alignment
         // NOTE: We never reduce this memory which can cause bottlenecks on very
-        // long paths
+        // long paths with major variability in number of obstacles
         size_t new_capacity =
             ((obs_size + maxWGSize_ - 1) / maxWGSize_) * maxWGSize_;
 
@@ -367,6 +385,9 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
         (tracked_segment_length > 0) ? 1.0f / tracked_segment_length : 0.0f;
     const float invRefSizeCount = (refSize > 0) ? 1.0f / refSize : 0.0f;
 
+    // Infinity for padding local memory accessors
+    const float INF_DIST = std::numeric_limits<float>::infinity();
+
     // Configure kernel work-group size
     const size_t WG_SIZE = maxWGSize_;
 
@@ -423,6 +444,10 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
                 size_t global_traj_idx = traj_idx * pathSize + traj_pt_idx;
                 tile_traj_X[local_id] = X[global_traj_idx];
                 tile_traj_Y[local_id] = Y[global_traj_idx];
+              } else {
+                // PADDING: garbage memory with Infinity
+                tile_traj_X[local_id] = INF_DIST;
+                tile_traj_Y[local_id] = INF_DIST;
               }
 
               // Wait for all local memory loads to finish
@@ -430,10 +455,8 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
 
               // Compute closest point in this tile for the current ref point
               if (valid_ref_point) {
-                size_t current_tile_count =
-                    sycl::min(WG_SIZE, pathSize - tile_base);
-
-                for (size_t t = 0; t < current_tile_count; ++t) {
+                // this loop can be unrolled by the compiler
+                for (size_t t = 0; t < WG_SIZE; ++t) {
                   float dx = r_x - tile_traj_X[t];
                   float dy = r_y - tile_traj_Y[t];
 
@@ -802,7 +825,8 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
               tile_obs_X[local_id] = obs_X[obs_idx];
               tile_obs_Y[local_id] = obs_Y[obs_idx];
             } else {
-              // PADDING: Determine that this is garbage memory and neutralize it
+              // PADDING: Determine that this is garbage memory and neutralize
+              // it
               tile_obs_X[local_id] = INF_DIST;
               tile_obs_Y[local_id] = INF_DIST;
             }
@@ -820,7 +844,7 @@ sycl::event CostEvaluator::obstaclesDistCostFunc(const size_t trajs_size,
               float py = Y[traj_idx * pathSize + k];
 
               // Check distance against all cached obstacles in this tile
-              // This loop should be unrolled
+              // This loop should be unrolled by the compiler
               for (size_t j = 0; j < WG_SIZE; ++j) {
                 float ox = tile_obs_X[j];
                 float oy = tile_obs_Y[j];
