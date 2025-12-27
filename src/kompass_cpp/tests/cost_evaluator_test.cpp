@@ -49,7 +49,7 @@ Path::Path generate_points_from_scan(const LaserScan &scan) {
     double y = scan.ranges[i] * std::sin(scan.angles[i]);
     points.emplace_back(x, y, 0.0);
   }
-  return Path::Path(points, points.size() + 1); // +1 buffer
+  return Path::Path(points); // +1 buffer
 }
 
 std::unique_ptr<TrajectorySamples2D>
@@ -329,7 +329,7 @@ struct TestConfig {
   TestConfig()
       : points{Path::Point(0.0, 0.0, 0.0), Path::Point(5.0, 0.0, 0.0),
                Path::Point(10.0, 0.0, 0.0)},
-        reference_path(points, 500), max_path_length(10.0),
+        reference_path(points), max_path_length(10.0),
         max_interpolation_point_dist(0.01), current_segment_index(0),
         timeStep(0.01), predictionHorizon(10.0), maxNumThreads(10),
         x_params(1, 3, 5), y_params(1, 3, 5), angular_params(3.14, 3, 5, 8),
@@ -340,10 +340,9 @@ struct TestConfig {
         costEval(costWeights, controlLimits, numTrajectories,
                  predictionHorizon / timeStep,
                  max_path_length / max_interpolation_point_dist) {
-    reference_path.setMaxLength(max_path_length);
     reference_path.interpolate(max_interpolation_point_dist,
                                Path::InterpolationType::LINEAR);
-    reference_path.segment(1.0);
+    reference_path.segment(max_path_length / max_interpolation_point_dist, 1000);
     // NOTE: Change numTrajectories to a manageable size (e.g 11) when setting
     // this to true
     plotResults = false;

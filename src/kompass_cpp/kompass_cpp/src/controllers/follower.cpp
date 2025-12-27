@@ -27,9 +27,9 @@ void Follower::setParams(const FollowerParameters &config) {
       this->config.getParameter<double>("goal_orientation_tolerance");
   loosing_goal_distance =
       this->config.getParameter<double>("loosing_goal_distance");
-  path_segment_length =
+  path_segment_length_ =
       this->config.getParameter<double>("path_segment_length");
-  maxDist =
+  max_point_interpolation_distance_ =
       this->config.getParameter<double>("max_point_interpolation_distance");
   speed_reg_curvature =
       this->config.getParameter<double>("speed_regulation_curvature");
@@ -43,7 +43,7 @@ void Follower::setParams(const FollowerParameters &config) {
   } else {
     rotate_in_place = true;
   }
-  maxSegmentSize = getMaxSegmentSize();
+  max_segment_size_ = getMaxSegmentSize();
 }
 
 Follower::Follower(const FollowerParameters &config) : Controller() {
@@ -65,10 +65,7 @@ Follower::Target Follower::getTrackedTarget() const {
 const Path::Path Follower::getCurrentPath() const { return *currentPath; }
 
 void Follower::clearCurrentPath() {
-  // Delete old reference and current path before setting new values
-  if (refPath) {
-    refPath = nullptr;
-  }
+  // Delete old current path before setting new values
   if (currentPath) {
     currentPath = nullptr;
   }
@@ -82,18 +79,15 @@ void Follower::clearCurrentPath() {
 
 void Follower::setCurrentPath(const Path::Path &path, const bool interpolate) {
   currentPath = std::make_unique<Path::Path>(path);
-  refPath = std::make_unique<Path::Path>(path);
-
-  currentPath->setMaxLength(
-      this->config.getParameter<double>("max_path_length"));
 
   if (interpolate) {
-    currentPath->interpolate(maxDist, interpolationType);
+    currentPath->interpolate(max_point_interpolation_distance_, interpolationType);
     // std::cout << "Path X: " << currentPath->getX() << "\n";
     // std::cout << "Path Y: " << currentPath->getY() << "\n";
   }
+
   // Segment path
-  currentPath->segment(path_segment_length);
+  currentPath->segment(path_segment_length_, max_segment_size_);
 
   // Get max number of segments in the path
   max_segment_index_ = currentPath->getNumSegments() - 1;

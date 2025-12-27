@@ -42,7 +42,7 @@ Path::Path createStraightPath() {
   for (double x = 0.0; x <= 10.0; x += 0.5) {
     points.emplace_back(x, 0.0, 0.0);
   }
-  return Path::Path(points, 1000);
+  return Path::Path(points);
 }
 
 Path::Path createUTurnPath() {
@@ -63,7 +63,7 @@ Path::Path createUTurnPath() {
   for (double x = 5.0; x >= 0.0; x -= 0.5) {
     points.emplace_back(x, 5.0, 0.0);
   }
-  return Path::Path(points, 1000);
+  return Path::Path(points);
 }
 
 Path::Path createCirclePath() {
@@ -74,7 +74,7 @@ Path::Path createCirclePath() {
     points.emplace_back(radius * std::cos(angle), radius * std::sin(angle),
                         0.0);
   }
-  return Path::Path(points, 1000);
+  return Path::Path(points);
 }
 
 // Creates a circular obstacle as a point cloud
@@ -268,8 +268,7 @@ BOOST_AUTO_TEST_CASE(test_PurePursuit_All_Scenarios) {
           // Create a dummy path container for obstacles to reuse
           // savePathToJson/plotter or we create a specific function. Let's try
           // to reuse savePathToJson by wrapping points.
-          Path::Path obsPathObj(obstacleCloud,
-                                obstacleCloud.size() + 1); // +1 buffer
+          Path::Path obsPathObj(obstacleCloud); // +1 buffer
           savePathToJson(obsPathObj, obs_file + ".json");
           // Plot using the python script
           command = "python3 " + file_location +
@@ -299,7 +298,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   // Create a test path
   std::vector<Path::Point> points{Path::Point(0.0, 0.0, 0.0), Path::Point(1.0, 0.0, 0.0),
                                   Path::Point(2.0, 0.0, 0.0)};
-  Path::Path path(points, 500);
+  Path::Path path(points);
 
   // Sampling configuration
   double timeStep = 0.1;

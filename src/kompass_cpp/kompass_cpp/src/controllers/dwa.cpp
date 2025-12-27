@@ -102,7 +102,7 @@ void DWA::configure(ControlLimitsParams controlLimits, ControlType controlType,
       costWeights, sensor_position_body,
       Eigen::Quaternionf(sensor_rotation_body), controlLimits,
       trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
-      maxSegmentSize);
+      max_segment_size_);
   this->maxNumThreads = maxNumThreads;
 }
 
@@ -123,7 +123,7 @@ void DWA::configure(TrajectorySampler::TrajectorySamplerParameters config,
       costWeights, sensor_position_body,
       Eigen::Quaternionf(sensor_rotation_body), controlLimits,
       trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
-      maxSegmentSize);
+      max_segment_size_);
   this->maxNumThreads = maxNumThreads;
 }
 
@@ -164,7 +164,7 @@ Path::Path::View DWA::findTrackedPathSegment() {
   // - Don't exceed max points allowed in a local plan
   // - Don't exceed the lookahead distance (max_forward_distance_)
   while ((global_end_index + 1) < currentPath->getSize() &&
-         points_count < this->maxSegmentSize) {
+         points_count < this->max_segment_size_) {
 
     // Calculate distance to the NEXT point
     float dist =

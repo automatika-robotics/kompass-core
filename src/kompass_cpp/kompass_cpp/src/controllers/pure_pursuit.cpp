@@ -237,7 +237,7 @@ Path::Point PurePursuit::findLookaheadPoint(double radius) {
     double dist_to_end = std::hypot(currentPath->getEnd().x() - currentState.x,
                                     currentPath->getEnd().y() - currentState.y);
     if (dist_to_end < radius) {
-      last_found_index_ = currentPath->getMaxSize() - 1;
+      last_found_index_ = currentPath->getSize() - 1;
       return currentPath->getEnd();
     } else {
       // If nothing is found increase the lookahead distance

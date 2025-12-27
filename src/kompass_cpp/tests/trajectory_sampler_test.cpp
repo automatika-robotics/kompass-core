@@ -23,7 +23,7 @@ void testTrajSampler() {
   std::vector<Path::Point> points{Path::Point(0.0, 0.0, 0.0),
                                   Path::Point(1.0, 0.0, 0.0),
                                   Path::Point(2.0, 0.0, 0.0)};
-  Path::Path raw_path(points, 500);
+  Path::Path raw_path(points);
 
   // Generic follower to use for raw path interpolation and segmentation
   Control::Follower *follower = new Control::Follower();

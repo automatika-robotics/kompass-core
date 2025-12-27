@@ -22,7 +22,7 @@ public:
                     1000.0)); // [m] distance used for path interpolation
       addParameter(
           "max_path_length",
-          Parameter(10.0, 1.0,
+          Parameter(100.0, 1.0,
                     1e9)); // Maximum allowed length of the global path (meters)
       // NOTE: Currently the maximum path length is a configuration parameter to
       // limit the maximum number of interpolated path points. In future updates
@@ -189,7 +189,6 @@ protected:
   double speed_reg_curvature{0.0}; // Curvature factor
   double speed_reg_rotation{0.0};    // Rotation factor
   std::unique_ptr<Path::Path> currentPath = nullptr;
-  std::unique_ptr<Path::Path> refPath = nullptr;
   std::unique_ptr<Path::PathPosition> closestPosition = std::make_unique<Path::PathPosition>();
   double goal_dist_tolerance{0.0};
   double goal_orientation_tolerance{0.0};
@@ -197,10 +196,10 @@ protected:
   bool rotate_in_place{false};
   double lookahead_distance{0.0};
   bool enable_reverse_driving{false};
-  double path_segment_length{0.0};
+  double path_segment_length_{0.0};
   double min_speed_regulation_factor{0.0};
-  double maxDist{0.0};
-  size_t maxSegmentSize;
+  double max_point_interpolation_distance_{0.0};
+  size_t max_segment_size_;
   Path::InterpolationType interpolationType = Path::InterpolationType::LINEAR;
 
   FollowerParameters config = FollowerParameters();

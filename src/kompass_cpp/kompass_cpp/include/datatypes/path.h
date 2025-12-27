@@ -128,10 +128,10 @@ struct Path {
 
   Path(const Path &other) = default;
 
-  Path(const std::vector<Point> &points = {}, const size_t new_max_size = 10);
+  Path(const std::vector<Point> &points = {});
 
   Path(const Eigen::VectorXf &x_points, const Eigen::VectorXf &y_points,
-       const Eigen::VectorXf &z_points, const size_t new_max_size = 10);
+       const Eigen::VectorXf &z_points);
 
   // --- Inlined functions ---
 
@@ -152,12 +152,6 @@ struct Path {
 
   // get path size in points
   inline size_t getSize() const { return current_size_; }
-
-  // get max path length
-  inline void setMaxLength(double max_length) { max_path_length_ = max_length; }
-
-  // get max size of the path in number of points
-  inline size_t getMaxSize() const { return max_size_; }
 
   // get last point in the path
   inline Point getEnd() const { return getIndex(current_size_ - 1); }
@@ -227,7 +221,7 @@ struct Path {
   void interpolate(double max_interpolation_point_dist, InterpolationType type);
 
   // Segment the path by a given segment path length [m]
-  void segment(double pathSegmentLength);
+  void segment(double pathSegmentLength, size_t maxPointsPerSegment);
 
   Point getSegmentStart(size_t segment_index) const;
 
@@ -271,12 +265,8 @@ private:
   // three segments [i, j-1], [j, k-1], [k, end_of_path_index]
   std::vector<size_t> segment_indices_;
   size_t current_size_{0}; // Current size of the path
-  // Max interpolation distance and total path distance are updated from user
-  // config
-  float max_path_length_{10.0}, max_interpolation_dist_{0.0};
-  float current_total_length_{0.0};
+  float current_total_length_ = 0.0f;
   bool interpolated_ = false;
-  size_t max_size_{10};
 };
 
 struct PathPosition {

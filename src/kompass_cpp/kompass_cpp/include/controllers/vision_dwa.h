@@ -289,8 +289,7 @@ private:
       // ---------------------------------------------------------------
       // Update reference to use in case goal is lost
       auto referenceToTarget =
-          Path::Path(ref_traj.path.x, ref_traj.path.y, ref_traj.path.z,
-                     config_.prediction_horizon());
+          Path::Path(ref_traj.path.x, ref_traj.path.y, ref_traj.path.z);
       this->setCurrentPath(referenceToTarget, false);
       // ---------------------------------------------------------------
       return result;
