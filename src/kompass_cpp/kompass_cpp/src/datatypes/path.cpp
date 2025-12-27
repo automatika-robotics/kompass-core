@@ -169,7 +169,7 @@ float Path::totalPathLength() const {
   }
 
   // If path is already interpolated -> length was already calculated
-  if(interpolated_){
+  if (interpolated_) {
     return current_total_length_;
   }
 
@@ -180,7 +180,6 @@ float Path::totalPathLength() const {
 
   return totalLength;
 }
-
 
 void Path::interpolate(double max_interpolation_point_dist,
                        InterpolationType type) {
@@ -299,8 +298,7 @@ void Path::interpolate(double max_interpolation_point_dist,
     float denominator = val * std::sqrt(val);
 
     if (denominator > 1e-3f) {
-      pK[i] = (dx_old * ddy - ddx * dy_old) /
-              denominator;
+      pK[i] = (dx_old * ddy - ddx * dy_old) / denominator;
       pK[i] = (dx * ddy - ddx * dy) / denominator;
     } else {
       pK[i] = 0.0f;
@@ -315,10 +313,6 @@ void Path::interpolate(double max_interpolation_point_dist,
 void Path::segment(double pathSegmentLength) {
   if (current_size_ == 0)
     return;
-  if (max_interpolation_dist_ > 0.0) {
-    this->max_segment_size =
-        static_cast<int>(pathSegmentLength / max_interpolation_dist_) + 1;
-  }
 
   segment_indices_.clear();
   double totalLength = totalPathLength();

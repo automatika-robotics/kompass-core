@@ -124,10 +124,6 @@ struct Path {
     Iterator end() const { return Iterator(*this, getSize()); }
   };
 
-  // Max segment size and max total path points size is calculated after
-  // interpolation
-  int max_segment_size{10};
-
   // --- Constructors ---
 
   Path(const Path &other) = default;
