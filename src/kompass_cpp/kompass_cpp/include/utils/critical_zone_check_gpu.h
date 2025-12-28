@@ -70,7 +70,8 @@ public:
         return;
       }
 
-      m_devicePtrRanges = sycl::malloc_device<double>(m_scanSize, m_q);
+    m_devicePtrRanges = sycl::malloc_device<float>(m_scanSize, m_q);
+    m_hostFloatBuffer.resize(m_scanSize); // Resize conversion buffer
 
       // Load pre-computed Sin/Cos for fast transform
       m_cos = sycl::malloc_device<float>(cos_angles_.size(), m_q);
@@ -149,7 +150,8 @@ private:
   sycl::queue m_q;
 
   // -- LaserScan Specific --
-  double *m_devicePtrRanges = nullptr;
+  float *m_devicePtrRanges = nullptr;
+  std::vector<float> m_hostFloatBuffer; // host buffer for type conversion
   size_t *m_devicePtrForward = nullptr;
   size_t *m_devicePtrBackward = nullptr;
   float *m_cos = nullptr;

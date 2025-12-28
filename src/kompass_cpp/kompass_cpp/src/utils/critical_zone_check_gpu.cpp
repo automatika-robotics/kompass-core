@@ -192,70 +192,83 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
 float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
                                     const bool forward) {
   try {
-    m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(double) * m_scanSize);
+    // Host-side conversion (Double -> Float)
+    std::transform(ranges.begin(), ranges.end(), m_hostFloatBuffer.begin(),
+                   [](double d) { return static_cast<float>(d); });
+    m_q.memcpy(m_devicePtrRanges, m_hostFloatBuffer.data(),
+               sizeof(float) * m_scanSize);
 
     // command scope
     m_q.submit([&](sycl::handler &h) {
-      // local copies of class members to be used inside the kernel
       const double robot_radius = robotRadius_;
-      auto transformation_matrix = sensor_tf_body_.matrix();
-      const sycl::vec<float, 4> x_transform{
-          transformation_matrix(0, 0), transformation_matrix(0, 1),
-          transformation_matrix(0, 2), transformation_matrix(0, 3)};
 
-      sycl::vec<float, 4> y_transform{
-          transformation_matrix(1, 0), transformation_matrix(1, 1),
-          transformation_matrix(1, 2), transformation_matrix(1, 3)};
+      // Prepare Transformation Constants
+      auto tf = sensor_tf_body_.matrix();
+      const float m00 = tf(0, 0), m01 = tf(0, 1), m03 = tf(0, 3);
+      const float m10 = tf(1, 0), m11 = tf(1, 1), m13 = tf(1, 3);
+      // Prepare Thresholds for squared-distance checks
+      const float crit_dist = critical_distance_;
+      const float slow_dist = slowdown_distance_;
+      const float dist_denom = slow_dist - crit_dist;
 
-      const auto devicePtrRanges = m_devicePtrRanges;
-      const auto devicePtrCos = m_cos;
-      const auto devicePtrSin = m_sin;
-      const auto criticalDistance = critical_distance_;
-      const auto slowdownDistance = slowdown_distance_;
+      // Check distance: if dist > slow_dist + radius, it is SAFE
+      const float safe_threshold = slow_dist + robot_radius;
+      const float safe_threshold_sq = safe_threshold * safe_threshold;
+
+      // Select Indices
       size_t *critical_indices;
-      float *result = m_result;
-      *result = 1.0f;
-      sycl::range<1> global_size;
+      size_t num_work_items;
       if (forward) {
         critical_indices = m_devicePtrForward;
-        global_size = sycl::range<1>(indicies_forward_.size());
+        num_work_items = indicies_forward_.size();
       } else {
         critical_indices = m_devicePtrBackward;
-        global_size = sycl::range<1>(indicies_backward_.size());
+        num_work_items = indicies_backward_.size();
       }
 
+      // Reset Result
+      *m_result = 1.0f;
+
+      // Capture pointers by value for the kernel
+      const auto devRanges = m_devicePtrRanges;
+      const auto devCos = m_cos;
+      const auto devSin = m_sin;
+
       // kernel scope
-      h.parallel_for<class checkCriticalZoneKernel>(
-          global_size, [=](sycl::id<1> idx) {
-            const size_t local_id = critical_indices[idx];
-            double range = devicePtrRanges[local_id];
+      h.parallel_for(
+          sycl::range<1>(num_work_items),
+          sycl::reduction(m_result, sycl::minimum<float>()),
+          [=](sycl::id<1> idx, auto &reducer) {
+            const size_t global_idx = critical_indices[idx];
+            const float r = devRanges[global_idx];
 
-            sycl::vec<float, 4> point{range * devicePtrCos[local_id],
-                                      range * devicePtrSin[local_id], 0.0, 1.0};
-            sycl::vec<float, 2> transformed_point{0.0, 0.0};
+            // Unrolled Matrix Multiply
+            // z=0 and w=1, so we skip z-row and w-row calculations.
+            // x_local = r * cos, y_local = r * sin
+            const float cos_val = devCos[global_idx];
+            const float sin_val = devSin[global_idx];
 
-            for (size_t i = 0; i < 4; ++i) {
-              transformed_point[0] += x_transform[i] * point[i];
-              transformed_point[1] += y_transform[i] * point[i];
+            // x_body = m00*x_L + m01*y_L + m03
+            const float x = (m00 * r * cos_val) + (m01 * r * sin_val) + m03;
+            const float y = (m10 * r * cos_val) + (m11 * r * sin_val) + m13;
+
+            // Squared Distance Check
+            const float dist_sq = x * x + y * y;
+
+            // Only proceed if the point is unsafe
+            if (dist_sq < safe_threshold_sq) {
+              // Calculate distance
+              const float dist = sycl::sqrt(dist_sq);
+              const float dist_surface = dist - robot_radius;
+
+              if (dist_surface <= crit_dist) {
+                reducer.combine(0.0f);
+              } else {
+                // In the slowdown zone (between crit and slow)
+                float factor = (dist_surface - crit_dist) / dist_denom;
+                reducer.combine(factor);
+              }
             }
-
-            float converted_range = sycl::length(transformed_point);
-            float slowdownFactor;
-            if (converted_range - robot_radius <= criticalDistance) {
-              slowdownFactor = 0.0f;
-            } else if (converted_range - robot_radius <= slowdownDistance) {
-              slowdownFactor =
-                  (converted_range - robot_radius - criticalDistance) /
-                  (slowdownDistance - criticalDistance);
-            } else {
-              slowdownFactor = 1.0f;
-            }
-
-            sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                             sycl::memory_scope::device,
-                             sycl::access::address_space::global_space>
-                atomic_cost(*result);
-            atomic_cost.fetch_min(slowdownFactor);
           });
     });
 
@@ -266,6 +279,7 @@ float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
     throw;
   }
 
+  LOG_INFO("Critical zone dist: ", *m_result);
   return *m_result;
 }
 
