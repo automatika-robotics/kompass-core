@@ -279,7 +279,6 @@ float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
     throw;
   }
 
-  LOG_INFO("Critical zone dist: ", *m_result);
   return *m_result;
 }
 
