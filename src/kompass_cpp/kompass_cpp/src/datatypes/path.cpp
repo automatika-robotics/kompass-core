@@ -1,5 +1,4 @@
 #include "datatypes/path.h"
-#include "utils/logger.h"
 #include "utils/spline.h"
 #include <cmath>
 #include <cstdlib>
@@ -296,8 +295,6 @@ void Path::segment(double pathSegmentLength, size_t maxPointsPerSegment) {
 
   segment_indices_.clear();
   segment_indices_.push_back(0);
-
-  const float totalLength = accumulated_path_length_.back();
 
   size_t segmentStartIdx = 0;
   float segmentStartLength = accumulated_path_length_[0];
