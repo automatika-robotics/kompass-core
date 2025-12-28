@@ -21,7 +21,6 @@
 #endif
 
 #include <cstring> // for offsetof
-#include <memory>
 
 using namespace Kompass;
 using namespace Kompass::Benchmarks;
@@ -34,9 +33,7 @@ struct PointXYZ {
   float x, y, z, padding;
 };
 
-/**
- * @brief Generates heavy trajectories (same logic as cost_evaluator_test.cpp)
- */
+// Generates Heavy Trajectories for Cost Evaluator
 std::unique_ptr<Control::TrajectorySamples2D>
 generate_heavy_trajectory_samples(double predictionHorizon, double timeStep,
                                   int number_of_samples) {
@@ -106,8 +103,9 @@ std::vector<int8_t> generate_heavy_pointcloud_bytes(size_t num_points) {
   return buffer;
 }
 
-void generate_dense_scan(size_t num_points, std::vector<double> &ranges,
-                         std::vector<double> &angles) {
+// Generates varied laserscan data for Mapping
+void generate_mapping_scan(size_t num_points, std::vector<double> &ranges,
+                           std::vector<double> &angles) {
   ranges.resize(num_points);
   angles.resize(num_points);
   double angle_step = (2.0 * M_PI) / num_points;
@@ -132,8 +130,6 @@ int main(int argc, char *argv[]) {
 
   std::string platform_alias = argv[1];
   std::string output_path = argv[2];
-
-  // Also log to a text file for human readability
   std::string log_file_path = output_path + ".log";
   Kompass::setLogFile(log_file_path);
 
@@ -191,7 +187,7 @@ int main(int argc, char *argv[]) {
     int width = 400;
     float res = 0.05f;
     std::vector<double> ranges, angles;
-    generate_dense_scan(3600, ranges, angles);
+    generate_mapping_scan(3600, ranges, angles);
 
 #ifdef GPU
     Mapping::LocalMapperGPU mapper(height, width, res, {0.0, 0.0, 0.0}, 0.0,
@@ -209,6 +205,7 @@ int main(int argc, char *argv[]) {
     results.push_back(measure_performance("Mapper_Dense_400x400", workload));
   }
 
+  // NOTE: Commented out till stable vesion
 //   // -------------------------------------------------------------------------
 //   // TEST 3: CRITICAL ZONE (Point Cloud)
 //   // -------------------------------------------------------------------------
@@ -255,8 +252,45 @@ int main(int argc, char *argv[]) {
   // TEST 4: CRITICAL ZONE (LaserScan)
   // -------------------------------------------------------------------------
   {
+    // TARGET: Force points to be in the "Slowdown Zone" (0.81m to 1.11m from
+    // center) This ensures the CPU loop does not break early (collision) and
+    // does not skip (safe).
+    // -----------------------------------------------------------------------
+    // Robot Radius = 0.51
+    // Critical Limit = 0.51 + 0.3 = 0.81
+    // Slowdown Limit = 0.51 + 0.6 = 1.11
+    // Target Distance = 0.96m (Safe middle ground)
+
     std::vector<double> ranges, angles;
-    generate_dense_scan(3600, ranges, angles);
+    size_t num_scan_points = 3600;
+    ranges.resize(num_scan_points);
+    angles.resize(num_scan_points);
+    double angle_step = (2.0 * M_PI) / num_scan_points;
+
+    double sensor_x = 0.22; // From sensorPos below
+    double target_dist_sq = 0.96 * 0.96;
+
+    // Generate ranges such that every point lands exactly at 'target_dist' from
+    // robot center
+    for (size_t i = 0; i < num_scan_points; ++i) {
+      angles[i] = -M_PI + (i * angle_step);
+
+      // Equation for distance R from robot center given sensor offset sx:
+      // R^2 = (sx + r*cos_theta)^2 + (r*sin_theta)^2
+      // R^2 = sx^2 + 2*sx*r*cos_theta + r^2
+      // 0 = r^2 + (2*sx*cos_theta)*r + (sx^2 - R^2)
+
+      double b = 2.0 * sensor_x * std::cos(angles[i]);
+      double c = (sensor_x * sensor_x) - target_dist_sq;
+
+      // Quadratic formula: r = (-b + sqrt(b^2 - 4ac)) / 2a.  (a=1)
+      double discriminant = b * b - 4.0 * c;
+      if (discriminant >= 0) {
+        ranges[i] = (-b + std::sqrt(discriminant)) / 2.0;
+      } else {
+        ranges[i] = 10.0; // Fallback (should not happen with these params)
+      }
+    }
 
     std::vector<float> robotDim{0.51, 2.0};
     Eigen::Vector3f sensorPos{0.22, 0.0, 0.4};
