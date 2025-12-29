@@ -1,102 +1,148 @@
 import json
 import matplotlib.pyplot as plt
-import os
+import glob
+import sys
 
 # --- Configuration ---
-# filenames expected for benchmarking data
-EXPECTED_FILES = [
-    "benchmark_cpu_native.json",
-    "benchmark_cpu_omp.json",
-    "benchmark_cuda.json",
-    "benchmark_rocm.json",
-]
-
 OUTPUT_IMAGE = "benchmark_comparison.png"
+
+# Chic Color Palette
+COLORS = ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC948", "#B07AA1"]
 
 
 def load_data():
     all_benchmarks = {}  # Key: Test Name, Value: List of results
 
-    for filename in EXPECTED_FILES:
-        if not os.path.exists(filename):
-            print(f"Warning: {filename} not found. Skipping.")
-            continue
+    # Get all json files
+    json_files = glob.glob("*.json")
+    if not json_files:
+        print("[Error] No .json files found in the current directory.")
+        sys.exit(1)
 
-        with open(filename, "r") as f:
-            data = json.load(f)
-            platform = data["platform"]
+    print(f"[Info] Found {len(json_files)} JSON files. parsing...")
 
-            for bench in data["benchmarks"]:
-                test_name = bench["test_name"]
-                if test_name not in all_benchmarks:
-                    all_benchmarks[test_name] = []
+    for filename in json_files:
+        try:
+            with open(filename, "r") as f:
+                data = json.load(f)
 
-                all_benchmarks[test_name].append({
-                    "platform": platform,
-                    "mean": bench["mean_ms"],
-                    "std_dev": bench["std_dev_ms"],
-                })
+                # Validation
+                if "platform" not in data or "benchmarks" not in data:
+                    print(f"  [Skip] {filename} (Not a benchmark file)")
+                    continue
+
+                platform = data["platform"]
+                print(f"  [Load] {filename} -> Platform: {platform}")
+
+                for bench in data["benchmarks"]:
+                    test_name = bench["test_name"]
+                    if test_name not in all_benchmarks:
+                        all_benchmarks[test_name] = []
+
+                    all_benchmarks[test_name].append({
+                        "platform": platform,
+                        "mean": bench["mean_ms"],
+                        "std_dev": bench["std_dev_ms"],
+                    })
+        except Exception as e:
+            print(f"  [Error] Failed to read {filename}: {e}")
+
     return all_benchmarks
 
 
 def plot_benchmarks(data_map):
     if not data_map:
-        print("No data found to plot!")
+        print("[Error] No valid benchmark data found to plot!")
         return
 
     test_names = list(data_map.keys())
     num_tests = len(test_names)
 
-    # Create subplots (one row per test case)
-    _, axes = plt.subplots(nrows=num_tests, ncols=1, figsize=(10, 4 * num_tests))
+    # Setup Figure with transparent background
+    fig, axes = plt.subplots(nrows=num_tests, ncols=1, figsize=(10, 5 * num_tests))
     if num_tests == 1:
-        axes = [axes]  # Handle single case
+        axes = [axes]
 
-    # Colors for platforms
-    colors = ["#3498db", "#9b59b6", "#2ecc71", "#e74c3c"]
+    # Make the figure background transparent
+    fig.patch.set_alpha(0.0)
 
     for i, test_name in enumerate(test_names):
         ax = axes[i]
         results = data_map[test_name]
 
-        # Sort results to keep platforms consistent (optional)
-        # results.sort(key=lambda x: x['platform'])
+        # Sort: CPU platforms first (0), then others (1), then alphabetical
+        results.sort(key=lambda x: ("CPU" not in x["platform"], x["platform"]))
 
         platforms = [r["platform"] for r in results]
         means = [r["mean"] for r in results]
         errors = [r["std_dev"] for r in results]
 
-        # Create Bar Chart
+        # --- Styling ---
+        # Make axes background transparent
+        ax.patch.set_alpha(0.0)
+
+        # Remove top and right borders
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_linewidth(1.5)
+        ax.spines["bottom"].set_linewidth(1.5)
+
+        # Horizontal grid, dotted, behind bars
+        ax.yaxis.grid(True, linestyle="--", which="major", color="grey", alpha=0.3)
+        ax.set_axisbelow(True)
+
+        # Bar Plot
+        x_pos = range(len(platforms))  # Create explicit x-positions
         bars = ax.bar(
-            platforms,
+            x_pos,
             means,
             yerr=errors,
-            capsize=5,
-            color=colors[: len(platforms)],
-            alpha=0.8,
+            capsize=6,
+            color=COLORS[: len(platforms)],
+            edgecolor="black",
+            linewidth=0.5,
+            alpha=0.9,
+            error_kw={"lw": 1.5, "capthick": 1.5, "ecolor": "#444444"},
         )
 
-        # Formatting
-        ax.set_title(f"Benchmark: {test_name}", fontsize=14, fontweight="bold")
-        ax.set_ylabel("Time (ms) - Lower is Better", fontsize=11)
-        ax.grid(axis="y", linestyle="--", alpha=0.6)
+        # Titles and Labels (Bold)
+        ax.set_title(
+            f"Benchmark: {test_name}",
+            fontsize=16,
+            fontweight="bold",
+            pad=20,
+            color="#333333",
+        )
+        ax.set_ylabel(
+            "Time (ms)", fontsize=12, fontweight="bold", labelpad=10, color="#333333"
+        )
 
-        # Add numeric labels on top of bars
+        # Set the ticks first, THEN the labels
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(platforms, fontsize=11, fontweight="500", color="#333333")
+
+        # Add Value Labels on top of bars
         for bar in bars:
             height = bar.get_height()
+            label_text = f"{height:.2f} ms"
+
+            # place above bar
             ax.text(
                 bar.get_x() + bar.get_width() / 2.0,
-                1.02 * height,
-                f"{height:.3f} ms",
+                height + (max(means) * 0.02),
+                label_text,
                 ha="center",
                 va="bottom",
-                fontsize=10,
+                fontsize=11,
                 fontweight="bold",
+                color="#222222",
             )
 
     plt.tight_layout()
-    plt.savefig(OUTPUT_IMAGE, dpi=300)
-    print(f"Successfully generated {OUTPUT_IMAGE}")
+
+    # Save with transparent background
+    plt.savefig(OUTPUT_IMAGE, dpi=300, transparent=True, bbox_inches="tight")
+    print(f"\n[Success] Generated chic benchmark chart: {OUTPUT_IMAGE}")
 
 
 if __name__ == "__main__":
