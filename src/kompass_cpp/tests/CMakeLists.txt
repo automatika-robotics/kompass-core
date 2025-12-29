@@ -64,9 +64,6 @@ add_executable(vision_detector_test vision_detector_test.cpp)
 target_link_libraries(vision_detector_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework ${OpenCV_LIBS})
 add_test(vision_tests vision_detector_test)
 
-# find sycl
-find_package(AdaptiveCpp)
-
 # add sycl based GPU tests
 if(AdaptiveCpp_FOUND)
   add_executable(mapper_test_gpu mapper_test_gpu.cpp)

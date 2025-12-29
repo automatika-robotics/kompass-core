@@ -3,8 +3,13 @@ find_package(Eigen3 3.4 REQUIRED NO_MODULE)
 find_package(fcl 0.7 REQUIRED)
 find_package(ompl 1.5 REQUIRED)
 
-# find sycl
-find_package(AdaptiveCpp)
+# An option to force CPU build, default is OFF (allow GPU if found)
+option(FORCE_CPU_BUILD "Force CPU compilation even if AdaptiveCpp is available" OFF)
+
+# find sycl ONLY if the flag is not set
+if(NOT FORCE_CPU_BUILD)
+    find_package(AdaptiveCpp)
+endif()
 
 # Build static lib for kompass cpp
 add_subdirectory(kompass_cpp)
