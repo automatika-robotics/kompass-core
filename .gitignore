@@ -71,3 +71,7 @@ tests/*.csv
 *compile_commands.json
 *compile_flags.txt
 *.clangd
+
+# Benchmarking
+benchmark_files
+src/kompass_cpp/benchmarks/*.png

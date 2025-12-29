@@ -10,7 +10,7 @@ COLORS = ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC948", "#B0
 
 def load_data():
     all_benchmarks = {}
-    json_files = glob.glob("*.json")
+    json_files = glob.glob("benchmark_files/*.json")
     if not json_files:
         print("[Error] No .json files found.")
         sys.exit(1)
