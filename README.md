@@ -23,8 +23,8 @@ This package is developed to be used with [Kompass](https://github.com/automatik
 
 
 - [**Install**](#installation) Kompass Core 🛠️
-- Check the [**Package Overview**](#-package-overview)
-- See [**Benchmarking Results**](#-benchmarking-results) for different platforms
+- Check the [**Package Overview**](#package-overview)
+- See [**Benchmarking Results**](#benchmarking-results) for different platforms
 - To use Kompass Core on your robot with ROS2, check the [**Kompass**](https://automatika-robotics.github.io/kompass) framework 🚀
 
 
@@ -107,21 +107,21 @@ Includes wrappers and integrations with external planning and collision librarie
 - OMPL (Open Motion Planning Library)
 
 # Benchmarking Results
-The plots below visualize the performance differences across platforms for various components of the navigation stack. The **Logarithmic Scale** plot is essential for comparing CPU vs. GPU performance where differences can be orders of magnitude large, while the **Linear Scale** plot is useful for comparing performance within similar hardware classes. Checkout the [benchmarking details](src/kompass_cpp/benchmarks/README.md) about how the plots were generated and what tasks were measured.
+The plots below visualize the performance differences across platforms for various components of the navigation stack. The **Logarithmic Scale** plot is essential for comparing CPU vs. GPU performance where differences can be orders of magnitude large, while the **Linear Scale** plot is useful for comparing performance within similar hardware classes. See the [benchmarking details](src/kompass_cpp/benchmarks/README.md) for how these plots were generated and what tasks were measured.
 
 
 ### Logarithmic Scale (CPU vs GPU Comparison)
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../../../docs/benchmark_log_dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="../../../docs/benchmark_log_light.png">
-  <img alt="Logarithmic Benchmark Results" src="../../../docs/benchmark_log_light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark_log_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/benchmark_log_light.png">
+  <img alt="Logarithmic Benchmark Results" src="docs/benchmark_log_light.png">
 </picture>
 
 ### Linear Scale (Absolute Time)
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../../../docs/benchmark_abs_dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="../../../docs/benchmark_abs_light.png">
-  <img alt="Linear Benchmark Results" src="../../../docs/benchmark_abs_light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark_abs_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/benchmark_abs_light.png">
+  <img alt="Linear Benchmark Results" src="docs/benchmark_abs_light.png">
 </picture>
 
 
