@@ -19,25 +19,36 @@ We benchmark three critical components of the navigation stack:
     - **Stress Factor:** Random memory access patterns and ray traversal.
 
 3.  **Critical Zone Checker (Safety System)**
-    - **Workload:** Checks a high-res 2D scan (3,600 rays) where points fall within the "slowdown" zone to force worst-case evaluation logic.
+    - **Workload:** Checks a high-res 2D scan (3,600 rays) where points fall within the "slowdown" zone to force worst-case evaluation logic. This component is light-weight and highly optimized on the CPU, so performance gains are expected to be marginal. Use of the GPU is not default behaviour and left to the user.
     - **Metric:** Latency to return a safety factor $[0.0, 1.0]$.
     - **Stress Factor:** High-throughput collision checking.
 
 ---
 
+## 🏆 Results
+
+The plots below visualize the performance differences across platforms. The **Logarithmic Scale** plot is essential for comparing CPU vs. GPU performance where differences can be orders of magnitude large, while the **Linear Scale** plot is useful for comparing performance within similar hardware classes.
+
+### Logarithmic Scale (CPU vs GPU Comparison)
+![Logarithmic Benchmark Results](../../../docs/benchmark_comparison_log.png)
+
+### Linear Scale (Absolute Time)
+![Linear Benchmark Results](../../../docs/benchmark_comparison_absolute.png)
+
 ## 🛠️ Compilation & Usage
 
-The benchmark runner is a standalone executable (`kompass_benchmark`). It behavior changes based on the compilation flags (`USE_SYCL`).
+The benchmark runner is a standalone executable (`kompass_benchmark`).
 
 ### Prerequisites
 
 - **CMake 3.5+**
 - **AdaptiveCpp** (if targeting GPU or OMP backends)
+- **OpenCV, Boost Unit Test Framework, nlohmann json** (`sudo apt install nlohmann-json3-dev libopencv-dev libboost-test-dev`)
 - **Python 3** + `matplotlib` (for plotting)
 
 ### 1. CPU Native Baseline (No SYCL)
 
-Measures the pure C++ performance without any SYCL abstraction overhead.
+Measures the pure C++ performance without SYCL parallelization.
 
 ```bash
 mkdir -p build_cpu_native && cd build_cpu_native
@@ -50,7 +61,7 @@ cmake --build . --target kompass_benchmark -- -j$(nproc)
 
 ### 2. CPU with SYCL (OpenMP)
 
-Measures the performance of the GPU kernels running on the CPU via OpenMP. Useful for verifying SYCL overhead.
+Measures the performance of the GPU kernels running on the CPU via OpenMP.
 
 ```bash
 mkdir -p build_cpu_sycl && cd build_cpu_sycl
@@ -111,4 +122,4 @@ This will generate two images:
 - `benchmark_comparison_absolute.png`: Linear scale (good for similar performance classes).
 - `benchmark_comparison_log.png`: Logarithmic scale (essential for comparing CPU vs GPU).
 
-**Note:** You can configure the `BASELINE_PLATFORM` variable at the top of `plot_benchmarks.py` to automatically calculate speedup factors relative to a specific device (default: `Rockchip_CPU_Native`).
+**Note:** You can configure the `BASELINE_PLATFORM` variable at the top of `plot_benchmarks.py` to automatically calculate speedup factors relative to a specific device (default: `RK3588_CPU_Native`).
