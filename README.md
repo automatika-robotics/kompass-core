@@ -64,7 +64,7 @@ The following three packages will become available once kompass-core is installe
 - `omplpy`: Bespoke python bindings for the Open Motion Planning Library (OMPL).
 
 
-# 📦 Package Overview
+# Package Overview
 
 The package includes modules for mapping, control, trajectory planning, and vision-based tracking algorithms, with **GPU acceleration** support and Python bindings via `nanobind`.
 

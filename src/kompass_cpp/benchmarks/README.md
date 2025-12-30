@@ -30,10 +30,18 @@ We benchmark three critical components of the navigation stack:
 The plots below visualize the performance differences across platforms. The **Logarithmic Scale** plot is essential for comparing CPU vs. GPU performance where differences can be orders of magnitude large, while the **Linear Scale** plot is useful for comparing performance within similar hardware classes.
 
 ### Logarithmic Scale (CPU vs GPU Comparison)
-![Logarithmic Benchmark Results](../../../docs/benchmark_comparison_log.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../../docs/benchmark_log_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../../docs/benchmark_log_light.png">
+  <img alt="Logarithmic Benchmark Results" src="../../../docs/benchmark_log_light.png">
+</picture>
 
 ### Linear Scale (Absolute Time)
-![Linear Benchmark Results](../../../docs/benchmark_comparison_absolute.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../../docs/benchmark_abs_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../../docs/benchmark_abs_light.png">
+  <img alt="Linear Benchmark Results" src="../../../docs/benchmark_abs_light.png">
+</picture>
 
 ## 🛠️ Compilation & Usage
 

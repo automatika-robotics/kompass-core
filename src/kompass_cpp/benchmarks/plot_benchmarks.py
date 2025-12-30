@@ -2,17 +2,21 @@ import json
 import matplotlib.pyplot as plt
 import glob
 import sys
+import os
 
 # --- Configuration ---
-BASELINE_PLATFORM = "Rockchip_CPU_Native"
+BASELINE_PLATFORM = "RK3588_CPU_Native"
 COLORS = ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC948", "#B07AA1"]
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DOCS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "../../../docs"))
 
 
 def load_data():
     all_benchmarks = {}
     json_files = glob.glob("benchmark_files/*.json")
     if not json_files:
-        print("[Error] No .json files found.")
+        print("[Error] No .json files found in benchmark_files/.")
         sys.exit(1)
 
     print(f"[Info] Found {len(json_files)} JSON files. parsing...")
@@ -43,10 +47,28 @@ def load_data():
 
 
 def generate_chart(
-    data_map, output_file, log_scale=False, baseline_name=BASELINE_PLATFORM
+    data_map,
+    output_filename,
+    log_scale=False,
+    baseline_name=BASELINE_PLATFORM,
+    theme="light",
 ):
     if not data_map:
         return
+
+    # --- Theme Logic ---
+    if theme == "dark":
+        c_text = "#F0F0F0"  # White-ish text
+        c_grid = "#666666"  # Lighter grid for visibility
+        c_edge = "#DDDDDD"  # Light bar borders
+        c_annot_bg = "#303030"  # Dark bg for annotation box
+        c_error = "#FFFFFF"  # White error bars
+    else:
+        c_text = "#333333"  # Dark text
+        c_grid = "grey"  # Standard grid
+        c_edge = "black"  # Black bar borders
+        c_annot_bg = "white"  # White bg for annotation box
+        c_error = "#444444"  # Dark error bars
 
     test_names = list(data_map.keys())
     num_tests = len(test_names)
@@ -75,16 +97,22 @@ def generate_chart(
         ax.spines["left"].set_linewidth(1.5)
         ax.spines["bottom"].set_linewidth(1.5)
 
+        # Color the spines (axes lines)
+        ax.spines["left"].set_color(c_text)
+        ax.spines["bottom"].set_color(c_text)
+        ax.tick_params(axis="x", colors=c_text)
+        ax.tick_params(axis="y", colors=c_text)
+
         # --- Scale Specific Logic ---
         if log_scale:
             ax.set_yscale("log")
-            # Log Grid (Minor ticks are important here)
-            ax.grid(True, which="major", linestyle="-", color="grey", alpha=0.3)
-            ax.grid(True, which="minor", linestyle=":", color="grey", alpha=0.15)
+            # Log Grid
+            ax.grid(True, which="major", linestyle="-", color=c_grid, alpha=0.3)
+            ax.grid(True, which="minor", linestyle=":", color=c_grid, alpha=0.15)
             ylabel = "Time (ms) - Logarithmic Scale"
         else:
             # Linear Grid
-            ax.grid(True, axis="y", linestyle="--", color="grey", alpha=0.3)
+            ax.grid(True, axis="y", linestyle="--", color=c_grid, alpha=0.3)
             ylabel = "Time (ms) - Absolute"
 
         ax.set_axisbelow(True)
@@ -96,10 +124,10 @@ def generate_chart(
             yerr=errors,
             capsize=6,
             color=COLORS[: len(platforms)],
-            edgecolor="black",
+            edgecolor=c_edge,
             linewidth=0.5,
             alpha=0.9,
-            error_kw={"lw": 1.5, "capthick": 1.5, "ecolor": "#444444"},
+            error_kw={"lw": 1.5, "capthick": 1.5, "ecolor": c_error},
         )
 
         ax.set_title(
@@ -107,25 +135,22 @@ def generate_chart(
             fontsize=16,
             fontweight="bold",
             pad=20,
-            color="#333333",
+            color=c_text,
         )
-        ax.set_ylabel(
-            ylabel, fontsize=12, fontweight="bold", labelpad=10, color="#333333"
-        )
+        ax.set_ylabel(ylabel, fontsize=12, fontweight="bold", labelpad=10, color=c_text)
 
         ax.set_xticks(x_pos)
-        ax.set_xticklabels(platforms, fontsize=11, fontweight="500", color="#333333")
+        ax.set_xticklabels(platforms, fontsize=11, fontweight="500", color=c_text)
 
         # --- Label Placement ---
         for bar in bars:
             height = bar.get_height()
             label_text = f"{height:.2f} ms"
 
-            # Position logic changes based on scale
             if log_scale:
-                y_pos = height * 1.15  # Multiplicative spacing for log
+                y_pos = height * 1.15
             else:
-                y_pos = height + (max(means) * 0.02)  # Additive spacing for linear
+                y_pos = height + (max(means) * 0.02)
 
             ax.text(
                 bar.get_x() + bar.get_width() / 2.0,
@@ -135,7 +160,7 @@ def generate_chart(
                 va="bottom",
                 fontsize=11,
                 fontweight="bold",
-                color="#222222",
+                color=c_text,
             )
 
         # --- Speedup Annotation ---
@@ -159,20 +184,31 @@ def generate_chart(
                     transform=ax.transAxes,
                     ha="right",
                     fontsize=12,
-                    color="#333333",
-                    bbox={"facecolor": "white", "alpha": 0.7, "edgecolor": "none"},
+                    color=c_text,
+                    bbox={
+                        "facecolor": c_annot_bg,
+                        "alpha": 0.7,
+                        "edgecolor": c_text,
+                        "linewidth": 0.5,
+                    },
                 )
 
     plt.tight_layout()
-    plt.savefig(output_file, dpi=300, transparent=True, bbox_inches="tight")
-    print(f"[Success] Generated chart: {output_file}")
+    output_path = os.path.join(DOCS_DIR, output_filename)
+
+    plt.savefig(output_path, dpi=300, transparent=True, bbox_inches="tight")
+    print(f"[Success] Generated chart ({theme}): {output_path}")
 
 
 if __name__ == "__main__":
     data = load_data()
 
-    # Generate Linear Scale Image
-    generate_chart(data, "benchmark_comparison_absolute.png", log_scale=False)
+    # Generate 4 images total
 
-    # Generate Log Scale Image
-    generate_chart(data, "benchmark_comparison_log.png", log_scale=True)
+    # 1. Linear Scale
+    generate_chart(data, "benchmark_abs_light.png", log_scale=False, theme="light")
+    generate_chart(data, "benchmark_abs_dark.png", log_scale=False, theme="dark")
+
+    # 2. Log Scale
+    generate_chart(data, "benchmark_log_light.png", log_scale=True, theme="light")
+    generate_chart(data, "benchmark_log_dark.png", log_scale=True, theme="dark")
