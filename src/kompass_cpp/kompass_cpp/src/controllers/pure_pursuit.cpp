@@ -150,11 +150,11 @@ Controller::Result PurePursuit::execute(const Path::State currentPosition,
 bool PurePursuit::checkCommandCollisions(const Velocity2D &cmd, double dt) {
     Path::State sim_state = currentState;
     for (int i = 0; i < prediction_horizon; ++i) {
+      sim_state.update(cmd, dt);
       collision_checker_->updateState(sim_state);
       if (collision_checker_->checkCollisions()) {
         return true;
       }
-      sim_state.update(cmd, dt);
     }
     return false;
 }
@@ -165,7 +165,6 @@ Velocity2D PurePursuit::findSafeCommand(const Velocity2D &nominal, double dt) {
   // These offsets represent adjustments to the steering/rotation to "go around" the obstacle
 
   Velocity2D candidate = nominal;
-  // double original_vx = nominal.vx();
 
   for (double off : search_offsets_) {
     candidate.setOmega(nominal.omega() + off);
@@ -185,6 +184,29 @@ Velocity2D PurePursuit::findSafeCommand(const Velocity2D &nominal, double dt) {
       }
     }
   }
+
+  // If all fail check reverse motion
+  candidate = nominal;
+  candidate.setVx(- nominal.vx());
+  for (double off : search_offsets_) {
+    candidate.setOmega(nominal.omega() + off);
+
+    // Check if this candidate is safe
+    if (!checkCommandCollisions(candidate, dt)) {
+      return candidate;
+    }
+
+    // If omni, also try lateral shifts
+    if (ctrType == ControlType::OMNI) {
+      candidate.setOmega(nominal.omega());
+      candidate.setVy(nominal.vy() + off);
+
+      if (!checkCommandCollisions(candidate, dt)) {
+        return candidate;
+      }
+    }
+  }
+
   // No safe path found -> Stop and wait for the obstacle
   return Velocity2D(0.0, 0.0, 0.0);
 }

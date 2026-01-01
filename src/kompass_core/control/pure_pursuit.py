@@ -172,18 +172,18 @@ class PurePursuit(FollowerTemplate):
 
         # Execute controller
         # Check for sensor data to determine which execute overload to call
-        if "local_map" in kwargs:
+        if "local_map" in kwargs and kwargs["local_map"] is not None:
             # Execute with PointCloud
             self._result = self._planner.execute(
                 self._control_time_step, kwargs["local_map"]
             )
-        if "laser_scan" in kwargs:
+        elif "laser_scan" in kwargs and kwargs["laser_scan"] is not None:
             # Execute with LaserScan
             sensor_data = kompass_cpp.types.LaserScan(
                 ranges=kwargs["laser_scan"].ranges, angles=kwargs["laser_scan"].angles
             )
             self._result = self._planner.execute(self._control_time_step, sensor_data)
-        elif "point_cloud" in kwargs:
+        elif "point_cloud" in kwargs and kwargs["point_cloud"] is not None:
             # Execute with PointCloud
             sensor_data = kwargs["point_cloud"].data
             self._result = self._planner.execute(self._control_time_step, sensor_data)
