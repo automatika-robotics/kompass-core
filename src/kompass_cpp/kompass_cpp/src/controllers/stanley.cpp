@@ -16,9 +16,8 @@ Stanley::Stanley() : Follower() {
   wheel_base = config.getParameter<double>("wheel_base");
 }
 
-Stanley::Stanley(StanleyParameters config) : Follower() {
+Stanley::Stanley(StanleyParameters config) : Stanley() {
   setParams(config);
-  Stanley();
 }
 
 Controller::Result Stanley::execute(Path::State currentPosition,
