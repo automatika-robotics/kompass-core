@@ -161,6 +161,7 @@ public:
         global_vel, currentState, scan_points);
   };
 
+  // NOTE: Uncomment for debug
   // std::optional<Path::Path::View> getTrackedSegment() {
   //   return trackedRefPathSegment_;
   // }
@@ -226,12 +227,13 @@ private:
   float maxLocalRange_ =
       10.0; // Max range of the robot sensor or local map in meters. Used to
             // calculate the cost of coming close to obstacles
+
+  // NOTE: Uncomment for debug
   // std::optional<Path::Path::View> trackedRefPathSegment_ = nullopt;
 
   /**
    * @brief get maximum reference path length
    */
-  // size_t getMaxPathLength();
   size_t getMaxPathLength();
 
   Path::Path::View findTrackedPathSegment();

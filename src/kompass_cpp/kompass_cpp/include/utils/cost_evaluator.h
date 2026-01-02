@@ -197,8 +197,8 @@ private:
   size_t numTrajectories_;
   size_t numPointsPerTrajectory_;
   size_t maxRefPathSegmentSize_;
-  size_t maxObstaclePoints_;
-  size_t maxWGSize_;
+  size_t maxObstaclePoints_; // updated at runtime
+  size_t maxWGSize_; // initialized from accelerator cpabilities
   float *m_devicePtrPathsX = nullptr;
   float *m_devicePtrPathsY = nullptr;
   float *m_devicePtrVelocitiesVx = nullptr;

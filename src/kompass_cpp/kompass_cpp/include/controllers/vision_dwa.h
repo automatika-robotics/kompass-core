@@ -286,12 +286,10 @@ private:
       result.trajCost = 0.0;
       result.trajectory = ref_traj;
       latest_velocity_command_ = ref_traj.velocities.getFront();
-      // ---------------------------------------------------------------
       // Update reference to use in case goal is lost
       auto referenceToTarget =
           Path::Path(ref_traj.path.x, ref_traj.path.y, ref_traj.path.z);
       this->setCurrentPath(referenceToTarget, false);
-      // ---------------------------------------------------------------
       return result;
     }
     if (this->hasPath() and !isGoalReached() and
