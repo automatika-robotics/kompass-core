@@ -77,8 +77,9 @@ The package includes modules for mapping, control, trajectory planning, and visi
 
 | Algorithm                                   | Description                                        |
 | ------------------------------------------- | -------------------------------------------------- |
-| **Stanley**                   | Path tracking with robust convergence              |
 | **DWA (Dynamic Window Approach)** | Velocity-space sampling and optimization           |
+| **Pure Pursuit**                   | Path tracking with obstacle avoidance              |
+| **Stanley**                   | Path tracking with robust convergence              |
 | **DVZ**                           | Reactive obstacle avoidance using deformable zones |
 | **VisionRGBFollower**   | Follow visual targets using RGB images          |
 | **VisionRGBDFollower**   | Follow visual targets using RGBD (depth) images          |
