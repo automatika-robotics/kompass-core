@@ -21,15 +21,6 @@ public:
           Parameter(0.01, 0.0001,
                     1000.0)); // [m] distance used for path interpolation
       addParameter(
-          "max_path_length",
-          Parameter(100.0, 1.0,
-                    1e9)); // Maximum allowed length of the global path (meters)
-      // NOTE: Currently the maximum path length is a configuration parameter to
-      // limit the maximum number of interpolated path points. In future updates
-      // the path length limit should be removed and a partial interpolation
-      // should be implemented instead (i.e. save all reference points and
-      // interpolate smaller parts gradually).
-      addParameter(
           "lookahead_distance",
           Parameter(1.0, 0.0,
                     1000.0)); // [m] Lookahead distance used to find the next

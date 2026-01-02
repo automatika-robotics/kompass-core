@@ -33,7 +33,7 @@ PurePursuit::PurePursuit(const ControlType &robotCtrlType,
     max_search_candidates += 1;
   }
   search_offsets_.resize(max_search_candidates);
-  for (size_t i = 0; i < max_search_candidates; i=i+2) {
+  for (int i = 0; i < max_search_candidates; i=i+2) {
     search_offsets_[i] = path_search_step * (i + 1);
     search_offsets_[i + 1] = - path_search_step * (i + 1);
   }
