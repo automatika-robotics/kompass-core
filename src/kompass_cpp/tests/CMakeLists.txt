@@ -44,6 +44,11 @@ add_executable(collisions_test collisions_test.cpp)
 target_link_libraries(collisions_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework)
 add_test(collisions_tests collisions_test)
 
+# Critical zone checker Checker tests
+add_executable(critical_zone_test critical_zone_test.cpp)
+target_link_libraries(critical_zone_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework)
+add_test(critical_zone_tests critical_zone_test)
+
 # Vision DWA test
 add_executable(vision_dwa_test vision_dwa_test.cpp)
 target_link_libraries(vision_dwa_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework ${OpenCV_LIBS})
@@ -59,9 +64,6 @@ add_executable(vision_detector_test vision_detector_test.cpp)
 target_link_libraries(vision_detector_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework ${OpenCV_LIBS})
 add_test(vision_tests vision_detector_test)
 
-# find sycl
-find_package(AdaptiveCpp)
-
 # add sycl based GPU tests
 if(AdaptiveCpp_FOUND)
   add_executable(mapper_test_gpu mapper_test_gpu.cpp)
@@ -69,11 +71,11 @@ if(AdaptiveCpp_FOUND)
   add_sycl_to_target(TARGET mapper_test_gpu SOURCES mapper_test_gpu.cpp)
   add_test(mapper_tests mapper_test_gpu)
 
-  # Collision Checker GPU tests
-  add_executable(collisions_test_gpu collisions_test_gpu.cpp)
-  target_link_libraries(collisions_test_gpu PRIVATE ${MODULE_NAME} Boost::unit_test_framework)
-  add_sycl_to_target(TARGET collisions_test_gpu SOURCES collisions_test_gpu.cpp)
-  add_test(collisions_tests collisions_test_gpu)
+  # Critical Zone Checker GPU tests
+  add_executable(critical_zone_test_gpu critical_zone_test_gpu.cpp)
+  target_link_libraries(critical_zone_test_gpu PRIVATE ${MODULE_NAME} Boost::unit_test_framework)
+  add_sycl_to_target(TARGET critical_zone_test_gpu SOURCES critical_zone_test_gpu.cpp)
+  add_test(critical_zone_tests critical_zone_test_gpu)
 
   # Add sycl to cost evaluator test if AdaptiveCpp found
   add_sycl_to_target(TARGET cost_evaluator_test SOURCES cost_evaluator_test.cpp)

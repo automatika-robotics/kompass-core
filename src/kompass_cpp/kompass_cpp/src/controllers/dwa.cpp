@@ -73,10 +73,12 @@ void DWA::initJitCompile() {
   velocities.push_back({Velocity2D(1.0, 0.0, 0.0)});
   auto dummyPath = Path::Path(
       {Path::Point(0.0f, 0.0f, 0.0f), Path::Point(1.0f, 1.0f, 0.0f)});
+  auto dummyPathView = dummyPath.getPart(0, 1);
   paths.push_back(dummyPath);
   std::unique_ptr<TrajectorySamples2D> dummySamples =
       std::make_unique<TrajectorySamples2D>(velocities, paths);
-  trajCostEvaluator->getMinTrajectoryCost(dummySamples, &dummyPath, dummyPath);
+  trajCostEvaluator->getMinTrajectoryCost(dummySamples, &dummyPath,
+                                          dummyPathView);
 }
 
 void DWA::configure(ControlLimitsParams controlLimits, ControlType controlType,
@@ -100,7 +102,7 @@ void DWA::configure(ControlLimitsParams controlLimits, ControlType controlType,
       costWeights, sensor_position_body,
       Eigen::Quaternionf(sensor_rotation_body), controlLimits,
       trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
-      maxSegmentSize);
+      max_segment_size_);
   this->maxNumThreads = maxNumThreads;
 }
 
@@ -121,7 +123,7 @@ void DWA::configure(TrajectorySampler::TrajectorySamplerParameters config,
       costWeights, sensor_position_body,
       Eigen::Quaternionf(sensor_rotation_body), controlLimits,
       trajSampler->numTrajectories, trajSampler->numPointsPerTrajectory,
-      maxSegmentSize);
+      max_segment_size_);
   this->maxNumThreads = maxNumThreads;
 }
 
@@ -143,54 +145,19 @@ void DWA::setCurrentState(const Path::State &position) {
   this->trajSampler->updateState(position);
 }
 
-Path::Path DWA::findTrackedPathSegment() {
+Path::Path::View DWA::findTrackedPathSegment() {
+  // Start the segment from the closest point index
+  size_t global_start_index = closestPosition->index;
 
-  size_t segment_index{current_segment_index_ + 1};
-  Path::Path currentSegment = currentPath->segments[current_segment_index_];
-
-  // If we reached end of the current segment and a new segment is available ->
-  // take the next segment
-  if (closestPosition->index >= currentSegment.getSize() - 1 and
-      current_segment_index_ < max_segment_index_) {
-    segment_index = current_segment_index_ + 1;
-    return currentPath->segments[current_segment_index_ + 1];
-  } else if (closestPosition->index >= currentSegment.getSize() - 1) {
-    // Return current segment directly (last segment)
-    return currentPath->segments[current_segment_index_];
+  if (global_start_index >= currentPath->getSize()) {
+    global_start_index = currentPath->getSize() - 1;
   }
-  // Else take the segment points from the current point onwards
-  else {
-    auto trackedPath = currentSegment.getPart(closestPosition->index,
-                                              currentSegment.getSize() - 1,
-                                              this->maxSegmentSize);
-    size_t point_index{0};
 
-    float segment_length = trackedPath.totalPathLength();
-
-    // If the segment does not have the required number of points add more
-    // points from next path segment
-    while (segment_length < max_forward_distance_ and
-           segment_index <= max_segment_index_ and
-           trackedPath.getSize() < maxSegmentSize - 1) {
-      if (point_index >= currentPath->segments[segment_index].getSize()) {
-        point_index = 0;
-        segment_index++;
-        if (segment_index > max_segment_index_) {
-          break;
-        }
-      }
-      // Add distance between last point and new point
-      Path::Point back_point = trackedPath.getEnd();
-      segment_length += calculateDistance(
-          back_point,
-          currentPath->segments[segment_index].getIndex(point_index));
-      trackedPath.pushPoint(
-          currentPath->segments[segment_index].getIndex(point_index));
-      point_index++;
-    }
-
-    return trackedPath;
-  }
+  // Lookahead index
+  size_t global_end_index = std::min(global_start_index + max_segment_size_,
+                                    currentPath->getSize() - 1);
+  // Create and Return the View
+  return currentPath->getPart(global_start_index, global_end_index);
 }
 
 std::tuple<MatrixXfR, MatrixXfR> DWA::getDebuggingSamples() const {

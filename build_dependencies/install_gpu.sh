@@ -56,19 +56,48 @@ command_exists() {
     command -v "$1" &>/dev/null
 }
 
+# Detect OS and Version
+detect_os() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS_ID=$ID
+        OS_VERSION_ID=$VERSION_ID
+    else
+        log ERROR "Cannot detect OS. /etc/os-release not found."
+        exit 1
+    fi
+}
+
+# Function to determine if we need legacy support (vcpkg/kitware)
+# Returns 0 (true) if legacy (old Ubuntu), 1 (false) if modern (Debian 11+, RPi OS, Ubuntu > 20)
+is_legacy_system() {
+    # If Debian or Raspbian, assume modern (Debian 10/Buster is old, but we assume 11+ for this context)
+    if [[ "$OS_ID" == "debian" || "$OS_ID" == "raspbian" ]]; then
+        return 1
+    elif [[ "$OS_ID" == "ubuntu" ]]; then
+        if [[ $(echo "$OS_VERSION_ID <= 20.04" | bc -l) == 1 ]]; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # Function to install missing dependencies
 install_dependencies() {
-
+    log INFO "Updating package lists..."
     $SUDO apt update -y
-    $SUDO apt install -y lsb-release bc
-    # Get the Ubuntu version
-    UBUNTU_VERSION=$(lsb_release -sr)
-    log INFO "Ubuntu version found: $UBUNTU_VERSION"
-    # Specifically install latest version of cmake for Ubuntu <= 20
-    if [[ $(echo "$UBUNTU_VERSION <= 20.04" | bc -l) == 1 ]]; then
-        log INFO "Installing latest cmake..."
-        export DEBIAN_FRONTEND=noninteractive  # avoid fresh OS timezone setting
-        $SUDO apt install -y software-properties-common wget
+
+    $SUDO apt install -y lsb-release bc wget gnupg
+
+    detect_os
+    log INFO "Detected OS: $OS_ID, Version: $OS_VERSION_ID"
+
+    # Install specific CMake for Legacy Ubuntu
+    if is_legacy_system; then
+        log INFO "Legacy system detected. Installing latest cmake from Kitware..."
+        $SUDO apt install -y software-properties-common
+
+        export DEBIAN_FRONTEND=noninteractive
         wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | $SUDO tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
         $SUDO apt-add-repository -y "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
         $SUDO apt update -y && apt install -y kitware-archive-keyring
@@ -77,12 +106,12 @@ install_dependencies() {
         $SUDO apt install -y --only-upgrade cmake
         local dependencies=("git" "make" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq" "python3-minimal" "python3-apt" "python3-dev")
     else
-        local dependencies=("git" "make" "cmake" "software-properties-common" "wget" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq" "python3-minimal" "python3-apt" "python3-dev")
+        # Modern Debian/Raspbian/Ubuntu
+        local dependencies=("git" "make" "cmake" "wget" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq" "python3-minimal" "python3-apt" "python3-dev")
     fi
 
     # Install other tool dependencies
     local missing=()
-
     for dep in "${dependencies[@]}"; do
         if ! command_exists "$dep"; then
             missing+=("$dep")
@@ -91,13 +120,13 @@ install_dependencies() {
 
     if (( ${#missing[@]} > 0 )); then
         log INFO "Installing missing dependencies: ${missing[*]}"
-        export DEBIAN_FRONTEND=noninteractive  # avoid fresh OS timezone setting
+        export DEBIAN_FRONTEND=noninteractive
         $SUDO apt install -y "${missing[@]}"
     else
         log INFO "All dependencies are already installed."
     fi
 
-    #  Ensure /usr/bin/python3 exists for system scripts like add-apt-repository
+    # Ensure /usr/bin/python3 exists
     if [ ! -x /usr/bin/python3 ]; then
         log INFO "Fixing missing /usr/bin/python3 symlink..."
         $SUDO ln -sf $(command -v python3) /usr/bin/python3
@@ -130,7 +159,7 @@ check_llvm_clang_versions_in_range() {
 KOMPASS_CORE_REPO="automatika-robotics/kompass-core"
 KOMPASS_CORE_URL="https://github.com/$KOMPASS_CORE_REPO"
 ADAPTIVE_CPP_URL="https://github.com/AdaptiveCpp/AdaptiveCpp"
-ADAPTIVE_CPP_SOURCE_VERSION="v25.02.0"
+ADAPTIVE_CPP_SOURCE_VERSION="v25.10.0"
 DEFAULT_INSTALL_PREFIX="/usr/local"
 DEFAULT_KEEP_SOURCE_FILES=false
 MINIMUM_LLVM_VERSION=14
@@ -175,8 +204,8 @@ install_dependencies
 # Check for LLVM/Clang versions
 if [[ $LLVM_VERSION ]]; then
     # Check if given version is within range
-    if (( LLVM_VERSION < 15 || LLVM_VERSION > 17 )); then
-        log ERROR "LLVM Versions higher than 20 and lower than 15 are not compatible with kompass-core."
+    if (( LLVM_VERSION < 15 || LLVM_VERSION > 18 )); then
+        log ERROR "LLVM Versions higher than 18 and lower than 15 are not compatible with kompass-core."
         exit 1
     fi
     if check_llvm_clang_version $LLVM_VERSION; then
@@ -186,32 +215,39 @@ if [[ $LLVM_VERSION ]]; then
     fi
 else
     # Clang version 18 gives an error when compiling with boost version < 1.75
-    # Thus setting highest version to 17
+    # For Debian 13/Raspberry Pi OS, check up to 17 first
     LLVM_VERSION=17
     FOUND_LLVM_VERSION=$(check_llvm_clang_versions_in_range $MINIMUM_LLVM_VERSION $LLVM_VERSION)
 fi
 
 # Install LLVM/Clang if needed
 if [ $FOUND_LLVM_VERSION -eq 0 ]; then
-    log INFO "Downloading and installing LLVM/Clang..."
-    wget -q https://apt.llvm.org/llvm.sh || { log ERROR "Failed to download LLVM setup script."; exit 1; }
-    chmod +x llvm.sh
+    log INFO "Attempting to install LLVM/Clang $LLVM_VERSION from system repositories..."
 
-    log INFO "Installing LLVM/Clang version $LLVM_VERSION..."
-    $SUDO ./llvm.sh "$LLVM_VERSION"
-    # Revert command echoing if not in debug mode
-    if [[ $DEBUG_MODE == false ]]; then
-        set +x
+    # Try system install first (Debian 13 / Ubuntu 24 often have these)
+    if $SUDO apt install -y "llvm-$LLVM_VERSION" "clang-$LLVM_VERSION" "libclang-$LLVM_VERSION-dev" "libomp-$LLVM_VERSION-dev" "lld-$LLVM_VERSION" 2>/dev/null; then
+        log INFO "Successfully installed LLVM/Clang from system repositories."
+    else
+        log INFO "System repository install failed or incomplete. Falling back to LLVM script."
+        log INFO "Downloading and installing LLVM/Clang via llvm.sh..."
+
+        wget -q https://apt.llvm.org/llvm.sh || { log ERROR "Failed to download LLVM setup script."; exit 1; }
+        chmod +x llvm.sh
+
+        log INFO "Installing LLVM/Clang version $LLVM_VERSION..."
+
+        # Note: On Debian Testing/Unstable, llvm.sh might warn about codenames.
+        $SUDO ./llvm.sh "$LLVM_VERSION"
+
+        # Cleanup
+        rm -f llvm.sh
     fi
-
-    # Cleanup
-    rm -f llvm.sh
 else
     LLVM_VERSION=$FOUND_LLVM_VERSION
     log INFO "Found LLVM/Clang version $FOUND_LLVM_VERSION. Skipping LLVM/Clang installation."
 fi
 
-# Install required packages for acpp
+# Install required packages for acpp (ensure dev headers are present)
 $SUDO apt install -y \
     "libclang-${LLVM_VERSION}-dev" "clang-tools-${LLVM_VERSION}" \
     "libomp-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-dev" "lld-${LLVM_VERSION}"
@@ -220,16 +256,17 @@ $SUDO apt install -y \
 LLVM_DIR=$(llvm-config-${LLVM_VERSION} --cmakedir)
 log INFO "LLVM cmake path is $LLVM_DIR"
 CLANG_EXECUTABLE_PATH=$(which clang++-${LLVM_VERSION})
-log INFO "Clang++ executable path is $LLVM_DIR"
+log INFO "Clang++ executable path is $CLANG_EXECUTABLE_PATH"
 
 # Install libstdc++ for Clang
-GCC_VERSION=$(clang++-${LLVM_VERSION} -v 2>&1 | awk -F/ '/Selected GCC/ {print $NF}')
-log INFO "Installing libstdc++ version $GCC_VERSION..."
-$SUDO apt install -y "libstdc++-${GCC_VERSION}-dev"
-
-# Install Boost libraries for acpp
-log INFO "Installing boost dependencies..."
-$SUDO apt install -y libboost-fiber-dev libboost-context-dev libboost-test-dev
+# On some Debian systems, the gcc version parsing might be tricky, fail gracefully
+GCC_VERSION=$(clang++-${LLVM_VERSION} -v 2>&1 | awk -F/ '/Selected GCC/ {print $NF}' || echo "")
+if [[ -n "$GCC_VERSION" ]]; then
+    log INFO "Installing libstdc++ version $GCC_VERSION..."
+    $SUDO apt install -y "libstdc++-${GCC_VERSION}-dev" || log WARN "Could not explicitly install libstdc++-${GCC_VERSION}-dev, assuming standard libstdc++-dev is sufficient."
+else
+    $SUDO apt install -y libstdc++-dev
+fi
 
 # Clone and build AdaptiveCpp
 if [[ ! -d "AdaptiveCpp" ]]; then
@@ -241,7 +278,6 @@ fi
 
 
 cd AdaptiveCpp
-# Checkout latest tag
 mkdir -p build && cd build
 log INFO "Configuring build with CMake..."
 CMAKE_FLAGS="-DCMAKE_INSTALL_PREFIX=$INSTALL_PREFIX -DLLVM_DIR=$LLVM_DIR -DCLANG_EXECUTABLE_PATH=$CLANG_EXECUTABLE_PATH"
@@ -285,9 +321,10 @@ else
 fi
 
 cd kompass-core
-# For ubuntu <= 20.04 install dependencies via vcpkg
-if [[ $(echo "$UBUNTU_VERSION <= 20.04" | bc -l) == 1 ]]; then
-    log WARN "Installing vcpkg for Ubuntu version <= 20.04..."
+
+# Check if legacy system (Ubuntu <= 20.04) for VCPKG usage
+if is_legacy_system; then
+    log WARN "Legacy system detected. Installing vcpkg..."
     export VCPKG_ROOT=$PWD/.vcpkg
     export CMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
     # If vcpkg folder exists, assume vcpkg was already downloaded
@@ -300,8 +337,7 @@ if [[ $(echo "$UBUNTU_VERSION <= 20.04" | bc -l) == 1 ]]; then
     fi
 
     # Check for architecture
-    if [ "$(uname -m)" != "x86_64" ]
-    then
+    if [ "$(uname -m)" != "x86_64" ]; then
         export VCPKG_FORCE_SYSTEM_BINARIES=1
         export VCPKG_TARGET_TRIPLET="arm64-linux-release"
     else
@@ -315,11 +351,12 @@ if [[ $(echo "$UBUNTU_VERSION <= 20.04" | bc -l) == 1 ]]; then
     $VCPKG_ROOT/bootstrap-vcpkg.sh -disableMetrics
 
     # install dependencies
-    log WARN "Installing ompl and fcl with vcpkg for latest version..."
+    log WARN "Installing ompl and fcl with vcpkg..."
     $VCPKG_ROOT/vcpkg install fcl --triplet=$VCPKG_TARGET_TRIPLET
     $VCPKG_ROOT/vcpkg install ompl --triplet=$VCPKG_TARGET_TRIPLET
 else
-    log INFO "Installing ompl and fcl from apt..."
+    log INFO "Modern system (Debian 11+/Ubuntu 21+/Raspbian) detected."
+    log INFO "Installing ompl and fcl from system apt repositories..."
     $SUDO apt install -y libompl-dev libfcl-dev libode-dev
 fi
 
@@ -337,8 +374,8 @@ fi
 
 if python3 -c "import kompass_cpp" 2>/dev/null; then
     log INFO "\033[1;32mkompass-core was installed successfully.\033[0m"
-    if [[ $(echo "$UBUNTU_VERSION <= 20.04" | bc -l) == 1 ]]; then
-        log WARN "In order to use kompass-core on Ubuntu <= 20.04, you will have to set LD_LIBRARY_PATH in your environment as follows:
+    if is_legacy_system; then
+        log WARN "In order to use kompass-core on this system, you will have to set LD_LIBRARY_PATH in your environment as follows:
 
         export LD_LIBRARY_PATH=$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib:\$LD_LIBRARY_PATH
 

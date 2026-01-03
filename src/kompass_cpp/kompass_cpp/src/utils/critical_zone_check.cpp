@@ -12,13 +12,14 @@ namespace Kompass {
  */
 
 CriticalZoneChecker::CriticalZoneChecker(
-    const CollisionChecker::ShapeType robot_shape_type,
+    InputType input_type, const CollisionChecker::ShapeType robot_shape_type,
     const std::vector<float> &robot_dimensions,
     const Eigen::Vector3f &sensor_position_body,
     const Eigen::Vector4f &sensor_rotation_body, const float critical_angle,
     const float critical_distance, const float slowdown_distance,
     const std::vector<double> &angles, const float min_height,
     const float max_height, const float range_max) {
+  input_type_ = input_type;
   min_height_ = min_height;
   max_height_ = max_height;
   range_max_ = range_max;
@@ -31,6 +32,10 @@ CriticalZoneChecker::CriticalZoneChecker(
     robotRadius_ = std::sqrt(pow(robot_dimensions.at(0), 2) +
                              pow(robot_dimensions.at(1), 2)) /
                    2;
+
+  } else if (robot_shape_type == CollisionChecker::ShapeType::SPHERE) {
+    robotHeight_ = robot_dimensions.at(0);
+    robotRadius_ = robot_dimensions.at(0);
   } else {
     throw std::invalid_argument("Invalid robot geometry type");
   }
@@ -40,15 +45,22 @@ CriticalZoneChecker::CriticalZoneChecker(
       getTransformation(sensor_rotation_body, sensor_position_body);
   // Compute the critical zone angles min,max
   float angle_rad = critical_angle * M_PI / 180.0;
-  angle_right_forward_ = angle_rad / 2;
-  angle_left_forward_ = (2 * M_PI) - (angle_rad / 2);
-  angle_right_backward_ = Angle::normalizeTo0Pi(M_PI + angle_right_forward_);
-  angle_left_backward_ = Angle::normalizeTo0Pi(M_PI + angle_left_forward_);
+  float angle_right_forward_ = angle_rad / 2;
+  float angle_left_forward_ = (2 * M_PI) - (angle_rad / 2);
+  float angle_right_backward_ =
+      Angle::normalizeTo0Pi(M_PI + angle_right_forward_);
+  float angle_left_backward_ =
+      Angle::normalizeTo0Pi(M_PI + angle_left_forward_);
 
   LOG_DEBUG("Critical zone forward angles: [", angle_right_forward_, ", ",
             angle_left_forward_, "]");
   LOG_DEBUG("Critical zone backward angles: [", angle_right_backward_, ", ",
             angle_left_backward_, "]");
+
+  angle_max_forward_ = std::max(angle_left_forward_, angle_right_forward_);
+  angle_min_forward_ = std::min(angle_left_forward_, angle_right_forward_);
+  angle_max_backward_ = std::max(angle_left_backward_, angle_right_backward_);
+  angle_min_backward_ = std::min(angle_left_backward_, angle_right_backward_);
 
   preset(angles);
 
@@ -79,12 +91,10 @@ void CriticalZoneChecker::preset(const std::vector<double> &angles) {
     theta = Angle::normalizeTo0Pi(
         std::atan2(cartesianPoint.y(), cartesianPoint.x()));
 
-    if (theta >= std::max(angle_left_forward_, angle_right_forward_) ||
-        theta <= std::min(angle_left_forward_, angle_right_forward_)) {
+    if (theta >= angle_max_forward_ || theta <= angle_min_forward_) {
       indicies_forward_.push_back(i);
     }
-    if (theta >= std::min(angle_left_backward_, angle_right_backward_) &&
-        theta <= std::max(angle_left_backward_, angle_right_backward_)) {
+    if (theta >= angle_min_backward_ && theta <= angle_max_forward_) {
       indicies_backward_.push_back(i);
     }
   }
@@ -101,6 +111,7 @@ float CriticalZoneChecker::check(const std::vector<double> &ranges,
     indicies = &indicies_backward_;
   }
   // If sensor data has been preset then use the indicies directly
+  float slowdown_factor = 1.0f;
   for (size_t index : *indicies) {
     x = ranges[index] * cos_angles_[index];
     y = ranges[index] * sin_angles_[index];
@@ -115,11 +126,12 @@ float CriticalZoneChecker::check(const std::vector<double> &ranges,
     if (distance <= critical_distance_) {
       return 0.0;
     } else if (distance <= slowdown_distance_) {
-      return (distance - critical_distance_) /
-             (slowdown_distance_ - critical_distance_);
+      slowdown_factor = std::min(slowdown_factor,
+                                 (distance - critical_distance_) /
+                                     (slowdown_distance_ - critical_distance_));
     }
   }
-  return 1.0;
+  return slowdown_factor;
 }
 
 float CriticalZoneChecker::check(const std::vector<int8_t> &data,

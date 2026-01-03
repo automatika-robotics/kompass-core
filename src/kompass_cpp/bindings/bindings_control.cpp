@@ -8,6 +8,7 @@
 #include "controllers/dwa.h"
 #include "controllers/follower.h"
 #include "controllers/pid.h"
+#include "controllers/pure_pursuit.h"
 #include "controllers/rgb_follower.h"
 #include "controllers/stanley.h"
 #include "controllers/vision_dwa.h"
@@ -154,6 +155,56 @@ void bindings_control(py::module_ &m) {
            py::arg("kd"), "Init PID controller with parameters")
       .def("compute", &Control::PID::compute, py::arg("target"),
            py::arg("current"), py::arg("dt"));
+
+  // PurePursuit
+  // Bind PurePursuitConfig
+  py::class_<Control::PurePursuit::PurePursuitConfig,
+             Control::Follower::FollowerParameters>(m_control,
+                                                    "PurePursuitConfig")
+      .def(py::init<>());
+
+  // Bind PurePursuit
+  py::class_<Control::PurePursuit, Control::Follower>(m_control, "PurePursuit")
+      .def(py::init<const Control::ControlType &,
+                    const Control::ControlLimitsParams &,
+                    const CollisionChecker::ShapeType,
+                    const std::vector<float> &, const Eigen::Vector3f &,
+                    const Eigen::Vector4f &, double,
+                    const Control::PurePursuit::PurePursuitConfig &>(),
+           "Init PurePursuit follower with collision avoidance configuration",
+           py::arg("control_type"), py::arg("control_limits"),
+           py::arg("robot_shape_type"), py::arg("robot_dimensions"),
+           py::arg("sensor_position_robot"), py::arg("sensor_rotation_robot"),
+           py::arg("octree_res") = 0.1,
+           py::arg("config") = Control::PurePursuit::PurePursuitConfig())
+      .def("execute",
+           (Control::Controller::Result(Control::PurePursuit::*)(
+               const Path::State, const double)) &
+               Control::PurePursuit::execute,
+           "Execute Pure Pursuit control step with state update",
+           py::arg("current_position"), py::arg("delta_time"))
+      .def(
+          "execute",
+          (Control::Controller::Result(Control::PurePursuit::*)(const double)) &
+              Control::PurePursuit::execute,
+          "Execute Pure Pursuit control step (uses internal state)",
+          py::arg("delta_time"))
+      .def(
+          "execute",
+          [](Control::PurePursuit &self, const double dt,
+             const Control::LaserScan &scan) {
+            return self.execute<Control::LaserScan>(dt, scan);
+          },
+          "Execute Pure Pursuit with LaserScan obstacle avoidance",
+          py::arg("delta_time"), py::arg("laser_scan"))
+      .def(
+          "execute",
+          [](Control::PurePursuit &self, const double dt,
+             const std::vector<Path::Point> &cloud) {
+            return self.execute<std::vector<Path::Point>>(dt, cloud);
+          },
+          "Execute Pure Pursuit with PointCloud obstacle avoidance",
+          py::arg("delta_time"), py::arg("point_cloud"));
 
   // Trajectory sampler control result
   py::class_<Control::TrajSearchResult>(m_control, "SamplingControlResult")

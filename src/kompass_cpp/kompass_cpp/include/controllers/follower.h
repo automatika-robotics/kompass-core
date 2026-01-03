@@ -21,19 +21,22 @@ public:
           Parameter(0.01, 0.0001,
                     1000.0)); // [m] distance used for path interpolation
       addParameter(
-          "max_path_length",
-          Parameter(10.0, 1.0,
-                    1e9)); // Maximum allowed length of the global path (meters)
-      // NOTE: Currently the maximum path length is a configuration parameter to
-      // limit the maximum number of interpolated path points. In future updates
-      // the path length limit should be removed and a partial interpolation
-      // should be implemented instead (i.e. save all reference points and
-      // interpolate smaller parts gradually).
-      addParameter(
           "lookahead_distance",
           Parameter(1.0, 0.0,
                     1000.0)); // [m] Lookahead distance used to find the next
                               // point to reach (normally be same as wheelbase)
+      // Speed control parameters
+      addParameter(
+          "speed_regulation_curvature",
+          Parameter(0.5, 0.0,
+                    1.0)); // Curvature-based linear velocity speed regulation parameter
+      addParameter("speed_regulation_angular",
+                   Parameter(0.5, 0.0,
+                             1.0)); // Angular velocity-based speed
+                                    // regulation parameter
+      addParameter("min_speed_regulation_factor",
+                   Parameter(0.5, 1e-3,
+                             1.0)); // Minimum value of the final speed regulation factor
       addParameter(
           "goal_dist_tolerance",
           Parameter(0.1, 0.001, 1000.0)); // [m] Tolerance to consider the robot
@@ -70,7 +73,9 @@ public:
   // Constructor
   Follower();
 
-  Follower(FollowerParameters config);
+  Follower(const FollowerParameters &config);
+
+  void setParams(const FollowerParameters &config);
 
   // Destructor
   virtual ~Follower() = default;
@@ -162,38 +167,19 @@ public:
   const Path::Path getCurrentPath() const;
 
   /**
-   * @brief Helper method to calculate the distance between a state and a point
+   * @brief Calculates an exponential speed factor [0, 1] based on path
+   * properties.
    *
-   * @param state
-   * @param point
-   * @return const double
+   * @param current_angular_vel
+   * @return double
    */
-  const double calculateDistance(const Path::State &state,
-                                 const Path::Point &point) const;
-
-  /**
-   * @brief Helper method to calculate the distance between two points
-   *
-   * @param point1
-   * @param point2
-   * @return const double
-   */
-  const double calculateDistance(const Path::Point &point1,
-                                 const Path::Point &point2) const;
-
-  /**
-   * @brief Helper method to calculate the distance between two states
-   *
-   * @param state1
-   * @param state2
-   * @return const double
-   */
-  const double calculateDistance(const Path::State &state1,
-                                 const Path::State &state2) const;
+  double calculateExponentialSpeedFactor(double current_angular_vel) const;
 
 protected:
+  // Speed Control Parameters
+  double speed_reg_curvature{0.0}; // Curvature factor
+  double speed_reg_rotation{0.0};    // Rotation factor
   std::unique_ptr<Path::Path> currentPath = nullptr;
-  std::unique_ptr<Path::Path> refPath = nullptr;
   std::unique_ptr<Path::PathPosition> closestPosition = std::make_unique<Path::PathPosition>();
   double goal_dist_tolerance{0.0};
   double goal_orientation_tolerance{0.0};
@@ -201,12 +187,13 @@ protected:
   bool rotate_in_place{false};
   double lookahead_distance{0.0};
   bool enable_reverse_driving{false};
-  double path_segment_length{0.0};
-  double maxDist{0.0};
-  size_t maxSegmentSize;
+  double path_segment_length_{0.0};
+  double min_speed_regulation_factor{0.0};
+  double max_point_interpolation_distance_{0.0};
+  size_t max_segment_size_;
   Path::InterpolationType interpolationType = Path::InterpolationType::LINEAR;
 
-  FollowerParameters config;
+  FollowerParameters config = FollowerParameters();
 
   /**
    * @brief Finds closestPosition on the currentPath to the currentState

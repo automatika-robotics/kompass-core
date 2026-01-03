@@ -11,6 +11,7 @@
 #include "datatypes/tracking.h"
 #include "datatypes/trajectory.h"
 #include "utils/collision_check.h"
+#include "utils/critical_zone_check.h"
 
 namespace py = nanobind;
 using namespace Kompass;
@@ -118,6 +119,18 @@ void bindings_types(py::module_ &m) {
           return CollisionChecker::ShapeType::BOX;
         if (key == "SPHERE")
           return CollisionChecker::ShapeType::SPHERE;
+        throw std::runtime_error("Invalid key");
+      });
+
+  // For critical zone checking
+  py::enum_<CriticalZoneChecker::InputType>(m_types, "SensorInputType")
+      .value("LASERSCAN", CriticalZoneChecker::InputType::LASERSCAN)
+      .value("POINTCLOUD", CriticalZoneChecker::InputType::POINTCLOUD)
+      .def_static("get", [](const std::string &key) {
+        if (key == "LASERSCAN")
+          return CriticalZoneChecker::InputType::LASERSCAN;
+        if (key == "POINTCLOUD")
+          return CriticalZoneChecker::InputType::POINTCLOUD;
         throw std::runtime_error("Invalid key");
       });
 

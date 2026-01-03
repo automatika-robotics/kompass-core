@@ -36,5 +36,5 @@ __all__ = [
     "Bbox3D",
     "Bbox2D",
     "get_points_from_pcd",
-    "get_occupancy_grid_from_pcd"
+    "get_occupancy_grid_from_pcd",
 ]

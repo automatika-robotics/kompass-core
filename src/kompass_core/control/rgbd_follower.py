@@ -53,6 +53,7 @@ class VisionRGBDFollowerConfig(DWAConfig):
         camera_position_to_robot (np.ndarray): 3D translation vector from the camera frame to the robot base (m).
         camera_rotation_to_robot (np.ndarray): Quaternion representing camera-to-robot rotation.
     """
+
     control_time_step: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
@@ -241,6 +242,7 @@ class VisionRGBDFollower(ControllerTemplate):
     omega_cmd = controller.angular_control
     ```
     """
+
     def __init__(
         self,
         robot: Robot,

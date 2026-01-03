@@ -280,24 +280,24 @@ bool CollisionChecker::checkCollisionsOctree() {
   // NOTE: Code below for testing box by box
   // auto OctreeBoxes = generateBoxesFromOctomap(*fclTree_);
   // for (auto boxObj : OctreeBoxes) {
-  //   collManager->clear();
+  //   collManager_->clear();
 
-  //   collManager->registerObject(boxObj);
+  //   collManager_->registerObject(boxObj);
 
-  //   collManager->collide(bodyObjPtr, &collisionData,
-  //                        fcl::DefaultCollisionFunction);
+  //   collManager_->collide(bodyObjPtr_.get(), &collisionData,
+  //                         fcl::DefaultCollisionFunction);
 
-  //   collManager->setup();
+  //   collManager_->setup();
 
   //   bool result = collisionData.result.isCollision();
 
   //   fcl::Vector3f trans = boxObj->getTranslation();
-  //   fcl::Vector3f transRobot = bodyObjPtr->getTranslation();
+  //   fcl::Vector3f transRobot = bodyObjPtr_->getTranslation();
 
   //   if (result) {
   //     fcl::Vector3f trans = boxObj->getTranslation();
-  //     fcl::Vector3f transRobot = bodyObjPtr->getTranslation();
-  //     LOG_DEBUG("Got collision with box at: {", trans[0], ", ", trans[1],
+  //     fcl::Vector3f transRobot = bodyObjPtr_->getTranslation();
+  //     LOG_INFO("Got collision with box at: {", trans[0], ", ", trans[1],
   //     ",",
   //               trans[2], "}. Robot at: {", transRobot[0], ", ",
   //               transRobot[1],
@@ -305,11 +305,11 @@ bool CollisionChecker::checkCollisionsOctree() {
 
   //     return result;
   //   }
-  // else{
-  //   LOG_DEBUG("NO collision with box at: {", trans[0], ", ", trans[1], ",",
-  //             trans[2], "}. Robot at: {", transRobot[0], ", ", transRobot[1],
-  //             ", ", transRobot[2], "}");
-  // }
+  //   else{
+  //     LOG_INFO("NO collision with box at: {", trans[0], ", ", trans[1], ",",
+  //               trans[2], "}. Robot at: {", transRobot[0], ", ", transRobot[1],
+  //               ", ", transRobot[2], "}");
+  //   }
   // }
   // return false;
 }

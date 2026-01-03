@@ -106,10 +106,10 @@ public:
   TrajSearchResult
   getMinTrajectoryCost(const std::unique_ptr<TrajectorySamples2D> &trajs,
                        const Path::Path *reference_path,
-                       const Path::Path &tracked_segment);
+                       const Path::Path::View &tracked_segment);
 
   /**
-   * @brief Adds a new custome cost to be used in the trajectory evaluation
+   * @brief Adds a new custom cost to be used in the trajectory evaluation
    *
    * @param weight
    * @param custom_cost_function
@@ -121,7 +121,7 @@ public:
   };
 
   /**
-   * @brief Set the point scan with either lazerscan or vector of points
+   * @brief Set the point scan with either laserscan or vector of points
    *
    * @param scan / point cloud
    * @param current_state
@@ -197,13 +197,14 @@ private:
   size_t numTrajectories_;
   size_t numPointsPerTrajectory_;
   size_t maxRefPathSegmentSize_;
-  size_t max_wg_size_;
-  float *m_devicePtrPathsX;
-  float *m_devicePtrPathsY;
-  float *m_devicePtrVelocitiesVx;
-  float *m_devicePtrVelocitiesVy;
-  float *m_devicePtrVelocitiesOmega;
-  float *m_devicePtrCosts;
+  size_t maxObstaclePoints_; // updated at runtime
+  size_t maxWGSize_; // initialized from accelerator cpabilities
+  float *m_devicePtrPathsX = nullptr;
+  float *m_devicePtrPathsY = nullptr;
+  float *m_devicePtrVelocitiesVx = nullptr;
+  float *m_devicePtrVelocitiesVy = nullptr;
+  float *m_devicePtrVelocitiesOmega = nullptr;
+  float *m_devicePtrCosts = nullptr;
   float *m_devicePtrTrackedSegmentX = nullptr;
   float *m_devicePtrTrackedSegmentY = nullptr;
   float *m_devicePtrObstaclesX = nullptr;
@@ -211,7 +212,6 @@ private:
   float *m_devicePtrTempCosts = nullptr;
   LowestCost *m_minCost;
   sycl::queue m_q;
-  sycl::vec<float, 3> m_deviceRefPathEnd;
   void initializeGPUMemory();
   /**
    * @brief Trajectory cost based on the distance to a given reference path
@@ -232,6 +232,7 @@ private:
    * @param reference_path
    */
   sycl::event goalCostFunc(const size_t trajs_size, const float ref_path_length,
+                           const float goal_x, const float goal_y,
                            const double cost_weight);
 
   /**
@@ -272,7 +273,7 @@ private:
    * @return float
    */
   float pathCostFunc(const Trajectory2D &trajectory,
-                     const Path::Path &tracked_segment,
+                     const Path::Path::View &tracked_segment,
                      const float tracked_segment_length);
 
   /**

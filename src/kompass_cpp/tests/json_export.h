@@ -49,7 +49,7 @@ inline void from_json(const json &j, Path::Path &p) {
     point.y() = item.at("y");
     points.push_back(point); // Deserialize each Point
   }
-  p = Path::Path(points, points.size());
+  p = Path::Path(points);
 }
 
 // Convert Velocity to JSON

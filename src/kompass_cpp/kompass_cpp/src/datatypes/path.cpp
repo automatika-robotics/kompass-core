@@ -1,5 +1,7 @@
 #include "datatypes/path.h"
-#include "utils/logger.h"
+#include "utils/spline.h"
+#include <cmath>
+#include <cstdlib>
 #include <stdexcept>
 #include <vector>
 
@@ -8,69 +10,44 @@ using namespace tk;
 
 namespace Path {
 
-Path::Path(const std::vector<Point> &points, const size_t new_max_size) {
-  if (new_max_size < 2) {
+Path::Path(const std::vector<Point> &points) {
+  if (points.size() < 2) {
     throw std::invalid_argument(
         "At least two points are required to create a path.");
   }
-  if (points.size() > new_max_size) {
-    throw std::invalid_argument(
-        "Points size is larger than the allowed maximum size.");
-  }
-  resize(new_max_size);
   current_size_ = points.size();
+  resize(current_size_);
   for (size_t i = 0; i < points.size(); ++i) {
     X_(i) = points[i].x();
     Y_(i) = points[i].y();
     Z_(i) = points[i].z();
+    Curvature_(i) = 0.0f;
   }
 }
 
 Path::Path(const Eigen::VectorXf &x_points, const Eigen::VectorXf &y_points,
-           const Eigen::VectorXf &z_points, const size_t new_max_size) {
+           const Eigen::VectorXf &z_points) {
   if (x_points.size() != y_points.size() ||
       x_points.size() != z_points.size()) {
     throw std::invalid_argument("X, Y and Z vectors must have the same size.");
   }
-  if (new_max_size < 2) {
+  if (x_points.size() < 2) {
     throw std::invalid_argument(
         "At least two points are required to create a path.");
   }
-  if (x_points.size() > new_max_size) {
-    throw std::invalid_argument(
-        "Points size is larger than the allowed maximum size.");
-  }
-  resize(new_max_size);
   current_size_ = x_points.size();
+  resize(current_size_);
   X_.head(current_size_) = x_points;
   Y_.head(current_size_) = y_points;
   Z_.head(current_size_) = z_points;
 }
 
-const Eigen::VectorXf Path::getX() const {
-  return X_.segment(0, current_size_);
-}
-
-const Eigen::VectorXf Path::getY() const {
-  return Y_.segment(0, current_size_);
-}
-
-const Eigen::VectorXf Path::getZ() const {
-  return Z_.segment(0, current_size_);
-}
-
-size_t Path::getSize() const { return current_size_; }
-
-void Path::setMaxLength(double max_length) { max_path_length_ = max_length; }
-
-void Path::resize(const size_t new_max_size) {
-  max_size_ = new_max_size;
-  X_.resize(max_size_);
-  Y_.resize(max_size_);
-  Z_.resize(max_size_);
-  if (current_size_ > max_size_) {
-    current_size_ = max_size_;
-  }
+void Path::resize(const size_t max_size) {
+  X_.resize(max_size);
+  Y_.resize(max_size);
+  Z_.resize(max_size);
+  Curvature_.resize(max_size);
+  interpolated_ = false;
 }
 
 bool Path::endReached(State currentState, double minDist) {
@@ -80,35 +57,41 @@ bool Path::endReached(State currentState, double minDist) {
   return dist <= minDist;
 }
 
-size_t Path::getMaxSize() const { return max_size_; }
+Path::View Path::getSegment(size_t segment_index) const {
+  if (segment_index >= segment_indices_.size()) {
+    throw std::out_of_range(
+        "Invalid segment index. Maximum number of segments is " +
+        std::to_string(segment_indices_.size() - 1) +
+        ", but requested segment index is " + std::to_string(segment_index));
+  }
 
-size_t Path::getMaxNumSegments() { return segments.size() - 1; }
+  size_t start_idx = segment_indices_[segment_index];
+  size_t end_idx;
 
-Point Path::getEnd() const { return getIndex(current_size_ - 1); }
+  if (segment_index + 1 < segment_indices_.size()) {
+    end_idx = segment_indices_[segment_index + 1] - 1;
+  } else {
+    end_idx = current_size_ - 1;
+  }
 
-Point Path::getStart() const { return getIndex(0); }
-
-Point Path::getIndex(const size_t index) const {
-  assert(index < current_size_ && "Index out of range");
-  return Point(X_(index), Y_(index), Z_(index));
+  return getPart(start_idx, end_idx);
 }
 
-Path Path::getPart(const size_t start, const size_t end,
-                   const size_t max_part_size) const {
-  if (start >= current_size_ || end >= current_size_ || start >= end) {
-    throw std::out_of_range("Invalid range for path part.");
+Path::View Path::getPart(const size_t start, const size_t end) const {
+  if (start >= current_size_ || end >= current_size_ || start > end) {
+    throw std::out_of_range(
+        "Invalid range for path part. Maximum path size is " +
+        std::to_string(current_size_) + ", but requested part start= " +
+        std::to_string(start) + ", and requested end= " + std::to_string(end));
   }
-  auto part_size = std::max(max_part_size, end - start + 1);
-  Path part(X_.segment(start, end - start + 1),
-            Y_.segment(start, end - start + 1),
-            Z_.segment(start, end - start + 1), part_size);
-  return part;
+
+  size_t length = end - start + 1;
+
+  return Path::View(*this, start, length);
 }
 
 void Path::pushPoint(const Point &point) {
-  if (current_size_ >= max_size_) {
-    throw std::out_of_range("Path is full. Cannot add more points.");
-  }
+  resize(current_size_ + 1);
   X_(current_size_) = point.x();
   Y_(current_size_) = point.y();
   Z_(current_size_) = point.z();
@@ -161,15 +144,16 @@ float Path::getOrientation(const size_t index) const {
   return angle;
 }
 
-float Path::distance(const Point &p1, const Point &p2) {
-  return sqrt(pow((p2.x() - p1.x()), 2) + pow((p2.y() - p1.y()), 2));
-}
-
 // Function to compute the total path length
 float Path::totalPathLength() const {
 
   if (current_size_ < 2) {
     return 0.0;
+  }
+
+  // If path is already interpolated -> length was already calculated
+  if (interpolated_) {
+    return current_total_length_;
   }
 
   float totalLength = 0.0;
@@ -180,194 +164,229 @@ float Path::totalPathLength() const {
   return totalLength;
 }
 
-Point Path::getPointAtLength(const double length) const {
-  float totalLength = totalPathLength();
-  if (length <= totalLength or current_size_ > 2) {
-    float accumLength = 0.0;
-    float twoPointDist = distance(getIndex(0), getIndex(1));
-    for (size_t i = 1; i < current_size_; ++i) {
-      accumLength += distance(getIndex(i - 1), getIndex(i));
-      if (abs(accumLength - totalLength) < twoPointDist) {
-        return getIndex(i - 1);
-      }
-    }
-  }
-  return getEnd();
-}
-
-size_t Path::getNumberPointsInLength(double length) const {
-  double totalLength = 0.0;
-
-  for (size_t i = 1; i < current_size_; ++i) {
-    totalLength += distance(getIndex(i - 1), getIndex(i));
-    if (totalLength >= length) {
-      return i;
-    }
-  }
-  return current_size_;
-}
-
 void Path::interpolate(double max_interpolation_point_dist,
                        InterpolationType type) {
   if (current_size_ < 2) {
-    throw invalid_argument(
+    throw std::invalid_argument(
         "At least two points are required to perform interpolation.");
   }
-  // Get copies of X and Y vectors effective points
-  Eigen::VectorXf x = X_.segment(0, current_size_);
-  Eigen::VectorXf y = Y_.segment(0, current_size_);
 
-  this->max_interpolation_dist_ = max_interpolation_point_dist;
-  // Set the maximum size for the points
-  auto maxSize = static_cast<size_t>(this->max_path_length_ /
-                                     this->max_interpolation_dist_);
-  resize(maxSize);
-  // Remaining iteration when interpolating the path (interpolation points
-  // between each two path points)
-  max_interpolation_iterations_ =
-      static_cast<size_t>((maxSize - current_size_) / (current_size_));
+  // --- Data Preparation & Parametrization ---
+  // Extract current points and compute 's' (cumulative distance)
+  std::vector<double> s_vals;
+  std::vector<double> x_vals;
+  std::vector<double> y_vals;
 
-  Z_ = Eigen::VectorXf::Zero(max_size_);
-  current_size_ = 0;
+  // Reserve memory
+  s_vals.reserve(current_size_);
+  x_vals.reserve(current_size_);
+  y_vals.reserve(current_size_);
 
-  float dist, x_e, y_e;
+  // Push the first point
+  s_vals.push_back(0.0);
+  x_vals.push_back(X_[0]);
+  y_vals.push_back(Y_[0]);
 
-  for (size_t i = 0; i < x.size() - 1; ++i) {
-    // Add the first point
-    X_(current_size_) = x[i];
-    Y_(current_size_) = y[i];
-    current_size_++;
-    std::vector<double> x_points, y_points;
+  // Reset the effective path length (meters)
+  current_total_length_ = 0.0;
 
-    // Add mid point to send 3 points for spline interpolation
-    float mid_x = (x[i + 1] + x[i]) / 2;
-    float mid_y;
+  for (size_t i = 1; i < current_size_; ++i) {
+    // Calculate the segment distance
+    double seg_dist = std::hypot(X_[i] - X_[i - 1], Y_[i] - Y_[i - 1]);
+    current_total_length_ += seg_dist;
 
-    // Spline interpolation requires sorted data (x points)
-    if (x[i + 1] > x[i]) {
-      mid_y = y[i] + (mid_x - x[i]) * (y[i + 1] - y[i]) / (x[i + 1] - x[i]);
-      x_points = {x[i], mid_x, x[i + 1]};
-      y_points = {y[i], mid_y, y[i + 1]};
-    } else {
-      mid_y =
-          y[i + 1] + (mid_x - x[i + 1]) * (y[i + 1] - y[i]) / (x[i + 1] - x[i]);
-      x_points = {x[i + 1], mid_x, x[i]};
-      y_points = {y[i + 1], mid_y, y[i]};
-    }
-
-    // Create the spline object and set the x and y values
-    if (type == InterpolationType::LINEAR) {
-      spline_ = new tk::spline(x_points, y_points, tk::spline::linear);
-    } else if (type == InterpolationType::CUBIC_SPLINE) {
-      spline_ = new tk::spline(x_points, y_points, tk::spline::cspline);
-    } else {
-      spline_ = new tk::spline(x_points, y_points, tk::spline::cspline_hermite);
-    }
-
-    x_e = x[i];
-    dist = distance({x[i], y[i], 0.0}, {x[i + 1], y[i + 1], 0.0});
-    int j = 1;
-
-    // Interpolate new points between i, i+1
-    while (dist > max_interpolation_point_dist and
-           j < max_interpolation_iterations_) {
-      x_e = x[i] + j * (x[i + 1] - x[i]) * max_interpolation_point_dist;
-
-      y_e = spline_->operator()(x_e);
-      X_(current_size_) = x_e;
-      Y_(current_size_) = y_e;
-      current_size_++;
-      dist = distance({x_e, y_e, 0.0}, {x[i + 1], y[i + 1], 0.0});
-      j++;
-    }
-    if (current_size_ > this->max_size_) {
-      float remaining_len =
-          distance({x[i + 1], y[i + 1], 0.0}, {x[-1], y[-1], 0.0});
-      LOG_WARNING("Cannot interpolate more than ", this->max_size_,
-                  " path points -> "
-                  "Discarding all future points of length ",
-                  remaining_len, "m");
-      break;
-    }
+    // Push points
+    s_vals.push_back(current_total_length_);
+    x_vals.push_back(X_[i]);
+    y_vals.push_back(Y_[i]);
   }
-  if (current_size_ < this->max_size_) {
-    // Add last point
-    X_(current_size_) = x(x.size() - 1);
-    Y_(current_size_) = y(y.size() - 1);
-    current_size_++;
+
+  // --- Global Spline Construction ---
+  tk::spline spline_x, spline_y;
+  tk::spline::spline_type sp_type;
+
+  switch (type) {
+  case InterpolationType::LINEAR:
+    sp_type = tk::spline::linear;
+    break;
+  case InterpolationType::HERMITE_SPLINE:
+    sp_type = tk::spline::cspline_hermite;
+    break;
+  case InterpolationType::CUBIC_SPLINE:
+  default:
+    sp_type = tk::spline::cspline;
+    break;
+  }
+
+  spline_x.set_points(s_vals, x_vals, sp_type);
+  spline_y.set_points(s_vals, y_vals, sp_type);
+
+  // --- Output Vector Resizing ---
+  // Calculate exact size needed
+  size_t new_size = static_cast<size_t>(current_total_length_ /
+                                        max_interpolation_point_dist) +
+                    1;
+
+  // Resize Eigen vectors (this resets data, but we saved it in x_vals/y_vals)
+  resize(new_size);
+  accumulated_path_length_.resize(new_size);
+
+  // Reset Curvature
+  Curvature_.setZero(new_size);
+  Z_.setZero(new_size);
+
+  // --- Interpolation Loop ---
+  size_t idx = 0;
+  // Iterate by distance arc distance 's'
+  for (double s = 0.0; s <= current_total_length_ && idx < new_size;
+       s += max_interpolation_point_dist) {
+    accumulated_path_length_[idx] = s;
+    X_[idx] = static_cast<float>(spline_x(s));
+    Y_[idx] = static_cast<float>(spline_y(s));
+    idx++;
+  }
+
+  // Add the last point at effective_len
+  if (idx < new_size && idx > 0) {
+    X_[idx] = static_cast<float>(spline_x(current_total_length_));
+    Y_[idx] = static_cast<float>(spline_y(current_total_length_));
+    idx++;
+  }
+
+  interpolated_ = true;
+
+  current_size_ = idx;
+
+  // --- Optimized Curvature Calculation ---
+  float *pX = X_.data();
+  float *pY = Y_.data();
+  float *pK = Curvature_.data();
+
+  // first derivatives
+  float dx_old = pX[1] - pX[0];
+  float dy_old = pY[1] - pY[0];
+
+  for (size_t i = 1; i < current_size_ - 1; ++i) {
+    float dx = pX[i + 1] - pX[i];
+    float dy = pY[i + 1] - pY[i];
+
+    float ddx = dx - dx_old;
+    float ddy = dy - dy_old;
+
+    float val = dx * dx + dy * dy;
+    float denominator = val * std::sqrt(val);
+
+    if (denominator > 1e-3f) {
+      pK[i] = (dx_old * ddy - ddx * dy_old) / denominator;
+      pK[i] = (dx * ddy - ddx * dy) / denominator;
+    } else {
+      pK[i] = 0.0f;
+    }
+
+    dx_old = dx;
+    dy_old = dy;
   }
 }
 
-// Segment the path by a given segment path length [m]
-void Path::segment(double pathSegmentLength) {
-  if (max_interpolation_dist_ > 0.0) {
-    this->max_segment_size =
-        static_cast<int>(pathSegmentLength / max_interpolation_dist_) + 1;
+void Path::segment(double pathSegmentLength, size_t maxPointsPerSegment) {
+
+  if (current_size_ < 2)
+    return;
+
+  segment_indices_.clear();
+  segment_indices_.push_back(0);
+
+  size_t segmentStartIdx = 0;
+  float segmentStartLength = accumulated_path_length_[0];
+
+  for (size_t i = 1; i < current_size_; ++i) {
+    const size_t pointsInSegment = i - segmentStartIdx + 1;
+    const float segmentLength =
+        accumulated_path_length_[i] - segmentStartLength;
+
+    const bool lengthExceeded =
+        (pathSegmentLength > 0.0 && segmentLength >= pathSegmentLength);
+
+    const bool pointsExceeded =
+        (maxPointsPerSegment > 0 && pointsInSegment > maxPointsPerSegment);
+
+    // Start a new segment at i
+    if (lengthExceeded || pointsExceeded) {
+      segment_indices_.push_back(i);
+
+      segmentStartIdx = i;
+      segmentStartLength = accumulated_path_length_[i];
+    }
   }
-  segments.clear();
-  double totalLength = totalPathLength();
-  if (pathSegmentLength >= totalLength) {
-    // Add the whole path as a single segment
-    auto new_segment = *this;
-    new_segment.resize(this->max_segment_size);
-    segments.push_back(new_segment);
+
+}
+
+Point Path::getSegmentStart(size_t segment_index) const {
+  if (segment_index >= segment_indices_.size()) {
+    throw std::out_of_range("Invalid segment index.");
+  }
+
+  size_t start_idx = segment_indices_[segment_index];
+  return getIndex(start_idx);
+}
+
+Point Path::getSegmentEnd(size_t segment_index) const {
+  if (segment_index >= segment_indices_.size()) {
+    throw std::out_of_range("Invalid segment index.");
+  }
+  size_t end_idx;
+
+  if (segment_index + 1 < segment_indices_.size()) {
+    end_idx = segment_indices_[segment_index + 1] - 1;
   } else {
-    int segmentsNumber =
-        max(static_cast<int>(totalLength / pathSegmentLength), 1);
-    if (segmentsNumber == 1) {
-      auto new_segment = *this;
-      new_segment.resize(this->max_segment_size);
-      segments.push_back(new_segment);
-      return;
-    }
-    segmentBySegmentNumber(segmentsNumber);
+    end_idx = current_size_ - 1;
   }
+  return getIndex(end_idx);
 }
 
-// Segment using a number of segments
-void Path::segmentBySegmentNumber(int numSegments) {
-  segments.clear();
-  if (numSegments <= 0 || current_size_ <= 0) {
-    throw std::invalid_argument(
-        "Invalid number of segments or empty points vector.");
+size_t Path::getSegmentSize(size_t segment_index) const {
+  if (segment_index >= segment_indices_.size()) {
+    throw std::out_of_range(
+        "Invalid segment index. Maximum number of segments is " +
+        std::to_string(segment_indices_.size() - 1) +
+        ", but requested segment index is " + std::to_string(segment_index));
   }
+  size_t start_idx = segment_indices_[segment_index];
+  size_t end_idx;
 
-  this->max_segment_size = current_size_ / numSegments;
-  int remainder = current_size_ % numSegments;
-
-  auto it_x = X_.begin();
-  auto it_y = Y_.begin();
-  auto it_z = Z_.begin();
-  for (int i = 0; i < numSegments; ++i) {
-    std::vector<Point> segment_points;
-    for (int j = 0; j < this->max_segment_size; ++j) {
-      segment_points.push_back({*it_x++, *it_y++, *it_z++});
-    }
-    if (remainder > 0) {
-      segment_points.push_back({*it_x++, *it_y++, *it_z++});
-      --remainder;
-    }
-    auto new_segment = Path(segment_points, segment_points.size());
-    segments.push_back(new_segment);
+  if (segment_index + 1 < segment_indices_.size()) {
+    end_idx = segment_indices_[segment_index + 1] - 1;
+  } else {
+    end_idx = current_size_ - 1;
   }
+  return end_idx - start_idx + 1;
 }
 
-// Segment using a segment points number
-void Path::segmentByPointsNumber(int segmentLength) {
-  this->max_segment_size = segmentLength;
-  segments.clear();
-  if (segmentLength <= 0 || current_size_ <= 0) {
-    throw std::invalid_argument(
-        "Invalid segment length or empty points vector.");
+size_t Path::getSegmentStartIndex(size_t segment_index) const {
+  if (segment_index >= segment_indices_.size()) {
+    throw std::out_of_range(
+        "Invalid segment index. Maximum number of segments is " +
+        std::to_string(segment_indices_.size() - 1) +
+        ", but requested segment index is " + std::to_string(segment_index));
   }
-  for (size_t i = 0; i < current_size_; i += segmentLength) {
-    std::vector<Point> segment_points;
-    for (size_t j = i; j < i + segmentLength && j < current_size_; ++j) {
-      segment_points.push_back(getIndex(j));
-    }
-    auto new_segment = Path(segment_points, segment_points.size());
-    new_segment.max_size_ = this->max_segment_size;
-    segments.push_back(new_segment);
-  }
+  return segment_indices_[segment_index];
 }
+
+size_t Path::getSegmentEndIndex(size_t segment_index) const {
+  if (segment_index >= segment_indices_.size()) {
+    throw std::out_of_range(
+        "Invalid segment index. Maximum number of segments is " +
+        std::to_string(segment_indices_.size() - 1) +
+        ", but requested segment index is " + std::to_string(segment_index));
+  }
+  size_t end_idx;
+
+  if (segment_index + 1 < segment_indices_.size()) {
+    end_idx = segment_indices_[segment_index + 1] - 1;
+  } else {
+    end_idx = current_size_ - 1;
+  }
+  return end_idx;
+}
+
 } // namespace Path
