@@ -10,7 +10,6 @@
 #include "utils/logger.h"
 #include "vision/depth_detector.h"
 #include "vision/tracker.h"
-#include <Eigen/Dense>
 #include <cmath>
 #include <memory>
 #include <optional>
@@ -316,7 +315,7 @@ private:
           TrajectoryVelocities2D velocities(config_.control_horizon());
           TrajectoryPath path(config_.control_horizon());
           path.add(0, 0.0, 0.0);
-          std::array<double, 3> search_command;
+          Eigen::Vector3d search_command;
           for (int i = 0; i < config_.control_horizon() - 1; i++) {
             if (search_commands_queue_.empty()) {
               LOG_DEBUG("Search commands queue is empty. Ending Search ");

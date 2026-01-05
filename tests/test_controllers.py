@@ -678,7 +678,7 @@ def test_dwa_debug():
 
     dwa.planner.set_resolution(0.1)
 
-    current_velocity = kompass_cpp.types.ControlCmd(
+    current_velocity = kompass_cpp.types.Velocity2D(
         vx=my_robot.state.vx, vy=my_robot.state.vy, omega=my_robot.state.omega
     )
 

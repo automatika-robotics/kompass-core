@@ -164,7 +164,7 @@ class PurePursuit(FollowerTemplate):
             current_state.x, current_state.y, current_state.yaw, current_state.speed
         )
 
-        current_velocity = kompass_cpp.types.ControlCmd(
+        current_velocity = kompass_cpp.types.Velocity2D(
             vx=current_state.vx, vy=current_state.vy, omega=current_state.omega
         )
 
