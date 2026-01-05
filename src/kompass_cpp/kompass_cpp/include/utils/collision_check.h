@@ -79,39 +79,61 @@ public:
   void updateState(const double x, const double y, const double yaw);
 
   /**
-   * @brief Update the sensor input from laser scan data
-   *
-   * @param ranges
-   * @param angles
+   * @brief Generic method to update sensor input.
+   * * Supports:
+   * 1. Point Clouds and Local Maps: std::vector<Path::Point> or std::vector<Eigen::Vector3f>
+   * 2. Laser Scans: Kompass::LaserScan struct
+   * * @tparam T Input data type
+   * @param data The sensor data
+   * @param global_frame If true, points are assumed to be in world frame
+   * (default true). Ignored for LaserScan (always assumes sensor frame).
    */
-  void updateScan(const std::vector<double> &ranges,
-                  const std::vector<double> &angles);
+  template <typename T>
+  void updateSensorData(const T &data,
+                        const bool global_frame = true){
+    // Clear old data
+    octTree_->clear();
+    octomapCloud_.clear();
 
-  /**
-   * @brief Update the sensor input from Map points (Eigen::Matrix3Xf) data
-   *
-   * @param points
-   * @param global_frame
-   */
-  void update3DMap(const std::vector<Eigen::Vector3f> &points,
-                   const bool global_frame = true);
+    // -- CASE 1: LaserScan Input --
+    if constexpr (std::is_same_v<T, Control::LaserScan>) {
+      // Update TF: LaserScan is always local, so calculate World TF
+      sensor_tf_world_ = body->tf * sensor_tf_body_;
 
-  /**
-   * @brief Update the sensor input from PointCloud like struct
-   * std::vector<Control::Point3D>
-   *
-   * @param cloud
-   */
-  void updatePointCloud(const std::vector<Path::Point> &cloud,
-                        const bool global_frame = true);
+      // Sensor frame height correction
+      float height_in_sensor = -sensor_tf_body_.translation().z() / 2.0;
 
-  /**
-   * @brief Check collisions between the robot and the constructed OctTree
-   *
-   * @return true
-   * @return false
-   */
-  bool checkCollisionsOctree();
+      for (size_t i = 0; i < data.angles.size(); ++i) {
+        double angle = data.angles[i];
+        double r = data.ranges[i];
+
+        // Basic validity check for inf/nan often found in scans
+        if (std::isfinite(r)) {
+          float x = r * std::cos(angle);
+          float y = r * std::sin(angle);
+          octomapCloud_.push_back(x, y, height_in_sensor);
+        }
+      }
+    }
+    // -- CASE 2: PointCloud Input (Vector of Points) --
+    else {
+      // Handle Frame Transforms
+      if (global_frame) {
+        sensor_tf_world_ = Eigen::Isometry3f::Identity();
+      } else {
+        sensor_tf_world_ = body->tf * sensor_tf_body_;
+      }
+
+      // Insert Points
+      for (const auto &point : data) {
+        octomapCloud_.push_back(point.x(), point.y(), point.z());
+      }
+    }
+
+    // Update Octree
+    octTree_->insertPointCloud(octomapCloud_, octomap::point3d(0, 0, 0));
+    updateOctreePtr();
+  }
 
   /**
    * @brief Get the Min Distance from the Octree (sensor data Octomap)
@@ -121,29 +143,6 @@ public:
   float getMinDistance();
 
   /**
-   * @brief Get the Min Distance object from given LaserScan data
-   *
-   * @param ranges
-   * @param angle_min
-   * @param angle_increment
-   * @param height
-   * @return float
-   */
-  float getMinDistance(const std::vector<double> &ranges, double angle_min,
-                       double angle_increment, double height = 0.1);
-
-  /**
-   * @brief Get the Min Distance object from given LaserScan data
-   *
-   * @param ranges
-   * @param angles
-   * @param height
-   * @return float
-   */
-  float getMinDistance(const std::vector<double> &ranges,
-                       const std::vector<double> &angles, double height = 0.1);
-
-  /**
    * @brief Check collisions between the robot and previously set sensor data
    *
    * @return true
@@ -151,30 +150,8 @@ public:
    */
   bool checkCollisions();
 
-  /**
-   * @brief Check collisions between the robot and given PointCloud data
-   *
-   * @param cloud
-   * @return true
-   * @return false
-   */
-  bool checkCollisions(const std::vector<Path::Point> &cloud);
 
-  /**
-   * @brief Check collisions between the robot and given LaserScan data
-   * defined by a vector of ranges values, minimum scan angle and scan angle
-   * step
-   *
-   * @param ranges
-   * @param angle_min
-   * @param angle_increment
-   * @param height        Height of the constructed OctTree map, defaults to
-   * 0.1
-   * @return true
-   * @return false
-   */
-  bool checkCollisions(const std::vector<double> &ranges, double angle_min,
-                       double angle_increment, double height = 0.1);
+  bool checkCollisions(const Path::State current_state);
 
   /**
    * @brief Check collisions between the robot and given LaserScan data
@@ -189,16 +166,6 @@ public:
    */
   bool checkCollisions(const std::vector<double> &ranges,
                        const std::vector<double> &angles, double height = 0.1);
-
-  /**
-   * @brief Check collisions between the given robot state and existing
-   * Octomap data defined
-   *
-   * @param current_state
-   * @return true
-   * @return false
-   */
-  bool checkCollisions(const Path::State current_state);
 
   float getRadius() const;
 
@@ -251,38 +218,6 @@ private:
   std::vector<fcl::CollisionObjectf *>
   generateBoxesFromOctomap(fcl::OcTreef &tree);
 
-  /**
-   * @brief Helper method to convert PointCloud data to an Octomap
-   *
-   * @param cloud
-   */
-  void convertPointCloudToOctomap(const std::vector<Path::Point> &cloud,
-                                  const bool global_frame = true);
 
-  /**
-   * @brief Helper method to convert LaserScan data to an OctoMap. LaserScan
-   * data defined by a vector of ranges values, minimum scan angle and scan
-   * angle step
-   *
-   * @param ranges
-   * @param angle_min
-   * @param angle_increment
-   * @param height
-   */
-  void convertLaserScanToOctomap(const std::vector<double> &ranges,
-                                 double angle_min, double angle_increment,
-                                 double height = 0.1);
-
-  /**
-   * @brief Helper method to convert LaserScan data to an OctoMap. LaserScan
-   * data defined by a vector of ranges values, and a vector of angles values
-   *
-   * @param ranges
-   * @param angles
-   * @param height
-   */
-  void convertLaserScanToOctomap(const std::vector<double> &ranges,
-                                 const std::vector<double> &angles,
-                                 double height = 0.1);
 };
 } // namespace Kompass

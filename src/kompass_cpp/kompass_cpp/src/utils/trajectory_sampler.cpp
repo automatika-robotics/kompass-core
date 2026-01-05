@@ -1,4 +1,3 @@
-#include <array>
 #include <cmath>
 #include <cstdlib>
 #include <memory>
@@ -451,7 +450,7 @@ TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
   collChecker->updateState(current_pose);
   // Update the laserscan values at the current location -> no need to update
   // it as scan is not changing (during the simulation)
-  collChecker->updateScan(scan.ranges, scan.angles);
+  collChecker->updateSensorData(scan);
   return getNewTrajectories(current_vel, current_pose);
 }
 
@@ -461,7 +460,7 @@ TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
                                         const std::vector<Path::Point> &cloud) {
   collChecker->updateState(current_pose);
   // Update the PointCloud values
-  collChecker->updatePointCloud(cloud);
+  collChecker->updateSensorData(cloud);
   return getNewTrajectories(current_vel, current_pose);
 }
 
@@ -512,7 +511,7 @@ template <>
 bool TrajectorySampler::checkStatesFeasibility<LaserScan>(
     const std::vector<Path::State> &states, const LaserScan &scan) {
   // collChecker->updateState(states[0]);
-  collChecker->updateScan(scan.ranges, scan.angles);
+  collChecker->updateSensorData(scan);
   for (auto state : states) {
     collChecker->updateState(state);
     // Update the PointCloud values
@@ -528,7 +527,7 @@ bool TrajectorySampler::checkStatesFeasibility<std::vector<Path::Point>>(
     const std::vector<Path::State> &states,
     const std::vector<Path::Point> &cloud) {
   // collChecker->updateState(states[0]);
-  collChecker->updatePointCloud(cloud);
+  collChecker->updateSensorData(cloud);
   for (auto state : states) {
     collChecker->updateState(state);
     // Update the PointCloud values

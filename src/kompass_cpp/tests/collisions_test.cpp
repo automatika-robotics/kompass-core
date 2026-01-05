@@ -71,7 +71,7 @@ BOOST_AUTO_TEST_CASE(test_FCL) {
     std::vector<Path::Point> cloud;
     cloud.push_back(Path::Point(3.1, 5.1, -0.5));
 
-    collChecker.updatePointCloud(cloud, true);
+    collChecker.updateSensorData(cloud, true);
     bool res = collChecker.checkCollisions();
     BOOST_TEST(res, "Collision Result: " << res);
   }
