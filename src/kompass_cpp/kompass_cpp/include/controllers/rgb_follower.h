@@ -3,6 +3,7 @@
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
 #include "datatypes/tracking.h"
+#include "datatypes/trajectory.h"
 #include <memory>
 #include <optional>
 #include <queue>
@@ -75,7 +76,7 @@ public:
 
   bool run(const std::optional<Bbox2D> tracking);
 
-  const Velocities getCtrl() const;
+  const TrajectoryVelocities2D getCtrl() const;
 
   Eigen::Vector2f getErrors() const {
     return Eigen::Vector2f(dist_error_, orientation_error_);
@@ -85,8 +86,8 @@ protected:
   bool is_diff_drive_;
   ControlLimitsParams ctrl_limits_;
   double recorded_search_time_ = 0.0, recorded_wait_time_ = 0.0;
-  std::queue<std::array<double, 3>> search_commands_queue_;
-  std::array<double, 3> search_command_;
+  std::queue<Eigen::Vector3d> search_commands_queue_;
+  Eigen::Vector3d search_command_;
   std::unique_ptr<Bbox2D> last_tracking_ = nullptr;
   float dist_error_ = 0.0f, orientation_error_ = 0.0f;
 
@@ -97,7 +98,7 @@ protected:
 
 private:
   RGBFollowerConfig config_;
-  Velocities out_vel_;
+  TrajectoryVelocities2D out_vel_;
 
   void trackTarget(const Bbox2D &tracking);
   //

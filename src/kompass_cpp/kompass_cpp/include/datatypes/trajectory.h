@@ -70,7 +70,7 @@ struct TrajectoryVelocities2D {
   TrajectoryVelocities2D(const Eigen::VectorXf &vx_, const Eigen::VectorXf &vy_,
                          const Eigen::VectorXf &omega_)
       : vx(vx_), vy(vy_), omega(omega_),
-        numPointsPerTrajectory_(vx_.size() + 1) {};
+        numPointsPerTrajectory_(vx_.size() + 1){};
 
   // add velocity to specified index in TrajectoryVelocities2D
   void add(size_t idx, const Velocity2D &velocity) {
@@ -80,6 +80,16 @@ struct TrajectoryVelocities2D {
     vx(idx) = velocity.vx();
     vy(idx) = velocity.vy();
     omega(idx) = velocity.omega();
+  };
+
+  void add(size_t idx, const float velocity_vx, const float velocity_vy,
+           const float velocity_omega) {
+
+    assert(idx < numPointsPerTrajectory_ - 1 && "Index out of bounds");
+
+    vx(idx) = velocity_vx;
+    vy(idx) = velocity_vy;
+    omega(idx) = velocity_omega;
   };
 
   // get point on index
@@ -164,7 +174,7 @@ struct TrajectoryPath {
   // initialize from eigen vectors
   TrajectoryPath(const Eigen::VectorXf &x_, const Eigen::VectorXf &y_,
                  const Eigen::VectorXf &z_)
-      : x(x_), y(y_), z(z_), numPointsPerTrajectory_(x.size()) {};
+      : x(x_), y(y_), z(z_), numPointsPerTrajectory_(x.size()){};
 
   // add point to specified index in path
   void add(size_t idx, const Path::Point &point) {

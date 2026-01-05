@@ -7,7 +7,7 @@ from kompass_cpp.control import (
 )
 from kompass_cpp.types import (
     Bbox2D,
-    ControlCmd,
+    Velocity2D,
     LaserScan,
     TrajectoryVelocities2D,
     TrajectoryPath,
@@ -442,7 +442,7 @@ class VisionRGBDFollower(ControllerTemplate):
             self._planner.set_current_state(
                 current_state.x, current_state.y, current_state.yaw, current_state.speed
             )
-            robot_cmd = ControlCmd(
+            robot_cmd = Velocity2D(
                 vx=current_state.vx, vy=current_state.vy, omega=current_state.omega
             )
 
@@ -559,14 +559,14 @@ class VisionRGBDFollower(ControllerTemplate):
         return [0.0]
 
     @property
-    def _last_cmd(self) -> ControlCmd:
+    def _last_cmd(self) -> Velocity2D:
         """
         Getter of the last command sent to the controller
 
         :return: Last command sent to the controller
-        :rtype: ControlCmd
+        :rtype: Velocity2D
         """
-        return ControlCmd(
+        return Velocity2D(
             vx=self.linear_x_control[-1],
             vy=self.linear_y_control[-1],
             omega=self.angular_control[-1],

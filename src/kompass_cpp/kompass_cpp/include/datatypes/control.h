@@ -2,7 +2,6 @@
 
 #include <Eigen/Dense>
 #include <cmath>
-#include <stdexcept>
 #include <vector>
 
 // Namespace for Control Types
@@ -186,52 +185,6 @@ public:
 
 protected:
   Velocity2D vel_;
-};
-
-struct Velocities {
-  std::vector<float> vx; // Speed on x-asix (m/s)
-  std::vector<float> vy;
-  std::vector<float> omega; // angular velocity (rad/s)
-  unsigned int _length;
-
-  Velocities() {
-    // Initialize control vectors
-    vx = {};
-    vy = {};
-    omega = {};
-    _length = 0;
-  };
-
-  Velocities(const int length) {
-    // Initialize control vectors
-    vx.resize(length, 0.0);
-    vy.resize(length, 0.0);
-    omega.resize(length, 0.0);
-    _length = length;
-  };
-  void set(int index, float x_velocity, float y_velocity,
-           float angular_velocity) {
-    if (index >= 0 && index < (int)vx.size()) {
-      vx[index] = x_velocity;
-      vy[index] = y_velocity;
-      omega[index] = angular_velocity;
-    } else {
-      throw std::out_of_range("Index out of range for Velocities");
-    }
-  };
-  void set(std::vector<float> x_velocity, std::vector<float> y_velocity,
-           std::vector<float> angular_velocity) {
-    if ((x_velocity.size() == y_velocity.size()) &&
-        (y_velocity.size() == angular_velocity.size()) &&
-        (angular_velocity.size() == _length)) {
-      vx = x_velocity;
-      vy = y_velocity;
-      omega = angular_velocity;
-    } else {
-      throw std::length_error(
-          "Incompatible vector size to the Velocities length");
-    }
-  }
 };
 
 // Structure for Forward Linear Velocity Control parameters
