@@ -6,6 +6,7 @@ from ..models import (
 )
 import numpy as np
 from ..datatypes import LaserScanData, PointCloudData, ScanModelConfig
+from kompass_cpp.types import SensorInputType
 
 
 class EmergencyChecker:
@@ -42,20 +43,22 @@ class EmergencyChecker:
         self.__initialized = False
 
     def _init_checker(self, scan: Union[LaserScanData, PointCloudData]) -> None:
-        angles = (
-            scan.angles
-            if isinstance(scan, LaserScanData)
-            else np.arange(
+        if isinstance(scan, LaserScanData):
+            input_type = SensorInputType.LASERSCAN
+            angles = scan.angles
+        else:
+            input_type = SensorInputType.POINTCLOUD
+            angles = np.arange(
                 0.0,
                 2 * np.pi,
                 self.__scan_model.angle_step,
             )
-        )
         if self.__use_gpu:
             try:
                 from kompass_cpp.utils import CriticalZoneCheckerGPU
 
                 self._critical_zone_checker = CriticalZoneCheckerGPU(
+                    input_type=input_type,
                     robot_shape=self.__robot_shape,
                     robot_dimensions=self.__robot_dimensions,
                     sensor_position_body=self.__sensor_position_robot,
@@ -78,6 +81,7 @@ class EmergencyChecker:
             from kompass_cpp.utils import CriticalZoneChecker
 
             self._critical_zone_checker = CriticalZoneChecker(
+                input_type=input_type,
                 robot_shape=self.__robot_shape,
                 robot_dimensions=self.__robot_dimensions,
                 sensor_position_body=self.__sensor_position_robot,

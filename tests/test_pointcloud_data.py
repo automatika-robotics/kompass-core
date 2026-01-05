@@ -17,7 +17,10 @@ def plot_ranges_angles(angles: list, ranges: list, output_image_path: str):
     :raises ValueError: If 'ranges' and 'angles' do not have the same length
     """
     try:
+        import matplotlib
         import matplotlib.pyplot as plt
+
+        matplotlib.use("Agg")  # avoid Qt errors, no GUI
     except ImportError:
         print(
             "Matplotlib is not installed. Test figures will not be generated. To generate figures run 'pip install matplotlib'"
