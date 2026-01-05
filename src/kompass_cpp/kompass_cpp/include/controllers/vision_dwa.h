@@ -267,10 +267,10 @@ private:
       // Reset recorded wait and search times
       recorded_wait_time_ = 0.0;
       recorded_search_time_ = 0.0;
-      LOG_INFO("Tracking target at position: ", tracked_pose->x(), ", ",
-               tracked_pose->y(), " with velocity: ", tracked_pose->v(), ", ",
-               tracked_pose->omega());
-      LOG_INFO("Robot current position: ", currentState.x, ", ",
+      LOG_DEBUG("Tracking target at position: ", tracked_pose->x(), ", ",
+                tracked_pose->y(), " with velocity: ", tracked_pose->v(), ", ",
+                tracked_pose->omega());
+      LOG_DEBUG("Robot current position: ", currentState.x, ", ",
                currentState.y);
       // Generate reference to target
       Trajectory2D ref_traj;
@@ -288,7 +288,7 @@ private:
       // Update reference to use in case goal is lost
       auto referenceToTarget =
           Path::Path(ref_traj.path.x, ref_traj.path.y, ref_traj.path.z);
-      this->setCurrentPath(referenceToTarget, false);
+      this->setCurrentPath(referenceToTarget, true);
       return result;
     }
     if (this->hasPath() and !isGoalReached() and

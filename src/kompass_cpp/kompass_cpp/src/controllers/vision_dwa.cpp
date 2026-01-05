@@ -192,6 +192,11 @@ VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose) {
     // Get the pure tracking control command
     // If step == 0, update the global error to have the errors for the initial state
     cmd = this->getPureTrackingCtrl(simulated_track, (step == 0));
+    if (cmd.vx() == 0.0){
+      // Skip commands with zero speed producing similar path points
+      step++;
+      continue;
+    }
     simulated_state.update(cmd, config_.control_time_step());
     if (track_velocity_) {
       simulated_track.update(config_.control_time_step());
@@ -239,6 +244,11 @@ Trajectory2D VisionDWA::getTrackingReferenceSegmentDiffDrive(
               ",", simulated_track.y());
     this->setCurrentState(simulated_state);
     cmd = this->getPureTrackingCtrl(simulated_track);
+    if (cmd.vx() == 0.0) {
+      // Skip commands with zero speed producing similar path points
+      step++;
+      continue;
+    }
     LOG_DEBUG("Got CMD: ", cmd.vx(), ",", cmd.omega());
     if (std::abs(cmd.vx()) >= config_.min_vel() &&
         std::abs(cmd.omega()) >= config_.min_vel()) {

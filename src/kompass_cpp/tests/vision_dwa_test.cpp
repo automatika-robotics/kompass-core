@@ -257,7 +257,7 @@ struct VisionDWATestConfig {
 
       // Simulate lost of target around obstacle
       if (simulate_obstacle and robotState.y > 0.2 and robotState.y < 0.4) {
-        LOG_INFO("Sending EMPTY BOXES NOW!!!!!");
+        LOG_INFO("Sending EMPTY BOXES!");
         seen_boxes = {};
       }
       controller->setCurrentState(robotState);
