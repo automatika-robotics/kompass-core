@@ -67,12 +67,12 @@ void bindings_utils(py::module_ &m) {
 
       .def("check",
            py::overload_cast<const std::vector<int8_t> &, int, int, int, int,
-                             int, int, int, bool>(
-               &CriticalZoneChecker::check),
+                             int, int, int, bool>(&CriticalZoneChecker::check),
            py::arg("data"), py::arg("point_step"), py::arg("row_step"),
            py::arg("height"), py::arg("width"), py::arg("x_offset"),
            py::arg("y_offset"), py::arg("z_offset"), py::arg("forward"));
 
+  // Overload using angle_step (Returns: tuple(ranges, angles))
   m_utils.def(
       "pointcloud_to_laserscan_from_raw",
       [](const std::vector<int8_t> &data, int point_step, int row_step,
@@ -81,7 +81,7 @@ void bindings_utils(py::module_ &m) {
         std::vector<double> ranges_out;
         std::vector<double> angles_out;
 
-        // Call the actual function
+        // Call the overload function that takes angle_step
         pointCloudToLaserScanFromRaw(data, point_step, row_step, height, width,
                                      x_offset, y_offset, z_offset, max_range,
                                      min_z, max_z, angle_step, ranges_out,
@@ -94,7 +94,30 @@ void bindings_utils(py::module_ &m) {
       py::arg("height"), py::arg("width"), py::arg("x_offset"),
       py::arg("y_offset"), py::arg("z_offset"), py::arg("max_range"),
       py::arg("min_z"), py::arg("max_z"), py::arg("angle_step"),
-      "Converts raw PointCloud2 binary data to laser scan ranges and angles.");
+      "Converts raw PointCloud2 to ranges and angles using a specific angular "
+      "step.");
+
+  // Overload using num_bins (Returns: list(ranges))
+  m_utils.def(
+      "pointcloud_to_laserscan_from_raw",
+      [](const std::vector<int8_t> &data, int point_step, int row_step,
+         int height, int width, int x_offset, int y_offset, int z_offset,
+         double max_range, double min_z, double max_z, int num_bins) {
+        std::vector<double> ranges_out;
+
+        // Call the overload that takes num_bins
+        pointCloudToLaserScanFromRaw(data, point_step, row_step, height, width,
+                                     x_offset, y_offset, z_offset, max_range,
+                                     min_z, max_z, num_bins, ranges_out);
+
+        // Return ranges to Python
+        return ranges_out;
+      },
+      py::arg("data"), py::arg("point_step"), py::arg("row_step"),
+      py::arg("height"), py::arg("width"), py::arg("x_offset"),
+      py::arg("y_offset"), py::arg("z_offset"), py::arg("max_range"),
+      py::arg("min_z"), py::arg("max_z"), py::arg("num_bins"),
+      "Converts raw PointCloud2 to ranges only, using a fixed number of bins.");
 
   m_utils.def(
       "read_pcd", &read_pcd_py, py::arg("filename"),
