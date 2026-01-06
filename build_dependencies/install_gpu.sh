@@ -304,22 +304,32 @@ fi
 # Install kompass core dependencies
 log INFO "Installing kompass-core dependencies..."
 
-# Clone and build kompass-core
-if [[ ! -d "kompass-core" ]]; then
+# Determine source directory
+KOMPASS_SRC_DIR=""
+
+# Check if we are already inside the repo
+if [[ -f "pyproject.toml" ]] && grep -q "kompass_core" "pyproject.toml"; then
+    log INFO "Found pyproject.toml in current directory. Using current directory as source."
+    KOMPASS_SRC_DIR="."
+
+# Check if folder exist explicitly
+elif [[ -d "kompass-core" ]]; then
+    log INFO "kompass-core directory found. Using existing directory."
+    KOMPASS_SRC_DIR="kompass-core"
+else
+    # Clone if not found
     if [ "${NIGHTLY}" = "true" ]; then
         log INFO "NIGHTLY build enabled, cloning kompass-core from main..."
         git clone --depth 1 --branch main "$KOMPASS_CORE_URL"
     else
-        # Checkout latest tag
         LATEST_TAG=$(curl -s "https://api.github.com/repos/$KOMPASS_CORE_REPO/tags" | jq -r '.[0].name')
         log INFO "Cloning kompass-core repository at tag $LATEST_TAG..."
         git clone --depth 1 --branch "$LATEST_TAG" "$KOMPASS_CORE_URL"
     fi
-else
-    log WARN "kompass-core directory already exists. Skipping download."
+    KOMPASS_SRC_DIR="kompass-core"
 fi
 
-cd kompass-core
+cd "$KOMPASS_SRC_DIR"
 
 # Check if legacy system (Ubuntu <= 20.04) for CONAN usage
 if is_legacy_system; then

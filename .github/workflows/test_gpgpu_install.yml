@@ -7,6 +7,9 @@ on:
     branches:
       - main
 
+env:
+  PIP_BREAK_SYSTEM_PACKAGES: 1
+
 jobs:
   install_gpu:
     strategy:
@@ -20,15 +23,19 @@ jobs:
     runs-on: ${{ matrix.os-arch.os }}
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Install curl
         run: sudo apt-get update && sudo apt-get install -y curl
 
-      - name: Install GPGPU dependancies and kompass-core
-        run: curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/heads/main/build_dependencies/install_gpu.sh | bash
+      - name: Install GPGPU dependencies and kompass-core
+        # We run the script from the checked-out build_dependencies folder directly
+        # This prevents the script from trying to clone anything
+        run: |
+          sudo bash build_dependencies/install_gpu.sh --keep-source-files
 
-      - name: Install test dependancies
+      - name: Install test dependencies
         run: pip install pytest opencv-python
 
       - name: Run tests
-        run: pytest
-        working-directory: kompass-core/tests
+        run: pytest tests
