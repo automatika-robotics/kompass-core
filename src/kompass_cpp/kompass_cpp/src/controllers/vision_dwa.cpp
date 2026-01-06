@@ -84,11 +84,15 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose, co
     orientation_error_ = angle_error;
   }
 
+  float angle_diff = gamma - psi;
+  float sin_diff = std::sin(angle_diff);
+  float cos_diff = std::cos(angle_diff);
+
   Velocity2D followingVel;
   if (abs(distance_error) > config_.dist_tolerance() or
       abs(angle_error) > config_.ang_tolerance()) {
     double v =
-        track_velocity_ * (tracking_pose.v() * cos(gamma - psi)) -
+        track_velocity_ * (tracking_pose.v() * cos_diff) -
         config_.K_v() * ctrl_limits_.velXParams.maxVel * tanh(distance_error);
 
     v = std::clamp(v, -ctrl_limits_.velXParams.maxVel,
@@ -100,7 +104,7 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose, co
     double omega;
 
     omega = 2.0 *
-            (track_velocity_ * tracking_pose.v() * sin(gamma - psi) / distance +
+            (track_velocity_ * tracking_pose.v() * sin_diff / distance +
              v * sin(psi) / distance -
              config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
                  tanh(angle_error));
@@ -168,148 +172,71 @@ bool VisionDWA::setInitialTracking(
   return tracker_->setInitialTracking(boxes_3d.value()[0], yaw);
 }
 
+TrackedPose2D VisionDWA::updateLocalTarget(const TrackedPose2D &current_target,
+                                           const Velocity2D &robot_cmd,
+                                           double dt) {
+  // Calculate transform of one step movement
+  Path::State step_move(0.0, 0.0, 0.0);
+  step_move.update(robot_cmd, dt);
+  Eigen::Isometry3f step_tf = getTransformation(step_move);
+
+  // Apply inverse transform to the target
+  // i.e. The target is "pushed back" by the robot's forward movement
+  auto new_pos = transformPosition(
+      Eigen::Vector3f(current_target.x(), current_target.y(), 0.0),
+      step_tf.inverse());
+
+  return TrackedPose2D(new_pos.x(), new_pos.y(), current_target.z(), 0.0, 0.0,
+                       0.0);
+}
+
 Trajectory2D
 VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose) {
-  int step = 0;
-
   Trajectory2D ref_traj(config_.prediction_horizon());
-  Path::State simulated_state(0.0, 0.0, 0.0);
-  if (track_velocity_) {
-    // Global frame -> get actual state
-    simulated_state = Path::State(currentState);
-  }
-  auto simulated_track = TrackedPose2D(tracking_pose);
-  Eigen::Isometry3f tracked_state_tf = Eigen::Isometry3f::Identity();
-  Velocity2D cmd;
 
-  // Simulate following the tracked target for the period til
-  // prediction_horizon assuming the target moves with its same current
-  // velocity
-  while (step < config_.prediction_horizon()) {
-    ref_traj.path.add(step,
-                      Path::Point(simulated_state.x, simulated_state.y, 0.0));
-    this->setCurrentState(simulated_state);
-    // Get the pure tracking control command
-    // If step == 0, update the global error to have the errors for the initial state
-    cmd = this->getPureTrackingCtrl(simulated_track, (step == 0));
-    simulated_state.update(cmd, config_.control_time_step());
-    if (track_velocity_) {
-      simulated_track.update(config_.control_time_step());
-    } else {
-      // Update the tracked state in the local frame after the robot have
-      // moved (apply inverse of robot velocity)
-      tracked_state_tf = getTransformation(simulated_state);
-      auto new_state = transformPosition(
-          Eigen::Vector3f(simulated_track.x(), simulated_track.y(), 0.0),
-          tracked_state_tf.inverse());
-      simulated_track = TrackedPose2D(new_state.x(), new_state.y(),
-                                      simulated_track.z(), 0.0, 0.0, 0.0);
-    }
-    if (step < config_.prediction_horizon() - 1) {
-      ref_traj.velocities.add(step, cmd);
-    }
+  Path::State sim_state =
+      track_velocity_ ? Path::State(currentState) : Path::State(0, 0, 0);
+  TrackedPose2D sim_target = tracking_pose;
+  double dt = config_.control_time_step();
 
-    step++;
-  }
-  this->setCurrentState(currentState);
+  for (int step = 0; step < config_.prediction_horizon(); ++step) {
+    // Record current position in trajectory
+    ref_traj.path.add(step, Path::Point(sim_state.x, sim_state.y, 0.0));
 
-  return ref_traj;
-};
+    // Nominal Control Command
+    this->setCurrentState(sim_state);
+    Velocity2D cmd = this->getPureTrackingCtrl(sim_target, (step == 0));
 
-Trajectory2D VisionDWA::getTrackingReferenceSegmentDiffDrive(
-    const TrackedPose2D &tracking_pose) {
-  int step = 0;
-
-  Trajectory2D ref_traj(config_.prediction_horizon());
-  Path::State simulated_state(0.0, 0.0, 0.0);
-  if (track_velocity_) {
-    // Global frame -> get actual state
-    simulated_state = Path::State(currentState);
-  }
-  auto simulated_track = TrackedPose2D(tracking_pose);
-  Eigen::Isometry3f tracked_state_tf = Eigen::Isometry3f::Identity();
-  Velocity2D cmd;
-
-  // Simulate following the tracked target for the period til
-  // prediction_horizon assuming the target moves with its same current
-  // velocity
-  while (step < config_.prediction_horizon()) {
-    LOG_DEBUG("Step: ", step, "Simulated robot at", simulated_state.x, ",",
-              simulated_state.y, " simulated target at ", simulated_track.x(),
-              ",", simulated_track.y());
-    this->setCurrentState(simulated_state);
-    cmd = this->getPureTrackingCtrl(simulated_track);
-    LOG_DEBUG("Got CMD: ", cmd.vx(), ",", cmd.omega());
-    if (std::abs(cmd.vx()) >= config_.min_vel() &&
+    // Motion Model Adaptation
+    Velocity2D applied_cmd = cmd;
+    if (is_diff_drive_ && std::abs(cmd.vx()) >= config_.min_vel() &&
         std::abs(cmd.omega()) >= config_.min_vel()) {
-      // Rotate then Move
-      ref_traj.path.add(step,
-                        Path::Point(simulated_state.x, simulated_state.y, 0.0));
-      auto vel_rotate = Velocity2D(0.0, 0.0, cmd.omega());
-      simulated_state.update(vel_rotate, config_.control_time_step());
-      if (track_velocity_) {
-        simulated_track.update(config_.control_time_step());
-      } else {
-        // Update the tracked state in the local frame after the robot have
-        // moved (apply inverse of robot velocity)
-        tracked_state_tf = getTransformation(simulated_state);
-        auto new_state = transformPosition(
-            Eigen::Vector3f(simulated_track.x(), simulated_track.y(), 0.0),
-            tracked_state_tf.inverse());
-        simulated_track = TrackedPose2D(new_state.x(), new_state.y(),
-                                        simulated_track.z(), 0.0, 0.0, 0.0);
-      }
-      if (step < config_.prediction_horizon() - 1) {
-        ref_traj.velocities.add(step, vel_rotate);
-      }
-      step++;
-      if (step < config_.prediction_horizon() - 2) {
-        auto vel_move = Velocity2D(cmd.vx(), 0.0, 0.0);
-        ref_traj.path.add(
-            step, Path::Point(simulated_state.x, simulated_state.y, 0.0));
-        simulated_state.update(vel_move, config_.control_time_step());
-        if (track_velocity_) {
-          simulated_track.update(config_.control_time_step());
-        } else {
-          // Update the tracked state in the local frame after the robot have
-          // moved (apply inverse of robot velocity)
-          tracked_state_tf = getTransformation(simulated_state);
-          auto new_state = transformPosition(
-              Eigen::Vector3f(simulated_track.x(), simulated_track.y(), 0.0),
-              tracked_state_tf.inverse());
-          simulated_track = TrackedPose2D(new_state.x(), new_state.y(),
-                                          simulated_track.z(), 0.0, 0.0, 0.0);
-        }
-        ref_traj.velocities.add(step, vel_move);
-        step++;
-      }
-    } else {
-      ref_traj.path.add(step,
-                        Path::Point(simulated_state.x, simulated_state.y, 0.0));
-      simulated_state.update(cmd, config_.control_time_step());
-      if (track_velocity_) {
-        simulated_track.update(config_.control_time_step());
-      } else {
-        // Update the tracked state in the local frame after the robot have
-        // moved (apply inverse of robot velocity)
-        tracked_state_tf = getTransformation(simulated_state);
-        auto new_state = transformPosition(
-            Eigen::Vector3f(simulated_track.x(), simulated_track.y(), 0.0),
-            tracked_state_tf.inverse());
-        simulated_track = TrackedPose2D(new_state.x(), new_state.y(),
-                                        simulated_track.z(), 0.0, 0.0, 0.0);
-      }
+      // For Diff-Drive, we alternate between rotation and translation
+      // to simulate the physical constraints more accurately
+      applied_cmd = (step % 2 == 0) ? Velocity2D(0.0, 0.0, cmd.omega())
+                                    : Velocity2D(cmd.vx(), 0.0, 0.0);
+    }
 
-      if (step < config_.prediction_horizon() - 1) {
-        ref_traj.velocities.add(step, cmd);
-      }
-      step++;
+    // Update Robot State
+    sim_state.update(applied_cmd, dt);
+
+    // Update Target Pose
+    if (track_velocity_) {
+      sim_target.update(dt);
+    } else {
+      // Using the helper function suggested previously to fix the math
+      sim_target = updateLocalTarget(sim_target, applied_cmd, dt);
+    }
+
+    // Store velocity in trajectory
+    if (step < config_.prediction_horizon() - 1) {
+      ref_traj.velocities.add(step, applied_cmd);
     }
   }
-  this->setCurrentState(currentState);
 
+  this->setCurrentState(currentState); // Restore original state
   return ref_traj;
-};
+}
 
 } // namespace Control
 } // namespace Kompass

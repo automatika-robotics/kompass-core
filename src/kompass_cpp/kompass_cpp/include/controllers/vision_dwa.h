@@ -10,7 +10,6 @@
 #include "utils/logger.h"
 #include "vision/depth_detector.h"
 #include "vision/tracker.h"
-#include <Eigen/Dense>
 #include <cmath>
 #include <memory>
 #include <optional>
@@ -241,6 +240,9 @@ private:
   Trajectory2D
   getTrackingReferenceSegmentDiffDrive(const TrackedPose2D &tracking_pose);
 
+  TrackedPose2D updateLocalTarget(const TrackedPose2D &current_target,
+                                  const Velocity2D &robot_cmd, double dt);
+
   /**
    * @brief Get the Pure Tracking Control Command
    *
@@ -268,18 +270,16 @@ private:
       // Reset recorded wait and search times
       recorded_wait_time_ = 0.0;
       recorded_search_time_ = 0.0;
-      LOG_INFO("Tracking target at position: ", tracked_pose->x(), ", ",
-               tracked_pose->y(), " with velocity: ", tracked_pose->v(), ", ",
-               tracked_pose->omega());
-      LOG_INFO("Robot current position: ", currentState.x, ", ",
-               currentState.y);
+      LOG_DEBUG("Tracking target at position: ", tracked_pose->x(), ", ",
+                tracked_pose->y(), " with velocity: ", tracked_pose->v(), ", ",
+                tracked_pose->omega());
+      LOG_DEBUG("Robot current position: ", currentState.x, ", ",
+                currentState.y);
       // Generate reference to target
       Trajectory2D ref_traj;
-      if (is_diff_drive_) {
-        ref_traj = getTrackingReferenceSegmentDiffDrive(tracked_pose.value());
-      } else {
-        ref_traj = getTrackingReferenceSegment(tracked_pose.value());
-      }
+
+      ref_traj = getTrackingReferenceSegment(tracked_pose.value());
+
 
       TrajSearchResult result;
       result.isTrajFound = true;
@@ -316,7 +316,7 @@ private:
           TrajectoryVelocities2D velocities(config_.control_horizon());
           TrajectoryPath path(config_.control_horizon());
           path.add(0, 0.0, 0.0);
-          std::array<double, 3> search_command;
+          Eigen::Vector3d search_command;
           for (int i = 0; i < config_.control_horizon() - 1; i++) {
             if (search_commands_queue_.empty()) {
               LOG_DEBUG("Search commands queue is empty. Ending Search ");

@@ -17,7 +17,10 @@ def plot_ranges_angles(angles: list, ranges: list, output_image_path: str):
     :raises ValueError: If 'ranges' and 'angles' do not have the same length
     """
     try:
+        import matplotlib
         import matplotlib.pyplot as plt
+
+        matplotlib.use("Agg")  # avoid Qt errors, no GUI
     except ImportError:
         print(
             "Matplotlib is not installed. Test figures will not be generated. To generate figures run 'pip install matplotlib'"
@@ -65,7 +68,7 @@ def plot_pointcloud_from_json(file_path: str, output_image_path: str) -> PointCl
     pc = PointCloudData(
         point_step=pc_json["point_step"],
         row_step=pc_json["row_step"],
-        data=np.array(pc_json["data"], dtype=np.int8),
+        data=np.array(pc_json["data"]).astype(np.int8),
         height=pc_json["height"],
         width=pc_json["width"],
     )
@@ -128,7 +131,12 @@ def plot_pointcloud_from_json(file_path: str, output_image_path: str) -> PointCl
     )
 
     fig.update_layout(
-        scene={"xaxis_title": "X", "yaxis_title": "Y", "zaxis_title": "Z"},
+        scene={
+            "xaxis_title": "X",
+            "yaxis_title": "Y",
+            "zaxis_title": "Z",
+            "aspectmode": "data",
+        },
         title="PointCloud2 3D Plot",
     )
     fig.write_html(output_image_path, include_plotlyjs="cdn")
@@ -146,7 +154,7 @@ def main():
     resources_path = os.path.join(dir_name, "resources/mapping")
 
     data = plot_pointcloud_from_json(
-        file_path=os.path.join(resources_path, "livox_pointcloud_sample_1.json"),
+        file_path=os.path.join(resources_path, "livox_pointcloud_sample_0.json"),
         output_image_path=os.path.join(resources_path, "pointcloud_plot.html"),
     )
     ranges, angles = pointcloud_to_laserscan_from_raw(

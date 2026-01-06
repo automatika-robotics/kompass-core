@@ -32,8 +32,11 @@ endif()
 # add project as library
 add_library(${MODULE_NAME} STATIC ${SOURCES})
 target_include_directories(${MODULE_NAME} PUBLIC include)
-target_include_directories(${MODULE_NAME} PUBLIC ${OMPL_INCLUDE_DIR} ${EIGEN3_INCLUDE_DIR}${FCL_INCLUDE_DIRS})
-target_link_libraries(${MODULE_NAME} PUBLIC fcl ${OMPL_LIBRARIES})
+target_link_libraries(${MODULE_NAME} PUBLIC
+    ompl::ompl
+    fcl::fcl
+    Eigen3::Eigen
+)
 
 # add sycl
 if(AdaptiveCpp_FOUND)

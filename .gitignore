@@ -10,7 +10,6 @@ nodes/__pycache__/
 # Distribution / packaging
 bin/
 build/
-build_*
 develop-eggs/
 dist/
 wheelhouse/

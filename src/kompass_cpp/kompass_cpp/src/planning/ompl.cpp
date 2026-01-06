@@ -24,7 +24,7 @@ void OMPL2DGeometricPlanner::setupProblem(
     double goal_y, double goal_yaw,
     const std::vector<Eigen::Vector3f> &map_3d) {
   setup_->clear();
-  collision_checker_->update3DMap(map_3d);
+  collision_checker_->updateSensorData(map_3d);
   ompl::base::ScopedState<ompl::base::SE2StateSpace> start(
       setup_->getStateSpace());
   ompl::base::ScopedState<ompl::base::SE2StateSpace> goal(

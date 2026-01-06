@@ -42,14 +42,6 @@ This script will install all relevant dependencies, including [AdaptiveCPP](http
 
 ## Installing with pip (CPU only)
 
-- On Ubuntu versions >= 22.04, install dependencies by running the following:
-
-```bash
-sudo apt-get install libompl-dev libfcl-dev
-```
-
-- Then install kompass-core as follows:
-
 ```bash
 pip install kompass-core
 ```

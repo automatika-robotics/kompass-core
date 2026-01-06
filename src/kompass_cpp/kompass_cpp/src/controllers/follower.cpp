@@ -338,27 +338,5 @@ Follower::calculateExponentialSpeedFactor(double current_angular_vel) const {
   return std::max(std::exp(-exponent), min_speed_regulation_factor);
 }
 
-// Get the control commands
-double Follower::getLinearVelocityCmdX() const {
-  return latest_velocity_command_.vx();
-}
-double Follower::getLinearVelocityCmdY() const {
-  return latest_velocity_command_.vy();
-}
-double Follower::getAngularVelocityCmd() const {
-  return latest_velocity_command_.omega();
-}
-double Follower::getSteeringAngleCmd() const {
-  return latest_velocity_command_.steer_ang();
-}
-const double Follower::getPathLength() const {
-  return currentPath->totalPathLength();
-}
-const bool Follower::hasPath() const {
-  if (!currentPath or !path_processing_) {
-    return false;
-  }
-  return currentPath->totalPathLength() > 0.0;
-}
 } // namespace Control
 } // namespace Kompass

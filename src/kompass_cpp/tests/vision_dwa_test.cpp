@@ -30,6 +30,10 @@ struct VisionDWATestConfig {
   int maxAngularSamples;
   int maxNumThreads;
 
+  double distance_tolerance = 0.05;
+  double target_distance = 0.2;
+  float robot_radius = 0.1;
+
   // Detected Boxes
   std::vector<Bbox3D> detected_boxes;
   int num_test_boxes = 3;
@@ -85,15 +89,17 @@ struct VisionDWATestConfig {
                       const double reference_path_distance_weight = 1.0,
                       const double goal_distance_weight = 1.0,
                       const double obstacles_distance_weight = 0.0)
-      : use_local_frame(use_local_frame), timeStep(timeStep), predictionHorizon(predictionHorizon),
-        controlHorizon(controlHorizon), maxLinearSamples(maxLinearSamples),
+      : use_local_frame(use_local_frame), timeStep(timeStep),
+        predictionHorizon(predictionHorizon), controlHorizon(controlHorizon),
+        maxLinearSamples(maxLinearSamples),
         maxAngularSamples(maxAngularSamples), maxNumThreads(maxNumThreads),
         octreeRes(0.1), x_params(maxVel, 5.0, 10.0), y_params(1, 3, 5),
         angular_params(3.14, maxOmega, 3.0, 3.0),
         controlLimits(x_params, y_params, angular_params),
-        controlType(Control::ControlType::ACKERMANN),
+        controlType(Control::ControlType::DIFFERENTIAL_DRIVE),
         robotShapeType(Kompass::CollisionChecker::ShapeType::CYLINDER),
-        robotDimensions{0.1, 0.4}, prox_sensor_position_body{0.0, 0.0, 0.0},
+        robotDimensions{robot_radius, 0.4},
+        prox_sensor_position_body{0.0, 0.0, 0.0},
         prox_sensor_rotation_body{0, 0, 0, 1}, cloud(sensor_points),
         robotState(-0.5, 0.0, 0.0, 0.0), tracked_vel(0.1, 0.0, 0.3),
         tracked_pose(0.0, 0.0, 0.0, tracked_vel) {
@@ -110,6 +116,9 @@ struct VisionDWATestConfig {
     config.setParameter("control_horizon", controlHorizon);
     config.setParameter("prediction_horizon", predictionHorizon);
     config.setParameter("use_local_coordinates", use_local_frame);
+    config.setParameter("target_distance", target_distance);
+    config.setParameter("target_orientation", 0.2);
+    config.setParameter("distance_tolerance", distance_tolerance);
 
     // For depth config
     // Body to camera tf from robot of test pictures
@@ -212,8 +221,8 @@ struct VisionDWATestConfig {
     return res.isTrajFound;
   }
 
-  bool run_test(const int numPointsPerTrajectory, std::string pltFileName,
-                const bool simulate_obstacle = false) {
+  double run_test(const int numPointsPerTrajectory, std::string pltFileName,
+                  const bool simulate_obstacle = false) {
     Control::TrajectorySamples2D samples(2, numPointsPerTrajectory);
     Control::TrajectoryVelocities2D simulated_velocities(
         numPointsPerTrajectory);
@@ -223,18 +232,38 @@ struct VisionDWATestConfig {
     Control::TrajSearchResult result;
 
     controller->setCurrentState(robotState);
+
+    // Set the initial tracking boxes in local or global frame
+    std::vector<Bbox3D> initial_boxes;
+    if (use_local_frame) {
+      // Transform boxes to local coordinates for initialization
+      Eigen::Isometry3f world_in_robot_tf =
+          getTransformation(robotState).inverse();
+      Eigen::Matrix3f abs_rotation = world_in_robot_tf.linear().cwiseAbs();
+
+      for (auto &box : detected_boxes) {
+        Bbox3D box_local(box);
+        box_local.center = world_in_robot_tf * box.center;
+        box_local.size = abs_rotation * box.size;
+        initial_boxes.push_back(box_local);
+      }
+    } else {
+      initial_boxes = detected_boxes;
+    }
+
     controller->setInitialTracking(ref_point_img(0), ref_point_img(1),
-                                   detected_boxes);
+                                   initial_boxes);
 
     int step = 0;
+    double start_distance = std::sqrt(std::pow(robotState.x - tracked_pose.x(), 2) +
+              std::pow(robotState.y - tracked_pose.y(), 2));
+    double end_distance = start_distance;
+
     while (step < numPointsPerTrajectory) {
       Path::Point point(robotState.x, robotState.y, 0.0);
       robot_path.add(step, point);
       tracked_path.add(step, {tracked_pose.x(), tracked_pose.y(), 0.0});
       controller->setCurrentState(robotState);
-      LOG_INFO("Target center at: ", tracked_pose.x(), ", ", tracked_pose.y(),
-               ", ", tracked_pose.yaw());
-      LOG_INFO("Robot at: ", point.x(), ", ", point.y());
 
       std::vector<Bbox3D> seen_boxes;
       if (use_local_frame) {
@@ -257,7 +286,7 @@ struct VisionDWATestConfig {
 
       // Simulate lost of target around obstacle
       if (simulate_obstacle and robotState.y > 0.2 and robotState.y < 0.4) {
-        LOG_INFO("Sending EMPTY BOXES NOW!!!!!");
+        LOG_INFO("Sending EMPTY BOXES!");
         seen_boxes = {};
       }
       controller->setCurrentState(robotState);
@@ -266,14 +295,6 @@ struct VisionDWATestConfig {
       if (result.isTrajFound) {
         LOG_INFO(FMAG("STEP: "), step,
                  FMAG(", Found best trajectory with cost: "), result.trajCost);
-        if (controller->getLinearVelocityCmdX() >
-            controlLimits.velXParams.maxVel) {
-          LOG_ERROR(BOLD(FRED("Vx is larger than max vel: ")), KRED,
-                    controller->getLinearVelocityCmdX(), RST,
-                    BOLD(FRED(", Vx: ")), KRED, controlLimits.velXParams.maxVel,
-                    RST);
-          return false;
-        }
         auto velocities = result.trajectory.velocities;
         int numSteps = 0;
         for (auto vel : velocities) {
@@ -307,6 +328,15 @@ struct VisionDWATestConfig {
 
       moveDetectedBoxes();
 
+      end_distance =
+          std::sqrt(std::pow(robotState.x - tracked_pose.x(), 2) +
+                    std::pow(robotState.y - tracked_pose.y(), 2));
+
+      if(end_distance > 3.0 * start_distance){
+        LOG_ERROR("Robot is moving too far from tracked target");
+        break;
+      }
+
       step++;
     }
     samples.push_back(simulated_velocities, robot_path);
@@ -330,7 +360,10 @@ struct VisionDWATestConfig {
     if (res != 0)
       throw std::system_error(res, std::generic_category(),
                               "Python script failed with error code");
-    return true;
+
+    // Compute final tracking error
+    return std::sqrt(std::pow(robotState.x - tracked_pose.x(), 2) +
+                     std::pow(robotState.y - tracked_pose.y(), 2)); // minus robot radius
   }
 };
 
@@ -346,11 +379,24 @@ BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free_local) {
 
   int numPointsPerTrajectory = 100;
 
-  bool test_passed = testConfig.run_test(
+  double end_distance = testConfig.run_test(
       numPointsPerTrajectory,
       std::string("vision_follower_with_tracker_local_frame"));
+
+  double distance_error = end_distance - testConfig.robot_radius - testConfig.target_distance;
+
+  bool test_passed = std::abs(distance_error) < testConfig.distance_tolerance;
+
+  if (test_passed) {
+    LOG_INFO("Tracking finished successfully. End error: ", distance_error,
+             " < tolerance ", testConfig.distance_tolerance);
+  } else {
+    LOG_ERROR("Tracking Failed! End error: ", distance_error, " > tolerance ",
+              testConfig.distance_tolerance);
+  }
+
   BOOST_TEST(test_passed,
-             "VisionDWA Failed To Find Control in local frame mode");
+             "VisionDWA Failed To Track Target in local frame mode");
 }
 
 BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free_global_frame) {
@@ -365,50 +411,40 @@ BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free_global_frame) {
 
   int numPointsPerTrajectory = 100;
 
-  bool test_passed = testConfig.run_test(
+  double end_distance = testConfig.run_test(
       numPointsPerTrajectory,
-      std::string("vision_follower_with_tracker_global_frame"),
-      use_local_frame);
+      std::string("vision_follower_with_tracker_global_frame"));
+
+  double distance_error =
+      end_distance - testConfig.robot_radius - testConfig.target_distance;
+
+  bool test_passed = std::abs(distance_error) < testConfig.distance_tolerance;
+
+  if (test_passed) {
+    LOG_INFO("Tracking finished successfully. End error: ", distance_error,
+             " < tolerance ", testConfig.distance_tolerance);
+  } else {
+    LOG_ERROR("Tracking Failed! End error: ", distance_error, " > tolerance ",
+              testConfig.distance_tolerance);
+  }
+
   BOOST_TEST(test_passed,
              "VisionDWA Failed To Find Control in global frame mode");
 }
 
-// BOOST_AUTO_TEST_CASE(test_VisionDWA_with_tracker_and_obstacle) {
-//   // Create timer
-//   Timer time;
-
-//   // Robot pointcloud values (global frame)
-//   std::vector<Path::Point> cloud = {{0.3, 0.27, 0.1}};
-
-//   VisionDWATestConfig testConfig(cloud);
-
-//   int numPointsPerTrajectory = 100;
-
-//   bool test_passed = testConfig.run_test(
-//       numPointsPerTrajectory,
-//       std::string("vision_follower_with_tracker_and_obstacle"), true);
-//   BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
-// }
-
-BOOST_AUTO_TEST_CASE(test_VisionDWA_with_depth_image) {
+BOOST_AUTO_TEST_CASE(test_VisionDWA_with_tracker_and_obstacle) {
   // Create timer
   Timer time;
 
-  std::string filename =
-      "/home/ahr/kompass/kompass-navigation/tests/resources/control/"
-      "bag_image_depth.tif";
-  Bbox2D box({410, 0}, {410, 390});
-  std::vector<Bbox2D> detections_2d{box};
-
-  auto initial_point = Eigen::Vector2i{610, 200};
-
   // Robot pointcloud values (global frame)
-  std::vector<Path::Point> cloud = {{10.3, 10.5, 0.2}};
+  std::vector<Path::Point> cloud = {{0.3, 0.27, 0.1}};
 
   VisionDWATestConfig testConfig(cloud);
 
-  auto test_passed = testConfig.test_one_cmd_depth(filename, detections_2d,
-                                                   initial_point, cloud);
+  int numPointsPerTrajectory = 100;
 
-  BOOST_TEST(test_passed, "VisionDWA Failed To Find Control Using Depth Image");
+  bool test_passed = testConfig.run_test(
+      numPointsPerTrajectory,
+      std::string("vision_follower_with_tracker_and_obstacle"), true);
+  BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
 }

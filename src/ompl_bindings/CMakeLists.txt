@@ -4,6 +4,18 @@ set(MODULE_NAME omplpy)
 find_package(Eigen3 3.4 REQUIRED NO_MODULE)
 find_package(ompl 1.5 REQUIRED)
 
+# -------------------------------------------------------------------------
+# COMPATIBILITY SHIM: OMPL
+# -------------------------------------------------------------------------
+if(NOT TARGET ompl::ompl)
+    message(STATUS "Modern ompl::ompl target not found. Creating shim from legacy variables.")
+    add_library(ompl::ompl INTERFACE IMPORTED)
+    set_target_properties(ompl::ompl PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${OMPL_INCLUDE_DIRS}"
+        INTERFACE_LINK_LIBRARIES "${OMPL_LIBRARIES}"
+    )
+endif()
+
 # Detect nanobind (injected by scikit build)
 find_package(nanobind CONFIG)
 
@@ -24,8 +36,10 @@ endif()
 
 # add bindings as nanobind module
 nanobind_add_module(${MODULE_NAME} STABLE_ABI bindings.cpp)
-target_include_directories(${MODULE_NAME} PRIVATE ${EIGEN3_INCLUDE_DIR} ${OMPL_INCLUDE_DIRS})
-target_link_libraries(${MODULE_NAME} PRIVATE ${OMPL_LIBRARIES})
+target_link_libraries(${MODULE_NAME} PUBLIC
+    ompl::ompl
+    Eigen3::Eigen
+)
 
 # install location
 if (SKBUILD)

@@ -142,15 +142,11 @@ private:
    */
   Velocity2D findSafeCommand(const Velocity2D &nominal, double dt);
 
-  // Helper: Update collision checker with LaserScan data
-  void updateCollisionCheckerData(const Control::LaserScan &scan) {
-    collision_checker_->updateScan(scan.ranges, scan.angles);
+  // Helper: Update collision checker with sensor data
+  template <typename T> void updateCollisionCheckerData(const T &data) {
+    collision_checker_->updateSensorData(data);
   }
 
-  // Helper: Update collision checker with PointCloud data
-  void updateCollisionCheckerData(const std::vector<Path::Point> &cloud) {
-    collision_checker_->updatePointCloud(cloud);
-  }
 };
 
 } // namespace Control

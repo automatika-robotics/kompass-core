@@ -58,7 +58,7 @@ void bindings_types(py::module_ &m) {
       .def("y", &Path::Path::getY);
 
   // Velocity control command
-  py::class_<Control::Velocity2D>(m_types, "ControlCmd")
+  py::class_<Control::Velocity2D>(m_types, "Velocity2D")
       .def(py::init<float, float, float, float>(), py::arg("vx") = 0.0,
            py::arg("vy") = 0.0, py::arg("omega") = 0.0,
            py::arg("steer_ang") = 0.0)
@@ -70,13 +70,48 @@ void bindings_types(py::module_ &m) {
                    &Control::Velocity2D::setSteerAng)
       .def("__str__", &printControlCmd);
 
-  py::class_<Control::Velocities>(m_types, "ControlCmdList")
+  // Set of velocity control commands
+  py::class_<Control::TrajectoryVelocities2D>(m_types, "TrajectoryVelocities2D")
       .def(py::init<>(), "Default constructor")
-      .def(py::init<int>(), "Constructor with length", py::arg("length"))
-      .def_rw("vx", &Control::Velocities::vx, "Speed on x-axis (m/s)")
-      .def_rw("vy", &Control::Velocities::vy, "Speed on y-axis (m/s)")
-      .def_rw("omega", &Control::Velocities::omega, "Angular velocity (rad/s)")
-      .def_rw("length", &Control::Velocities::_length, "Length of the vectors");
+      // Maps Python 'length' (size of vector) to C++ 'numPointsPerTrajectory'
+      // (length + 1)
+      .def(
+          "__init__",
+          [](Control::TrajectoryVelocities2D *t, size_t length) {
+            new (t) Control::TrajectoryVelocities2D(length + 1);
+          },
+          py::arg("length"),
+          "Constructor taking the actual length of the velocity vectors")
+      // Constructor from std::vector<Velocity2D>
+      .def(py::init<const std::vector<Control::Velocity2D> &>(),
+           "Initialize from a vector of Velocity2D", py::arg("velocities"))
+
+      // Constructor from Eigen vectors
+      .def(py::init<const Eigen::VectorXf &, const Eigen::VectorXf &,
+                    const Eigen::VectorXf &>(),
+           "Initialize from Eigen vectors", py::arg("vx"), py::arg("vy"),
+           py::arg("omega"))
+      .def_ro("vx", &Control::TrajectoryVelocities2D::vx,
+              py::rv_policy::reference_internal, "Speed on x-axis (m/s)")
+      .def_ro("vy", &Control::TrajectoryVelocities2D::vy,
+              py::rv_policy::reference_internal, "Speed on y-axis (m/s)")
+      .def_ro("omega", &Control::TrajectoryVelocities2D::omega,
+              py::rv_policy::reference_internal, "Angular velocity (rad/s)")
+      // Exposes 'length' as (numPointsPerTrajectory_ - 1)
+      .def_prop_rw(
+          "length",
+          // Getter: return actual vector size
+          [](const Control::TrajectoryVelocities2D &t) {
+            return (t.numPointsPerTrajectory_ > 0)
+                       ? (t.numPointsPerTrajectory_ - 1)
+                       : 0;
+          },
+          // Setter: update internal counter
+          [](Control::TrajectoryVelocities2D &t, size_t length) {
+            t.numPointsPerTrajectory_ = length + 1;
+          },
+          "Actual length of the velocities vectors (mapped to "
+          "numPointsPerTrajectory_ - 1)");
 
   py::class_<Control::TrajectoryPath>(m_types, "TrajectoryPath")
       .def(py::init<>())
@@ -85,15 +120,6 @@ void bindings_types(py::module_ &m) {
       .def_ro("y", &Control::TrajectoryPath::y,
               py::rv_policy::reference_internal)
       .def_ro("z", &Control::TrajectoryPath::z,
-              py::rv_policy::reference_internal);
-
-  py::class_<Control::TrajectoryVelocities2D>(m_types, "TrajectoryVelocities2D")
-      .def(py::init<>())
-      .def_ro("vx", &Control::TrajectoryVelocities2D::vx,
-              py::rv_policy::reference_internal)
-      .def_ro("vy", &Control::TrajectoryVelocities2D::vy,
-              py::rv_policy::reference_internal)
-      .def_ro("omega", &Control::TrajectoryVelocities2D::omega,
               py::rv_policy::reference_internal);
 
   py::class_<Control::Trajectory2D>(m_types, "Trajectory")
