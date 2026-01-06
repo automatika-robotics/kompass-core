@@ -91,12 +91,11 @@ install_dependencies() {
 
     detect_os
     log INFO "Detected OS: $OS_ID, Version: $OS_VERSION_ID"
+    export DEBIAN_FRONTEND=noninteractive
 
     # Install specific CMake for Legacy Ubuntu
     if is_legacy_system; then
         log INFO "Legacy system detected. Installing latest cmake from Kitware..."
-
-        export DEBIAN_FRONTEND=noninteractive
         $SUDO apt install -y software-properties-common
         wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | $SUDO tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
         $SUDO apt-add-repository -y "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
@@ -107,7 +106,7 @@ install_dependencies() {
         local dependencies=("git" "make" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq" "python3-minimal" "python3-apt" "python3-dev" "patch")
     else
         # Modern Debian/Raspbian/Ubuntu
-        local dependencies=("git" "make" "cmake" "wget" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq" "python3-minimal" "python3-apt" "python3-dev")
+        local dependencies=("git" "make" "cmake" "wget" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq" "python3-minimal" "python3-apt" "python3-dev" "software-properties-common")
     fi
 
     # Install other tool dependencies
