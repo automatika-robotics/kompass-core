@@ -296,6 +296,16 @@ void Path::segment(double pathSegmentLength, size_t maxPointsPerSegment) {
   segment_indices_.clear();
   segment_indices_.push_back(0);
 
+  // NOTE: If segmentation is called without prior interpolated, the cumulated path
+  // length won't be pre-computed
+  if (!interpolated_) {
+    accumulated_path_length_.resize(current_size_ - 1);
+    // Calculate accumulated path length
+    for (size_t i = 0; i < current_size_ - 1; ++i) {
+      accumulated_path_length_[i] = distance(getIndex(i), getIndex(i + 1));
+    }
+  }
+
   size_t segmentStartIdx = 0;
   float segmentStartLength = accumulated_path_length_[0];
 
@@ -318,7 +328,6 @@ void Path::segment(double pathSegmentLength, size_t maxPointsPerSegment) {
       segmentStartLength = accumulated_path_length_[i];
     }
   }
-
 }
 
 Point Path::getSegmentStart(size_t segment_index) const {
