@@ -26,17 +26,18 @@ public:
                     1000.0)); // [m] Lookahead distance used to find the next
                               // point to reach (normally be same as wheelbase)
       // Speed control parameters
-      addParameter(
-          "speed_regulation_curvature",
-          Parameter(0.5, 0.0,
-                    1.0)); // Curvature-based linear velocity speed regulation parameter
+      addParameter("speed_regulation_curvature",
+                   Parameter(0.5, 0.0,
+                             1.0)); // Curvature-based linear velocity speed
+                                    // regulation parameter
       addParameter("speed_regulation_angular",
                    Parameter(0.5, 0.0,
                              1.0)); // Angular velocity-based speed
                                     // regulation parameter
-      addParameter("min_speed_regulation_factor",
-                   Parameter(0.5, 1e-3,
-                             1.0)); // Minimum value of the final speed regulation factor
+      addParameter(
+          "min_speed_regulation_factor",
+          Parameter(0.5, 1e-3,
+                    1.0)); // Minimum value of the final speed regulation factor
       addParameter(
           "goal_dist_tolerance",
           Parameter(0.1, 0.001, 1000.0)); // [m] Tolerance to consider the robot
@@ -121,48 +122,34 @@ public:
    */
   Target getTrackedTarget() const;
 
-  /**
-   * @brief Get the Linear Velocity Cmd X object
-   *
-   * @return double
-   */
-  double getLinearVelocityCmdX() const;
-
-  /**
-   * @brief Get the Linear Velocity Cmd Y object
-   *
-   * @return double
-   */
-  double getLinearVelocityCmdY() const;
-
-  /**
-   * @brief Get the Angular Velocity Cmd object
-   *
-   * @return double
-   */
-  double getAngularVelocityCmd() const;
-
-  /**
-   * @brief Get the Steering Angle Cmd object
-   *
-   * @return double
-   */
-  double getSteeringAngleCmd() const;
-
-  /**
-   * @brief Get the Path Length object
-   *
-   * @return const double
-   */
-  const double getPathLength() const;
-
-  /**
-   * @brief Checks if there is a path to follow
-   *
-   * @return true
-   * @return false
-   */
-  const bool hasPath() const;
+  // Get the control commands
+  inline double getLinearVelocityCmdX() const {
+    return std::max(std::min(latest_velocity_command_.vx(),
+                             ctrlimitsParams.velXParams.maxVel),
+                    -ctrlimitsParams.velXParams.maxVel);
+  }
+  inline double getLinearVelocityCmdY() const {
+    return std::max(std::min(latest_velocity_command_.vy(),
+                             ctrlimitsParams.velYParams.maxVel),
+                    -ctrlimitsParams.velYParams.maxVel);
+  }
+  inline double getAngularVelocityCmd() const {
+    return std::max(std::min(latest_velocity_command_.omega(),
+                             ctrlimitsParams.omegaParams.maxOmega),
+                    -ctrlimitsParams.omegaParams.maxOmega);
+  }
+  inline double getSteeringAngleCmd() const {
+    return latest_velocity_command_.steer_ang();
+  }
+  inline const double getPathLength() const {
+    return currentPath->totalPathLength();
+  }
+  inline const bool hasPath() const {
+    if (!currentPath or !path_processing_) {
+      return false;
+    }
+    return currentPath->totalPathLength() > 0.0;
+  }
 
   const Path::Path getCurrentPath() const;
 
@@ -178,9 +165,10 @@ public:
 protected:
   // Speed Control Parameters
   double speed_reg_curvature{0.0}; // Curvature factor
-  double speed_reg_rotation{0.0};    // Rotation factor
+  double speed_reg_rotation{0.0};  // Rotation factor
   std::unique_ptr<Path::Path> currentPath = nullptr;
-  std::unique_ptr<Path::PathPosition> closestPosition = std::make_unique<Path::PathPosition>();
+  std::unique_ptr<Path::PathPosition> closestPosition =
+      std::make_unique<Path::PathPosition>();
   double goal_dist_tolerance{0.0};
   double goal_orientation_tolerance{0.0};
   double loosing_goal_distance{0.0};
