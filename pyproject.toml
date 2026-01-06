@@ -1,5 +1,6 @@
 [build-system]
-requires = ["scikit-build-core>=0.8", "nanobind>=1.8"]
+# pinned nanobind for python3.8 support
+requires = ["scikit-build-core>=0.8", "nanobind>=1.8,<2.9.2"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -45,10 +46,6 @@ wheel.py-api = "cp312"
 cmake.version = ">=3.5.0"
 # Fast build
 build.tool-args = ["-j8"]
-# For vcpkg based builds
-[tool.scikit-build.cmake.define]
-CMAKE_TOOLCHAIN_FILE = {env="CMAKE_TOOLCHAIN_FILE"}
-VCPKG_TARGET_TRIPLET = {env="VCPKG_TARGET_TRIPLET"}
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -118,17 +115,5 @@ manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
 
 [tool.cibuildwheel.linux]
-environment = {VCPKG_ROOT="/project/deps/vcpkg", CMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"}
 before-all = "bash build_dependencies/install_linux.sh"
-
-[[tool.cibuildwheel.overrides]]
-select = "*-manylinux_x86_64"
-inherit.environment = "append"
-environment.VCPKG_TARGET_TRIPLET = "x64-linux-release"
-environment.LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib"
-
-[[tool.cibuildwheel.overrides]]
-select = "*-manylinux_aarch64"
-inherit.environment = "append"
-environment.VCPKG_TARGET_TRIPLET = "arm64-linux-release"
-environment.LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib"
+environment = { SKBUILD_CMAKE_DEFINE = "CMAKE_TOOLCHAIN_FILE=/project/conan_build/conan_toolchain.cmake" }
