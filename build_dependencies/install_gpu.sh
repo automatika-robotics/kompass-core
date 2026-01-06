@@ -68,7 +68,7 @@ detect_os() {
     fi
 }
 
-# Function to determine if we need legacy support (vcpkg/kitware)
+# Function to determine if we need legacy support (Conan)
 # Returns 0 (true) if legacy (old Ubuntu), 1 (false) if modern (Debian 11+, RPi OS, Ubuntu > 20)
 is_legacy_system() {
     # If Debian or Raspbian, assume modern (Debian 10/Buster is old, but we assume 11+ for this context)
@@ -95,16 +95,16 @@ install_dependencies() {
     # Install specific CMake for Legacy Ubuntu
     if is_legacy_system; then
         log INFO "Legacy system detected. Installing latest cmake from Kitware..."
-        $SUDO apt install -y software-properties-common
 
         export DEBIAN_FRONTEND=noninteractive
+        $SUDO apt install -y software-properties-common
         wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | $SUDO tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
         $SUDO apt-add-repository -y "deb https://apt.kitware.com/ubuntu/ $(lsb_release -cs) main"
         $SUDO apt update -y && apt install -y kitware-archive-keyring
         $SUDO rm /etc/apt/trusted.gpg.d/kitware.gpg
         $SUDO apt update -y && apt install -y cmake
         $SUDO apt install -y --only-upgrade cmake
-        local dependencies=("git" "make" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq" "python3-minimal" "python3-apt" "python3-dev")
+        local dependencies=("git" "make" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq" "python3-minimal" "python3-apt" "python3-dev" "patch")
     else
         # Modern Debian/Raspbian/Ubuntu
         local dependencies=("git" "make" "cmake" "wget" "python3-pip" "zip" "unzip" "ninja-build" "curl" "tar" "pkg-config" "jq" "python3-minimal" "python3-apt" "python3-dev")
@@ -322,38 +322,84 @@ fi
 
 cd kompass-core
 
-# Check if legacy system (Ubuntu <= 20.04) for VCPKG usage
+# Check if legacy system (Ubuntu <= 20.04) for CONAN usage
 if is_legacy_system; then
-    log WARN "Legacy system detected. Installing vcpkg..."
-    export VCPKG_ROOT=$PWD/.vcpkg
-    export CMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-    # If vcpkg folder exists, assume vcpkg was already downloaded
-    if [[ ! -d $VCPKG_ROOT ]]; then
-        mkdir -p $VCPKG_ROOT
-        # install vcpkg
-        git clone --depth 1 https://github.com/microsoft/vcpkg.git $VCPKG_ROOT
+    log WARN "Legacy system detected. Installing dependencies via Conan..."
+
+    # Install python build tools
+    log INFO "Installing Conan and Ninja..."
+    export PIP_BREAK_SYSTEM_PACKAGES=1
+    python3 -m pip install conan ninja "cmake<3.30"
+
+    # Configure Conan Profile
+    log INFO "Configuring Conan profile..."
+    conan profile detect --force
+    # Force C++17 (Required for OMPL)
+    sed -i 's/compiler.cppstd=.*/compiler.cppstd=gnu17/g' ~/.conan2/profiles/default
+
+    # Ensure the whole graph is built as static libs
+    log INFO "Forcing static libs in Conan profile..."
+    cat >> ~/.conan2/profiles/default <<EOF
+[options]
+*:shared=False
+*:fPIC=True
+EOF
+
+    # TODO: This fork should be removed when recipe merged upstream
+    # Clone Fork (to get the ompl recipe)
+    log INFO "Cloning Conan recipes fork..."
+    CONAN_RECIPES_DIR="/tmp/conan_recipes"
+    rm -rf "$CONAN_RECIPES_DIR"
+    git clone --depth 1 https://github.com/aleph-ra/conan-center-index.git "$CONAN_RECIPES_DIR"
+
+    # Clean previous artifacts to ensure a fresh build
+    log INFO "Cleaning previous Conan artifacts..."
+    conan remove "ompl/*" -c || true
+    conan remove "fcl/*" -c || true
+    rm -rf build
+    rm -rf conan_build
+
+    # Build recipes
+    log INFO "Building FCL and OMPL packages from source..."
+
+    # Build FCL 0.7.0
+    conan create "$CONAN_RECIPES_DIR/recipes/fcl/all" --version=0.7.0 \
+        --build=missing
+
+    # Build OMPL 1.7.0 (With optimization flags)
+    conan create "$CONAN_RECIPES_DIR/recipes/ompl/all" --version=1.7.0 \
+        --build=missing --build="b2/*" \
+        -c tools.build:jobs=$(nproc)
+
+    # Install Dependencies into local project folder
+    log INFO "Generating Conan toolchains..."
+    CONAN_BUILD_DIR="$PWD/conan_build"
+    mkdir -p "$CONAN_BUILD_DIR"
+
+    conan install \
+        --requires="ompl/1.7.0" \
+        --requires="fcl/0.7.0" \
+        -g CMakeDeps \
+        -g CMakeToolchain \
+        -g VirtualRunEnv \
+        --output-folder="$CONAN_BUILD_DIR" \
+        --build=missing \
+        --build="b2/*" \
+        -c "tools.cmake.cmaketoolchain:extra_variables={'CMAKE_POLICY_VERSION_MINIMUM':'3.5'}"
+
+    # Verification of static libs
+    log INFO "Verifying OMPL Build Artifacts..."
+    if [ -z "$(find ~/.conan2 -name 'libompl.a')" ]; then
+        log ERROR "libompl.a NOT found. Build may have produced shared libraries."
+        find ~/.conan2 -name "libompl.so*"
+        exit 1
     else
-        log WARN "vcpkg directory already exists. Skipping download."
+        log INFO "SUCCESS: libompl.a found."
     fi
 
-    # Check for architecture
-    if [ "$(uname -m)" != "x86_64" ]; then
-        export VCPKG_FORCE_SYSTEM_BINARIES=1
-        export VCPKG_TARGET_TRIPLET="arm64-linux-release"
-    else
-        export VCPKG_TARGET_TRIPLET="x64-linux-release"
-    fi
+    # Set SKBUILD_CMAKE_ARGS env var which scikit-build-core picks up
+    export SKBUILD_CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=$CONAN_BUILD_DIR/conan_toolchain.cmake"
 
-    # Set LD_LIBRARY_PATH
-    export LD_LIBRARY_PATH="$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib:$LD_LIBRARY_PATH"
-
-    # install vcpkg
-    $VCPKG_ROOT/bootstrap-vcpkg.sh -disableMetrics
-
-    # install dependencies
-    log WARN "Installing ompl and fcl with vcpkg..."
-    $VCPKG_ROOT/vcpkg install fcl --triplet=$VCPKG_TARGET_TRIPLET
-    $VCPKG_ROOT/vcpkg install ompl --triplet=$VCPKG_TARGET_TRIPLET
 else
     log INFO "Modern system (Debian 11+/Ubuntu 21+/Raspbian) detected."
     log INFO "Installing ompl and fcl from system apt repositories..."
@@ -362,26 +408,31 @@ fi
 
 log INFO "Installing kompass-core with pip"
 export PIP_BREAK_SYSTEM_PACKAGES=1
-pip install pip-tools
-pip uninstall -y kompass-core  # uninstall any previous versions
-CXX=$CLANG_EXECUTABLE_PATH pip install .
+python3 -m pip install pip-tools
+python3 -m pip uninstall -y kompass-core  # uninstall any previous versions
+
+# Build and Install
+# SKBUILD_CMAKE_ARGS is already set if we are in legacy mode
+CXX=$CLANG_EXECUTABLE_PATH python3 -m pip install .
 
 # Clean up source files if not required
 if [[ $KEEP_SOURCE_FILES == false ]]; then
-    log INFO "Removing acpp source files as --keep-source-files is not set."
-    cd .. && rm -rf AdaptiveCpp
+    log INFO "Removing source files (AdaptiveCpp, kompass-core) as --keep-source-files is not set."
+    # We are currently inside kompass-core, so move up one level to delete it
+    cd ..
+    rm -rf AdaptiveCpp
+    rm -rf kompass-core
 fi
 
+# Clean up temporary Conan recipes
+if [[ -d "/tmp/conan_recipes" ]]; then
+    log INFO "Removing temporary Conan recipes..."
+    rm -rf /tmp/conan_recipes
+fi
+
+# Verify installation
 if python3 -c "import kompass_cpp" 2>/dev/null; then
     log INFO "\033[1;32mkompass-core was installed successfully.\033[0m"
-    if is_legacy_system; then
-        log WARN "In order to use kompass-core on this system, you will have to set LD_LIBRARY_PATH in your environment as follows:
-
-        export LD_LIBRARY_PATH=$VCPKG_ROOT/installed/$VCPKG_TARGET_TRIPLET/lib:\$LD_LIBRARY_PATH
-
-        You can make this change permanent by adding it to your .bashrc file.
-        "
-    fi
 else
     log ERROR "There was an error while installing kompass-core. Please refer to the git repo and open an issue."
 fi
