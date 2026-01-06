@@ -268,13 +268,15 @@ else
 fi
 
 # Clone and build AdaptiveCpp
+DID_CLONE_ACPP=false
 if [[ ! -d "AdaptiveCpp" ]]; then
     log INFO "Cloning AdaptiveCpp repository..."
     git clone --depth 1 --branch $ADAPTIVE_CPP_SOURCE_VERSION "$ADAPTIVE_CPP_URL"
+    DID_CLONE_ACPP=true
 else
     log WARN "AdaptiveCpp directory already exists. Skipping download."
+    DID_CLONE_ACPP=false
 fi
-
 
 cd AdaptiveCpp
 mkdir -p build && cd build
@@ -306,18 +308,22 @@ log INFO "Installing kompass-core dependencies..."
 
 # Determine source directory
 KOMPASS_SRC_DIR=""
+IS_LOCAL_SOURCE=false
 
 # Check if we are already inside the repo
 if [[ -f "pyproject.toml" ]] && grep -q "kompass_core" "pyproject.toml"; then
     log INFO "Found pyproject.toml in current directory. Using current directory as source."
     KOMPASS_SRC_DIR="."
+    IS_LOCAL_SOURCE=true
 
 # Check if folder exist explicitly
 elif [[ -d "kompass-core" ]]; then
     log INFO "kompass-core directory found. Using existing directory."
     KOMPASS_SRC_DIR="kompass-core"
+    IS_LOCAL_SOURCE=true
 else
     # Clone if not found
+    IS_LOCAL_SOURCE=false
     if [ "${NIGHTLY}" = "true" ]; then
         log INFO "NIGHTLY build enabled, cloning kompass-core from main..."
         git clone --depth 1 --branch main "$KOMPASS_CORE_URL"
@@ -415,7 +421,8 @@ else
     $SUDO apt install -y libompl-dev libfcl-dev libode-dev \
                 libboost-serialization-dev \
                 libboost-filesystem-dev \
-                libboost-system-dev
+                libboost-system-dev \
+                libhdf5-openmpi-dev
 fi
 
 log INFO "Installing kompass-core with pip"
@@ -429,11 +436,28 @@ CXX=$CLANG_EXECUTABLE_PATH python3 -m pip install .
 
 # Clean up source files if not required
 if [[ $KEEP_SOURCE_FILES == false ]]; then
-    log INFO "Removing source files (AdaptiveCpp, kompass-core) as --keep-source-files is not set."
-    # We are currently inside kompass-core, so move up one level to delete it
-    cd ..
-    rm -rf AdaptiveCpp
-    rm -rf kompass-core
+    log INFO "Cleaning up build artifacts..."
+
+    # If we are inside kompass-core, move out first
+    if [[ "$KOMPASS_SRC_DIR" != "." ]]; then
+        cd .. || { log ERROR "Failed to change directory to parent. Aborting cleanup to prevent accidental deletion."; exit 1; }
+    fi
+
+    # Cleanup: AdaptiveCpp
+    if [[ "$DID_CLONE_ACPP" == "true" ]]; then
+        log INFO "Removing AdaptiveCpp (auto-cloned)..."
+        rm -rf AdaptiveCpp
+    else
+        log INFO "Skipping removal of AdaptiveCpp (existed before script ran)"
+    fi
+
+    # Cleanup: kompass-core
+    if [[ "$IS_LOCAL_SOURCE" == "false" ]]; then
+        log INFO "Removing kompass-core (auto-cloned)..."
+        rm -rf kompass-core
+    else
+        log INFO "Skipping removal of kompass-core source (local source detected)."
+    fi
 fi
 
 # Clean up temporary Conan recipes
