@@ -14,6 +14,7 @@ jobs:
         os-arch:
           - { os: ubuntu-latest, arch: x86_64 }
           - { os: ubuntu-24.04-arm, arch: aarch64 }
+          - { os: ubuntu-22.04-arm, arch: aarch64 }
 
     name: Build on ${{ matrix.os-arch.os }} ${{ matrix.os-arch.arch }}
     runs-on: ${{ matrix.os-arch.os }}
