@@ -39,13 +39,6 @@ curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/hea
 
 ## 使用 pip 安装（仅支持 CPU）
 
-- 在 Ubuntu 22.04 或更高版本上，请先运行以下命令安装依赖项：
-
-```bash
-sudo apt-get install libompl-dev libfcl-dev
-```
-
-- 然后按如下方式安装 kompass-core：
 ```bash
 pip install kompass-core
 ```
