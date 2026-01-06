@@ -402,7 +402,10 @@ EOF
 else
     log INFO "Modern system (Debian 11+/Ubuntu 21+/Raspbian) detected."
     log INFO "Installing ompl and fcl from system apt repositories..."
-    $SUDO apt install -y libompl-dev libfcl-dev libode-dev
+    $SUDO apt install -y libompl-dev libfcl-dev libode-dev \
+                libboost-serialization-dev \
+                libboost-filesystem-dev \
+                libboost-system-dev
 fi
 
 log INFO "Installing kompass-core with pip"
