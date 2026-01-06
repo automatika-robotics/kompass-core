@@ -12,6 +12,7 @@
 #include "datatypes/trajectory.h"
 #include "utils/collision_check.h"
 #include "utils/critical_zone_check.h"
+#include "utils/pointcloud.h"
 
 namespace py = nanobind;
 using namespace Kompass;
@@ -30,7 +31,8 @@ void bindings_types(py::module_ &m) {
   py::enum_<Path::InterpolationType>(m_types, "PathInterpolationType")
       .value("LINEAR", Path::InterpolationType::LINEAR)
       .value("CUBIC_SPLINE", Path::InterpolationType::CUBIC_SPLINE)
-      .value("HERMITE_SPLINE", Path::InterpolationType::HERMITE_SPLINE);
+      .value("HERMITE_SPLINE", Path::InterpolationType::HERMITE_SPLINE)
+      .export_values();
 
   py::class_<Path::State>(m_types, "State")
       .def(py::init<double, double, double, double>(), py::arg("x") = 0.0,
@@ -147,6 +149,29 @@ void bindings_types(py::module_ &m) {
           return CollisionChecker::ShapeType::SPHERE;
         throw std::runtime_error("Invalid key");
       });
+
+  // For pointcloud data type
+  py::enum_<PointFieldType>(m_types, "PointFieldType")
+      .value("INT8", PointFieldType::INT8)
+      .value("UINT8", PointFieldType::UINT8)
+      .value("INT16", PointFieldType::INT16)
+      .value("UINT16", PointFieldType::UINT16)
+      .value("INT32", PointFieldType::INT32)
+      .value("UINT32", PointFieldType::UINT32)
+      .value("FLOAT32", PointFieldType::FLOAT32)
+      .value("FLOAT64", PointFieldType::FLOAT64)
+      .export_values()
+      .def_static(
+          "from_int",
+          [](int value) {
+            if (value < 1 || value > 8) {
+              throw std::invalid_argument("Invalid integer for PointFieldType. "
+                                          "Must be between 1 and 8.");
+            }
+            return static_cast<PointFieldType>(value);
+          },
+          py::arg("value"),
+          "Creates a PointFieldType from its integer ID (1-8).");
 
   // For critical zone checking
   py::enum_<CriticalZoneChecker::InputType>(m_types, "SensorInputType")

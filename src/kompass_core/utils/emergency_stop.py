@@ -6,7 +6,7 @@ from ..models import (
 )
 import numpy as np
 from ..datatypes import LaserScanData, PointCloudData, ScanModelConfig
-from kompass_cpp.types import SensorInputType
+from kompass_cpp.types import SensorInputType, PointFieldType
 
 
 class EmergencyChecker:
@@ -22,6 +22,7 @@ class EmergencyChecker:
         sensor_position_robot: Optional[np.ndarray] = None,
         sensor_rotation_robot: Optional[np.ndarray] = None,
         use_gpu: bool = False,
+        cloud_field_type: PointFieldType = PointFieldType.FLOAT32,
     ) -> None:
         self.__scan_model = scan_model or ScanModelConfig()
         self.__emergency_distance = emergency_distance
@@ -41,24 +42,33 @@ class EmergencyChecker:
         self.__robot_dimensions = robot.geometry_params
         self.__use_gpu = use_gpu
         self.__initialized = False
+        # NOTE: cloud_field_type is only used in point cloud and gotten from PointCloudCallback in Kompass
+        self.__cloud_field_type = cloud_field_type
 
     def _init_checker(self, scan: Union[LaserScanData, PointCloudData]) -> None:
         if isinstance(scan, LaserScanData):
-            input_type = SensorInputType.LASERSCAN
-            angles = scan.angles
+            kwargs = {
+                "input_type": SensorInputType.LASERSCAN,
+                "scan_angles": scan.angles,
+            }
         else:
-            input_type = SensorInputType.POINTCLOUD
-            angles = np.arange(
-                0.0,
-                2 * np.pi,
-                self.__scan_model.angle_step,
-            )
+            kwargs = {
+                "input_type": SensorInputType.POINTCLOUD,
+                "scan_angles": np.arange(
+                    0.0,
+                    2 * np.pi,
+                    self.__scan_model.angle_step,
+                ),
+            }
+            if self.__use_gpu:
+                # this parameter is only used in the GPU kernel
+                kwargs["cloud_field_type"] = self.__cloud_field_type
+
         if self.__use_gpu:
             try:
                 from kompass_cpp.utils import CriticalZoneCheckerGPU
 
                 self._critical_zone_checker = CriticalZoneCheckerGPU(
-                    input_type=input_type,
                     robot_shape=self.__robot_shape,
                     robot_dimensions=self.__robot_dimensions,
                     sensor_position_body=self.__sensor_position_robot,
@@ -66,10 +76,10 @@ class EmergencyChecker:
                     critical_angle=self.__emergency_angle,
                     critical_distance=self.__emergency_distance,
                     slowdown_distance=self.__slowdown_distance,
-                    scan_angles=angles,
                     min_height=self.__scan_model.min_height,
                     max_height=self.__scan_model.max_height,
                     range_max=self.__scan_model.range_max,
+                    **kwargs,
                 )
             except (ImportError, ModuleNotFoundError):
                 Logger(name="EmergencyChecker").error(
@@ -81,7 +91,6 @@ class EmergencyChecker:
             from kompass_cpp.utils import CriticalZoneChecker
 
             self._critical_zone_checker = CriticalZoneChecker(
-                input_type=input_type,
                 robot_shape=self.__robot_shape,
                 robot_dimensions=self.__robot_dimensions,
                 sensor_position_body=self.__sensor_position_robot,
@@ -89,10 +98,10 @@ class EmergencyChecker:
                 critical_angle=self.__emergency_angle,
                 critical_distance=self.__emergency_distance,
                 slowdown_distance=self.__slowdown_distance,
-                scan_angles=angles,
                 min_height=self.__scan_model.min_height,
                 max_height=self.__scan_model.max_height,
                 range_max=self.__scan_model.range_max,
+                **kwargs,
             )
 
     def run(
@@ -115,4 +124,4 @@ class EmergencyChecker:
                 ranges=scan.ranges, forward=forward
             )
         else:
-            return self._critical_zone_checker.check(**scan.asdict())
+            return self._critical_zone_checker.check(**scan.asdict(), forward=forward)

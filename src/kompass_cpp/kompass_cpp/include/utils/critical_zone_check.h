@@ -72,8 +72,8 @@ public:
    * @return            A 2D occupancy grid as an Eigen::MatrixXi.
    */
   float check(const std::vector<int8_t> &data, int point_step, int row_step,
-              int height, int width, float x_offset, float y_offset,
-              float z_offset, const bool forward);
+              int height, int width, int x_offset, int y_offset,
+              int z_offset, const bool forward);
 
 protected:
   InputType input_type_;

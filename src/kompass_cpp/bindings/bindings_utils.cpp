@@ -67,7 +67,7 @@ void bindings_utils(py::module_ &m) {
 
       .def("check",
            py::overload_cast<const std::vector<int8_t> &, int, int, int, int,
-                             float, float, float, bool>(
+                             int, int, int, bool>(
                &CriticalZoneChecker::check),
            py::arg("data"), py::arg("point_step"), py::arg("row_step"),
            py::arg("height"), py::arg("width"), py::arg("x_offset"),

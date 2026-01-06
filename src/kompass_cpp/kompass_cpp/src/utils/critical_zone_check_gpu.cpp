@@ -4,21 +4,10 @@
 
 namespace Kompass {
 
-// Helper for unaligned loads
-inline float load_float_unaligned(const int8_t *base_ptr, size_t offset) {
-  float res;
-  int8_t *dst = reinterpret_cast<int8_t *>(&res);
-  const int8_t *src = base_ptr + offset;
-#pragma unroll
-  for (int i = 0; i < 4; ++i)
-    dst[i] = src[i];
-  return res;
-}
-
 float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
                                     int point_step, int row_step, int height,
-                                    int width, float x_offset, float y_offset,
-                                    float z_offset, const bool forward) {
+                                    int width, int x_offset, int y_offset,
+                                    int z_offset, const bool forward) {
   // Handle Empty Cloud
   if (data.empty() || width * height == 0) {
     return 1.0f; // No points -> Safe
@@ -38,7 +27,6 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
 
     // command scope
     m_q.submit([&](sycl::handler &h) {
-      // Prepare Constants
       // Extract 2D transform from the 3D matrix for planar navigation
       Eigen::Matrix4f tf = sensor_tf_body_.matrix();
       float tf_00 = tf(0, 0);
@@ -47,6 +35,10 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
       float tf_10 = tf(1, 0);
       float tf_11 = tf(1, 1);
       float tf_13 = tf(1, 3); // Row 1
+
+      // Prepare Constants
+      PointFieldType k_type = m_pointFieldType;
+      int k_elem_size = m_elementSize;
 
       // Safety Thresholds
       float r_radius = robotRadius_;
@@ -80,9 +72,9 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
       *result = 1.0f; // set result default
 
       // Offsets cast to integers for byte arithmetic
-      int x_off = static_cast<int>(x_offset);
-      int y_off = static_cast<int>(y_offset);
-      int z_off = static_cast<int>(z_offset);
+      int x_off = x_offset;
+      int y_off = y_offset;
+      int z_off = z_offset;
       float min_z = min_height_; // Class member
       float max_z = max_height_; // Class member
 
@@ -103,20 +95,27 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
                                    static_cast<size_t>(col) * point_step;
 
               // Bounds check
-              if (byte_offset + std::max({x_off, y_off, z_off}) + 4 >
-                  total_bytes)
+              int max_offset = x_off;
+              if (y_off > max_offset)
+                max_offset = y_off;
+              if (z_off > max_offset)
+                max_offset = z_off;
+
+              // Use k_elem_size
+              if (byte_offset + max_offset + k_elem_size > total_bytes)
                 continue;
 
-              // Early Z-Filter (Fastest Rejection)
-              float z = load_float_unaligned(raw_bytes, byte_offset + z_off);
+              // Early Z-Filter
+              float z =
+                  load_and_cast_val(raw_bytes, byte_offset + z_off, k_type);
               if (z < min_z || z > max_z)
                 continue;
 
               // Load X, Y
               float x_sens =
-                  load_float_unaligned(raw_bytes, byte_offset + x_off);
+                  load_and_cast_val(raw_bytes, byte_offset + x_off, k_type);
               float y_sens =
-                  load_float_unaligned(raw_bytes, byte_offset + y_off);
+                  load_and_cast_val(raw_bytes, byte_offset + y_off, k_type);
 
               // Transform to Body Frame
               // x_body = x*R00 + y*R01 + Tx

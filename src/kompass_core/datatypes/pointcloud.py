@@ -1,8 +1,9 @@
-from typing import Optional, Union, Tuple
+from typing import Optional, Tuple, Dict
 from attrs import define, field
 from ..utils.common import BaseAttrs, base_validators
 import numpy as np
 from kompass_cpp.utils import read_pcd, read_pcd_to_occupancy_grid
+from kompass_cpp.types import PointFieldType
 
 
 def get_points_from_pcd(file_path: str) -> np.ndarray:
@@ -43,6 +44,6 @@ class PointCloudData(BaseAttrs):
     row_step: int = field(validator=base_validators.gt(0))
     height: int = field(validator=base_validators.gt(0))
     width: int = field(validator=base_validators.gt(0))
-    x_offset: Optional[Union[int, float]] = field(default=None)
-    y_offset: Optional[Union[int, float]] = field(default=None)
-    z_offset: Optional[Union[int, float]] = field(default=None)
+    x_offset: Optional[int] = field(default=None)
+    y_offset: Optional[int] = field(default=None)
+    z_offset: Optional[int] = field(default=None)

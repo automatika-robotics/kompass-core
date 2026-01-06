@@ -31,6 +31,39 @@ inline from_chars_result from_chars(const char* first, const char* last, double&
 }
 #endif
 
+// Point offset type
+enum class PointFieldType : int {
+    INT8 = 1, UINT8 = 2, INT16 = 3, UINT16 = 4,
+    INT32 = 5, UINT32 = 6, FLOAT32 = 7, FLOAT64 = 8
+};
+
+// Helper: Loads bytes and casts to float based on type
+inline float load_and_cast_val(const int8_t *ptr, size_t offset,
+                               PointFieldType type) {
+  const int8_t *addr = ptr + offset;
+  switch (type) {
+  case PointFieldType::INT8:
+    return static_cast<float>(*addr);
+  case PointFieldType::UINT8:
+    return static_cast<float>(*reinterpret_cast<const uint8_t *>(addr));
+  case PointFieldType::INT16:
+    return static_cast<float>(*reinterpret_cast<const int16_t *>(addr));
+  case PointFieldType::UINT16:
+    return static_cast<float>(*reinterpret_cast<const uint16_t *>(addr));
+  case PointFieldType::INT32:
+    return static_cast<float>(*reinterpret_cast<const int32_t *>(addr));
+  case PointFieldType::UINT32:
+    return static_cast<float>(*reinterpret_cast<const uint32_t *>(addr));
+  case PointFieldType::FLOAT32:
+    return static_cast<float>(*reinterpret_cast<const float *>(addr));
+  case PointFieldType::FLOAT64:
+    return static_cast<float>(*reinterpret_cast<const double *>(addr));
+  default:
+    return 0.0f;
+  }
+}
+
+
 /**
  * @brief Converts raw PointCloud2-style byte data to 2D LaserScan-like data.
  *

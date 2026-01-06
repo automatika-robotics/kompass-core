@@ -3,6 +3,7 @@
 #include "utils/collision_check.h"
 #include "utils/critical_zone_check.h"
 #include "utils/logger.h"
+#include "utils/pointcloud.h"
 #include <Eigen/Dense>
 #include <sycl/sycl.hpp>
 #include <vector>
@@ -32,6 +33,8 @@ public:
    * @param min_height           Min Z height to consider (for PointCloud).
    * @param max_height           Max Z height to consider (for PointCloud).
    * @param range_max            Maximum valid sensor range.
+   * @param cloud_field_type: Data type of fields (for PointCloud default:
+   * FLOAT32).
    */
   CriticalZoneCheckerGPU(
       InputType input_type, const CollisionChecker::ShapeType robot_shape_type,
@@ -40,13 +43,14 @@ public:
       const Eigen::Vector4f &sensor_rotation_body, const float critical_angle,
       const float critical_distance, const float slowdown_distance,
       const std::vector<double> &angles, const float min_height,
-      const float max_height, const float range_max)
+      const float max_height, const float range_max,
+      const PointFieldType cloud_field_type = PointFieldType::FLOAT32)
       : CriticalZoneChecker(input_type, robot_shape_type, robot_dimensions,
                             sensor_position_body, sensor_rotation_body,
                             critical_angle, critical_distance,
                             slowdown_distance, angles, min_height, max_height,
                             range_max),
-        m_scanSize(angles.size()) {
+        m_scanSize(angles.size()), m_pointFieldType(cloud_field_type) {
 
     // Initialize Queue
     m_q = sycl::queue{sycl::default_selector_v,
@@ -70,8 +74,8 @@ public:
         return;
       }
 
-    m_devicePtrRanges = sycl::malloc_device<float>(m_scanSize, m_q);
-    m_hostFloatBuffer.resize(m_scanSize); // Resize conversion buffer
+      m_devicePtrRanges = sycl::malloc_device<float>(m_scanSize, m_q);
+      m_hostFloatBuffer.resize(m_scanSize); // Resize conversion buffer
 
       // Load pre-computed Sin/Cos for fast transform
       m_cos = sycl::malloc_device<float>(cos_angles_.size(), m_q);
@@ -99,6 +103,28 @@ public:
       m_rawCapacity = 0;
       m_devicePtrRawBytes = nullptr;
       max_wg_size_ = dev.get_info<sycl::info::device::max_work_group_size>();
+      // set element size based on point field type
+      switch (m_pointFieldType) {
+      case PointFieldType::INT8:
+      case PointFieldType::UINT8:
+        m_elementSize = 1;
+        break;
+      case PointFieldType::INT16:
+      case PointFieldType::UINT16:
+        m_elementSize = 2;
+        break;
+      case PointFieldType::INT32:
+      case PointFieldType::UINT32:
+      case PointFieldType::FLOAT32:
+        m_elementSize = 4;
+        break;
+      case PointFieldType::FLOAT64:
+        m_elementSize = 8;
+        break;
+      default:
+        m_elementSize = 4;
+        break;
+      }
     }
   }
 
@@ -139,8 +165,8 @@ public:
    * Only valid if initialized with InputType::POINTCLOUD
    */
   float check(const std::vector<int8_t> &data, int point_step, int row_step,
-              int height, int width, float x_offset, float y_offset,
-              float z_offset, const bool forward);
+              int height, int width, int x_offset, int y_offset, int z_offset,
+              const bool forward);
 
 private:
   const size_t m_scanSize;
@@ -161,6 +187,8 @@ private:
   size_t max_wg_size_ = 0;
   int8_t *m_devicePtrRawBytes = nullptr;
   size_t m_rawCapacity = 0;
+  PointFieldType m_pointFieldType; // intialized in init
+  int m_elementSize;               // initialized in init
 };
 
 } // namespace Kompass

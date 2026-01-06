@@ -1,5 +1,6 @@
 #include "mapping/local_mapper_gpu.h"
 #include "utils/critical_zone_check_gpu.h"
+#include "utils/pointcloud.h"
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/vector.h>
@@ -43,13 +44,14 @@ void bindings_utils_gpu(py::module_ &m) {
                     const std::vector<float> &, const Eigen::Vector3f &,
                     const Eigen::Vector4f &, const float, const float,
                     const float, const std::vector<double> &, const float,
-                    const float, const float>(),
+                    const float, const float, const PointFieldType>(),
            py::arg("input_type"), py::arg("robot_shape"),
            py::arg("robot_dimensions"), py::arg("sensor_position_body"),
            py::arg("sensor_rotation_body"), py::arg("critical_angle"),
            py::arg("critical_distance"), py::arg("slowdown_distance"),
            py::arg("scan_angles"), py::arg("max_height"), py::arg("min_height"),
-           py::arg("range_max"))
+           py::arg("range_max"),
+           py::arg("cloud_field_type") = PointFieldType::FLOAT32)
 
       .def("check",
            py::overload_cast<const std::vector<double> &, bool>(
@@ -58,7 +60,7 @@ void bindings_utils_gpu(py::module_ &m) {
 
       .def("check",
            py::overload_cast<const std::vector<int8_t> &, int, int, int, int,
-                             float, float, float, bool>(
+                             int, int, int, bool>(
                &CriticalZoneCheckerGPU::check),
            py::arg("data"), py::arg("point_step"), py::arg("row_step"),
            py::arg("height"), py::arg("width"), py::arg("x_offset"),

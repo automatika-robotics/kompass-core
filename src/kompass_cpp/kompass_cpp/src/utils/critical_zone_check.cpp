@@ -136,8 +136,8 @@ float CriticalZoneChecker::check(const std::vector<double> &ranges,
 
 float CriticalZoneChecker::check(const std::vector<int8_t> &data,
                                  int point_step, int row_step, int height,
-                                 int width, float x_offset, float y_offset,
-                                 float z_offset, const bool forward) {
+                                 int width, int x_offset, int y_offset,
+                                 int z_offset, const bool forward) {
 
   std::vector<double> ranges;
   pointCloudToLaserScanFromRaw(
