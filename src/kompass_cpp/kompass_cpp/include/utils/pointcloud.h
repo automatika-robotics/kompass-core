@@ -14,33 +14,52 @@
 #include <string>
 #include <vector>
 
-
 // --- Compatibility shim for libstdc++ versions that lack from_chars(float) ---
-#if defined(__GLIBCXX__) && (!defined(__cpp_lib_to_chars) || __cpp_lib_to_chars < 201611L)
+#if defined(__GLIBCXX__) &&                                                    \
+    (!defined(__cpp_lib_to_chars) || __cpp_lib_to_chars < 201611L)
 namespace std {
-inline from_chars_result from_chars(const char* first, const char* last, float& value) noexcept {
-  char* end;
+inline from_chars_result from_chars(const char *first, const char *last,
+                                    float &value) noexcept {
+  char *end;
   value = std::strtof(first, &end);
-  return { end, (end == first ? std::errc::invalid_argument : std::errc()) };
+  return {end, (end == first ? std::errc::invalid_argument : std::errc())};
 }
-inline from_chars_result from_chars(const char* first, const char* last, double& value) noexcept {
-  char* end;
+inline from_chars_result from_chars(const char *first, const char *last,
+                                    double &value) noexcept {
+  char *end;
   value = std::strtod(first, &end);
-  return { end, (end == first ? std::errc::invalid_argument : std::errc()) };
+  return {end, (end == first ? std::errc::invalid_argument : std::errc())};
 }
-}
+} // namespace std
 #endif
 
 // Point offset type
 enum class PointFieldType : int {
-    INT8 = 1, UINT8 = 2, INT16 = 3, UINT16 = 4,
-    INT32 = 5, UINT32 = 6, FLOAT32 = 7, FLOAT64 = 8
+  INT8 = 1,
+  UINT8 = 2,
+  INT16 = 3,
+  UINT16 = 4,
+  INT32 = 5,
+  UINT32 = 6,
+  FLOAT32 = 7,
+  FLOAT64 = 8
 };
 
 // Helper: Loads bytes and casts to float based on type
 inline float load_and_cast_val(const int8_t *ptr, size_t offset,
                                PointFieldType type) {
   const int8_t *addr = ptr + offset;
+
+  // Helper to load unaligned values safely
+  auto load_safe_float = [&](const int8_t *p) {
+    float res;
+    // compilers should optimize this loop into a single unaligned load
+    // instruction
+    for (int i = 0; i < sizeof(float); ++i)
+      reinterpret_cast<int8_t *>(&res)[i] = p[i];
+    return res;
+  };
+
   switch (type) {
   case PointFieldType::INT8:
     return static_cast<float>(*addr);
@@ -55,14 +74,15 @@ inline float load_and_cast_val(const int8_t *ptr, size_t offset,
   case PointFieldType::UINT32:
     return static_cast<float>(*reinterpret_cast<const uint32_t *>(addr));
   case PointFieldType::FLOAT32:
-    return static_cast<float>(*reinterpret_cast<const float *>(addr));
+    return load_safe_float(addr);
+    ;
   case PointFieldType::FLOAT64:
-    return static_cast<float>(*reinterpret_cast<const double *>(addr));
+    return load_safe_float(addr);
+    ;
   default:
     return 0.0f;
   }
 }
-
 
 /**
  * @brief Converts raw PointCloud2-style byte data to 2D LaserScan-like data.
@@ -126,6 +146,12 @@ inline void pointCloudToLaserScanFromRaw(
       std::memcpy(&y, &data[point_start + y_offset], sizeof(float));
       std::memcpy(&z, &data[point_start + z_offset], sizeof(float));
 
+      // filter (0,0,0) early with epsilon for checking float equality to 0.0f
+      float range_sq = x * x + y * y;
+      if (range_sq < 1e-6) {
+        continue;
+      }
+
       // Z filtering
       if (z < min_z || (max_z >= 0.0 && z > max_z)) {
         continue;
@@ -139,7 +165,7 @@ inline void pointCloudToLaserScanFromRaw(
       int bin = static_cast<int>(angle / angle_step);
       bin = std::min(bin, num_bins - 1); // Clamp just in case
 
-      double distance = std::sqrt(x * x + y * y);
+      double distance = std::sqrt(range_sq);
       if (distance < ranges_out[bin]) {
         ranges_out[bin] = distance;
       }
@@ -202,6 +228,12 @@ inline void pointCloudToLaserScanFromRaw(
       std::memcpy(&y, &data[point_start + y_offset], sizeof(float));
       std::memcpy(&z, &data[point_start + z_offset], sizeof(float));
 
+      // filter (0,0,0) early with epsilon for checking float equality to 0.0f
+      float range_sq = x * x + y * y;
+      if (range_sq < 1e-6) {
+        continue;
+      }
+
       // Z filtering
       if (z < min_z || (max_z >= 0.0 && z > max_z)) {
         continue;
@@ -215,7 +247,7 @@ inline void pointCloudToLaserScanFromRaw(
       int bin = static_cast<int>((angle / two_pi) * num_bins);
       bin = std::min(bin, num_bins - 1); // Clamp just in case
 
-      double distance = std::sqrt(x * x + y * y);
+      double distance = std::sqrt(range_sq);
       if (distance < ranges_out[bin]) {
         ranges_out[bin] = distance;
       }
