@@ -45,40 +45,43 @@ enum class PointFieldType : int {
   FLOAT64 = 8
 };
 
-// Helper: Loads bytes and casts to float based on type
+// Helper: Loads bytes safely handling potential misalignment
 inline float load_and_cast_val(const int8_t *ptr, size_t offset,
                                PointFieldType type) {
   const int8_t *addr = ptr + offset;
 
-  // Helper to load unaligned values safely
-  auto load_safe_float = [&](const int8_t *p) {
-    float res;
-    // compilers should optimize this loop into a single unaligned load
-    // instruction
-    for (int i = 0; i < sizeof(float); ++i)
-      reinterpret_cast<int8_t *>(&res)[i] = p[i];
-    return res;
+  // Generic lambda to load unaligned data safely
+  auto load_safe = [&](auto dummy_type) {
+    using T = decltype(dummy_type);
+    T val;
+    // Copy byte-by-byte (compiler optimizes this to a register load)
+    // use int8_t* to match the source pointer type
+    for (size_t i = 0; i < sizeof(T); ++i) {
+      reinterpret_cast<int8_t *>(&val)[i] = addr[i];
+    }
+    return static_cast<float>(val);
   };
 
   switch (type) {
   case PointFieldType::INT8:
+    // INT8 is always aligned (1 byte)
     return static_cast<float>(*addr);
   case PointFieldType::UINT8:
+    // UINT8 is always aligned (1 byte)
     return static_cast<float>(*reinterpret_cast<const uint8_t *>(addr));
   case PointFieldType::INT16:
-    return static_cast<float>(*reinterpret_cast<const int16_t *>(addr));
+    return load_safe(int16_t{});
   case PointFieldType::UINT16:
-    return static_cast<float>(*reinterpret_cast<const uint16_t *>(addr));
+    return load_safe(uint16_t{});
   case PointFieldType::INT32:
-    return static_cast<float>(*reinterpret_cast<const int32_t *>(addr));
+    return load_safe(int32_t{});
   case PointFieldType::UINT32:
-    return static_cast<float>(*reinterpret_cast<const uint32_t *>(addr));
+    return load_safe(uint32_t{});
   case PointFieldType::FLOAT32:
-    return load_safe_float(addr);
-    ;
+    return load_safe(float{});
   case PointFieldType::FLOAT64:
-    return load_safe_float(addr);
-    ;
+    return load_safe(double{});
+
   default:
     return 0.0f;
   }
