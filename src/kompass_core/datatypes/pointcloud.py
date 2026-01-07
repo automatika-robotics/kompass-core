@@ -1,9 +1,8 @@
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple
 from attrs import define, field
 from ..utils.common import BaseAttrs, base_validators
 import numpy as np
 from kompass_cpp.utils import read_pcd, read_pcd_to_occupancy_grid
-from kompass_cpp.types import PointFieldType
 
 
 def get_points_from_pcd(file_path: str) -> np.ndarray:
