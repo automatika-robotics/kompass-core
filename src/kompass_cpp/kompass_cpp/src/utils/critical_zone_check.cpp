@@ -1,6 +1,5 @@
 #include "utils/critical_zone_check.h"
 #include "utils/angles.h"
-#include "utils/logger.h"
 #include "utils/pointcloud.h"
 #include "utils/transformation.h"
 #include <Eigen/Core>
@@ -43,24 +42,10 @@ CriticalZoneChecker::CriticalZoneChecker(
   // Init the sensor position w.r.t body
   sensor_tf_body_ =
       getTransformation(sensor_rotation_body, sensor_position_body);
-  // Compute the critical zone angles min,max
+
+  // Compute the normalized critical zone angle
   float angle_rad = critical_angle * M_PI / 180.0;
-  float angle_right_forward_ = angle_rad / 2;
-  float angle_left_forward_ = (2 * M_PI) - (angle_rad / 2);
-  float angle_right_backward_ =
-      Angle::normalizeTo0Pi(M_PI + angle_right_forward_);
-  float angle_left_backward_ =
-      Angle::normalizeTo0Pi(M_PI + angle_left_forward_);
-
-  LOG_DEBUG("Critical zone forward angles: [", angle_right_forward_, ", ",
-            angle_left_forward_, "]");
-  LOG_DEBUG("Critical zone backward angles: [", angle_right_backward_, ", ",
-            angle_left_backward_, "]");
-
-  angle_max_forward_ = std::max(angle_left_forward_, angle_right_forward_);
-  angle_min_forward_ = std::min(angle_left_forward_, angle_right_forward_);
-  angle_max_backward_ = std::max(angle_left_backward_, angle_right_backward_);
-  angle_min_backward_ = std::min(angle_left_backward_, angle_right_backward_);
+  critical_angle_ = Angle::normalizeToMinusPiPlusPi(angle_rad / 2);
 
   preset(angles);
 
@@ -76,7 +61,7 @@ CriticalZoneChecker::CriticalZoneChecker(
 
 void CriticalZoneChecker::preset(const std::vector<double> &angles) {
   Eigen::Vector3f cartesianPoint;
-  float theta;
+  float abs_theta;
   sin_angles_.resize(angles.size());
   cos_angles_.resize(angles.size());
 
@@ -88,13 +73,12 @@ void CriticalZoneChecker::preset(const std::vector<double> &angles) {
     cartesianPoint = sensor_tf_body_ * cartesianPoint;
 
     // check if within the zone
-    theta = Angle::normalizeTo0Pi(
-        std::atan2(cartesianPoint.y(), cartesianPoint.x()));
+    abs_theta = std::abs(std::atan2(cartesianPoint.y(), cartesianPoint.x()));
 
-    if (theta >= angle_max_forward_ || theta <= angle_min_forward_) {
+    if (abs_theta <= critical_angle_) {
       indicies_forward_.push_back(i);
     }
-    if (theta >= angle_min_backward_ && theta <= angle_max_forward_) {
+    if (abs_theta >= M_PI - critical_angle_) {
       indicies_backward_.push_back(i);
     }
   }
