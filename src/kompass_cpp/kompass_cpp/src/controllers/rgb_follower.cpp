@@ -71,7 +71,7 @@ void RGBFollower::generateSearchCommands(float total_rotation,
     if (enable_pause) {
       // Add zero commands for search pause
       for (int j = 0; j <= num_pause_steps; j++) {
-        search_commands_queue_.emplace(Eigen::Vector3d());
+        search_commands_queue_.emplace(Eigen::Vector3d::Zero());
       }
     }
   }
