@@ -91,16 +91,21 @@ generate_heavy_trajectory_samples(double predictionHorizon, double timeStep,
 }
 
 std::vector<int8_t> generate_heavy_pointcloud_bytes(size_t num_points) {
-  std::vector<int8_t> buffer;
-  buffer.resize(num_points * sizeof(PointXYZ));
-  PointXYZ *points = reinterpret_cast<PointXYZ *>(buffer.data());
-  for (size_t i = 0; i < num_points; ++i) {
-    points[i].x = (rand() % 2000) / 100.0f - 10.0f;
-    points[i].y = (rand() % 2000) / 100.0f - 10.0f;
-    points[i].z = (rand() % 300) / 100.0f;
-    points[i].padding = 0.0f;
-  }
-  return buffer;
+    // Create a temporary vector of strict types to ensure alignment
+    std::vector<PointXYZ> temp_points(num_points);
+
+    for (size_t i = 0; i < num_points; ++i) {
+        temp_points[i].x = (rand() % 2000) / 100.0f - 10.0f;
+        temp_points[i].y = (rand() % 2000) / 100.0f - 10.0f;
+        temp_points[i].z = (rand() % 300) / 100.0f;
+        temp_points[i].padding = 0.0f;
+    }
+
+    // Memcpy into the byte buffer
+    std::vector<int8_t> buffer(num_points * sizeof(PointXYZ));
+    std::memcpy(buffer.data(), temp_points.data(), buffer.size());
+
+    return buffer;
 }
 
 // Generates varied laserscan data for Mapping
@@ -205,49 +210,52 @@ int main(int argc, char *argv[]) {
     results.push_back(measure_performance("Mapper_Dense_400x400", workload));
   }
 
-  // NOTE: Commented out till stable vesion
-//   // -------------------------------------------------------------------------
-//   // TEST 3: CRITICAL ZONE (Point Cloud)
-//   // -------------------------------------------------------------------------
-//   {
-//     auto shape = CollisionChecker::ShapeType::CYLINDER;
-//     std::vector<float> robotDim{0.51, 2.0};
-//     Eigen::Vector3f sensorPos{0.22, 0.0, 0.4};
-//     Eigen::Vector4f sensorRot{0, 0, 0.99, 0.0};
-//     float crit_angle = 160.0, crit_dist = 0.3, slow_dist = 0.6;
-//     std::vector<double> dummy_angles;
-//
-//     auto cloud_bytes = generate_heavy_pointcloud_bytes(100000); // 100k points
-//
-//     int point_step = sizeof(PointXYZ);
-//     int x_off = offsetof(PointXYZ, x);
-//     int y_off = offsetof(PointXYZ, y);
-//     int z_off = offsetof(PointXYZ, z);
-//     int num_points = cloud_bytes.size() / point_step;
-//     int width = num_points;
-//     int height = 1;
-//     int row_step = width * point_step;
-//
-// #ifdef GPU
-//     CriticalZoneCheckerGPU checker(CriticalZoneChecker::InputType::POINTCLOUD,
-//                                    shape, robotDim, sensorPos, sensorRot,
-//                                    crit_angle, crit_dist, slow_dist,
-//                                    dummy_angles, 0.1, 2.0, 20.0);
-// #else
-//     CriticalZoneChecker checker(CriticalZoneChecker::InputType::POINTCLOUD,
-//                                 shape, robotDim, sensorPos, sensorRot,
-//                                 crit_angle, crit_dist, slow_dist, dummy_angles,
-//                                 0.1, 2.0, 20.0);
-// #endif
-//
-//     auto workload = [&]() {
-//       checker.check(cloud_bytes, point_step, row_step, height, width, x_off,
-//                     y_off, z_off, true);
-//     };
-//
-//     results.push_back(measure_performance("CriticalZone_100k_Cloud", workload));
-//   }
-//
+  // -------------------------------------------------------------------------
+  // TEST 3: CRITICAL ZONE (Point Cloud)
+  // -------------------------------------------------------------------------
+  {
+    auto shape = CollisionChecker::ShapeType::CYLINDER;
+    std::vector<float> robotDim{0.51, 2.0};
+    Eigen::Vector3f sensorPos{0.22, 0.0, 0.4};
+    Eigen::Vector4f sensorRot{0, 0, 0.99, 0.0};
+    float crit_angle = 160.0, crit_dist = 0.3, slow_dist = 0.6;
+    std::vector<double> dummy_angles;
+    dummy_angles.reserve(360);
+    double angle_step = 2.0 * M_PI / 360.0;
+    for (int i = 0; i < 360; ++i) {
+      dummy_angles.push_back(i * angle_step);
+    }
+    auto cloud_bytes = generate_heavy_pointcloud_bytes(100000); // 100k points
+
+    int point_step = sizeof(PointXYZ);
+    int x_off = offsetof(PointXYZ, x);
+    int y_off = offsetof(PointXYZ, y);
+    int z_off = offsetof(PointXYZ, z);
+    int num_points = cloud_bytes.size() / point_step;
+    int width = num_points;
+    int height = 1;
+    int row_step = width * point_step;
+
+#ifdef GPU
+    CriticalZoneCheckerGPU checker(CriticalZoneChecker::InputType::POINTCLOUD,
+                                   shape, robotDim, sensorPos, sensorRot,
+                                   crit_angle, crit_dist, slow_dist,
+                                   dummy_angles, 0.1, 2.0, 20.0);
+#else
+    CriticalZoneChecker checker(CriticalZoneChecker::InputType::POINTCLOUD,
+                                shape, robotDim, sensorPos, sensorRot,
+                                crit_angle, crit_dist, slow_dist, dummy_angles,
+                                0.1, 2.0, 20.0);
+#endif
+
+    auto workload = [&]() {
+      checker.check(cloud_bytes, point_step, row_step, height, width, x_off,
+                    y_off, z_off, true);
+    };
+
+    results.push_back(measure_performance("CriticalZone_100k_Cloud", workload));
+  }
+
   // -------------------------------------------------------------------------
   // TEST 4: CRITICAL ZONE (LaserScan)
   // -------------------------------------------------------------------------

@@ -72,15 +72,14 @@ public:
    * @return            A 2D occupancy grid as an Eigen::MatrixXi.
    */
   float check(const std::vector<int8_t> &data, int point_step, int row_step,
-              int height, int width, float x_offset, float y_offset,
-              float z_offset, const bool forward);
+              int height, int width, int x_offset, int y_offset,
+              int z_offset, const bool forward);
 
 protected:
   InputType input_type_;
   double robotHeight_{1.0}, robotRadius_;
   float min_height_, max_height_, range_max_;
-  float angle_max_forward_, angle_min_forward_, angle_max_backward_,
-      angle_min_backward_;
+  float critical_angle_;
   std::vector<float> sin_angles_;
   std::vector<float> cos_angles_;
   std::vector<size_t> indicies_forward_, indicies_backward_;

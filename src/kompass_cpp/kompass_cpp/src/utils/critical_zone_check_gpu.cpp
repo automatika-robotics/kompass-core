@@ -4,21 +4,10 @@
 
 namespace Kompass {
 
-// Helper for unaligned loads
-inline float load_float_unaligned(const int8_t *base_ptr, size_t offset) {
-  float res;
-  int8_t *dst = reinterpret_cast<int8_t *>(&res);
-  const int8_t *src = base_ptr + offset;
-#pragma unroll
-  for (int i = 0; i < 4; ++i)
-    dst[i] = src[i];
-  return res;
-}
-
 float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
                                     int point_step, int row_step, int height,
-                                    int width, float x_offset, float y_offset,
-                                    float z_offset, const bool forward) {
+                                    int width, int x_offset, int y_offset,
+                                    int z_offset, const bool forward) {
   // Handle Empty Cloud
   if (data.empty() || width * height == 0) {
     return 1.0f; // No points -> Safe
@@ -38,7 +27,6 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
 
     // command scope
     m_q.submit([&](sycl::handler &h) {
-      // Prepare Constants
       // Extract 2D transform from the 3D matrix for planar navigation
       Eigen::Matrix4f tf = sensor_tf_body_.matrix();
       float tf_00 = tf(0, 0);
@@ -49,6 +37,7 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
       float tf_13 = tf(1, 3); // Row 1
 
       // Safety Thresholds
+      float crit_angle = critical_angle_;
       float r_radius = robotRadius_;
       float crit_dist = critical_distance_;
       float slow_dist = slowdown_distance_;
@@ -60,12 +49,6 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
       // Inverse for division removal
       float dist_range = slow_dist - crit_dist;
       float inv_dist_range = (dist_range > 1e-5f) ? 1.0f / dist_range : 0.0f;
-
-      // Angular Limits
-      float forward_max_angle = angle_max_forward_;
-      float forward_min_angle = angle_min_forward_;
-      float backward_min_angle = angle_min_backward_;
-      float backward_max_angle = angle_max_backward_;
 
       bool check_forward = forward;
 
@@ -79,12 +62,18 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
       float *result = m_result;
       *result = 1.0f; // set result default
 
-      // Offsets cast to integers for byte arithmetic
-      int x_off = static_cast<int>(x_offset);
-      int y_off = static_cast<int>(y_offset);
-      int z_off = static_cast<int>(z_offset);
+      // Capture params
+      int m_width = width;
+      int m_point_step = point_step;
+      int m_row_step = row_step;
+      bool is_contiguous = (row_step == width * point_step);
+      int x_off = x_offset;
+      int y_off = y_offset;
+      int z_off = z_offset;
       float min_z = min_height_; // Class member
       float max_z = max_height_; // Class member
+      PointFieldType k_type = m_pointFieldType; // Class member
+      int k_elem_size = m_elementSize; // Class member
 
       h.parallel_for<class CheckRawCloudSafety>(
           sycl::nd_range<1>(sycl::range<1>(global_size),
@@ -97,26 +86,45 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
             for (size_t i = idx; i < num_points; i += global_size) {
 
               // Calculate Address
-              int row = i / width;
-              int col = i % width;
-              size_t byte_offset = static_cast<size_t>(row) * row_step +
-                                   static_cast<size_t>(col) * point_step;
-
+              size_t byte_offset;
+              if (is_contiguous) {
+                // Fast path: direct multiplication
+                byte_offset = i * m_point_step;
+              } else {
+                // Slow path: only used if rows have padding
+                int row = i / m_width;
+                int col = i % m_width;
+                byte_offset = static_cast<size_t>(row) * m_row_step +
+                              static_cast<size_t>(col) * m_point_step;
+              }
               // Bounds check
-              if (byte_offset + std::max({x_off, y_off, z_off}) + 4 >
-                  total_bytes)
+              int max_offset = x_off;
+              if (y_off > max_offset)
+                max_offset = y_off;
+              if (z_off > max_offset)
+                max_offset = z_off;
+
+              // Use k_elem_size
+              if (byte_offset + max_offset + k_elem_size > total_bytes)
                 continue;
 
-              // Early Z-Filter (Fastest Rejection)
-              float z = load_float_unaligned(raw_bytes, byte_offset + z_off);
+              // Early Z-Filter
+              float z =
+                  load_and_cast_val(raw_bytes, byte_offset + z_off, k_type);
               if (z < min_z || z > max_z)
                 continue;
 
               // Load X, Y
               float x_sens =
-                  load_float_unaligned(raw_bytes, byte_offset + x_off);
+                  load_and_cast_val(raw_bytes, byte_offset + x_off, k_type);
               float y_sens =
-                  load_float_unaligned(raw_bytes, byte_offset + y_off);
+                  load_and_cast_val(raw_bytes, byte_offset + y_off, k_type);
+
+              // Filter (0,0,0) using a small epsilon that handles float
+              // imprecision
+              if (x_sens * x_sens + y_sens * y_sens < 1e-6f) {
+                continue;
+              }
 
               // Transform to Body Frame
               // x_body = x*R00 + y*R01 + Tx
@@ -125,17 +133,16 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
 
               // Angular Filter
               // Check if point lies inside the critical cone
-              float angle = sycl::atan2(y_body, x_body);
+              float abs_angle = sycl::fabs(sycl::atan2(y_body, x_body));
 
               bool in_zone = false;
               if (check_forward) {
                 // Forward check: is angle within [-crit, +crit]?
-                if (angle >= forward_max_angle || angle <= forward_min_angle)
+                if (abs_angle <= crit_angle)
                   in_zone = true;
               } else {
-                // Backward check: is angle > (PI - crit) OR angle < (-PI +
-                // crit)
-                if (angle >= backward_min_angle && angle <= backward_max_angle)
+                // Backward check: is angle within [PI - crit, -PI + crit]
+                if (abs_angle >= M_PI - crit_angle)
                   in_zone = true;
               }
 

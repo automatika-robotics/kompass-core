@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 from attrs import define, field, Factory
 
-import kompass_cpp
 from kompass_cpp.types import PathInterpolationType, Path as PathCpp
 
 from kompass_core.datatypes.laserscan import LaserScanData
