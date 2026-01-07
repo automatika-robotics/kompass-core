@@ -40,6 +40,7 @@ class EmergencyChecker:
         )
         self.__robot_shape = RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type)
         self.__robot_dimensions = robot.geometry_params
+        self.__robot_height = robot.height
         self.__use_gpu = use_gpu
         self.__initialized = False
         # NOTE: cloud_field_type is only used in point cloud and gotten from PointCloudCallback in Kompass
@@ -76,8 +77,8 @@ class EmergencyChecker:
                     critical_angle=self.__emergency_angle,
                     critical_distance=self.__emergency_distance,
                     slowdown_distance=self.__slowdown_distance,
-                    min_height=self.__scan_model.min_height,
-                    max_height=self.__scan_model.max_height,
+                    min_height=-self.__robot_height,
+                    max_height=self.__robot_height,
                     range_max=self.__scan_model.range_max,
                     **kwargs,
                 )
@@ -98,8 +99,8 @@ class EmergencyChecker:
                 critical_angle=self.__emergency_angle,
                 critical_distance=self.__emergency_distance,
                 slowdown_distance=self.__slowdown_distance,
-                min_height=self.__scan_model.min_height,
-                max_height=self.__scan_model.max_height,
+                min_height=-self.__robot_height,
+                max_height=self.__robot_height,
                 range_max=self.__scan_model.range_max,
                 **kwargs,
             )
