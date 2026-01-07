@@ -49,7 +49,7 @@ void bindings_utils_gpu(py::module_ &m) {
            py::arg("robot_dimensions"), py::arg("sensor_position_body"),
            py::arg("sensor_rotation_body"), py::arg("critical_angle"),
            py::arg("critical_distance"), py::arg("slowdown_distance"),
-           py::arg("scan_angles"), py::arg("max_height"), py::arg("min_height"),
+           py::arg("scan_angles"), py::arg("min_height"), py::arg("max_height"),
            py::arg("range_max"),
            py::arg("cloud_field_type") = PointFieldType::FLOAT32)
 
