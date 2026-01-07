@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "kompass_core"
-version = "0.6.2"
+version = "0.7.0"
 description = "Navigation Algorithms Library for Kompass"
 authors = [{ name = "Automatika Robotics", email = "contact@automatikarobotics.com" }]
 readme = "README.md"
@@ -90,7 +90,7 @@ select = ["B","C","E","F","W","B9"]
 max-complexity = 10
 
 [tool.bumpver]
-current_version = "0.6.2"
+current_version = "0.7.0"
 version_pattern = "MAJOR.MINOR.PATCH"
 commit_message = "(chore) Bump version {old_version} -> {new_version}"
 tag_message = "{new_version}"
