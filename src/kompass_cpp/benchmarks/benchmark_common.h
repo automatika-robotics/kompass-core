@@ -3,7 +3,6 @@
 #include "utils/logger.h"
 
 #include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -15,13 +14,15 @@
 #include <string>
 #include <vector>
 
+// Only include if power monitoring is enabled
 #ifdef ENABLE_POWER_MONITOR
 #include <filesystem>
+#include <regex>
 #include <thread>
 namespace fs = std::filesystem;
 #endif
 
-// ANSI Colors for direct console output
+// ANSI Colors
 #define BM_RESET "\033[0m"
 #define BM_CYAN "\033[36m"
 #define BM_GREEN "\033[32m"
@@ -29,7 +30,6 @@ namespace fs = std::filesystem;
 #define BM_BOLD "\033[1m"
 
 using json = nlohmann::json;
-namespace fs = std::filesystem;
 
 namespace Kompass {
 namespace Benchmarks {
@@ -43,9 +43,8 @@ public:
   PowerMonitor() { detect_power_source(); }
 
   void start() {
-    if (sensor_paths_.empty())
+    if (sensors_.empty())
       return;
-
     running_ = true;
     readings_.clear();
     monitor_thread_ = std::thread([this]() {
@@ -57,70 +56,84 @@ public:
   }
 
   double stop() {
-    if (sensor_paths_.empty())
+    if (sensors_.empty())
       return 0.0;
-
     running_ = false;
     if (monitor_thread_.joinable()) {
       monitor_thread_.join();
     }
-
     if (readings_.empty())
       return 0.0;
-
     double sum = std::accumulate(readings_.begin(), readings_.end(), 0.0);
-    return sum / readings_.size(); // Average Watts
+    return sum / readings_.size();
   }
 
-  bool is_available() const { return !sensor_paths_.empty(); }
-
 private:
-  std::vector<std::string> sensor_paths_;
+  struct PowerSensor {
+    std::string path_a; // Voltage (mV) OR Direct Power
+    std::string path_b; // Current (mA) OR Empty
+    double scale;       // Multiplier to get Watts
+  };
+
+  std::vector<PowerSensor> sensors_;
   std::atomic<bool> running_{false};
   std::thread monitor_thread_;
   std::vector<double> readings_;
-  double scale_factor_ = 1.0;
 
   void detect_power_source() {
-    sensor_paths_.clear();
+    sensors_.clear();
 
-    // ---------------------------------------------------------------------
-    // STRATEGY 1: NVIDIA JETSON (INA3221)
-    // ---------------------------------------------------------------------
-    std::vector<std::string> jetson_candidates = {
-        "/sys/bus/i2c/drivers/ina3221/1-0040/iio:device0/in_power0_input", // Jetson
-                                                                           // Xavier/Orin
-                                                                           // NX
-        "/sys/bus/i2c/drivers/ina3221/1-0040/hwmon/hwmon0/in1_input" // Generic
-                                                                     // Orin AGX
-    };
+    // -----------------------------------------------------------
+    // 1. NVIDIA JETSON ORIN/AGX (INA3221 at 1-0040)
+    // -----------------------------------------------------------
+    // Logic: Look for 1-0040/hwmon/hwmonX.
+    // Scan for in[N]_input AND curr[N]_input pairs.
+    std::string jetson_base = "/sys/bus/i2c/drivers/ina3221/1-0040/hwmon";
 
-    for (const auto &path : jetson_candidates) {
-      if (fs::exists(path)) {
-        sensor_paths_.push_back(path);
-        scale_factor_ = 1.0 / 1000.0; // mW -> W
-        LOG_INFO("PowerMonitor: Found Jetson INA3221 sensor.");
-        return;
+    if (fs::exists(jetson_base)) {
+      for (const auto &entry : fs::directory_iterator(jetson_base)) {
+        if (entry.is_directory()) { // e.g. hwmon1
+          std::string hwmon_dir = entry.path().string();
+          bool found_any_rail = false;
+
+          // Check indices 1 through 8 (INA3221 usually has 3 channels, but loop
+          // safely)
+          for (int i = 1; i <= 8; ++i) {
+            std::string v_path =
+                hwmon_dir + "/in" + std::to_string(i) + "_input";
+            std::string c_path =
+                hwmon_dir + "/curr" + std::to_string(i) + "_input";
+
+            if (fs::exists(v_path) && fs::exists(c_path)) {
+              // mV * mA = uW. Scale to Watts: 1e-3 * 1e-3 = 1e-6
+              sensors_.push_back({v_path, c_path, 1.0e-6});
+              found_any_rail = true;
+            }
+          }
+
+          if (found_any_rail) {
+            LOG_INFO("PowerMonitor: Found Jetson Orin Rails (V*I) at: " +
+                     hwmon_dir);
+            return; // Stop searching
+          }
+        }
       }
     }
 
-    // ---------------------------------------------------------------------
-    // STRATEGY 2: GENERIC LINUX HWMON (Prioritized for AMD/Intel)
-    // ---------------------------------------------------------------------
+    // -----------------------------------------------------------
+    // 2. GENERIC HWMON (AMD Strix Halo / Intel - uW)
+    // -----------------------------------------------------------
     std::string best_candidate_path;
-
     if (fs::exists("/sys/class/hwmon")) {
       for (const auto &entry : fs::directory_iterator("/sys/class/hwmon")) {
         std::string hwmon_path = entry.path().string();
         std::string name_path = hwmon_path + "/name";
-
-        // Read sensor name ("amdgpu", "zenpower", "k10temp")
         std::string sensor_name = "unknown";
+
         std::ifstream name_file(name_path);
         if (name_file.is_open())
           name_file >> sensor_name;
 
-        // Look for power inputs
         for (const auto &file : fs::directory_iterator(hwmon_path)) {
           std::string filename = file.path().filename().string();
 
@@ -131,44 +144,58 @@ private:
             std::ifstream p_file(file.path());
             double val;
             if (p_file >> val && val > 0) {
-              // PRIORITY CHECK: AMD Strix Halo
               if (sensor_name == "amdgpu") {
-                sensor_paths_.clear();
-                sensor_paths_.push_back(file.path().string());
-                scale_factor_ = 1.0 / 1000000.0; // microWatts
-                LOG_INFO("PowerMonitor: Locked on AMD GPU/APU Sensor.");
+                sensors_.clear();
+                sensors_.push_back({file.path().string(), "", 1.0 / 1000000.0});
+                LOG_INFO("PowerMonitor: Locked on AMD GPU/APU Sensor (" +
+                         sensor_name + ")");
                 return;
               }
-
-              // Keep as candidate
               best_candidate_path = file.path().string();
             }
           }
         }
       }
     }
-
     if (!best_candidate_path.empty()) {
-      sensor_paths_.push_back(best_candidate_path);
-      scale_factor_ = 1.0 / 1000000.0;
-      LOG_INFO("PowerMonitor: Using Generic HWMON Sensor.");
+      sensors_.push_back({best_candidate_path, "", 1.0 / 1000000.0});
+      LOG_INFO("PowerMonitor: Using Generic HWMON Sensor");
       return;
     }
 
-    // ---------------------------------------------------------------------
-    // STRATEGY 3: POWER SUPPLY (Battery/Mains) - Rockchip
-    // ---------------------------------------------------------------------
+    // -----------------------------------------------------------
+    // 3. POWER SUPPLY CLASS (Rockchip / RPi / Laptops)
+    // -----------------------------------------------------------
     if (fs::exists("/sys/class/power_supply")) {
       for (const auto &entry :
            fs::directory_iterator("/sys/class/power_supply")) {
-        std::string p_path = entry.path().string() + "/power_now";
+        std::string path_base = entry.path().string();
+
+        // A. Direct Power (Laptops - uW)
+        std::string p_path = path_base + "/power_now";
         if (fs::exists(p_path)) {
-          std::ifstream p_file(p_path);
-          double test_val;
-          if (p_file >> test_val && test_val > 0) {
-            sensor_paths_.push_back(p_path);
-            scale_factor_ = 1.0 / 1000000.0;
+          std::ifstream pf(p_path);
+          double val;
+          if (pf >> val && val > 0) {
+            sensors_.push_back({p_path, "", 1.0 / 1000000.0});
+            LOG_INFO("PowerMonitor: Found Direct Power Supply");
             return;
+          }
+        }
+
+        // B. Rockchip TCPM (Voltage * Current)
+        std::string v_path = path_base + "/voltage_now";
+        std::string c_path = path_base + "/current_now";
+
+        if (fs::exists(v_path) && fs::exists(c_path)) {
+          std::ifstream vf(v_path), cf(c_path);
+          double v_val, c_val;
+          if (vf >> v_val && cf >> c_val) {
+            if (std::abs(c_val) > 0.0) {
+              // uV * uA = pW. Scale to W: 1e-12
+              sensors_.push_back({v_path, c_path, 1.0e-12});
+              LOG_INFO("PowerMonitor: Found Rockchip/RPi Supply (V*I)");
+            }
           }
         }
       }
@@ -177,34 +204,39 @@ private:
 
   void read_power() {
     double total_watts = 0.0;
-    bool read_success = false;
+    bool success = false;
 
-    for (const auto &path : sensor_paths_) {
-      std::ifstream file(path);
-      if (file.is_open()) {
-        double val;
-        if (file >> val) {
-          total_watts += val;
-          read_success = true;
+    for (const auto &sensor : sensors_) {
+      std::ifstream file_a(sensor.path_a);
+      double val_a = 0.0;
+
+      if (file_a >> val_a) {
+        if (sensor.path_b.empty()) {
+          // Direct Power
+          total_watts += val_a * sensor.scale;
+          success = true;
+        } else {
+          // Compound (Watts = |V * I| * Scale)
+          std::ifstream file_b(sensor.path_b);
+          double val_b = 0.0;
+          if (file_b >> val_b) {
+            total_watts += std::abs(val_a * val_b) * sensor.scale;
+            success = true;
+          }
         }
       }
     }
-
-    if (read_success) {
-      readings_.push_back(total_watts * scale_factor_);
-    }
+    if (success)
+      readings_.push_back(total_watts);
   }
 };
 
 #else
-
-// --- DUMMY IMPLEMENTATION ---
 class PowerMonitor {
 public:
-  void start() {}               // No-op
-  double stop() { return 0.0; } // Always returns 0.0
+  void start() {}
+  double stop() { return 0.0; }
 };
-
 #endif // ENABLE_POWER_MONITOR
 
 // =================================================================================
@@ -221,14 +253,10 @@ struct BenchmarkResult {
   double avg_power_w;
 };
 
-/**
- * @brief The core benchmarking engine.
- */
 template <typename Func>
 BenchmarkResult measure_performance(std::string name, Func &&func,
                                     int iterations = 50, int warmup_runs = 5) {
 
-  // Warm-up
   std::stringstream ss_warm;
   ss_warm << "[Benchmark: " << name << "] Warming up (" << warmup_runs
           << " cycles)...";
@@ -238,16 +266,15 @@ BenchmarkResult measure_performance(std::string name, Func &&func,
     func();
   }
 
-  // Measurement
   std::vector<double> times;
   times.reserve(iterations);
+
   PowerMonitor power_mon;
 
   std::cout << BM_CYAN << "       [Status] " << BM_RESET << "Starting "
             << iterations << " iterations..." << std::flush;
   std::cout << std::endl;
 
-  // Start Power Monitoring (different thread)
   power_mon.start();
 
   for (int i = 0; i < iterations; ++i) {
@@ -263,12 +290,10 @@ BenchmarkResult measure_performance(std::string name, Func &&func,
     times.push_back(ms.count());
   }
 
-  // Stop Power Monitoring
   double avg_watts = power_mon.stop();
 
   std::cout << std::endl;
 
-  // Statistics
   double sum = std::accumulate(times.begin(), times.end(), 0.0);
   double mean = sum / iterations;
 
@@ -280,11 +305,9 @@ BenchmarkResult measure_performance(std::string name, Func &&func,
   double min_val = *std::min_element(times.begin(), times.end());
   double max_val = *std::max_element(times.begin(), times.end());
 
-  // Log Result
   std::stringstream ss_res;
   ss_res << "   -> Result: " << std::fixed << std::setprecision(3) << mean
-         << " ms "
-         << "(+/- " << std_dev << ")";
+         << " ms " << "(+/- " << std_dev << ")";
 
   if (avg_watts > 0.0) {
     ss_res << " | Power: " << avg_watts << " W";
@@ -308,12 +331,11 @@ inline void save_results_to_json(const std::string &platform_name,
     json bench_obj = {
         {"test_name", r.test_name},   {"mean_ms", r.mean_ms},
         {"std_dev_ms", r.std_dev_ms}, {"min_ms", r.min_ms},
-        {"max_ms", r.max_ms},         {"iterations", r.iterations},
-    };
+        {"max_ms", r.max_ms},         {"iterations", r.iterations}};
+
     if (r.avg_power_w > 0.0) {
       bench_obj["avg_power_w"] = r.avg_power_w;
-    };
-
+    }
     j["benchmarks"].push_back(bench_obj);
   }
 
