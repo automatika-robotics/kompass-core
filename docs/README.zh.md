@@ -141,8 +141,6 @@ pip install kompass-core
 
 - `kompass_core.utils` - 通用工具函数集。
 
-## 中文（简体）
-
 # 基准测试结果
 
 下方的图表展示了在不同平台上，导航栈各个组件之间的性能差异。**对数刻度**图对于比较 CPU 与 GPU 的性能至关重要，因为两者之间的差异可能达到数量级上的巨大差别。有关这些图表的生成方式以及所测量任务的详细信息，请参阅[基准测试说明](src/kompass_cpp/benchmarks/README.md)。
