@@ -21,12 +21,10 @@ Kompass Core is a high-performance, GPU-accelerated library for motion planning,
 
 This package is developed to be used with [Kompass](https://github.com/automatika-robotics/kompass) for creating navigation stacks in [ROS2](https://docs.ros.org/en/rolling/index.html). For detailed usage documentation, check Kompass [docs](https://automatika-robotics.github.io/kompass/).
 
-
 - [**Install**](#installation) Kompass Core 🛠️
 - Check the [**Package Overview**](#package-overview)
 - See [**Benchmarking Results**](#benchmarking-results) for different platforms
 - To use Kompass Core on your robot with ROS2, check the [**Kompass**](https://automatika-robotics.github.io/kompass) framework 🚀
-
 
 # Installation
 
@@ -56,43 +54,45 @@ The following three packages will become available once kompass-core is installe
 - `kompass_core`: Python bindings for Kompass core C++ library with front-end classes for configuration and high-level logic.
 - `omplpy`: Bespoke python bindings for the Open Motion Planning Library (OMPL).
 
-
 # Package Overview
 
 The package includes modules for mapping, control, trajectory planning, and vision-based tracking algorithms, with **GPU acceleration** support and Python bindings via `nanobind`.
 
-
 ### Control Module
+
 - Includes a rich set of optimized C++ control strategies implementations and their python wrappers.
 - Supports **GPU-accelerated** trajectory sampling and cost evaluation with customizable weights for sampling based controllers.
 - Internally implements feature-based bounding box tracking and depth detection for enhanced vision-based tracking control.
 
-| Algorithm                                   | Description                                        |
-| ------------------------------------------- | -------------------------------------------------- |
+| Algorithm                         | Description                                        |
+| --------------------------------- | -------------------------------------------------- |
 | **DWA (Dynamic Window Approach)** | Velocity-space sampling and optimization           |
-| **Pure Pursuit**                   | Path tracking with obstacle avoidance              |
-| **Stanley**                   | Path tracking with robust convergence              |
+| **Pure Pursuit**                  | Path tracking with obstacle avoidance              |
+| **Stanley**                       | Path tracking with robust convergence              |
 | **DVZ**                           | Reactive obstacle avoidance using deformable zones |
-| **VisionRGBFollower**   | Follow visual targets using RGB images          |
-| **VisionRGBDFollower**   | Follow visual targets using RGBD (depth) images          |
+| **VisionRGBFollower**             | Follow visual targets using RGB images             |
+| **VisionRGBDFollower**            | Follow visual targets using RGBD (depth) images    |
 
 ### Mapping Module
+
 - Implements efficient local mapping and occupancy grid generation algorithms, with configuration support for various scan models and grid resolution settings.
 - Supports **GPU-accelerated** mapping for real-time performance.
 
-
 ### Utilities Module
+
 - Provides collision checking utilities and critical zone detection to ensure safe navigation, including both CPU and GPU implementations.
 - Logger utilities for runtime diagnostics.
 - Linear state-space Kalman filter implementation for state estimation (C++).
 - Spline interpolation utilities for path control.
 
 ### Data Types and Models Modules
+
 - Rich set of data types to represent paths, trajectories, controls, velocities, bounding boxes and various sensor data.
 - Strongly-typed parameters and configuration classes to enable flexible tuning.
 - Robot models and motion kinematics, supporting differential, omni-directional, and Ackermann robots. Along with geometry definitions, control limits and simulation-ready state representations.
 
 ### Third Party Modules
+
 Includes wrappers and integrations with external planning and collision libraries:
 
 - FCL (Flexible Collision Library)
@@ -100,23 +100,28 @@ Includes wrappers and integrations with external planning and collision librarie
 - OMPL (Open Motion Planning Library)
 
 # Benchmarking Results
-The plots below visualize the performance differences across platforms for various components of the navigation stack. The **Logarithmic Scale** plot is essential for comparing CPU vs. GPU performance where differences can be orders of magnitude large, while the **Linear Scale** plot is useful for comparing performance within similar hardware classes. See the [benchmarking details](src/kompass_cpp/benchmarks/README.md) for how these plots were generated and what tasks were measured.
 
+The plots below visualize the performance differences across platforms for various components of the navigation stack. The **Logarithmic Scale** plot is essential for comparing CPU vs. GPU performance where differences can be orders of magnitude large. See the [benchmarking details](src/kompass_cpp/benchmarks/README.md) for how these plots were generated and what tasks were measured.
 
-### Logarithmic Scale (CPU vs GPU Comparison)
+### 1. Performance (Logarithmic Scale)
+
+_Note: This chart excludes runs where power monitoring was active to ensure timing accuracy._
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark_log_dark.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/benchmark_log_light.png">
   <img alt="Logarithmic Benchmark Results" src="docs/benchmark_log_light.png">
 </picture>
 
-### Linear Scale (Absolute Time)
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark_abs_dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="docs/benchmark_abs_light.png">
-  <img alt="Linear Benchmark Results" src="docs/benchmark_abs_light.png">
-</picture>
+### 2. Power Consumption & Efficiency
 
+_Note: Efficiency is calculated as **Operations per Joule** (Throughput / Watts). Higher is better._
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/benchmark_power_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/benchmark_power_light.png">
+  <img alt="Power Efficiency Results" src="docs/benchmark_power_light.png">
+</picture>
 
 ## Copyright
 

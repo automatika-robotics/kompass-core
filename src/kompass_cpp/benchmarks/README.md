@@ -28,7 +28,7 @@ We benchmark three critical components of the navigation stack:
 
 ## 🏆 Results
 
-The plots below visualize the performance differences across platforms.
+The plots below visualize the performance differences across platforms for various components of the navigation stack. The **Logarithmic Scale** plot is essential for comparing CPU vs. GPU performance where differences can be orders of magnitude large.
 
 ### 1. Performance (Logarithmic Scale)
 
