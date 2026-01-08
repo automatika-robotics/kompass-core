@@ -66,36 +66,43 @@ pip install kompass-core
 `kompass_cpp/` 是一个包含建图、控制、轨迹规划与基于视觉的跟踪算法的 C++ 软件包，支持 **GPU 加速**，并通过 `nanobind` 提供 Python 绑定。
 
 ### 1. 建图
+
 - 实现高效的局部建图算法。
 - 支持 **GPU 加速**，实现实时性能。
 - 核心类：`LocalMapper`, `LocalMapperGPU`
 
 ### 2. 控制与轨迹规划
+
 - 支持多种控制策略，包括 PID、Stanley、动态窗口法（DWA）与视觉引导控制器。
 - 支持 **GPU 加速** 的轨迹采样与代价评估，可自定义权重。
 - 核心类：`Controller`, `PID`, `Stanley`, `DWA`, `VisionDWA`, `TrajectorySampler`, `CostEvaluator`
 
 ### 3. 碰撞检测与关键区域检测
+
 - 提供碰撞检测工具与关键区域识别功能，保障导航安全。
 - 提供 CPU 与 GPU 两种实现。
 - 核心类：`CollisionChecker`, `CriticalZoneChecker`, `CriticalZoneCheckerGPU`
 
 ### 4. 视觉与跟踪
+
 - 基于特征的边框跟踪与深度检测，增强感知能力。
 - 支持鲁棒的视觉导航算法。
 - 核心类：`FeatureBasedBboxTracker`, `DepthDetector`
 
 ### 5. 实用工具
+
 - 多线程池用于高效的并发处理。
 - 日志工具支持运行时诊断。
 - 基于线性状态空间的卡尔曼滤波器用于状态估计。
 - `tk` 命名空间下的样条插值工具。
 
 ### 6. 数据类型与参数
+
 - 提供丰富的数据结构，用于表示路径、轨迹、控制、速度与边框等。
 - 强类型参数与配置类，支持灵活调参。
 
 ### 7. Python 绑定
+
 - 使用 `nanobind` 构建的全面 Python 绑定，实现与 Python 工作流的无缝集成。
 - 绑定涵盖建图、控制、视觉与工具等核心功能。
 
@@ -105,13 +112,13 @@ pip install kompass-core
 
 - `kompass_core.control` - 多种控制策略及配置，包含 C++ 控制器的 Python 包装类：
 
-| 算法名称                             | 描述                                              |
-| ------------------------------------ | ------------------------------------------------- |
-| **Stanley**                          | 具备鲁棒收敛性的路径跟踪                         |
-| **DWA（动态窗口法）**              | 基于速度空间的采样与优化                         |
-| **DVZ**                              | 使用可变形区域的反应式避障                       |
-| **VisionRGBFollower**               | 基于 RGB 图像跟踪视觉目标                        |
-| **VisionRGBDFollower**              | 基于 RGBD 图像（含深度）跟踪视觉目标             |
+| 算法名称               | 描述                                 |
+| ---------------------- | ------------------------------------ |
+| **Stanley**            | 具备鲁棒收敛性的路径跟踪             |
+| **DWA（动态窗口法）**  | 基于速度空间的采样与优化             |
+| **DVZ**                | 使用可变形区域的反应式避障           |
+| **VisionRGBFollower**  | 基于 RGB 图像跟踪视觉目标            |
+| **VisionRGBDFollower** | 基于 RGBD 图像（含深度）跟踪视觉目标 |
 
 - `kompass_core.datatypes` - 标准化的机器人与传感器数据格式。
 
@@ -128,13 +135,37 @@ pip install kompass-core
 - `kompass_core.simulation` - 用于机器人运动仿真与路径可行性评估的工具。
 
 - `kompass_core.third_party` - 与外部规划与碰撞库的封装与集成：
+  - FCL（灵活碰撞库）
 
-    - FCL（灵活碰撞库）
-
-    - OMPL（开源运动规划库）
+  - OMPL（开源运动规划库）
 
 - `kompass_core.utils` - 通用工具函数集。
 
+## 中文（简体）
+
+# 基准测试结果
+
+下方的图表展示了在不同平台上，导航栈各个组件之间的性能差异。**对数刻度**图对于比较 CPU 与 GPU 的性能至关重要，因为两者之间的差异可能达到数量级上的巨大差别。有关这些图表的生成方式以及所测量任务的详细信息，请参阅[基准测试说明](src/kompass_cpp/benchmarks/README.md)。
+
+### 1. 性能（对数刻度）
+
+_注意：为确保计时精度，本图表排除了启用功耗监控的测试运行。_
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="benchmark_log_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="benchmark_log_light.png">
+  <img alt="对数基准测试结果" src="benchmark_log_light.png">
+</picture>
+
+### 2. 功耗与效率
+
+_注意：效率的计算方式为 **每焦耳完成的操作数**（吞吐量 / 功率）。数值越高表示效率越好。_
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="benchmark_power_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="benchmark_power_light.png">
+  <img alt="功耗效率结果" src="benchmark_power_light.png">
+</picture>
 ## 版权信息
 
 本发行版中的源代码（除非另有说明）版权归 Automatika Robotics 所有 © 2024。

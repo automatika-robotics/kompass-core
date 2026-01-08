@@ -1,15 +1,26 @@
 find_package(nlohmann_json 3.2.0 REQUIRED)
 
+# Toggles power monitoring
+option(ENABLE_POWER_MONITOR "Enable power monitoring (may affect benchmark accuracy)" OFF)
+
 # Define the benchmark executable
 add_executable(kompass_benchmark
     benchmark_runner.cpp
 )
 
+# Apply Feature Flags
+if(ENABLE_POWER_MONITOR)
+    message(STATUS "Benchmark Power Monitoring: ENABLED (Threaded polling active)")
+    target_compile_definitions(kompass_benchmark PRIVATE ENABLE_POWER_MONITOR)
+else()
+    message(STATUS "Benchmark Power Monitoring: DISABLED (Pure performance mode)")
+endif()
+
 # Standard Include Directories
 target_include_directories(kompass_benchmark PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${PROJECT_SOURCE_DIR}/kompass_cpp/include # Access to main headers
-    ${PROJECT_SOURCE_DIR}/kompass_cpp/tests   # Access to test.h
+    ${PROJECT_SOURCE_DIR}/kompass_cpp/include
+    ${PROJECT_SOURCE_DIR}/kompass_cpp/tests
 )
 
 # Link against main library

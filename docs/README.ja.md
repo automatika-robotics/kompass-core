@@ -39,7 +39,6 @@ curl https://raw.githubusercontent.com/automatika-robotics/kompass-core/refs/hea
 
 このスクリプトは、[AdaptiveCPP](https://github.com/AdaptiveCpp/AdaptiveCpp) を含むすべての関連依存関係をインストールし、`kompass-core` の最新版をソースから構築します。実行前に、[スクリプト](https://github.com/automatika-robotics/kompass-core/blob/main/build_dependencies/install_gpu.sh) の内容を確認することを推奨します。
 
-
 ## pip によるインストール（CPU のみ）
 
 ```bash
@@ -47,7 +46,6 @@ pip install kompass-core
 ```
 
 PyPI では、Linux x86_64 と aarch64 向けのホイールが提供されています。なお、現時点で PyPI にあるバージョンは GPU アクセラレーションには対応していません。
-
 
 ## インストール内容
 
@@ -70,36 +68,43 @@ kompass-core をインストールすると、以下の 3 つのパッケージ�
 `kompass_cpp/` はマッピング、制御、軌道計画、視覚ベースのトラッキングアルゴリズムを含む C++ パッケージであり、**GPU アクセラレーション** をサポートし、`nanobind` 経由で Python バインディングが提供されています。
 
 ### 1. マッピング
+
 - 高速な局所マッピングアルゴリズムを実装
 - **GPU アクセラレーション** に対応しリアルタイム性能を実現
 - 主なクラス：`LocalMapper`, `LocalMapperGPU`
 
 ### 2. 制御と軌道計画
+
 - PID、Stanley、動的ウィンドウ法（DWA）、ビジョンガイドコントローラなど複数の制御戦略を搭載
 - **GPU アクセラレーション** による軌道サンプリングとコスト評価、重みのカスタマイズが可能
 - 主なクラス：`Controller`, `PID`, `Stanley`, `DWA`, `VisionDWA`, `TrajectorySampler`, `CostEvaluator`
 
 ### 3. 衝突判定とクリティカルゾーン検出
+
 - 安全なナビゲーションを実現する衝突判定とクリティカルゾーン検出機能を提供
 - CPU 実装と GPU 実装の両方に対応
 - 主なクラス：`CollisionChecker`, `CriticalZoneChecker`, `CriticalZoneCheckerGPU`
 
 ### 4. ビジョンとトラッキング
+
 - 特徴点ベースのバウンディングボックス追跡と深度検出により認識性能を強化
 - 頑健な視覚ベースのナビゲーションアルゴリズムをサポート
 - 主なクラス：`FeatureBasedBboxTracker`, `DepthDetector`
 
 ### 5. ユーティリティ
+
 - 高効率なマルチスレッド処理を実現するスレッドプール
 - 実行時診断用のロガー
 - 線形状態空間カルマンフィルタによる状態推定
 - `tk` 名前空間で提供されるスプライン補間ユーティリティ
 
 ### 6. データ型とパラメータ
+
 - 経路、軌道、制御、速度、バウンディングボックスを表現する豊富なデータ型
 - 柔軟なパラメータ調整を可能にする強型の設定クラス
 
 ### 7. Python バインディング
+
 - `nanobind` によって構築された包括的な Python バインディングにより、Python ワークフローとシームレスに統合可能
 - マッピング、制御、ビジョン、ユーティリティの主要機能を広くカバー
 
@@ -109,13 +114,13 @@ kompass-core をインストールすると、以下の 3 つのパッケージ�
 
 - `kompass_core.control` - 多様な制御戦略と設定を含む。C++ 実装の Python ラッパークラスを提供：
 
-| アルゴリズム名                        | 説明                                       |
-|---------------------------------------|------------------------------------------|
-| **Stanley**                          | 高い収束性能を持つ経路追従                |
-| **DWA（動的ウィンドウ法）**         | 速度空間のサンプリングと最適化             |
-| **DVZ**                              | 可変ゾーンを用いたリアクティブな障害物回避 |
-| **VisionRGBFollower**               | RGB 画像を用いた視覚ターゲット追従         |
-| **VisionRGBDFollower**              | RGBD（深度付き）画像を用いた視覚ターゲット追従 |
+| アルゴリズム名              | 説明                                           |
+| --------------------------- | ---------------------------------------------- |
+| **Stanley**                 | 高い収束性能を持つ経路追従                     |
+| **DWA（動的ウィンドウ法）** | 速度空間のサンプリングと最適化                 |
+| **DVZ**                     | 可変ゾーンを用いたリアクティブな障害物回避     |
+| **VisionRGBFollower**       | RGB 画像を用いた視覚ターゲット追従             |
+| **VisionRGBDFollower**      | RGBD（深度付き）画像を用いた視覚ターゲット追従 |
 
 - `kompass_core.datatypes` - ロボットやセンサーデータ用の標準メッセージ・データ形式
 
@@ -132,13 +137,37 @@ kompass-core をインストールすると、以下の 3 つのパッケージ�
 - `kompass_core.simulation` - ロボット運動のシミュレーションと経路の実行可能性評価ツール
 
 - `kompass_core.third_party` - 外部計画ライブラリおよび衝突判定ライブラリとのラッパーと統合：
+  - FCL（Flexible Collision Library）
 
-    - FCL（Flexible Collision Library）
-
-    - OMPL（Open Motion Planning Library）
+  - OMPL（Open Motion Planning Library）
 
 - `kompass_core.utils` - 汎用ユーティリティ群
 
+## 日本語
+
+# ベンチマーク結果
+
+以下のプロットは、ナビゲーションスタックの各コンポーネントについて、プラットフォーム間の性能差を可視化したものです。**対数スケール**のプロットは、CPU と GPU の性能を比較する上で不可欠です。両者の差は桁違いになる場合があります。これらのプロットの生成方法や測定されたタスクの詳細については、[ベンチマークの詳細](src/kompass_cpp/benchmarks/README.md)を参照してください。
+
+### 1. 性能（対数スケール）
+
+_注：計測精度を確保するため、電力モニタリングが有効になっていた実行結果は本チャートから除外されています。_
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="benchmark_log_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="benchmark_log_light.png">
+  <img alt="対数スケールのベンチマーク結果" src="benchmark_log_light.png">
+</picture>
+
+### 2. 消費電力と効率
+
+_注：効率は **ジュールあたりの処理回数**（スループット / 消費電力）として計算されます。数値が高いほど効率が良いことを示します。_
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="benchmark_power_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="benchmark_power_light.png">
+  <img alt="電力効率の結果" src="benchmark_power_light.png">
+</picture>
 ## 著作権
 
 本配布物に含まれるコードは、特記がない限り 2024 年 Automatika Robotics に著作権があります。
