@@ -19,7 +19,8 @@ We benchmark three critical components of the navigation stack:
     - **Stress Factor:** Random memory access patterns and ray traversal.
 
 3.  **Critical Zone Checker (Safety System)**
-    - **Workload:** Checks a high-res 2D scan (3,600 rays) where points fall within the "slowdown" zone to force worst-case evaluation logic. This component is light-weight and highly optimized on the CPU, so performance gains are expected to be marginal. Use of the GPU is not default behaviour and left to the user.
+    - **Scenario A (PointCloud):** Checks a dense 3D point cloud (100,000 points) against the robot's safety footprint.
+    - **Scenario B (LaserScan):** Checks a high-res 2D laser scan (3,600 rays) where points fall within the "slowdown" zone to force worst-case evaluation logic. This component is light-weight and highly optimized on the CPU, so performance gains are expected to be marginal. Use of the GPU is not default behaviour and left to the user.
     - **Metric:** Latency to return a safety factor $[0.0, 1.0]$.
     - **Stress Factor:** High-throughput collision checking.
 
@@ -27,21 +28,29 @@ We benchmark three critical components of the navigation stack:
 
 ## 🏆 Results
 
-The plots below visualize the performance differences across platforms. The **Logarithmic Scale** plot is essential for comparing CPU vs. GPU performance where differences can be orders of magnitude large, while the **Linear Scale** plot is useful for comparing performance within similar hardware classes.
+The plots below visualize the performance differences across platforms.
 
-### Logarithmic Scale (CPU vs GPU Comparison)
+### 1. Performance (Logarithmic Scale)
+
+_Note: This chart excludes runs where power monitoring was active to ensure timing accuracy._
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../../../docs/benchmark_log_dark.png">
   <source media="(prefers-color-scheme: light)" srcset="../../../docs/benchmark_log_light.png">
   <img alt="Logarithmic Benchmark Results" src="../../../docs/benchmark_log_light.png">
 </picture>
 
-### Linear Scale (Absolute Time)
+### 2. Power Consumption & Efficiency
+
+_Note: Efficiency is calculated as **Operations per Joule** (Throughput / Watts). Higher is better._
+
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../../../docs/benchmark_abs_dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="../../../docs/benchmark_abs_light.png">
-  <img alt="Linear Benchmark Results" src="../../../docs/benchmark_abs_light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="../../../docs/benchmark_power_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../../../docs/benchmark_power_light.png">
+  <img alt="Power Efficiency Results" src="../../../docs/benchmark_power_light.png">
 </picture>
+
+---
 
 ## 🛠️ Compilation & Usage
 
@@ -54,7 +63,13 @@ The benchmark runner is a standalone executable (`kompass_benchmark`).
 - **OpenCV, Boost Unit Test Framework, nlohmann json** (`sudo apt install nlohmann-json3-dev libopencv-dev libboost-test-dev`)
 - **Python 3** + `matplotlib` (for plotting)
 
-### 1. CPU Native Baseline (No SYCL)
+### ⚡ Power Monitoring (Optional)
+
+To enable this feature on supported platforms, add `-DENABLE_POWER_MONITOR=ON` to your CMake command.
+
+> **⚠️ Important:** Power monitoring spawns a background thread that polls system sensors (sysfs) at 20Hz. This may introduce slight overhead. We recommend running separate benchmarks for speed (OFF) and power (ON).
+
+### 1. CPU Native Baseline
 
 Measures the pure C++ performance without SYCL parallelization.
 
@@ -80,13 +95,14 @@ cmake --build . --target kompass_benchmark -- -j$(nproc)
 ACPP_VISIBILITY_MASK=omp ./src/kompass_cpp/benchmarks/kompass_benchmark "CPU_SYCL" "../benchmark_cpu_sycl.json"
 ```
 
-### 3. NVIDIA GPU (CUDA)
+### 3. NVIDIA GPU (CUDA) + Power Monitoring
 
 Targeting Jetson Orin / Xavier or other NVIDIA GPUs.
 
 ```bash
 mkdir -p build_cuda && cd build_cuda
-cmake .. -DCMAKE_BUILD_TYPE=Release
+# Enable Power Monitor for efficiency stats
+cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_POWER_MONITOR=ON
 cmake --build . --target kompass_benchmark -- -j$(nproc)
 
 # Force CUDA backend
@@ -99,7 +115,7 @@ Targeting AMD Strix Halo APUs or Radeon GPUs.
 
 ```bash
 mkdir -p build_rocm && cd build_rocm
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_POWER_MONITOR=ON
 cmake --build . --target kompass_benchmark -- -j$(nproc)
 
 # Force HIP backend
@@ -118,16 +134,19 @@ A Python script is provided to aggregate the JSON results from different machine
 mkdir benchmark_files
 ```
 
-2. Collect all `.json` output files (e.g., `benchmark_cuda.json`, `benchmark_cpu_native.json`) into the `benchmark_files` this directory.
+2. Collect all `.json` output files (e.g., `benchmark_cuda.json`, `benchmark_cpu_native.json`) into the `benchmark_files` directory.
+
+- _Tip:_ You can include files with power data (compiled with `ENABLE_POWER_MONITOR`) and without. The script intelligently separates them.
+
 3. Run the plotter:
 
 ```bash
 python3 plot_benchmarks.py
 ```
 
-This will generate two images:
+This will generate 4 images (Light/Dark variants for each):
 
-- `benchmark_comparison_absolute.png`: Linear scale (good for similar performance classes).
-- `benchmark_comparison_log.png`: Logarithmic scale (essential for comparing CPU vs GPU).
+- `benchmark_log_*.png`: **Performance Chart**. Uses only "pure" runs (no power monitoring) to ensure maximum timing accuracy.
+- `benchmark_power_*.png`: **Efficiency Chart**. Uses only "instrumented" runs (with power data) to show Watts and Perf/Watt.
 
-**Note:** You can configure the `BASELINE_PLATFORM` variable at the top of `plot_benchmarks.py` to automatically calculate speedup factors relative to a specific device (default: `RK3588_CPU_Native`).
+**Note:** You can configure the `BASELINE_PLATFORM` variable at the top of `plot_benchmarks.py` to automatically calculate speedup factors relative to a specific device (default: `RK3588_CPU`).
