@@ -13,13 +13,11 @@ DepthDetector::DepthDetector(const Eigen::Vector2f &depth_range,
                              const Eigen::Quaternionf &camera_in_body_rotation,
                              const Eigen::Vector2f &focal_length,
                              const Eigen::Vector2f &principal_point,
-                             const float depth_conversion_factor) {
-  // Set camera tf
-  auto body_to_camera_tf =
-      getTransformation(camera_in_body_rotation, camera_in_body_translation);
-  DepthDetector(depth_range, body_to_camera_tf, focal_length, principal_point,
-                depth_conversion_factor);
-}
+                             const float depth_conversion_factor)
+    : DepthDetector(depth_range,
+                    getTransformation(camera_in_body_rotation,
+                                      camera_in_body_translation),
+                    focal_length, principal_point, depth_conversion_factor) {}
 
 DepthDetector::DepthDetector(
     const Eigen::Vector2f &depth_range,
@@ -128,7 +126,7 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
   box3d.center = camera_in_world_tf * center_in_camera_frame;
 
   LOG_DEBUG("Got detected box in 3D coordinates at :", box3d.center.x(), ", ",
-            box3d.center.y(), ", ", box3d.center.z());
+              box3d.center.y(), ", ", box3d.center.z());
 
   // Transform size from camera frame to world frame
   Eigen::Matrix3f abs_rotation = camera_in_world_tf.linear().cwiseAbs();
