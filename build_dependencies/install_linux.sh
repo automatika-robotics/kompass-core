@@ -16,10 +16,13 @@ conan profile detect --force
 sed -i 's/compiler.cppstd=.*/compiler.cppstd=gnu17/g' ~/.conan2/profiles/default
 
 # Ensure the whole graph is built as static libs
+# NOTE: OMPL 1.7.0 hardcodes shared libs for non-MSVC compilers
+# (see ompl/ompl src/ompl/CMakeLists.txt L36), so we must allow it
 cat >> ~/.conan2/profiles/default <<EOF
 [options]
 *:shared=False
 *:fPIC=True
+ompl/*:shared=True
 EOF
 
 # TODO: This fork should be removed when recipe merged upstream
@@ -55,12 +58,14 @@ conan install \
     --build="b2/*" \
     -c "tools.cmake.cmaketoolchain:extra_variables={'CMAKE_POLICY_VERSION_MINIMUM':'3.5'}"
 
-# Verify ompl artifacts
+# Verify OMPL build and install shared lib to system path
 echo "Verifying OMPL Build Artifacts..."
-if [ -z "$(find /root/.conan2 -name 'libompl.a')" ]; then
-    echo "❌ ERROR: libompl.a NOT found."
-    find /root/.conan2 -name "libompl.so*"
+OMPL_LIB_DIR="$(find /root/.conan2 -name 'libompl.so' -printf '%h\n' -quit)"
+if [ -z "$OMPL_LIB_DIR" ]; then
+    echo "ERROR: libompl.so NOT found. OMPL build may have failed."
     exit 1
 else
-    echo "✅ SUCCESS: libompl.a found."
+    echo "SUCCESS: libompl.so found in $OMPL_LIB_DIR"
 fi
+cp "$OMPL_LIB_DIR"/libompl.so* /usr/local/lib/
+ldconfig
