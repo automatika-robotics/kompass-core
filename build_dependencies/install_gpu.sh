@@ -436,14 +436,14 @@ fi
 
 log INFO "Installing kompass-core with pip"
 export PIP_BREAK_SYSTEM_PACKAGES=1
-python3 -m pip install "packaging>=22.0"
-python3 -m pip uninstall -y kompass-core  # uninstall any previous versions
+
+# Install build dependencies explicitly (avoids broken build isolation on old pip)
+python3 -m pip install "scikit-build-core>=0.8" "nanobind>=1.8,<2.9.2" "packaging>=22.0"
+python3 -m pip uninstall -y kompass-core
 
 # Build and Install
 # SKBUILD_CMAKE_ARGS is already set if we are in legacy mode
-# --ignore-installed: avoids "Cannot uninstall" errors for distutils-managed
-# system packages
-CXX=$CLANG_EXECUTABLE_PATH python3 -m pip install .
+CXX=$CLANG_EXECUTABLE_PATH python3 -m pip install --no-build-isolation .
 
 # Clean up source files if not required
 if [[ $KEEP_SOURCE_FILES == false ]]; then
