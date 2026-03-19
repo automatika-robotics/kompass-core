@@ -436,6 +436,7 @@ fi
 
 log INFO "Installing kompass-core with pip"
 export PIP_BREAK_SYSTEM_PACKAGES=1
+python3 -m pip install --upgrade pip packaging
 python3 -m pip uninstall -y kompass-core  # uninstall any previous versions
 
 # Build and Install
