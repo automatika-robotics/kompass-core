@@ -1,6 +1,6 @@
 [build-system]
 # pinned nanobind for python3.8 support
-requires = ["scikit-build-core>=0.8", "nanobind>=1.8,<2.9.2"]
+requires = ["scikit-build-core>=0.8", "nanobind>=1.8,<2.9.2", "packaging>=22.0"]
 build-backend = "scikit_build_core.build"
 
 [project]
