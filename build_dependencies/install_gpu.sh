@@ -344,7 +344,8 @@ if is_legacy_system; then
     # Install python build tools
     log INFO "Installing Conan and Ninja..."
     export PIP_BREAK_SYSTEM_PACKAGES=1
-    python3 -m pip install conan ninja "cmake<3.30"
+    # install pyyaml here (to avoid dependancy hell later)
+    python3 -m pip install --ignore-installed PyYAML conan ninja "cmake<3.30"
 
     # Configure Conan Profile
     log INFO "Configuring Conan profile..."
@@ -353,11 +354,14 @@ if is_legacy_system; then
     sed -i 's/compiler.cppstd=.*/compiler.cppstd=gnu17/g' ~/.conan2/profiles/default
 
     # Ensure the whole graph is built as static libs
-    log INFO "Forcing static libs in Conan profile..."
+    # NOTE: OMPL 1.7.0 hardcodes shared libs for non-MSVC compilers
+    # (see ompl/ompl src/ompl/CMakeLists.txt L36), so we must allow it
+    log INFO "Forcing static libs in Conan profile (except OMPL)..."
     cat >> ~/.conan2/profiles/default <<EOF
 [options]
 *:shared=False
 *:fPIC=True
+ompl/*:shared=True
 EOF
 
     # TODO: This fork should be removed when recipe merged upstream
@@ -402,15 +406,20 @@ EOF
         --build="b2/*" \
         -c "tools.cmake.cmaketoolchain:extra_variables={'CMAKE_POLICY_VERSION_MINIMUM':'3.5'}"
 
-    # Verification of static libs
+    # Verification: OMPL builds as shared lib on non-MSVC (upstream limitation)
     log INFO "Verifying OMPL Build Artifacts..."
-    if [ -z "$(find ~/.conan2 -name 'libompl.a')" ]; then
-        log ERROR "libompl.a NOT found. Build may have produced shared libraries."
-        find ~/.conan2 -name "libompl.so*"
+    OMPL_LIB_DIR="$(find ~/.conan2 -name 'libompl.so' -printf '%h\n' -quit)"
+    if [ -z "$OMPL_LIB_DIR" ]; then
+        log ERROR "libompl.so NOT found. OMPL build may have failed."
         exit 1
     else
-        log INFO "SUCCESS: libompl.a found."
+        log INFO "SUCCESS: libompl.so found in $OMPL_LIB_DIR"
     fi
+
+    # Install OMPL shared library to system-wide location so all users can find it
+    log INFO "Installing OMPL shared libraries to /usr/local/lib..."
+    $SUDO cp "$OMPL_LIB_DIR"/libompl.so* /usr/local/lib/
+    $SUDO ldconfig
 
     # Set SKBUILD_CMAKE_ARGS env var which scikit-build-core picks up
     export SKBUILD_CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=$CONAN_BUILD_DIR/conan_toolchain.cmake"
@@ -432,7 +441,9 @@ python3 -m pip uninstall -y kompass-core  # uninstall any previous versions
 
 # Build and Install
 # SKBUILD_CMAKE_ARGS is already set if we are in legacy mode
-CXX=$CLANG_EXECUTABLE_PATH python3 -m pip install .
+# --ignore-installed: avoids "Cannot uninstall" errors for distutils-managed
+# system packages
+CXX=$CLANG_EXECUTABLE_PATH python3 -m pip install --ignore-installed .
 
 # Clean up source files if not required
 if [[ $KEEP_SOURCE_FILES == false ]]; then
@@ -467,7 +478,17 @@ if [[ -d "/tmp/conan_recipes" ]]; then
 fi
 
 # Verify installation
-if python3 -c "import kompass_cpp" 2>/dev/null; then
+INSTALL_OK=true
+if ! python3 -c "import kompass_cpp" 2>/dev/null; then
+    log ERROR "Failed to import kompass_cpp."
+    INSTALL_OK=false
+fi
+if ! python3 -c "import omplpy" 2>/dev/null; then
+    log ERROR "Failed to import omplpy (OMPL bindings)."
+    INSTALL_OK=false
+fi
+
+if [ "$INSTALL_OK" = true ]; then
     log INFO "\033[1;32mkompass-core was installed successfully.\033[0m"
 else
     log ERROR "There was an error while installing kompass-core. Please refer to the git repo and open an issue."
