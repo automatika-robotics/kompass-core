@@ -436,14 +436,13 @@ fi
 
 log INFO "Installing kompass-core with pip"
 export PIP_BREAK_SYSTEM_PACKAGES=1
-python3 -m pip install pip-tools
 python3 -m pip uninstall -y kompass-core  # uninstall any previous versions
 
 # Build and Install
 # SKBUILD_CMAKE_ARGS is already set if we are in legacy mode
 # --ignore-installed: avoids "Cannot uninstall" errors for distutils-managed
 # system packages
-CXX=$CLANG_EXECUTABLE_PATH python3 -m pip install --ignore-installed .
+CXX=$CLANG_EXECUTABLE_PATH python3 -m pip install .
 
 # Clean up source files if not required
 if [[ $KEEP_SOURCE_FILES == false ]]; then
