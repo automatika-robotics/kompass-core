@@ -47,10 +47,9 @@ if ! command -v acpp &>/dev/null; then
 
     # Install minimal CUDA stubs to satisfy CMake's find_package(CUDA)
     # Only headers/stubs needed — no driver, no runtime, no GPU required
-    if ! dpkg -s cuda-nvcc-12-2 &>/dev/null; then
+    if ! command -v nvcc &>/dev/null; then
         UBUNTU_VER=$(lsb_release -rs | tr -d '.')
         ARCH=$(dpkg --print-architecture)
-        # Map dpkg arch to NVIDIA repo arch
         case "$ARCH" in
             amd64) NVIDIA_ARCH="x86_64" ;;
             arm64) NVIDIA_ARCH="sbsa" ;;
@@ -60,7 +59,8 @@ if ! command -v acpp &>/dev/null; then
             "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${UBUNTU_VER}/${NVIDIA_ARCH}/cuda-keyring_1.1-1_all.deb"
         dpkg -i /tmp/cuda-keyring.deb && rm /tmp/cuda-keyring.deb
         apt-get update -qq
-        apt-get install -y -qq cuda-nvcc-12-2 cuda-cudart-dev-12-2
+        # Install whatever CUDA version is available for this Ubuntu release
+        apt-get install -y -qq cuda-nvcc cuda-cudart-dev
     fi
 
     CXX="$CLANG_EXE" cmake \
