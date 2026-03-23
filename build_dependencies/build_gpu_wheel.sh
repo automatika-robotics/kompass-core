@@ -65,6 +65,7 @@ fi
 # -----------------------------------------------------------------------------
 cd "$PROJECT_DIR"
 rm -rf dist/
+export PIP_BREAK_SYSTEM_PACKAGES=1
 $PYTHON -m pip install patchelf scikit-build-core nanobind packaging
 CXX=acpp $PYTHON -m pip wheel --no-build-isolation -w dist/ .
 
