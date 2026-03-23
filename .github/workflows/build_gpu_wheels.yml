@@ -35,9 +35,7 @@ jobs:
           sudo apt-get install -y \
             cmake git make wget patchelf zip \
             lsb-release software-properties-common gnupg \
-            libompl-dev libfcl-dev libode-dev libeigen3-dev \
-            libboost-serialization-dev libboost-filesystem-dev libboost-system-dev \
-            libhdf5-openmpi-dev
+            libeigen3-dev python3-pip
 
       - name: Build GPU wheel
         run: sudo -E bash build_dependencies/build_gpu_wheel.sh $(which python)

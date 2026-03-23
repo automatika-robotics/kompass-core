@@ -64,15 +64,21 @@ find "$LIBS_DIR" -name '*.so*' -type f | while read lib; do
     patchelf --set-rpath '$ORIGIN:$ORIGIN/hipSYCL:$ORIGIN/llvm-to-backend' "$lib" 2>/dev/null || true
 done
 
-# Also fix RPATHs in subdirectories
-for subdir in hipSYCL llvm-to-backend; do
-    if [ -d "$LIBS_DIR/$subdir" ]; then
-        find "$LIBS_DIR/$subdir" -name '*.so*' -type f | while read lib; do
-            echo "  Patching ($subdir): $(basename "$lib")"
-            patchelf --set-rpath '$ORIGIN:$ORIGIN/..' "$lib" 2>/dev/null || true
-        done
-    fi
-done
+# Fix RPATHs in hipSYCL/ (backend plugins need to find libs in parent and llvm-to-backend/)
+if [ -d "$LIBS_DIR/hipSYCL" ]; then
+    find "$LIBS_DIR/hipSYCL" -maxdepth 1 -name '*.so*' -type f | while read lib; do
+        echo "  Patching (hipSYCL): $(basename "$lib")"
+        patchelf --set-rpath '$ORIGIN:$ORIGIN/..:$ORIGIN/llvm-to-backend' "$lib" 2>/dev/null || true
+    done
+fi
+
+# Fix RPATHs in hipSYCL/llvm-to-backend/ (need to find libs in parent and grandparent)
+if [ -d "$LIBS_DIR/hipSYCL/llvm-to-backend" ]; then
+    find "$LIBS_DIR/hipSYCL/llvm-to-backend" -name '*.so*' -type f | while read lib; do
+        echo "  Patching (llvm-to-backend): $(basename "$lib")"
+        patchelf --set-rpath '$ORIGIN:$ORIGIN/..:$ORIGIN/../..' "$lib" 2>/dev/null || true
+    done
+fi
 
 # -----------------------------------------------------------------------------
 # Repack the wheel
