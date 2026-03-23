@@ -59,8 +59,10 @@ if ! command -v acpp &>/dev/null; then
             "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${UBUNTU_VER}/${NVIDIA_ARCH}/cuda-keyring_1.1-1_all.deb"
         dpkg -i /tmp/cuda-keyring.deb && rm /tmp/cuda-keyring.deb
         apt-get update -qq
-        # Install whatever CUDA version is available for this Ubuntu release
-        apt-get install -y -qq cuda-nvcc cuda-cudart-dev
+        # Find the latest available CUDA 12.x packages and install
+        CUDA_VER=$(apt-cache search '^cuda-nvcc-12-' | sort -V | tail -1 | awk '{print $1}' | sed 's/cuda-nvcc//')
+        echo "Installing CUDA stubs: cuda-nvcc${CUDA_VER}, cuda-cudart-dev${CUDA_VER}"
+        apt-get install -y -qq "cuda-nvcc${CUDA_VER}" "cuda-cudart-dev${CUDA_VER}"
     fi
 
     CXX="$CLANG_EXE" cmake \
