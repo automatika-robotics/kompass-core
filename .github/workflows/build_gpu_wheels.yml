@@ -1,0 +1,65 @@
+name: Build GPU Wheels
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+  release:
+    types:
+      - published
+
+jobs:
+  build_gpu_wheels:
+    strategy:
+      matrix:
+        os-arch:
+          - { os: ubuntu-22.04, arch: x86_64 }
+          - { os: ubuntu-24.04-arm, arch: aarch64 }
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+
+    name: GPU wheel (${{ matrix.os-arch.arch }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os-arch.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake git make wget patchelf zip \
+            lsb-release software-properties-common gnupg \
+            libompl-dev libfcl-dev libode-dev libeigen3-dev \
+            libboost-serialization-dev libboost-filesystem-dev libboost-system-dev
+
+      - name: Build GPU wheel
+        run: sudo -E bash build_dependencies/build_gpu_wheel.sh $(which python)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gpu-wheel-${{ matrix.os-arch.arch }}-py${{ matrix.python-version }}
+          path: dist/repaired/*.whl
+
+  upload_release:
+    needs: [build_gpu_wheels]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: github.event_name == 'release' && github.event.action == 'published'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gpu-wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: Upload wheels to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.whl
