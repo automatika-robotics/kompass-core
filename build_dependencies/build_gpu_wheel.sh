@@ -66,7 +66,8 @@ fi
 cd "$PROJECT_DIR"
 rm -rf dist/
 export PIP_BREAK_SYSTEM_PACKAGES=1
-$PYTHON -m pip install patchelf scikit-build-core nanobind packaging
+# Version pins must match pyproject.toml [build-system] requires
+$PYTHON -m pip install patchelf "scikit-build-core>=0.8" "nanobind>=1.8,<2.9.2" "packaging>=22.0"
 CXX=acpp $PYTHON -m pip wheel --no-build-isolation -w dist/ .
 
 # -----------------------------------------------------------------------------
