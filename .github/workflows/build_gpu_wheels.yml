@@ -40,6 +40,13 @@ jobs:
       - name: Build GPU wheel
         run: sudo -E bash build_dependencies/build_gpu_wheel.sh $(which python)
 
+      - name: Test GPU wheel
+        run: |
+          python -m venv /tmp/test_wheel
+          source /tmp/test_wheel/bin/activate
+          pip install dist/repaired/kompass_core-*.whl pytest opencv-python
+          pytest tests/ -v
+
       - uses: actions/upload-artifact@v4
         with:
           name: gpu-wheel-${{ matrix.os-arch.arch }}-py${{ matrix.python-version }}
