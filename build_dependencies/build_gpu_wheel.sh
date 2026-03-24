@@ -205,7 +205,7 @@ CXX=acpp SKBUILD_CMAKE_ARGS="-DCMAKE_PREFIX_PATH=$CONAN_BUILD_DIR" \
 # Also bundle OMPL shared lib since it was built via Conan
 # -----------------------------------------------------------------------------
 if [ -n "$OMPL_LIB_DIR" ]; then
-    cp "$OMPL_LIB_DIR"/libompl.so* "$ACPP_DEPLOY_DIR/"
+    cp -L "$OMPL_LIB_DIR"/libompl.so* "$ACPP_DEPLOY_DIR/"
 fi
 
 WHEEL=$(ls dist/kompass_core-*.whl | head -1)

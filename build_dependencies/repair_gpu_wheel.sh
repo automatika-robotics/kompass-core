@@ -40,7 +40,7 @@ LIBS_DIR="$TMPDIR/kompass_core.libs"
 mkdir -p "$LIBS_DIR"
 
 echo "Copying acpp runtime from $ACPP_DEPLOY_DIR..."
-cp -r "$ACPP_DEPLOY_DIR"/* "$LIBS_DIR/"
+cp -rL "$ACPP_DEPLOY_DIR"/* "$LIBS_DIR/"
 
 # -----------------------------------------------------------------------------
 # Fix RPATHs on extension modules
