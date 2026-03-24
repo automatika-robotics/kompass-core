@@ -23,6 +23,9 @@ PYTHON="${1:-python3}"
 
 export PIP_BREAK_SYSTEM_PACKAGES=1
 
+# Helper: run conan via python module so it works under sudo
+CONAN="$PYTHON -m conans.cli.cli"
+
 # -----------------------------------------------------------------------------
 # 1. Install LLVM/Clang (skipped if already present)
 # -----------------------------------------------------------------------------
@@ -127,6 +130,10 @@ fi
 # -----------------------------------------------------------------------------
 if [ ! -d "$CONAN_BUILD_DIR" ]; then
     $PYTHON -m pip install conan "cmake<3.30"
+
+    # Add Python bin dir to PATH so conan command is found
+    PYTHON_BIN_DIR=$($PYTHON -c "import sysconfig; print(sysconfig.get_path('scripts'))")
+    export PATH="$PYTHON_BIN_DIR:$PATH"
 
     # Configure Conan profile with system compiler (not acpp)
     CXX=g++ conan profile detect --force
