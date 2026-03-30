@@ -47,12 +47,12 @@ public:
                 const float depth_conversion_factor = 1e-3);
 
   void
-  updateBoxes(const Eigen::MatrixX<unsigned short> aligned_depth_img,
+  updateBoxes(const Eigen::MatrixX<unsigned short> &aligned_depth_img,
               const std::vector<Bbox2D> &detections,
               const std::optional<Path::State> &robot_state = std::nullopt);
 
   void
-  updatePOIs(const Eigen::MatrixX<unsigned short> aligned_depth_img,
+  updatePOIs(const Eigen::MatrixX<unsigned short> &aligned_depth_img,
               const std::vector<PointOfInterest> &pois,
               const std::optional<Path::State> &robot_state = std::nullopt);
 

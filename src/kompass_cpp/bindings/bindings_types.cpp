@@ -189,8 +189,8 @@ void bindings_types(py::module_ &m) {
   py::class_<PointOfInterest>(m_types, "PointOfInterest")
       .def(py::init<>())
       .def(py::init<const PointOfInterest &>())
-      .def(py::init<const Eigen::Vector2i &, const Eigen::Vector2i, const float,
-                    const std::string &>(),
+      .def(py::init<const Eigen::Vector2i &, const Eigen::Vector2i &,
+                    const float, const std::string &>(),
            py::arg("point"), py::arg("img_size") = Eigen::Vector2i(640, 480),
            py::arg("timestamp") = 0.0, py::arg("label") = "")
       .def_rw("point_2d", &PointOfInterest::Point2D)
