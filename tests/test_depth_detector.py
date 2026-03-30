@@ -200,3 +200,47 @@ def test_poi_compute_3d_world_frame(detector, synthetic_depth_image_poi, center_
     assert box3d.center[0] == pytest.approx(10.0, abs=0.1)
     assert box3d.center[1] == pytest.approx(5.0, abs=0.1)
     assert box3d.center[2] == pytest.approx(3.0, abs=0.1)
+
+
+def test_poi_multipoint_robot_frame(detector, camera_params):
+    """
+    Test detection from PointsOfInterest with multiple scattered points.
+    The MAD-based bounding box should encompass the spread and the 3D
+    center should correspond to the median of the cluster.
+    """
+    cx, cy = int(camera_params["principal_point"][0]), int(
+        camera_params["principal_point"][1]
+    )
+    img_h, img_w = camera_params["img_shape"]
+
+    # Spread points around the principal point
+    points = [
+        np.array([cx - 30, cy - 20], dtype=np.int32),
+        np.array([cx - 10, cy - 10], dtype=np.int32),
+        np.array([cx, cy], dtype=np.int32),
+        np.array([cx + 10, cy + 10], dtype=np.int32),
+        np.array([cx + 30, cy + 20], dtype=np.int32),
+    ]
+
+    poi = PointsOfInterest(
+        points=points,
+        img_size=np.array([img_w, img_h], dtype=np.int32),
+    )
+
+    # Build depth image filling a generous region around the cluster
+    img = np.zeros((img_h, img_w), dtype=np.uint16, order="F")
+    margin = 80
+    img[cy - margin : cy + margin, cx - margin : cx + margin] = 3000
+
+    results = detector.compute_3d_detections(img, poi, 0.0, 0.0, 0.0, 0.0)
+
+    assert results is not None
+    assert len(results) == 1
+
+    box3d = results[0]
+
+    # Depth is 3.0m
+    assert box3d.center[2] == pytest.approx(3.0, abs=0.05)
+    # Median of the symmetric cluster is the principal point -> X, Y ~ 0.0
+    assert box3d.center[0] == pytest.approx(0.0, abs=0.1)
+    assert box3d.center[1] == pytest.approx(0.0, abs=0.1)
