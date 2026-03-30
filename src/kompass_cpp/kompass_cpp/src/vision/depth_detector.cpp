@@ -13,13 +13,11 @@ DepthDetector::DepthDetector(const Eigen::Vector2f &depth_range,
                              const Eigen::Quaternionf &camera_in_body_rotation,
                              const Eigen::Vector2f &focal_length,
                              const Eigen::Vector2f &principal_point,
-                             const float depth_conversion_factor) {
-  // Set camera tf
-  auto body_to_camera_tf =
-      getTransformation(camera_in_body_rotation, camera_in_body_translation);
-  DepthDetector(depth_range, body_to_camera_tf, focal_length, principal_point,
-                depth_conversion_factor);
-}
+                             const float depth_conversion_factor)
+    : DepthDetector(depth_range,
+                    getTransformation(camera_in_body_rotation,
+                                      camera_in_body_translation),
+                    focal_length, principal_point, depth_conversion_factor) {}
 
 DepthDetector::DepthDetector(
     const Eigen::Vector2f &depth_range,
@@ -52,7 +50,7 @@ std::optional<std::vector<Bbox3D>> DepthDetector::get3dDetections() const {
 }
 
 void DepthDetector::updateBoxes(
-    const Eigen::MatrixX<unsigned short> aligned_depth_img,
+    const Eigen::MatrixX<unsigned short> &aligned_depth_img,
     const std::vector<Bbox2D> &detections,
     const std::optional<Path::State> &robot_state) {
   if (robot_state.has_value()) {
@@ -60,11 +58,26 @@ void DepthDetector::updateBoxes(
   }
   alignedDepthImg_ = aligned_depth_img;
   boxes_ = std::make_unique<std::vector<Bbox3D>>();
-  for (auto box2d : detections) {
+  for (const auto& box2d : detections) {
     auto converted_box = convert2Dboxto3Dbox(box2d);
     if (converted_box) {
       boxes_->push_back(converted_box.value());
     }
+  }
+}
+
+void DepthDetector::updatePOIs(
+    const Eigen::MatrixX<unsigned short> &aligned_depth_img,
+    const PointsOfInterest &poi,
+    const std::optional<Path::State> &robot_state) {
+  if (robot_state.has_value()) {
+    body_in_world_tf_ = getTransformation(robot_state.value());
+  }
+  alignedDepthImg_ = aligned_depth_img;
+  boxes_ = std::make_unique<std::vector<Bbox3D>>();
+  auto converted_box = convertPOIto3Dbox(poi);
+  if (converted_box) {
+    boxes_->push_back(converted_box.value());
   }
 }
 
@@ -135,6 +148,12 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
   box3d.size = abs_rotation * size_camera_frame;
 
   return box3d;
+}
+
+std::optional<Bbox3D>
+DepthDetector::convertPOIto3Dbox(const PointsOfInterest &poi) {
+  Bbox2D box2d(poi);
+  return convert2Dboxto3Dbox(box2d);
 }
 
 float DepthDetector::getMedian(const std::vector<float> &values) {

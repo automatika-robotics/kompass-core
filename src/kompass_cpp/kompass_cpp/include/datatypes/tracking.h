@@ -3,11 +3,54 @@
 #include "datatypes/control.h"
 #include "utils/logger.h"
 #include <Eigen/Dense>
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <vector>
 
 namespace Kompass {
+
+struct PointsOfInterest {
+  std::vector<Eigen::Vector2i> Points2D = {}; // 2D points in the image frame
+  float timestamp = 0.0;  // Timestamp of the points in seconds
+  std::string label = ""; // Label of the point, e.g. "car", "pedestrian"
+  Eigen::Vector2i img_size = {640, 480}; // Size of the image frame
+  Eigen::Vector2i vel = {}; // Average points velocity in the image frame
+
+  PointsOfInterest() {};
+
+  PointsOfInterest(const PointsOfInterest &poi)
+      : Points2D(poi.Points2D), timestamp(poi.timestamp), label(poi.label),
+        img_size(poi.img_size), vel(poi.vel) {};
+
+  PointsOfInterest(const std::vector<Eigen::Vector2i> &points,
+                   const Eigen::Vector2i &img_size = {640, 480},
+                   const float timestamp = 0.0, const std::string &label = "")
+      : Points2D(points), timestamp(timestamp), label(label),
+        img_size(img_size) {
+    if (img_size.x() <= 0 || img_size.y() <= 0) {
+      throw std::invalid_argument("Invalid image size");
+    }
+    // Confirm that all points are within the image frame
+    for (const auto &point : Points2D) {
+      if (point.x() < 0 || point.x() >= img_size.x() || point.y() < 0 ||
+          point.y() >= img_size.y()) {
+        throw std::invalid_argument("Point " + std::to_string(point.x()) + "," +
+                                    std::to_string(point.y()) +
+                                    " is out of image bounds");
+      }
+    }
+  };
+
+  void setImgSize(const Eigen::Vector2i &size) {
+    if (size.x() <= 0 || size.y() <= 0) {
+      throw std::invalid_argument("Invalid image size");
+    }
+    this->img_size = size;
+  };
+
+  void setVel(const Eigen::Vector2i &vel) { this->vel = vel; };
+};
 
 struct Bbox2D {
   Eigen::Vector2i top_corner = {0, 0};
@@ -17,11 +60,11 @@ struct Bbox2D {
   Eigen::Vector2i img_size = {640, 480}; // Size of the image frame
   Eigen::Vector3f vel = {0.0, 0.0, 0.0};
 
-  Bbox2D(){};
+  Bbox2D() {};
 
   Bbox2D(const Bbox2D &box)
       : top_corner(box.top_corner), size(box.size), timestamp(box.timestamp),
-        label(box.label), img_size(box.img_size){};
+        label(box.label), img_size(box.img_size) {};
 
   Bbox2D(const Eigen::Vector2i top_corner, const Eigen::Vector2i size,
          const float timestamp = 0.0, const std::string &label = "",
@@ -34,6 +77,47 @@ struct Bbox2D {
     if (img_size.x() <= 0 || img_size.y() <= 0) {
       throw std::invalid_argument("Invalid image size");
     }
+  };
+
+  Bbox2D(const PointsOfInterest &poi, const float mad_scale = 2.0f)
+      : timestamp(poi.timestamp), label(poi.label), img_size(poi.img_size) {
+    if (poi.Points2D.empty()) {
+      throw std::invalid_argument("PointsOfInterest has no points");
+    }
+    // Collect x and y coordinates
+    std::vector<int> xs(poi.Points2D.size()), ys(poi.Points2D.size());
+    for (size_t i = 0; i < poi.Points2D.size(); ++i) {
+      xs[i] = poi.Points2D[i].x();
+      ys[i] = poi.Points2D[i].y();
+    }
+    std::sort(xs.begin(), xs.end());
+    std::sort(ys.begin(), ys.end());
+    int median_x = xs[xs.size() / 2];
+    int median_y = ys[ys.size() / 2];
+
+    // Compute MAD (Median Absolute Deviation) for each axis
+    std::vector<int> abs_dev_x(xs.size()), abs_dev_y(ys.size());
+    for (size_t i = 0; i < xs.size(); ++i) {
+      abs_dev_x[i] = std::abs(xs[i] - median_x);
+      abs_dev_y[i] = std::abs(ys[i] - median_y);
+    }
+    std::sort(abs_dev_x.begin(), abs_dev_x.end());
+    std::sort(abs_dev_y.begin(), abs_dev_y.end());
+    int mad_x = abs_dev_x[abs_dev_x.size() / 2];
+    int mad_y = abs_dev_y[abs_dev_y.size() / 2];
+
+    // Box spans mad_scale * MAD around the median, clamped to image bounds
+    int half_w = static_cast<int>(mad_scale * mad_x);
+    int half_h = static_cast<int>(mad_scale * mad_y);
+    // Ensure at least 1px box when all points coincide
+    half_w = std::max(half_w, 5);
+    half_h = std::max(half_h, 5);
+    int x0 = std::max(0, median_x - half_w);
+    int y0 = std::max(0, median_y - half_h);
+    int x1 = std::min(poi.img_size.x() - 1, median_x + half_w);
+    int y1 = std::min(poi.img_size.y() - 1, median_y + half_h);
+    top_corner = {x0, y0};
+    size = {x1 - x0, y1 - y0};
   };
 
   Eigen::Vector2i getXLimits() const {
@@ -67,13 +151,13 @@ struct Bbox3D {
   float timestamp = 0.0; // Timestamp of the detection in seconds
   std::string label = "";
 
-  Bbox3D(){};
+  Bbox3D() {};
 
   Bbox3D(const Bbox3D &box)
       : center(box.center), size(box.size),
         center_img_frame(box.center_img_frame),
         size_img_frame(box.size_img_frame), pc_points(box.pc_points),
-        timestamp(box.timestamp), label(box.label){};
+        timestamp(box.timestamp), label(box.label) {};
 
   Bbox3D(const Eigen::Vector3f &center, const Eigen::Vector3f &size,
          const Eigen::Vector2i center_img_frame,
@@ -82,7 +166,7 @@ struct Bbox3D {
          const std::vector<Eigen::Vector3f> pc_points = {})
       : center(center), size(size), center_img_frame(center_img_frame),
         size_img_frame(size_img_frame), pc_points(pc_points),
-        timestamp(timestamp), label(label){};
+        timestamp(timestamp), label(label) {};
 
   Bbox3D(const Eigen::Vector3f &center, const Eigen::Vector3f &size,
          const Bbox2D &box2d, std::vector<Eigen::Vector3f> pc_points = {})
@@ -91,14 +175,14 @@ struct Bbox3D {
             box2d.top_corner +
             Eigen::Vector2i{box2d.size.x() / 2, box2d.size.y() / 2}),
         size_img_frame(box2d.size), pc_points(pc_points),
-        timestamp(box2d.timestamp), label(box2d.label){};
+        timestamp(box2d.timestamp), label(box2d.label) {};
 
   Bbox3D(const Bbox2D &box2d)
       : center_img_frame(
             box2d.top_corner +
             Eigen::Vector2i{box2d.size.x() / 2, box2d.size.y() / 2}),
         size_img_frame(box2d.size), timestamp(box2d.timestamp),
-        label(box2d.label){};
+        label(box2d.label) {};
 
   Eigen::Vector2f getXLimitsImg() const {
     return {center_img_frame.x() - (size_img_frame.x() / 2),
@@ -117,7 +201,7 @@ struct TrackedBbox3D {
   Eigen::Vector3f acc = {0.0, 0.0, 0.0};
   int unique_id = 0;
 
-  TrackedBbox3D(const Bbox3D &box) : box(box){};
+  TrackedBbox3D(const Bbox3D &box) : box(box) {};
 
   void setState(const Eigen::Matrix<float, 9, 1> &state_vector) {
     this->box.center = {state_vector(0), state_vector(1), 0.0f};
@@ -137,8 +221,8 @@ struct TrackedBbox3D {
     float time_step = new_box.timestamp - this->box.timestamp;
     Eigen::Vector3f new_vel;
     if (time_step <= 0.0) {
-      LOG_ERROR(
-          "Box updated with invalid time step, Velocity wil be reset to zero.");
+      LOG_ERROR("Box updated with invalid time step, Velocity wil be reset "
+                "to zero.");
       this->vel = {0.0, 0.0, 0.0};
       this->acc = {0.0, 0.0, 0.0};
     } else {

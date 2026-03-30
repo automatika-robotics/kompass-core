@@ -186,6 +186,21 @@ void bindings_types(py::module_ &m) {
       });
 
   // Vision types
+  py::class_<PointsOfInterest>(m_types, "PointsOfInterest")
+      .def(py::init<>())
+      .def(py::init<const PointsOfInterest &>())
+      .def(py::init<const std::vector<Eigen::Vector2i> &, const Eigen::Vector2i &,
+                    const float, const std::string &>(),
+           py::arg("points"), py::arg("img_size") = Eigen::Vector2i(640, 480),
+           py::arg("timestamp") = 0.0, py::arg("label") = "")
+      .def_rw("points_2d", &PointsOfInterest::Points2D)
+      .def_rw("timestamp", &PointsOfInterest::timestamp)
+      .def_rw("label", &PointsOfInterest::label)
+      .def_rw("img_size", &PointsOfInterest::img_size)
+      .def_rw("vel", &PointsOfInterest::vel)
+      .def("set_vel", &PointsOfInterest::setVel)
+      .def("set_img_size", &PointsOfInterest::setImgSize);
+
   py::class_<Bbox2D>(m_types, "Bbox2D")
       .def(py::init<>())
       .def(py::init<const Bbox2D &>())
