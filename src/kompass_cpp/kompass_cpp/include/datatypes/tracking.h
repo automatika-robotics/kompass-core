@@ -9,6 +9,44 @@
 
 namespace Kompass {
 
+struct PointOfInterest {
+  Eigen::Vector2i Point2D = {}; // 2D points in the image frame
+  float timestamp = 0.0;        // Timestamp of the points in seconds
+  std::string label = "";       // Label of the point, e.g. "car", "pedestrian"
+  Eigen::Vector2i img_size = {640, 480}; // Size of the image frame
+  Eigen::Vector2i vel = {};              // 2D point velocity in the image frame
+
+  PointOfInterest(){};
+
+  PointOfInterest(const PointOfInterest &poi)
+      : Point2D(poi.Point2D), timestamp(poi.timestamp), label(poi.label),
+        img_size(poi.img_size){};
+
+  PointOfInterest(const Eigen::Vector2i &point,
+                  const Eigen::Vector2i img_size = {640, 480},
+                  const float timestamp = 0.0, const std::string &label = "")
+      : Point2D(point), timestamp(timestamp), label(label), img_size(img_size) {
+    // Confirm that all points are within the image frame
+    if (point.x() < 0 || point.x() >= img_size.x() || point.y() < 0 ||
+        point.y() >= img_size.y()) {
+      throw std::invalid_argument("Point " + std::to_string(point.x()) + "," +
+                                  std::to_string(point.y()) +
+                                  " is out of image bounds");
+    }
+    if (img_size.x() <= 0 || img_size.y() <= 0) {
+      throw std::invalid_argument("Invalid image size");
+    }
+  };
+
+  void setImgSize(const Eigen::Vector2i &size) {
+    if (size.x() <= 0 || size.y() <= 0) {
+      throw std::invalid_argument("Invalid image size");
+    }
+    this->img_size = size;
+  };
+
+  void setVel(const Eigen::Vector2i &vel) { this->vel = vel; };
+};
 struct Bbox2D {
   Eigen::Vector2i top_corner = {0, 0};
   Eigen::Vector2i size = {0, 0};
@@ -34,6 +72,18 @@ struct Bbox2D {
     if (img_size.x() <= 0 || img_size.y() <= 0) {
       throw std::invalid_argument("Invalid image size");
     }
+  };
+
+  Bbox2D(const PointOfInterest &poi, const float margin_ratio = 0.01f)
+      : timestamp(poi.timestamp), label(poi.label), img_size(poi.img_size) {
+    int margin_x = static_cast<int>(margin_ratio * poi.img_size.x());
+    int margin_y = static_cast<int>(margin_ratio * poi.img_size.y());
+    int x0 = std::max(0, poi.Point2D.x() - margin_x);
+    int y0 = std::max(0, poi.Point2D.y() - margin_y);
+    int x1 = std::min(poi.img_size.x() - 1, poi.Point2D.x() + margin_x);
+    int y1 = std::min(poi.img_size.y() - 1, poi.Point2D.y() + margin_y);
+    top_corner = {x0, y0};
+    size = {x1 - x0, y1 - y0};
   };
 
   Eigen::Vector2i getXLimits() const {
@@ -137,8 +187,8 @@ struct TrackedBbox3D {
     float time_step = new_box.timestamp - this->box.timestamp;
     Eigen::Vector3f new_vel;
     if (time_step <= 0.0) {
-      LOG_ERROR(
-          "Box updated with invalid time step, Velocity wil be reset to zero.");
+      LOG_ERROR("Box updated with invalid time step, Velocity wil be reset "
+                "to zero.");
       this->vel = {0.0, 0.0, 0.0};
       this->acc = {0.0, 0.0, 0.0};
     } else {
