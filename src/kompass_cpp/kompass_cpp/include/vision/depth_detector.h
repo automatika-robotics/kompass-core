@@ -51,10 +51,9 @@ public:
               const std::vector<Bbox2D> &detections,
               const std::optional<Path::State> &robot_state = std::nullopt);
 
-  void
-  updatePOIs(const Eigen::MatrixX<unsigned short> &aligned_depth_img,
-              const std::vector<PointOfInterest> &pois,
-              const std::optional<Path::State> &robot_state = std::nullopt);
+  void updatePOIs(const Eigen::MatrixX<unsigned short> &aligned_depth_img,
+                  const PointsOfInterest &pois,
+                  const std::optional<Path::State> &robot_state = std::nullopt);
 
   std::optional<std::vector<Bbox3D>> get3dDetections() const;
 
@@ -67,8 +66,7 @@ private:
 
   std::optional<Bbox3D> convert2Dboxto3Dbox(const Bbox2D &box2d);
 
-  std::optional<Bbox3D> convertPOIto3Dbox(const PointOfInterest &poi,
-                                          const float point_margin_ratio = 0.01f);
+  std::optional<Bbox3D> convertPOIto3Dbox(const PointsOfInterest &poi);
 
   static void calculateMAD(const std::vector<float> &depthValues, float &median,
                            float &mad);

@@ -68,18 +68,16 @@ void DepthDetector::updateBoxes(
 
 void DepthDetector::updatePOIs(
     const Eigen::MatrixX<unsigned short> &aligned_depth_img,
-    const std::vector<PointOfInterest> &pois,
+    const PointsOfInterest &poi,
     const std::optional<Path::State> &robot_state) {
   if (robot_state.has_value()) {
     body_in_world_tf_ = getTransformation(robot_state.value());
   }
   alignedDepthImg_ = aligned_depth_img;
   boxes_ = std::make_unique<std::vector<Bbox3D>>();
-  for (const auto& poi : pois) {
-    auto converted_box = convertPOIto3Dbox(poi);
-    if (converted_box) {
-      boxes_->push_back(converted_box.value());
-    }
+  auto converted_box = convertPOIto3Dbox(poi);
+  if (converted_box) {
+    boxes_->push_back(converted_box.value());
   }
 }
 
@@ -153,9 +151,8 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
 }
 
 std::optional<Bbox3D>
-DepthDetector::convertPOIto3Dbox(const PointOfInterest &poi,
-                                 const float point_margin_ratio) {
-  Bbox2D box2d(poi, point_margin_ratio);
+DepthDetector::convertPOIto3Dbox(const PointsOfInterest &poi) {
+  Bbox2D box2d(poi);
   return convert2Dboxto3Dbox(box2d);
 }
 

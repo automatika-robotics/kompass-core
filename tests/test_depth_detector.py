@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from kompass_core.vision import DepthDetector
-from kompass_core.datatypes import Bbox2D, PointOfInterest
+from kompass_core.datatypes import Bbox2D, PointsOfInterest
 
 # -----------------------------------------------------------------------------
 # Fixtures
@@ -127,7 +127,7 @@ def test_empty_input(detector, synthetic_depth_image):
 
 
 # -----------------------------------------------------------------------------
-# PointOfInterest Tests
+# PointsOfInterest Tests
 # -----------------------------------------------------------------------------
 
 
@@ -135,8 +135,9 @@ def test_empty_input(detector, synthetic_depth_image):
 def center_poi(camera_params):
     cx, cy = camera_params["principal_point"]
     img_h, img_w = camera_params["img_shape"]
-    return PointOfInterest(
-        point=np.array([int(cx), int(cy)], dtype=np.int32),
+    center = np.array([int(cx), int(cy)], dtype=np.int32)
+    return PointsOfInterest(
+        points=[center],
         img_size=np.array([img_w, img_h], dtype=np.int32),
     )
 
@@ -144,15 +145,15 @@ def center_poi(camera_params):
 @pytest.fixture
 def synthetic_depth_image_poi(camera_params, center_poi):
     """
-    Creates a depth image where a region around the POI center is filled
+    Creates a depth image where a region around the POI points is filled
     with 3000mm (3.0 meters). The region is large enough to cover the
-    margin that Bbox2D(PointOfInterest) applies.
+    bounding box that Bbox2D(PointsOfInterest) computes.
     """
     h, w = camera_params["img_shape"]
     img = np.zeros((h, w), dtype=np.uint16, order="F")
 
-    px, py_ = center_poi.point_2d
-    # Fill a generous region around the point (larger than the margin)
+    # Use the first point as reference for the fill region
+    px, py_ = center_poi.points_2d[0]
     margin = max(w, h) // 4
     x0 = max(0, px - margin)
     y0 = max(0, py_ - margin)
@@ -165,10 +166,10 @@ def synthetic_depth_image_poi(camera_params, center_poi):
 
 def test_poi_compute_3d_robot_frame(detector, synthetic_depth_image_poi, center_poi):
     """
-    Test detection from PointOfInterest in Robot Frame.
+    Test detection from PointsOfInterest in Robot Frame.
     """
     results = detector.compute_3d_detections(
-        synthetic_depth_image_poi, [center_poi], 0.0, 0.0, 0.0, 0.0
+        synthetic_depth_image_poi, center_poi, 0.0, 0.0, 0.0, 0.0
     )
 
     assert results is not None
@@ -185,12 +186,12 @@ def test_poi_compute_3d_robot_frame(detector, synthetic_depth_image_poi, center_
 
 def test_poi_compute_3d_world_frame(detector, synthetic_depth_image_poi, center_poi):
     """
-    Test detection from PointOfInterest in World Frame.
+    Test detection from PointsOfInterest in World Frame.
     """
     rx, ry, ryaw, rspeed = 10.0, 5.0, 0.0, 0.0
 
     results = detector.compute_3d_detections(
-        synthetic_depth_image_poi, [center_poi], rx, ry, ryaw, rspeed
+        synthetic_depth_image_poi, center_poi, rx, ry, ryaw, rspeed
     )
 
     assert results is not None
@@ -199,11 +200,3 @@ def test_poi_compute_3d_world_frame(detector, synthetic_depth_image_poi, center_
     assert box3d.center[0] == pytest.approx(10.0, abs=0.1)
     assert box3d.center[1] == pytest.approx(5.0, abs=0.1)
     assert box3d.center[2] == pytest.approx(3.0, abs=0.1)
-
-
-def test_poi_empty_input(detector, synthetic_depth_image_poi):
-    results = detector.compute_3d_detections(
-        synthetic_depth_image_poi, [], 0.0, 0.0, 0.0, 0.0
-    )
-    if results is not None:
-        assert len(results) == 0

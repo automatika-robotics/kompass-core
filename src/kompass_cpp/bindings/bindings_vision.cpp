@@ -65,7 +65,7 @@ void bindings_vision(py::module_ &m) {
           "compute_3d_detections",
           [](DepthDetector &self,
              const Eigen::MatrixX<unsigned short> &depth_img,
-             const std::vector<PointOfInterest> &input, float robot_x,
+             const PointsOfInterest &input, float robot_x,
              float robot_y, float robot_yaw, float robot_speed) {
             Path::State state;
             state.x = robot_x;

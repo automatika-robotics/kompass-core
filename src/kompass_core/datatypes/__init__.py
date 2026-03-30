@@ -15,7 +15,7 @@ from .path import (
 from .pointcloud import PointCloudData, get_points_from_pcd, get_occupancy_grid_from_pcd
 from .scan_model import ScanModelConfig
 from .pose import PoseData
-from kompass_cpp.types import Bbox3D, Bbox2D, PointOfInterest
+from kompass_cpp.types import Bbox3D, Bbox2D, PointsOfInterest
 
 __all__ = [
     "LaserScanData",
@@ -35,7 +35,7 @@ __all__ = [
     "PoseData",
     "Bbox3D",
     "Bbox2D",
-    "PointOfInterest",
+    "PointsOfInterest",
     "get_points_from_pcd",
     "get_occupancy_grid_from_pcd",
 ]
