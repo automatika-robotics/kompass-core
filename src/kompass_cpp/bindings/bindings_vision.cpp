@@ -37,8 +37,7 @@ void bindings_vision(py::module_ &m) {
           },
           py::arg("depth_range"), py::arg("camera_in_body_translation"),
           py::arg("camera_in_body_rotation"), py::arg("focal_length"),
-          py::arg("principal_point"),
-          py::arg("depth_conversion_factor") = 1e-3,
+          py::arg("principal_point"), py::arg("depth_conversion_factor") = 1e-3,
           "Initialize with camera translation and rotation (Vector4f as [x, y, "
           "z, w]).")
 
@@ -47,7 +46,26 @@ void bindings_vision(py::module_ &m) {
           "compute_3d_detections",
           [](DepthDetector &self,
              const Eigen::MatrixX<unsigned short> &depth_img,
-             const std::vector<Bbox2D> &detections, float robot_x,
+             const std::vector<Bbox2D> &input, float robot_x, float robot_y,
+             float robot_yaw, float robot_speed) {
+            Path::State state;
+            state.x = robot_x;
+            state.y = robot_y;
+            state.yaw = robot_yaw;
+            state.speed = robot_speed;
+
+            self.updateBoxes(depth_img, input,
+                             std::optional<Path::State>(state));
+            return self.get3dDetections();
+          },
+          py::arg("depth_img"), py::arg("input"), py::arg("robot_x"),
+          py::arg("robot_y"), py::arg("robot_yaw"), py::arg("robot_speed"))
+
+      .def(
+          "compute_3d_detections",
+          [](DepthDetector &self,
+             const Eigen::MatrixX<unsigned short> &depth_img,
+             const std::vector<PointOfInterest> &input, float robot_x,
              float robot_y, float robot_yaw, float robot_speed) {
             Path::State state;
             state.x = robot_x;
@@ -55,10 +73,10 @@ void bindings_vision(py::module_ &m) {
             state.yaw = robot_yaw;
             state.speed = robot_speed;
 
-            self.updateBoxes(depth_img, detections,
-                             std::optional<Path::State>(state));
+            self.updatePOIs(depth_img, input,
+                            std::optional<Path::State>(state));
             return self.get3dDetections();
           },
-          py::arg("depth_img"), py::arg("detections"), py::arg("robot_x"),
+          py::arg("depth_img"), py::arg("input"), py::arg("robot_x"),
           py::arg("robot_y"), py::arg("robot_yaw"), py::arg("robot_speed"));
 }

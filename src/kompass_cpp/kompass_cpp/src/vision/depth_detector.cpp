@@ -66,6 +66,23 @@ void DepthDetector::updateBoxes(
   }
 }
 
+void DepthDetector::updatePOIs(
+    const Eigen::MatrixX<unsigned short> aligned_depth_img,
+    const std::vector<PointOfInterest> &pois,
+    const std::optional<Path::State> &robot_state) {
+  if (robot_state.has_value()) {
+    body_in_world_tf_ = getTransformation(robot_state.value());
+  }
+  alignedDepthImg_ = aligned_depth_img;
+  boxes_ = std::make_unique<std::vector<Bbox3D>>();
+  for (auto poi : pois) {
+    auto converted_box = convertPOIto3Dbox(poi);
+    if (converted_box) {
+      boxes_->push_back(converted_box.value());
+    }
+  }
+}
+
 std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
   Bbox3D box3d(box2d);
   Eigen::Vector2i x_limits = box2d.getXLimits();
@@ -126,13 +143,20 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
   box3d.center = camera_in_world_tf * center_in_camera_frame;
 
   LOG_DEBUG("Got detected box in 3D coordinates at :", box3d.center.x(), ", ",
-              box3d.center.y(), ", ", box3d.center.z());
+            box3d.center.y(), ", ", box3d.center.z());
 
   // Transform size from camera frame to world frame
   Eigen::Matrix3f abs_rotation = camera_in_world_tf.linear().cwiseAbs();
   box3d.size = abs_rotation * size_camera_frame;
 
   return box3d;
+}
+
+std::optional<Bbox3D>
+DepthDetector::convertPOIto3Dbox(const PointOfInterest &poi,
+                                 const float point_margin_ratio) {
+  Bbox2D box2d(poi, point_margin_ratio);
+  return convert2Dboxto3Dbox(box2d);
 }
 
 float DepthDetector::getMedian(const std::vector<float> &values) {
