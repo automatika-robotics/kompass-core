@@ -91,11 +91,11 @@ def test_compute_3d_robot_frame(detector, synthetic_depth_image, center_bbox_2d)
 
     box3d = results[0]
 
-    # Depth is exactly 3000mm = 3.0m
-    assert box3d.center[2] == pytest.approx(3.0, abs=0.05)
-    # Box centered on principal point -> X, Y ~ 0.0
-    assert box3d.center[0] == pytest.approx(0.0, abs=0.05)
+    # Body frame is FLU: depth (3.0m) is forward (X), box centered on the
+    # principal point -> Y, Z ~ 0.0
+    assert box3d.center[0] == pytest.approx(3.0, abs=0.05)
     assert box3d.center[1] == pytest.approx(0.0, abs=0.05)
+    assert box3d.center[2] == pytest.approx(0.0, abs=0.05)
 
 
 def test_compute_3d_world_frame(detector, synthetic_depth_image, center_bbox_2d):
@@ -112,10 +112,11 @@ def test_compute_3d_world_frame(detector, synthetic_depth_image, center_bbox_2d)
     assert results is not None
     box3d = results[0]
 
-    assert box3d.center[0] == pytest.approx(10.0, abs=0.1)
+    # Robot at (10, 5) with yaw=0; target 3m straight ahead in body frame
+    # -> world position (13, 5, 0).
+    assert box3d.center[0] == pytest.approx(13.0, abs=0.1)
     assert box3d.center[1] == pytest.approx(5.0, abs=0.1)
-    # Z is updated to expect 3.0m
-    assert box3d.center[2] == pytest.approx(3.0, abs=0.1)
+    assert box3d.center[2] == pytest.approx(0.0, abs=0.1)
 
 
 def test_empty_input(detector, synthetic_depth_image):
@@ -177,11 +178,10 @@ def test_poi_compute_3d_robot_frame(detector, synthetic_depth_image_poi, center_
 
     box3d = results[0]
 
-    # Depth is exactly 3000mm = 3.0m
-    assert box3d.center[2] == pytest.approx(3.0, abs=0.05)
-    # POI centered on principal point -> X, Y ~ 0.0
-    assert box3d.center[0] == pytest.approx(0.0, abs=0.05)
+    # Body frame is FLU: depth (3.0m) is forward (X), POI on principal point.
+    assert box3d.center[0] == pytest.approx(3.0, abs=0.05)
     assert box3d.center[1] == pytest.approx(0.0, abs=0.05)
+    assert box3d.center[2] == pytest.approx(0.0, abs=0.05)
 
 
 def test_poi_compute_3d_world_frame(detector, synthetic_depth_image_poi, center_poi):
@@ -197,9 +197,11 @@ def test_poi_compute_3d_world_frame(detector, synthetic_depth_image_poi, center_
     assert results is not None
     box3d = results[0]
 
-    assert box3d.center[0] == pytest.approx(10.0, abs=0.1)
+    # Robot at (10, 5) with yaw=0; target 3m forward in body frame
+    # -> world position (13, 5, 0).
+    assert box3d.center[0] == pytest.approx(13.0, abs=0.1)
     assert box3d.center[1] == pytest.approx(5.0, abs=0.1)
-    assert box3d.center[2] == pytest.approx(3.0, abs=0.1)
+    assert box3d.center[2] == pytest.approx(0.0, abs=0.1)
 
 
 def test_poi_multipoint_robot_frame(detector, camera_params):
@@ -239,8 +241,8 @@ def test_poi_multipoint_robot_frame(detector, camera_params):
 
     box3d = results[0]
 
-    # Depth is 3.0m
-    assert box3d.center[2] == pytest.approx(3.0, abs=0.05)
-    # Median of the symmetric cluster is the principal point -> X, Y ~ 0.0
-    assert box3d.center[0] == pytest.approx(0.0, abs=0.1)
+    # Body frame is FLU: 3.0m forward (X), median of symmetric cluster on the
+    # principal point -> Y, Z ~ 0.0.
+    assert box3d.center[0] == pytest.approx(3.0, abs=0.05)
     assert box3d.center[1] == pytest.approx(0.0, abs=0.1)
+    assert box3d.center[2] == pytest.approx(0.0, abs=0.1)
