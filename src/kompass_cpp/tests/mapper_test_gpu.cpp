@@ -75,6 +75,34 @@ GridMapConfig &get_config() {
   return *cfg;
 }
 
+// Separate singleton for the pointcloud-mode mapper
+struct PointCloudMapConfig {
+  int grid_height;
+  int grid_width;
+  float grid_res;
+  float rangeMax;
+  int scan_size;   // number of angular bins produced by the conversion kernel
+  float angleStep; // uniform spacing across [0, 2π)
+  float minHeight;
+  float maxHeight;
+
+  Mapping::LocalMapperGPU mapper;
+
+  PointCloudMapConfig()
+      : grid_height(21), grid_width(21), grid_res(0.1f), rangeMax(5.0f),
+        scan_size(360), angleStep(static_cast<float>(2.0 * M_PI / 360.0)),
+        minHeight(-1.0f), maxHeight(1.0f),
+        mapper(Mapping::LocalMapperGPU(
+            grid_height, grid_width, grid_res, {0.0f, 0.0f, 0.0f}, 0.0f,
+            /*isPointCloud*/ true, scan_size, angleStep, maxHeight, minHeight,
+            rangeMax)) {}
+};
+
+PointCloudMapConfig &get_pc_config() {
+  static PointCloudMapConfig *cfg = new PointCloudMapConfig();
+  return *cfg;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -83,7 +111,8 @@ int countPointsInGrid(const Eigen::MatrixXi &matrix, int value) {
   int count = 0;
   for (int i = 0; i < matrix.rows(); ++i) {
     for (int j = 0; j < matrix.cols(); ++j) {
-      if (matrix(i, j) == value) ++count;
+      if (matrix(i, j) == value)
+        ++count;
     }
   }
   return count;
@@ -162,28 +191,77 @@ void run_circle_scan(double radius) {
   LOG_INFO("Number of unknown cells: ", n_unknown);
   std::cout << *gridData << std::endl;
 
-  // The only invariant that holds across every radius: the three cell counts
-  // must partition the grid. For radii larger than the grid half-diagonal
-  // (≈ 0.707 m here) every ray's endpoint lands outside the grid and gets
-  // dropped by the kernel's bounds check, so n_occ can legitimately be 0.
+  // For radii larger than the grid half-diagonal (≈ 0.707 m here) every ray's
+  // endpoint lands outside the grid and gets dropped by the kernel's bounds check
+  // so n_occ can legitimately be 0.
   const int total = static_cast<int>(gridData->size());
   BOOST_TEST(n_occ + n_empty + n_unknown == total,
              "cell counts must sum to total (" << total << "), got "
-                                                << n_occ + n_empty + n_unknown);
+                                               << n_occ + n_empty + n_unknown);
 }
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
-BOOST_AUTO_TEST_CASE(test_mapper_circle_radius_0_3) {
-  run_circle_scan(0.3);
-}
+BOOST_AUTO_TEST_CASE(test_mapper_circle_radius_0_3) { run_circle_scan(0.3); }
 
-BOOST_AUTO_TEST_CASE(test_mapper_circle_radius_0_5) {
-  run_circle_scan(0.5);
-}
+BOOST_AUTO_TEST_CASE(test_mapper_circle_radius_0_5) { run_circle_scan(0.5); }
 
-BOOST_AUTO_TEST_CASE(test_mapper_circle_radius_2_0) {
-  run_circle_scan(2.0);
+BOOST_AUTO_TEST_CASE(test_mapper_circle_radius_2_0) { run_circle_scan(2.0); }
+
+BOOST_AUTO_TEST_CASE(test_mapper_pointcloud_circle) {
+  auto &cfg = get_pc_config();
+
+  // Build a deterministic cloud: 200 points on a 0.5 m circle at z=0.1.
+  // With a 21x21 grid at 0.1 m / cell, the grid covers 2.1 m × 2.1 m so the
+  // circle sits comfortably inside.
+  std::vector<int8_t> cloud;
+  constexpr int N = 200;
+  for (int i = 0; i < N; ++i) {
+    float theta = 2.0f * static_cast<float>(M_PI) * i / N;
+    addPointToCloud(cloud, 0.5f * std::cos(theta), 0.5f * std::sin(theta),
+                    0.1f);
+  }
+  // Filtered: above ceiling.
+  addPointToCloud(cloud, 0.3f, 0.0f, 2.0f);
+  // Filtered: below floor.
+  addPointToCloud(cloud, 0.0f, 0.3f, -2.0f);
+  // Filtered: origin.
+  addPointToCloud(cloud, 0.0f, 0.0f, 0.1f);
+
+  const int point_step = static_cast<int>(sizeof(PointXYZ));
+  const int num_points = static_cast<int>(cloud.size() / point_step);
+  const int width = num_points;
+  const int height = 1;
+  const int row_step = width * point_step;
+
+  Eigen::MatrixXi *grid = nullptr;
+  {
+    Timer t;
+    grid = &cfg.mapper.scanToGrid(
+        cloud, point_step, row_step, height, width,
+        /*x_offset*/ static_cast<float>(offsetof(PointXYZ, x)),
+        /*y_offset*/ static_cast<float>(offsetof(PointXYZ, y)),
+        /*z_offset*/ static_cast<float>(offsetof(PointXYZ, z)));
+  }
+
+  const int n_occ = countPointsInGrid(
+      *grid, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  const int n_empty =
+      countPointsInGrid(*grid, static_cast<int>(Mapping::OccupancyType::EMPTY));
+  const int n_unknown = countPointsInGrid(
+      *grid, static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+  LOG_INFO("PointCloud mapper: OCCUPIED=", n_occ, " EMPTY=", n_empty,
+           " UNEXPLORED=", n_unknown);
+  std::cout << *grid << std::endl;
+
+  const int total = static_cast<int>(grid->size());
+  BOOST_TEST(n_occ + n_empty + n_unknown == total,
+             "cell counts must sum to total (" << total << ")");
+  // The circle sits well inside the grid, so we expect a visible ring.
+  BOOST_TEST(n_occ > 0,
+             "expected some OCCUPIED cells from the pointcloud circle");
+  BOOST_TEST(n_empty > 0,
+             "expected some EMPTY cells along the rays from origin");
 }
