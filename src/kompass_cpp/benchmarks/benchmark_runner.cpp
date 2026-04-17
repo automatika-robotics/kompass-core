@@ -211,6 +211,53 @@ int main(int argc, char *argv[]) {
   }
 
   // -------------------------------------------------------------------------
+  // TEST 2b: MAPPING (Point Cloud → occupancy grid, GPU-only)
+  //
+  // Exercises the full pointcloud path: raw bytes → on-device
+  // pointcloud_to_laserscan kernel → ray-cast kernel → occupancy grid.
+  // Uses the same 100k synthetic cloud as CriticalZone_100k_Cloud so the
+  // two benchmarks read identical input.
+  // -------------------------------------------------------------------------
+#ifdef GPU
+  {
+    const int height = 400;
+    const int width = 400;
+    const float res = 0.05f;
+    const int scan_size = 63;
+    const float angle_step = static_cast<float>(2.0 * M_PI / scan_size);
+
+    // Z-filter matches the critical-zone pointcloud benchmark so in-zone
+    // points survive and out-of-zone ones get rejected on device.
+    const float min_h = 0.1f;
+    const float max_h = 2.0f;
+    const float range_max = 20.0f;
+
+    Mapping::LocalMapperGPU mapper(height, width, res, {0.0, 0.0, 0.0}, 0.0,
+                                   /*isPointCloud*/ true, scan_size, angle_step,
+                                   max_h, min_h, range_max);
+
+    auto cloud_bytes = generate_heavy_pointcloud_bytes(100000);
+    const int point_step = sizeof(PointXYZ);
+    const int x_off = offsetof(PointXYZ, x);
+    const int y_off = offsetof(PointXYZ, y);
+    const int z_off = offsetof(PointXYZ, z);
+    const int num_points = cloud_bytes.size() / point_step;
+    const int pc_width = num_points;
+    const int pc_height = 1;
+    const int row_step = pc_width * point_step;
+
+    auto workload = [&]() {
+      mapper.scanToGrid(cloud_bytes, point_step, row_step, pc_height, pc_width,
+                        static_cast<float>(x_off), static_cast<float>(y_off),
+                        static_cast<float>(z_off));
+    };
+
+    results.push_back(
+        measure_performance("Mapper_PointCloud_100k", workload));
+  }
+#endif
+
+  // -------------------------------------------------------------------------
   // TEST 3: CRITICAL ZONE (Point Cloud)
   // -------------------------------------------------------------------------
   {
