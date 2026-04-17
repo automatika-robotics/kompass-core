@@ -3,84 +3,74 @@ import logging
 import math
 import os
 import random
+from pathlib import Path
+from typing import Tuple
+
 import numpy as np
 import pytest
-from kompass_core.datatypes.pose import PoseData
 from kompass_core.datatypes.laserscan import LaserScanData
+from kompass_core.datatypes.pointcloud import PointCloudData
+from kompass_core.datatypes.pose import PoseData
 from kompass_core.datatypes.scan_model import ScanModelConfig
-from kompass_cpp.mapping import OCCUPANCY_TYPE
-
 from kompass_core.mapping import LocalMapper, MapConfig
 from kompass_core.utils.visualization import visualize_grid
+from kompass_cpp.mapping import OCCUPANCY_TYPE
 
 
-def get_random_pose(min_range: float = -100.0, max_range: float = 100.0) -> PoseData:
-    """
-    Get a random pose in space
-    :return: pose described with position and orientation
-    :rtype: PoseData
-    """
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+RESOURCES_DIR = Path(__file__).parent / "resources" / "mapping"
+LASERSCAN_JSON = RESOURCES_DIR / "laserscan_data.json"
+LIVOX_CLOUD_JSON = RESOURCES_DIR / "livox_pointcloud_sample_0.json"
+
+
+def _get_random_pose(rng: random.Random,
+                     min_range: float = -100.0,
+                     max_range: float = 100.0) -> PoseData:
     p = PoseData()
-    p.x = random.uniform(min_range, max_range)
-    p.y = random.uniform(min_range, max_range)
-    p.z = random.uniform(min_range, max_range)
-    p.qw = random.uniform(-1, 1)
-    p.qx = random.uniform(-1, 1)
-    p.qy = random.uniform(-1, 1)
-    p.qz = random.uniform(-1, 1)
-
+    p.x = rng.uniform(min_range, max_range)
+    p.y = rng.uniform(min_range, max_range)
+    p.z = rng.uniform(min_range, max_range)
+    p.qw = rng.uniform(-1, 1)
+    p.qx = rng.uniform(-1, 1)
+    p.qy = rng.uniform(-1, 1)
+    p.qz = rng.uniform(-1, 1)
     return p
 
 
 @pytest.fixture
 def pose_robot_in_world() -> PoseData:
-    """
-    get random pose of the robot in the 3D world
-
-    :return: robot pose in the 3D world
-    :rtype: PoseData
-    """
-    pose_robot_in_world = get_random_pose()
-    return pose_robot_in_world
+    # Seeded so test runs are reproducible.
+    return _get_random_pose(random.Random(42))
 
 
 @pytest.fixture
 def logs_test_dir() -> str:
-    """
-    get root test directory
-
-    :return:    log direcotry
-    :rtype:     str
-    """
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-    logs_test_relative_path = "tests/logs/"
-    log_test_absolute_path = os.path.join(root_dir, logs_test_relative_path)
-    os.makedirs(log_test_absolute_path, exist_ok=True)
-
-    return log_test_absolute_path
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(root_dir, "logs")
+    os.makedirs(path, exist_ok=True)
+    return path
 
 
 @pytest.fixture
 def local_mapper() -> LocalMapper:
-    """
-    get a local mapper instance
-
-    :return: local mapper instance
-    :rtype: LocalMapper
-    """
-
     mapper_config = MapConfig(width=3.0, height=3.0, padding=0.0, resolution=0.05)
-
     scan_model_config = ScanModelConfig(
-        p_prior=0.5, p_occupied=0.9, range_sure=0.1, range_max=20.0, wall_size=0.075
+        p_prior=0.5,
+        p_occupied=0.9,
+        range_sure=0.1,
+        range_max=20.0,
+        wall_size=0.075,
     )
+    return LocalMapper(config=mapper_config, scan_model_config=scan_model_config)
 
-    local_mapper = LocalMapper(
-        config=mapper_config, scan_model_config=scan_model_config
-    )
 
-    return local_mapper
+# ---------------------------------------------------------------------------
+# Laserscan: parametrised over scan shapes (existing matrix, now asserting)
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(
@@ -95,45 +85,27 @@ def local_mapper() -> LocalMapper:
     ]
 )
 def range_option(request):
-    """
-    option for the range of laser scan
-    """
     return request.param
 
 
 @pytest.fixture
 def laser_scan_data(local_mapper: LocalMapper, range_option: str) -> LaserScanData:
-    """
-    Different scenarios for laserscan data read by the LiDAR.
+    data = json.loads(LASERSCAN_JSON.read_text())
 
-    :param      local_mapper: local mapper to build the map
-    :type       local_mapper: LocalMapper
-    :param      range_option: range scenarios
-    :type       range_option: str
-
-    :return:    laser scan data created
-    :rtype:     LaserScanData
-    """
-    dir_name = os.path.dirname(os.path.abspath(__file__))
-    json_file_path = os.path.join(dir_name, "resources/mapping/laserscan_data.json")
-    data = json.load(open(json_file_path))
-
-    laser_scan_data = LaserScanData()
-    laser_scan_data.angle_min = data["angle_min"]
-    laser_scan_data.angle_max = data["angle_max"]
-    laser_scan_data.angle_increment = data["angle_increment"]
-    laser_scan_data.time_increment = data["time_increment"]
-    laser_scan_data.scan_time = data["scan_time"]
-    laser_scan_data.range_min = data["range_min"]
-    laser_scan_data.range_max = data["range_max"]
+    scan = LaserScanData()
+    scan.angle_min = data["angle_min"]
+    scan.angle_max = data["angle_max"]
+    scan.angle_increment = data["angle_increment"]
+    scan.time_increment = data["time_increment"]
+    scan.scan_time = data["scan_time"]
+    scan.range_min = data["range_min"]
+    scan.range_max = data["range_max"]
 
     angles_size = np.arange(
-        laser_scan_data.angle_min,
-        laser_scan_data.angle_max,
-        laser_scan_data.angle_increment,
+        scan.angle_min, scan.angle_max, scan.angle_increment,
     ).shape[0]
 
-    laser_scan_data.intensities = [0.0] * angles_size
+    scan.intensities = [0.0] * angles_size
     width = local_mapper.grid_width * local_mapper.config.resolution
     height = local_mapper.grid_height * local_mapper.config.resolution
     max_range_quarter = 0.25 * min(width, height)
@@ -141,58 +113,61 @@ def laser_scan_data(local_mapper: LocalMapper, range_option: str) -> LaserScanDa
     min_range_from_robot = local_mapper.config.resolution * 2.0
     angle_increment_45 = 0.785398
 
+    rng = np.random.default_rng(seed=0)
+
     if range_option == "out_of_grid":
-        map_half_diagonal_in_meter = math.sqrt(math.pow(width, 2) + math.pow(height, 2))
-
-        laser_scan_data.ranges = np.array([map_half_diagonal_in_meter] * angles_size)
+        half_diag = math.sqrt(width ** 2 + height ** 2)
+        scan.ranges = np.array([half_diag] * angles_size)
     elif range_option == "circle_in_grid":
-        laser_scan_data.ranges = np.array([max_range_quarter] * angles_size)
-
+        scan.ranges = np.array([max_range_quarter] * angles_size)
     elif range_option == "circle_at_edge":
-        laser_scan_data.ranges = np.array([max_range_half] * angles_size)
-
+        scan.ranges = np.array([max_range_half] * angles_size)
     elif range_option == "random_in_grid":
-        laser_scan_data.ranges = np.random.uniform(
-            low=min_range_from_robot, high=max_range_quarter, size=angles_size
+        scan.ranges = rng.uniform(
+            min_range_from_robot, max_range_quarter, size=angles_size,
         )
     elif range_option == "at_45_deg_only":
-        laser_scan_data.angle_increment = angle_increment_45  # 45 deg angles only
+        scan.angle_increment = angle_increment_45
         angles_size = np.arange(
-            laser_scan_data.angle_min,
-            laser_scan_data.angle_max,
-            laser_scan_data.angle_increment,
+            scan.angle_min, scan.angle_max, scan.angle_increment,
         ).shape[0]
-        laser_scan_data.angles = np.arange(
-            laser_scan_data.angle_min,
-            laser_scan_data.angle_max,
-            laser_scan_data.angle_increment,
+        scan.angles = np.arange(
+            scan.angle_min, scan.angle_max, scan.angle_increment,
         )
-        laser_scan_data.ranges = np.array([max_range_quarter] * angles_size)
-        laser_scan_data.ranges[0] = 0.0
-        laser_scan_data.ranges[1] = 0.1
-
+        scan.ranges = np.array([max_range_quarter] * angles_size)
+        scan.ranges[0] = 0.0
+        scan.ranges[1] = 0.1
     elif range_option == "continuous":
-        min_obstacle_radius = 10
-        max_obstacle_radius = 20
-        laser_scan_data.ranges = []
+        # Clusters of non-zero ranges interspersed with zero-gaps.
+        scan.ranges = np.zeros(angles_size)
+        rng_py = random.Random(1)
         i = 0
-        laser_scan_data.ranges = np.zeros(angles_size)
         while i < angles_size:
-            c = random.randint(min_obstacle_radius, max_obstacle_radius)
-            r = random.uniform(min_range_from_robot, max_range_half)
+            c = rng_py.randint(10, 20)
+            r = rng_py.uniform(min_range_from_robot, max_range_half)
             c = c if c + i <= angles_size else angles_size - i
-            laser_scan_data.ranges[i] = r
+            scan.ranges[i] = r
             i += c
-
-        assert laser_scan_data.ranges.size == angles_size
+        assert scan.ranges.size == angles_size
     else:  # random
-        laser_scan_data.ranges = np.random.uniform(
-            low=min_range_from_robot,
-            high=local_mapper.scan_model.range_max,
+        scan.ranges = rng.uniform(
+            min_range_from_robot,
+            local_mapper.scan_model.range_max,
             size=angles_size,
         )
 
-    return laser_scan_data
+    return scan
+
+
+def _count(grid: np.ndarray, value: int) -> int:
+    return int(np.count_nonzero(grid == value))
+
+
+def _occupancy_counts(grid: np.ndarray) -> Tuple[int, int, int]:
+    occ = _count(grid, OCCUPANCY_TYPE.OCCUPIED.value)
+    empty = _count(grid, OCCUPANCY_TYPE.EMPTY.value)
+    unknown = _count(grid, OCCUPANCY_TYPE.UNEXPLORED.value)
+    return occ, empty, unknown
 
 
 def test_update_from_scan(
@@ -202,58 +177,257 @@ def test_update_from_scan(
     logs_test_dir: str,
     range_option: str,
 ):
-    """
-    given laser scan data, get the obstacles detected and compare if they are
-    equals to the filled grid cells.
-    """
-    local_mapper.update_from_scan(
-        pose_robot_in_world,
-        laser_scan_data,
+    """Drive the laserscan update path and assert the occupancy grid is
+    well-formed for each scan-shape scenario."""
+    local_mapper.update_from_scan(pose_robot_in_world, laser_scan_data)
+
+    grid = local_mapper.grid_data.occupancy
+    n_occ, n_empty, n_unknown = _occupancy_counts(grid)
+    total = grid.size
+
+    logging.info(
+        "[%s] OCCUPIED=%d EMPTY=%d UNEXPLORED=%d total=%d",
+        range_option, n_occ, n_empty, n_unknown, total,
     )
 
-    number_occupied_cells = np.count_nonzero(
-        local_mapper.grid_data.occupancy == OCCUPANCY_TYPE.OCCUPIED.value
+    # Invariant for every scenario: the three classes partition the grid
+    # and only these three values appear.
+    assert n_occ + n_empty + n_unknown == total, (
+        f"[{range_option}] classes don't partition grid: "
+        f"{n_occ}+{n_empty}+{n_unknown} != {total}"
     )
-    # log visualization for grid
+
+    # The mapper must have stamped *something* from a non-empty scan.
+    assert n_occ + n_empty > 0, (
+        f"[{range_option}] grid has zero stamped cells — mapper ran but "
+        "did nothing"
+    )
+
+    # Scenario-specific expectations:
+    if range_option == "circle_in_grid":
+        # Closed ring fully inside the grid: must stamp obstacle cells.
+        assert n_occ > 0, "circle_in_grid: expected OCCUPIED ring cells"
+        assert n_empty > 0, "circle_in_grid: expected EMPTY interior"
+    elif range_option == "out_of_grid":
+        # Every ray terminates past the grid boundary, so no endpoints get
+        # stamped as OCCUPIED. Rays still sweep EMPTY through the grid.
+        assert n_occ == 0, (
+            f"out_of_grid: expected zero OCCUPIED (all endpoints clipped), "
+            f"got {n_occ}"
+        )
+        assert n_empty > 0, "out_of_grid: rays still sweep EMPTY through grid"
+    elif range_option == "at_45_deg_only":
+        # Only eight rays; at least one endpoint lands inside.
+        assert n_occ >= 1, f"at_45_deg_only: expected ≥1 OCCUPIED, got {n_occ}"
+
     visualize_grid(
-        local_mapper.grid_data.occupancy,
-        scale=100,
-        show_image=False,
+        grid, scale=100, show_image=False,
         save_file=os.path.join(logs_test_dir, f"grid_occupancy_{range_option}.jpg"),
     )
 
-    logging.info(f"number_occupied_cells: {number_occupied_cells}")
+
+# ---------------------------------------------------------------------------
+# Pointcloud: synthetic (always runs) + livox (skipped if file missing)
+# ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def laser_scan_data_fixed() -> LaserScanData:
+# Matches the PointCloud2 layout the C++ tests use: 16 bytes per point,
+# x/y/z as float32 at offsets 0/4/8, with 4 bytes padding.
+_PC_STRIDE = 16
+_PC_X_OFFSET = 0
+_PC_Y_OFFSET = 4
+_PC_Z_OFFSET = 8
+
+
+def _make_synthetic_pointcloud(
+    points_xyz: np.ndarray,
+) -> PointCloudData:
+    """Pack an Nx3 float32 array into a PointCloud2-style byte buffer.
+
+    Each point is stored as 4 consecutive float32 (x, y, z, padding).
     """
-    fixed laser scan data
+    assert points_xyz.ndim == 2 and points_xyz.shape[1] == 3
+    n = points_xyz.shape[0]
+    buffer = np.zeros((n, 4), dtype=np.float32)
+    buffer[:, :3] = points_xyz.astype(np.float32)
+    raw = np.frombuffer(buffer.tobytes(), dtype=np.int8)
+    return PointCloudData(
+        data=raw,
+        point_step=_PC_STRIDE,
+        row_step=n * _PC_STRIDE,
+        height=1,
+        width=n,
+        x_offset=_PC_X_OFFSET,
+        y_offset=_PC_Y_OFFSET,
+        z_offset=_PC_Z_OFFSET,
+    )
 
-    :return:    laser scan data created
-    :rtype:     LaserScanData
+
+def _origin_pose() -> PoseData:
+    # Pose data is used only to grid-shift across frames; a stable pose
+    # exercises update_from_scan without triggering the shift path.
+    p = PoseData()
+    p.x = p.y = p.z = 0.0
+    p.qw = 1.0
+    p.qx = p.qy = p.qz = 0.0
+    return p
+
+
+def test_update_from_pointcloud_synthetic_ring(logs_test_dir: str):
+    """Deterministic synthetic ring of points should stamp OCCUPIED cells
+    along the circle and EMPTY cells along the rays back to the origin."""
+    mapper_config = MapConfig(width=3.0, height=3.0, padding=0.0, resolution=0.05)
+    scan_model = ScanModelConfig(
+        angle_step=0.01,
+        min_height=-0.5,
+        max_height=1.5,
+        range_max=5.0,
+    )
+    mapper = LocalMapper(config=mapper_config, scan_model_config=scan_model)
+
+    # 360-point ring at radius 0.5 m, z=0.1 m (inside the z filter window).
+    n = 360
+    theta = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
+    ring = np.column_stack([
+        0.5 * np.cos(theta),
+        0.5 * np.sin(theta),
+        np.full(n, 0.1),
+    ])
+    cloud = _make_synthetic_pointcloud(ring)
+
+    mapper.update_from_scan(_origin_pose(), cloud)
+
+    grid = mapper.grid_data.occupancy
+    n_occ, n_empty, n_unknown = _occupancy_counts(grid)
+
+    logging.info(
+        "synthetic ring: OCCUPIED=%d EMPTY=%d UNEXPLORED=%d",
+        n_occ, n_empty, n_unknown,
+    )
+
+    assert n_occ + n_empty + n_unknown == grid.size
+    assert n_occ > 0, "ring should stamp OCCUPIED cells"
+    assert n_empty > 0, "rays from origin should stamp EMPTY cells"
+
+    visualize_grid(
+        grid, scale=50, show_image=False,
+        save_file=os.path.join(logs_test_dir, "pc_synthetic_ring.jpg"),
+    )
+
+
+def test_update_from_pointcloud_z_filter_above_ceiling():
+    """Points above max_height must be rejected by the GPU kernel's
+    Z-filter; the grid must remain entirely UNEXPLORED."""
+    mapper_config = MapConfig(width=3.0, height=3.0, padding=0.0, resolution=0.05)
+    scan_model = ScanModelConfig(
+        angle_step=0.05,
+        min_height=0.0,
+        max_height=1.0,
+        range_max=5.0,
+    )
+    mapper = LocalMapper(config=mapper_config, scan_model_config=scan_model)
+
+    # All points above the ceiling — all filtered.
+    n = 64
+    theta = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
+    cloud_pts = np.column_stack([
+        np.cos(theta),
+        np.sin(theta),
+        np.full(n, 3.0),  # z=3.0 m, well above max_height=1.0
+    ])
+    cloud = _make_synthetic_pointcloud(cloud_pts)
+
+    mapper.update_from_scan(_origin_pose(), cloud)
+
+    grid = mapper.grid_data.occupancy
+    n_occ, n_empty, n_unknown = _occupancy_counts(grid)
+
+    assert n_occ == 0, (
+        f"z-filter: every point is above ceiling, expected zero OCCUPIED, "
+        f"got {n_occ}"
+    )
+    # Every bin receives max_range, so rays still walk the grid and stamp
+    # EMPTY along the way. But no cell should be OCCUPIED.
+
+
+def test_update_from_pointcloud_origin_only_points_filtered():
+    """Points at the sensor origin (r² < 1e-6) must be dropped — they
+    carry no direction information."""
+    mapper_config = MapConfig(width=3.0, height=3.0, padding=0.0, resolution=0.05)
+    scan_model = ScanModelConfig(
+        angle_step=0.05,
+        min_height=-0.1,
+        max_height=0.3,
+        range_max=5.0,
+    )
+    mapper = LocalMapper(config=mapper_config, scan_model_config=scan_model)
+
+    # Only origin points — should produce no OCCUPIED cells.
+    cloud = _make_synthetic_pointcloud(
+        np.array([[0.0, 0.0, 0.1]] * 16, dtype=np.float32),
+    )
+
+    # This must not crash.
+    mapper.update_from_scan(_origin_pose(), cloud)
+
+    grid = mapper.grid_data.occupancy
+    n_occ, _, _ = _occupancy_counts(grid)
+    assert n_occ == 0, (
+        f"origin-only cloud: no point has a direction, expected zero "
+        f"OCCUPIED, got {n_occ}"
+    )
+
+
+@pytest.mark.skipif(
+    not LIVOX_CLOUD_JSON.exists() or LIVOX_CLOUD_JSON.stat().st_size < 1_000_000,
+    reason=(
+        "livox_pointcloud_sample_0.json not available (too large for CI). "
+        "Drop the file into tests/resources/mapping/ to enable this test."
+    ),
+)
+def test_update_from_pointcloud_livox_recording(logs_test_dir: str):
+    """Real-world Livox cloud from a recorded frame. No strict assertions
+    on the grid — the cloud is messy — just verifies the path doesn't
+    crash, produces a well-formed grid, and stamps *some* occupancy.
     """
-    dir_name = os.path.dirname(os.path.abspath(__file__))
-    json_file_path = os.path.join(dir_name, "resources/mapping.laserscan_data.json")
-    data = json.load(open(json_file_path))
+    pc_json = json.loads(LIVOX_CLOUD_JSON.read_text())
+    offset_map = {f["name"]: f["offset"] for f in pc_json["fields"]}
 
-    laser_scan_data = LaserScanData()
-    laser_scan_data.angle_min = data["angle_min"]
-    laser_scan_data.angle_max = data["angle_max"]
-    laser_scan_data.angle_increment = data["angle_increment"]
-    laser_scan_data.time_increment = data["time_increment"]
-    laser_scan_data.scan_time = data["scan_time"]
-    laser_scan_data.range_min = data["range_min"]
-    laser_scan_data.range_max = data["range_max"]
+    cloud = PointCloudData(
+        data=np.array(pc_json["data"]).astype(np.int8),
+        point_step=pc_json["point_step"],
+        row_step=pc_json["row_step"],
+        height=pc_json["height"],
+        width=pc_json["width"],
+        x_offset=offset_map["x"],
+        y_offset=offset_map["y"],
+        z_offset=offset_map["z"],
+    )
 
-    angles_size = np.arange(
-        laser_scan_data.angle_min,
-        laser_scan_data.angle_max,
-        laser_scan_data.angle_increment,
-    ).shape[0]
+    mapper_config = MapConfig(width=10.0, height=10.0, padding=0.0, resolution=0.05)
+    scan_model = ScanModelConfig(
+        angle_step=0.01,
+        min_height=0.1,
+        max_height=2.0,
+        range_max=20.0,
+    )
+    mapper = LocalMapper(config=mapper_config, scan_model_config=scan_model)
 
-    laser_scan_data.intensities = [0.0] * angles_size
+    mapper.update_from_scan(_origin_pose(), cloud)
 
-    laser_scan_data.ranges = np.array([1.0] * angles_size)
+    grid = mapper.grid_data.occupancy
+    n_occ, n_empty, n_unknown = _occupancy_counts(grid)
 
-    return laser_scan_data
+    logging.info(
+        "livox: OCCUPIED=%d EMPTY=%d UNEXPLORED=%d total=%d",
+        n_occ, n_empty, n_unknown, grid.size,
+    )
+
+    assert n_occ + n_empty + n_unknown == grid.size
+    assert n_occ > 0, "livox cloud should stamp some OCCUPIED cells"
+    assert n_empty > 0, "livox cloud should stamp some EMPTY cells"
+
+    visualize_grid(
+        grid, scale=50, show_image=False,
+        save_file=os.path.join(logs_test_dir, "pc_livox.jpg"),
+    )
