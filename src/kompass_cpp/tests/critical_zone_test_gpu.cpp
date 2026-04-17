@@ -1,330 +1,288 @@
+// CriticalZoneCheckerGPU unit tests.
+//
+// AdaptiveCpp's runtime is reference-counted: it starts when the first
+// SYCL object is constructed and tears down when the last is destroyed
+// (AdaptiveCpp/AdaptiveCpp#1233, #1107). Constructing a fresh
+// CriticalZoneCheckerGPU per Boost test case restarts the runtime between
+// cases, and letting the final instance's destructor run during static
+// destruction races the runtime teardown — both surface as glibc heap
+// corruption at process exit.
+//
+// Workaround: one checker per input mode (laserscan, pointcloud) held by
+// an intentionally-leaked function-local static. Each test also builds
+// its own fresh input state to avoid cross-test dependencies. Same
+// pattern in mapper_test_gpu.cpp and pointcloud_to_laserscan_test_gpu.cpp.
+
 #include "test.h"
 #include <Eigen/Dense>
-#define BOOST_TEST_MODULE KOMPASS TESTS
+#define BOOST_TEST_MODULE KOMPASS CRIT ZONE GPU TESTS
 #include "utils/collision_check.h"
 #include "utils/critical_zone_check_gpu.h"
-#include "utils/logger.h"
 #include <boost/test/included/unit_test.hpp>
 #include <cmath>
 #include <vector>
 
-BOOST_AUTO_TEST_CASE(test_critical_zone_check_gpu) {
-  // Shared Setup
-  auto robotShapeType = CollisionChecker::ShapeType::CYLINDER;
-  std::vector<float> robotDimensions{0.51, 2.0};
+// ---------------------------------------------------------------------------
+// Shared config (same values as the original single-case test).
+// ---------------------------------------------------------------------------
 
-  const Eigen::Vector3f sensor_position_body{0.22, 0.0, 0.4};
-  const Eigen::Vector4f sensor_rotation_body{0, 0, 0.99, 0.0};
+namespace {
 
-  // Robot laserscan value holders
-  std::vector<double> scan_angles;
-  std::vector<double> scan_ranges;
-  initLaserscan(360, 10.0, scan_ranges, scan_angles);
+constexpr int SCAN_RESOLUTION = 360;
+constexpr double SCAN_DEFAULT_RANGE = 10.0;
+constexpr float CRIT_ANGLE = 160.0f;
+constexpr float CRIT_DIST = 0.3f;
+constexpr float SLOW_DIST = 0.6f;
+constexpr float LASERSCAN_MIN_H = 0.1f;
+constexpr float LASERSCAN_MAX_H = 2.0f;
+constexpr float POINTCLOUD_MIN_H = 0.1f;
+constexpr float POINTCLOUD_MAX_H = 2.0f;
+constexpr float MAX_RANGE = 20.0f;
 
-  float critical_angle = 160.0, critical_distance = 0.3,
-        slowdown_distance = 0.6;
-  float min_height = 0.1, max_height = 2.0;
+const auto ROBOT_SHAPE = CollisionChecker::ShapeType::CYLINDER;
+const std::vector<float> ROBOT_DIMS{0.51f, 2.0f};
 
-  // Initialize GPU Checker for LASERSCAN
-  CriticalZoneCheckerGPU zoneChecker(
-      CriticalZoneChecker::InputType::LASERSCAN, robotShapeType,
-      robotDimensions, sensor_position_body, sensor_rotation_body,
-      critical_angle, critical_distance, slowdown_distance, scan_angles,
-      min_height, max_height, 20.0);
+std::vector<double> make_reference_angles() {
+  std::vector<double> angles;
+  std::vector<double> ranges;
+  initLaserscan(SCAN_RESOLUTION, SCAN_DEFAULT_RANGE, ranges, angles);
+  return angles;
+}
 
-  LOG_INFO("Testing Emergency Stop with GPU (LASERSCAN)");
+// ---------------------------------------------------------------------------
+// Shared, intentionally-leaked checker singletons.
+//
+// Leaking sidesteps AdaptiveCpp/AdaptiveCpp#1107: running sycl::free and
+// sycl::queue destructors during static destruction races the runtime
+// teardown and produces glibc heap corruption at exit.
+// ---------------------------------------------------------------------------
 
-  // --- Test 1: Behind & Moving Forward ---
-  {
-    Timer time;
-    bool forward_motion = true;
-    setLaserscanAtAngle(0.0, 0.2, scan_ranges, scan_angles);
-    setLaserscanAtAngle(0.1, 0.2, scan_ranges, scan_angles);
-    setLaserscanAtAngle(-0.1, 0.2, scan_ranges, scan_angles);
+CriticalZoneCheckerGPU &shared_laserscan_checker() {
+  static CriticalZoneCheckerGPU *c = new CriticalZoneCheckerGPU(
+      CriticalZoneChecker::InputType::LASERSCAN, ROBOT_SHAPE, ROBOT_DIMS,
+      /*sensor_pos*/ Eigen::Vector3f{0.22f, 0.0f, 0.4f},
+      /*sensor_rot*/ Eigen::Vector4f{0.0f, 0.0f, 0.99f, 0.0f},
+      CRIT_ANGLE, CRIT_DIST, SLOW_DIST, make_reference_angles(),
+      LASERSCAN_MIN_H, LASERSCAN_MAX_H, MAX_RANGE);
+  return *c;
+}
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
-    BOOST_TEST(result == 1.0,
-               "Angles are behind and robot is moving forward -> "
-               "Critical zone result should be 1.0, returned "
-                   << result);
-    if (result == 1.0) {
-      LOG_INFO("Test1 PASSED: Angles are behind and robot is moving forward");
-    }
-  }
+CriticalZoneCheckerGPU &shared_pointcloud_checker() {
+  static CriticalZoneCheckerGPU *c = new CriticalZoneCheckerGPU(
+      CriticalZoneChecker::InputType::POINTCLOUD, ROBOT_SHAPE, ROBOT_DIMS,
+      /*sensor_pos*/ Eigen::Vector3f{0.0f, 0.0f, 0.0f},
+      /*sensor_rot*/ Eigen::Vector4f{0.0f, 0.0f, 0.0f, 1.0f},
+      CRIT_ANGLE, CRIT_DIST, SLOW_DIST, make_reference_angles(),
+      POINTCLOUD_MIN_H, POINTCLOUD_MAX_H, MAX_RANGE);
+  return *c;
+}
 
-  // --- Test 2: Front Far & Moving Forward ---
-  {
-    Timer time;
-    bool forward_motion = true;
-    initLaserscan(360, 10.0, scan_ranges, scan_angles); // Reset
+// ---------------------------------------------------------------------------
+// Helpers: build a fresh laserscan input for each test to avoid cross-test
+// state leakage.
+// ---------------------------------------------------------------------------
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
-    BOOST_TEST(result == 1.0,
-               "Angles are in front and far and robot is moving forward "
-               "-> Critical zone result should be 1.0, returned "
-                   << result);
-    if (result == 1.0) {
-      LOG_INFO("Test2 PASSED: Angles are in front and robot is moving forward");
-    }
-  }
+struct LaserScanInput {
+  std::vector<double> ranges;
+  std::vector<double> angles;
+};
 
-  // --- Test 3: Front Close & Moving Forward ---
-  {
-    Timer time;
-    bool forward_motion = true;
-    setLaserscanAtAngle(M_PI, 0.2, scan_ranges, scan_angles);
-    setLaserscanAtAngle(M_PI + 0.1, 0.2, scan_ranges, scan_angles);
-    setLaserscanAtAngle(M_PI - 0.1, 0.2, scan_ranges, scan_angles);
+LaserScanInput fresh_laserscan() {
+  LaserScanInput s;
+  initLaserscan(SCAN_RESOLUTION, SCAN_DEFAULT_RANGE, s.ranges, s.angles);
+  return s;
+}
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
-    BOOST_TEST(result == 0.0,
-               "Angles are in front and close and robot is moving "
-               "forward -> Critical zone result should be 0.0, returned "
-                   << result);
-    if (result == 0.0) {
-      LOG_INFO("Test3 PASSED: Angles are in front and close and robot is "
-               "moving forward");
-    }
-  }
+// Point-cloud byte-offset constants (PointXYZ is in test.h).
+const int PC_POINT_STEP = sizeof(PointXYZ);
+const int PC_X_OFF = offsetof(PointXYZ, x);
+const int PC_Y_OFF = offsetof(PointXYZ, y);
+const int PC_Z_OFF = offsetof(PointXYZ, z);
 
-  // --- Test 4: Front Close & Moving Backward ---
-  {
-    Timer time;
-    bool forward_motion = false;
-    // Note: Ranges are still set from Test 3
+float run_pc_check(const std::vector<int8_t> &cloud, bool forward) {
+  const int num_points = static_cast<int>(cloud.size() / PC_POINT_STEP);
+  const int width = num_points;
+  const int height = num_points > 0 ? 1 : 0;
+  const int row_step = width * PC_POINT_STEP;
+  return shared_pointcloud_checker().check(cloud, PC_POINT_STEP, row_step,
+                                           height, width, PC_X_OFF, PC_Y_OFF,
+                                           PC_Z_OFF, forward);
+}
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
-    BOOST_TEST(result == 1.0,
-               "Angles are in front and close and robot is moving "
-               "backwards-> Critical zone result should be 1.0, returned "
-                   << result);
-    if (result == 1.0) {
-      LOG_INFO("Test4 PASSED: Angles are in front and close and robot is "
-               "moving backward");
-    }
-  }
+} // namespace
 
-  // --- Test 5: Back Close & Moving Backward ---
-  {
-    Timer time;
-    bool forward_motion = false;
-    setLaserscanAtAngle(0.0, 0.2, scan_ranges, scan_angles);
-    setLaserscanAtAngle(0.1, 0.2, scan_ranges, scan_angles);
-    setLaserscanAtAngle(-0.1, 0.2, scan_ranges, scan_angles);
+// ===========================================================================
+// LASERSCAN tests (1-8)
+// ===========================================================================
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
-    BOOST_TEST(result == 0.0,
-               "Angles are in back and close and robot is moving "
-               "backwards -> Critical zone result should be 0.0, returned "
-                   << result);
-    if (result == 0.0) {
-      LOG_INFO("Test5 PASSED: Angles are in back and close and robot is moving "
-               "backwards");
-    }
-  }
+BOOST_AUTO_TEST_CASE(test_laserscan_behind_moving_forward) {
+  Timer time;
+  auto scan = fresh_laserscan();
+  setLaserscanAtAngle(0.0, 0.2, scan.ranges, scan.angles);
+  setLaserscanAtAngle(0.1, 0.2, scan.ranges, scan.angles);
+  setLaserscanAtAngle(-0.1, 0.2, scan.ranges, scan.angles);
 
-  // --- Test 6: Back Slowdown & Moving Backward ---
-  {
-    Timer time;
-    bool forward_motion = false;
-    initLaserscan(360, 10.0, scan_ranges, scan_angles);
-    setLaserscanAtAngle(0.0, 1.3, scan_ranges, scan_angles);
+  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ true);
+  BOOST_TEST(result == 1.0,
+             "Angles behind, moving forward -> expected 1.0, got " << result);
+}
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
-    BOOST_TEST(
-        (result > 0.0 and result < 1.0),
-        "Angles are in back and in the slowdown zone and robot is moving "
-        "backwards -> Critical zone result should be between [0, 1], returned "
-            << result);
-    if (result > 0.0 and result < 1.0) {
-      LOG_INFO(
-          "Test6 PASSED: Angles are in back and in the slowdown zone and robot "
-          "is moving backwards, slowdown factor = ",
-          result);
-    }
-  }
+BOOST_AUTO_TEST_CASE(test_laserscan_front_far_moving_forward) {
+  Timer time;
+  auto scan = fresh_laserscan();
 
-  // --- Test 7: Back Slowdown & Moving Forward ---
-  {
-    Timer time;
-    bool forward_motion = true;
-    // Ranges are still set from Test 6
+  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ true);
+  BOOST_TEST(result == 1.0,
+             "Angles in front, far, moving forward -> expected 1.0, got "
+                 << result);
+}
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
-    BOOST_TEST(
-        result == 1.0,
-        "Angles are in back and in the slowdown zone and robot is moving "
-        "forward -> Critical zone result should be between 1.0, returned "
-            << result);
-    if (result == 1.0) {
-      LOG_INFO("Test7 PASSED: Angles are in back and in the slowdown zone and "
-               "robot is moving "
-               "forward, slowdown factor = ",
-               result);
-    }
-  }
+BOOST_AUTO_TEST_CASE(test_laserscan_front_close_moving_forward) {
+  Timer time;
+  auto scan = fresh_laserscan();
+  setLaserscanAtAngle(M_PI, 0.2, scan.ranges, scan.angles);
+  setLaserscanAtAngle(M_PI + 0.1, 0.2, scan.ranges, scan.angles);
+  setLaserscanAtAngle(M_PI - 0.1, 0.2, scan.ranges, scan.angles);
 
-  // --- Test 8: Front Slowdown & Moving Forward ---
-  {
-    Timer time;
-    bool forward_motion = true;
-    setLaserscanAtAngle(M_PI, 0.7, scan_ranges, scan_angles);
+  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ true);
+  BOOST_TEST(result == 0.0,
+             "Angles in front, close, moving forward -> expected 0.0, got "
+                 << result);
+}
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
-    BOOST_TEST(
-        (result > 0.0 and result < 1.0),
-        "Angles are in front and in the slowdown zone and robot is moving "
-        "forward -> Critical zone result should be between [0, 1], returned "
-            << result);
-    if (result > 0.0 and result < 1.0) {
-      LOG_INFO("Test8 PASSED: Angles are in front and in the slowdown zone and "
-               "robot is moving "
-               "forward, slowdown factor = ",
-               result);
-    }
-  }
+BOOST_AUTO_TEST_CASE(test_laserscan_front_close_moving_backward) {
+  Timer time;
+  auto scan = fresh_laserscan();
+  setLaserscanAtAngle(M_PI, 0.2, scan.ranges, scan.angles);
+  setLaserscanAtAngle(M_PI + 0.1, 0.2, scan.ranges, scan.angles);
+  setLaserscanAtAngle(M_PI - 0.1, 0.2, scan.ranges, scan.angles);
 
-  // ==========================================
-  //      POINT CLOUD TESTS
-  // ==========================================
+  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ false);
+  BOOST_TEST(result == 1.0,
+             "Angles in front, close, moving backward -> expected 1.0, got "
+                 << result);
+}
 
-  LOG_INFO("Testing Emergency Stop with GPU (POINTCLOUD)");
+BOOST_AUTO_TEST_CASE(test_laserscan_back_close_moving_backward) {
+  Timer time;
+  auto scan = fresh_laserscan();
+  setLaserscanAtAngle(0.0, 0.2, scan.ranges, scan.angles);
+  setLaserscanAtAngle(0.1, 0.2, scan.ranges, scan.angles);
+  setLaserscanAtAngle(-0.1, 0.2, scan.ranges, scan.angles);
 
-  // Instantiate a separate checker for PointCloud mode
-  Eigen::Vector3f pcPos{0.0, 0.0, 0.0};
-  Eigen::Vector4f pcRot{0.0, 0.0, 0.0, 1.0};
+  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ false);
+  BOOST_TEST(result == 0.0,
+             "Angles behind, close, moving backward -> expected 0.0, got "
+                 << result);
+}
 
-  std::vector<double> pc_angles;
-  std::vector<double> dummy_ranges;
-  initLaserscan(360, 10.0, dummy_ranges, pc_angles); // 1-degree resolution
+BOOST_AUTO_TEST_CASE(test_laserscan_back_slowdown_moving_backward) {
+  Timer time;
+  auto scan = fresh_laserscan();
+  setLaserscanAtAngle(0.0, 1.3, scan.ranges, scan.angles);
 
-  CriticalZoneCheckerGPU pcChecker(
-      CriticalZoneChecker::InputType::POINTCLOUD, robotShapeType, robotDimensions, pcPos,
-      pcRot, critical_angle, critical_distance /*crit_dist*/, slowdown_distance /*slow_dist*/,
-      pc_angles, //
-      0.1 /*min_h*/, 2.0 /*max_h*/, 20.0);
+  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ false);
+  BOOST_TEST((result > 0.0 && result < 1.0),
+             "Angle behind in slowdown zone, moving backward -> expected in "
+             "(0, 1), got " << result);
+}
 
-  std::vector<int8_t> cloud_data;
+BOOST_AUTO_TEST_CASE(test_laserscan_back_slowdown_moving_forward) {
+  Timer time;
+  auto scan = fresh_laserscan();
+  setLaserscanAtAngle(0.0, 1.3, scan.ranges, scan.angles);
 
-  int point_step = sizeof(PointXYZ);
-  int x_off = offsetof(PointXYZ, x);
-  int y_off = offsetof(PointXYZ, y);
-  int z_off = offsetof(PointXYZ, z);
+  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ true);
+  BOOST_TEST(result == 1.0,
+             "Angle behind in slowdown zone, moving forward -> expected 1.0, "
+             "got " << result);
+}
 
-  // Helper lambda to run check with dynamic width calculation
-  // (Prevents errors if you add more than 1 point)
-  auto run_pc_check = [&](bool forward) -> float {
-    int num_points = cloud_data.size() / point_step;
-    int width = num_points;
-    int height = 1;
-    int row_step = width * point_step;
+BOOST_AUTO_TEST_CASE(test_laserscan_front_slowdown_moving_forward) {
+  Timer time;
+  auto scan = fresh_laserscan();
+  setLaserscanAtAngle(M_PI, 0.7, scan.ranges, scan.angles);
 
-    return pcChecker.check(cloud_data, point_step, row_step, height, width,
-                           x_off, y_off, z_off, forward);
-  };
+  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ true);
+  BOOST_TEST((result > 0.0 && result < 1.0),
+             "Angle in front in slowdown zone, moving forward -> expected in "
+             "(0, 1), got " << result);
+}
 
-  // --- Test 9: Empty Cloud (Safe) ---
-  {
-    Timer time;
-    cloud_data.clear();
-    // width will be 0, safe
-    float result = run_pc_check(true);
-    BOOST_TEST(result == 1.0, "Empty PointCloud should be safe (1.0)");
-  }
+// ===========================================================================
+// POINTCLOUD tests (9-14)
+// ===========================================================================
 
-  // --- Test 10: Critical Obstacle (Front) ---
-  {
-    Timer time;
-    cloud_data.clear();
-    // Front: x=0.8, y=0, z=0.5.
-    // Dist = 0.8. RobotRad(0.5) + Crit(0.3) = 0.8 -> 0.7 < 0.8 -> Critical.
-    addPointToCloud(cloud_data, 0.7f, 0.0f, 0.5f);
+BOOST_AUTO_TEST_CASE(test_pointcloud_empty_is_safe) {
+  Timer time;
+  std::vector<int8_t> cloud;
+  float result = run_pc_check(cloud, /*forward*/ true);
+  BOOST_TEST(result == 1.0f, "Empty point cloud should be safe (1.0)");
+}
 
-    float result = run_pc_check(true);
-    BOOST_TEST(result == 0.0, "Point at 0.7m, should trigger stop (0.0)");
+BOOST_AUTO_TEST_CASE(test_pointcloud_critical_obstacle_front) {
+  Timer time;
+  std::vector<int8_t> cloud;
+  addPointToCloud(cloud, 0.7f, 0.0f, 0.5f);
 
-    if (result == 0.0)
-      LOG_INFO("Test10 PASSED: PointCloud Critical Stop");
-  }
+  float result = run_pc_check(cloud, /*forward*/ true);
+  BOOST_TEST(result == 0.0f, "Point at 0.7 m should trigger stop (0.0)");
+}
 
-  // --- Test 11: Height Filter (Too High) ---
-  {
-    Timer time;
-    cloud_data.clear();
-    // Same X,Y but Z=3.0 (Max Height is 2.0)
-    addPointToCloud(cloud_data, 0.7f, 0.0f, 3.0f);
+BOOST_AUTO_TEST_CASE(test_pointcloud_height_filter_drops_point) {
+  Timer time;
+  std::vector<int8_t> cloud;
+  addPointToCloud(cloud, 0.7f, 0.0f, /*z above max*/ 3.0f);
 
-    float result = run_pc_check(true);
-    BOOST_TEST(result == 1.0, "High point (>max_z) should be ignored");
+  float result = run_pc_check(cloud, /*forward*/ true);
+  BOOST_TEST(result == 1.0f, "High point (> max_z) should be ignored");
+}
 
-    if (result == 1.0)
-      LOG_INFO("Test11 PASSED: PointCloud Height Filter");
-  }
+BOOST_AUTO_TEST_CASE(test_pointcloud_slowdown_zone) {
+  Timer time;
+  std::vector<int8_t> cloud;
+  addPointToCloud(cloud, 0.95f, 0.0f, 0.5f);
 
-  // --- Test 12: Slowdown Zone ---
-  {
-    Timer time;
-    cloud_data.clear();
-    // x=0.95. Dist to robot surface = 0.95 - 0.5 = 0.45
-    // Slowdown range [0.3, 0.6]. 0.45 is middle -> ~0.5 factor.
-    addPointToCloud(cloud_data, 0.95f, 0.0f, 0.5f);
+  float result = run_pc_check(cloud, /*forward*/ true);
+  BOOST_TEST((result > 0.4f && result < 0.6f),
+             "Point in slowdown zone -> expected ~0.5, got " << result);
+}
 
-    float result = run_pc_check(true);
-    BOOST_TEST((result > 0.4 && result < 0.6),
-               "Point in slowdown zone should return approx 0.5, returned "
-                   << result);
+BOOST_AUTO_TEST_CASE(test_pointcloud_mixed_stop_wins) {
+  Timer time;
+  std::vector<int8_t> cloud;
+  // Slowdown candidates
+  addPointToCloud(cloud, 0.95f, 0.0f, 0.5f);
+  addPointToCloud(cloud, 1.0f, 1.0f, 0.5f);
+  addPointToCloud(cloud, -1.0f, -1.0f, 0.5f);
+  // Filtered by Z (height out of range)
+  addPointToCloud(cloud, -0.1f, -0.1f, 3.0f);
+  addPointToCloud(cloud, -0.1f, -0.1f, -3.0f);
+  addPointToCloud(cloud, 0.1f, 0.2f, 4.0f);
+  addPointToCloud(cloud, 0.1f, 0.2f, -4.0f);
+  // Stop-zone point — should dominate the min-reduction
+  addPointToCloud(cloud, 0.75f, 0.0f, 0.5f);
 
-    if (result > 0.4 && result < 0.6)
-      LOG_INFO("Test12 PASSED: PointCloud Slowdown Factor: ", result);
-  }
+  float result = run_pc_check(cloud, /*forward*/ true);
+  BOOST_TEST(result == 0.0f, "Stop-zone point should win min reduction, got "
+                                 << result);
+}
 
-  // --- Test 13: More complex point cloud data ---
-  {
-    Timer time;
-    cloud_data.clear();
-    // x=0.95. Dist to robot surface = 0.95 - 0.5 = 0.45
-    // Slowdown points: range [0.3, 0.6]. 0.45 is middle -> ~0.5 factor.
-    addPointToCloud(cloud_data, 0.95f, 0.0f, 0.5f);
-    addPointToCloud(cloud_data, 1.0f, 1.0f, 0.5f);
-    addPointToCloud(cloud_data, -1.0f, -1.0f, 0.5f);
-    // points to be discarded
-    addPointToCloud(cloud_data, -0.1f, -0.1f, 3.0f);
-    addPointToCloud(cloud_data, -0.1f, -0.1f, -3.0f);
-    addPointToCloud(cloud_data, 0.1f, 0.2f, 4.0f);
-    addPointToCloud(cloud_data, 0.1f, 0.2f, -4.0f);
-    // Stop points
-    addPointToCloud(cloud_data, 0.75f, 0.0f, 0.5f);
+BOOST_AUTO_TEST_CASE(test_pointcloud_mixed_slowdown_backward) {
+  Timer time;
+  std::vector<int8_t> cloud;
+  addPointToCloud(cloud, 0.95f, 0.0f, 0.5f);
+  addPointToCloud(cloud, -0.95f, 0.0f, 0.5f);
+  addPointToCloud(cloud, 1.0f, 1.0f, 0.5f);
+  addPointToCloud(cloud, -1.0f, -1.0f, 0.5f);
+  // Filtered by Z
+  addPointToCloud(cloud, -0.1f, -0.1f, 3.0f);
+  addPointToCloud(cloud, -0.1f, -0.1f, -3.0f);
+  addPointToCloud(cloud, 0.1f, 0.2f, 4.0f);
+  addPointToCloud(cloud, 0.1f, 0.2f, -4.0f);
 
-    float result = run_pc_check(true);
-    BOOST_TEST((result == 0),
-               "Point in stop zone should return 0, returned " << result);
-
-    if (result == 0)
-      LOG_INFO("Test13 PASSED: Complex PointCloud STOP");
-  }
-
-  // --- Test 14: More complex point cloud data - slowdown ---
-  {
-    Timer time;
-    cloud_data.clear();
-    // x=0.95. Dist to robot surface = 0.95 - 0.5 = 0.45
-    // Slowdown points: range [0.3, 0.6]. 0.45 is middle -> ~0.5 factor.
-    addPointToCloud(cloud_data, 0.95f, 0.0f, 0.5f);
-    addPointToCloud(cloud_data, -0.95f, 0.0f, 0.5f);
-    addPointToCloud(cloud_data, 1.0f, 1.0f, 0.5f);
-    addPointToCloud(cloud_data, -1.0f, -1.0f, 0.5f);
-    // points to be discarded
-    addPointToCloud(cloud_data, -0.1f, -0.1f, 3.0f);
-    addPointToCloud(cloud_data, -0.1f, -0.1f, -3.0f);
-    addPointToCloud(cloud_data, 0.1f, 0.2f, 4.0f);
-    addPointToCloud(cloud_data, 0.1f, 0.2f, -4.0f);
-
-    float result = run_pc_check(false);
-    BOOST_TEST((result > 0.4 && result < 0.6),
-               "Point in slowdown zone should return approx 0.5, returned "
-                   << result);
-
-    if (result > 0.4 && result < 0.6)
-      LOG_INFO("Test14 PASSED: PointCloud Slowdown Factor: ", result);
-  }
+  float result = run_pc_check(cloud, /*forward*/ false);
+  BOOST_TEST((result > 0.4f && result < 0.6f),
+             "Mixed cloud, moving backward -> expected slowdown ~0.5, got "
+                 << result);
 }
