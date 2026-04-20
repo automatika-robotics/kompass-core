@@ -54,6 +54,11 @@ add_executable(vision_dwa_test vision_dwa_test.cpp)
 target_link_libraries(vision_dwa_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework ${OpenCV_LIBS})
 add_test(vision_tests vision_dwa_test)
 
+# Vision DWA fixture-based parametrized test (mirrors test_vision_dwa_follower.py)
+add_executable(vision_dwa_fixture_test vision_dwa_fixture_test.cpp)
+target_link_libraries(vision_dwa_fixture_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework nlohmann_json::nlohmann_json ${OpenCV_LIBS})
+add_test(vision_tests vision_dwa_fixture_test)
+
 # Vision Tracking test
 add_executable(vision_tracking_test vision_tracking_test.cpp)
 target_link_libraries(vision_tracking_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework nlohmann_json::nlohmann_json)

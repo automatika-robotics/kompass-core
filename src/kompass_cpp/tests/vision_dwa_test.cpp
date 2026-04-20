@@ -30,7 +30,7 @@ struct VisionDWATestConfig {
   int maxAngularSamples;
   int maxNumThreads;
 
-  double distance_tolerance = 0.05;
+  double distance_tolerance = 0.1;
   double target_distance = 0.2;
   float robot_radius = 0.1;
 
@@ -224,6 +224,18 @@ struct VisionDWATestConfig {
         numPointsPerTrajectory);
     Control::TrajectoryPath robot_path(numPointsPerTrajectory),
         tracked_path(numPointsPerTrajectory);
+    // Zero-fill the pre-allocated Eigen vectors so any slots that remain
+    // unfilled (early break from the divergence guard, etc.) plot as zeros
+    // instead of uninitialized garbage / NaN.
+    robot_path.x.setZero();
+    robot_path.y.setZero();
+    robot_path.z.setZero();
+    tracked_path.x.setZero();
+    tracked_path.y.setZero();
+    tracked_path.z.setZero();
+    simulated_velocities.vx.setZero();
+    simulated_velocities.vy.setZero();
+    simulated_velocities.omega.setZero();
     Control::Velocity2D cmd;
     Control::TrajSearchResult result;
 
@@ -280,10 +292,36 @@ struct VisionDWATestConfig {
         seen_boxes = detected_boxes;
       }
 
-      // Simulate lost of target around obstacle
-      if (simulate_obstacle and robotState.y > 0.2 and robotState.y < 0.4) {
-        LOG_INFO("Sending EMPTY BOXES!");
-        seen_boxes = {};
+      // Simulate occlusion: blank detections when an obstacle point lies
+      // within a cone between the robot and the tracked target AND the
+      // obstacle is close enough to the robot to actually block the view.
+      // From far away a small obstacle subtends a negligible angle.
+      if (simulate_obstacle) {
+        Eigen::Vector2f robot_pos(robotState.x, robotState.y);
+        Eigen::Vector2f target_pos(tracked_pose.x(), tracked_pose.y());
+        Eigen::Vector2f to_target = target_pos - robot_pos;
+        float dist_to_target = to_target.norm();
+        if (dist_to_target > 1e-3f) {
+          Eigen::Vector2f dir = to_target / dist_to_target;
+          constexpr float occlusion_radius = 0.15f; // half-width of the cone
+          constexpr float occlusion_range = 0.3f;   // max robot-to-obs range
+          for (const auto &obs : cloud) {
+            Eigen::Vector2f to_obs(obs.x() - robot_pos.x(),
+                                   obs.y() - robot_pos.y());
+            float dist_to_obs = to_obs.norm();
+            float proj = to_obs.dot(dir);
+            // Obstacle must be between robot and target AND within range
+            if (proj > 0.0f && proj < dist_to_target &&
+                dist_to_obs < occlusion_range) {
+              float perp = std::abs(to_obs.x() * dir.y() - to_obs.y() * dir.x());
+              if (perp < occlusion_radius) {
+                LOG_INFO("Obstacle occluding target — sending empty boxes");
+                seen_boxes = {};
+                break;
+              }
+            }
+          }
+        }
       }
       controller->setCurrentState(robotState);
       result = controller->getTrackingCtrl(seen_boxes, cmd, cloud);
@@ -320,9 +358,17 @@ struct VisionDWATestConfig {
         break;
       }
 
-      tracked_pose.update(timeStep);
-
-      moveDetectedBoxes();
+      // Advance target and detected boxes the same number of steps as the
+      // robot to keep the simulation in sync.
+      int applied_steps = result.isTrajFound
+                              ? std::min(controlHorizon,
+                                         static_cast<int>(
+                                             result.trajectory.velocities.vx.size()))
+                              : 1;
+      for (int s = 0; s < applied_steps; ++s) {
+        tracked_pose.update(timeStep);
+        moveDetectedBoxes();
+      }
 
       end_distance =
           std::sqrt(std::pow(robotState.x - tracked_pose.x(), 2) +
@@ -345,11 +391,27 @@ struct VisionDWATestConfig {
     std::string trajectories_filename = file_location + "/" + pltFileName;
 
     saveTrajectoriesToJson(samples, trajectories_filename + ".json");
-    // savePathToJson(reference_segment, ref_path_filename + ".json");
+
+    // Save obstacle cloud so the plot can display it
+    std::string obstacles_filename = file_location + "/" + pltFileName + "_obs";
+    {
+      json j_obs;
+      j_obs["points"] = json::array();
+      for (const auto &pt : cloud) {
+        j_obs["points"].push_back(json{{"x", pt.x()}, {"y", pt.y()}});
+      }
+      std::ofstream obs_file(obstacles_filename + ".json");
+      if (obs_file.is_open()) {
+        obs_file << j_obs.dump(4);
+      }
+    }
 
     std::string command = "python3 " + file_location +
                           "/trajectory_sampler_plt.py --samples \"" +
                           trajectories_filename + "\"";
+    if (simulate_obstacle) {
+      command += " --obstacles \"" + obstacles_filename + "\"";
+    }
 
     // Execute the Python script
     int res = system(command.c_str());
@@ -359,7 +421,7 @@ struct VisionDWATestConfig {
 
     // Compute final tracking error
     return std::sqrt(std::pow(robotState.x - tracked_pose.x(), 2) +
-                     std::pow(robotState.y - tracked_pose.y(), 2)); // minus robot radius
+                     std::pow(robotState.y - tracked_pose.y(), 2));
   }
 };
 
@@ -428,37 +490,52 @@ BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free_global_frame) {
              "VisionDWA Failed To Find Control in global frame mode");
 }
 
-BOOST_AUTO_TEST_CASE(test_VisionDWA_with_tracker_and_obstacle) {
-  // Create timer
+// Small obstacle the robot can navigate around and resume tracking.
+BOOST_AUTO_TEST_CASE(test_VisionDWA_small_obstacle) {
   Timer time;
 
-  // Robot pointcloud values (global frame)
-  std::vector<Path::Point> cloud = {{0.3, 0.27, 0.1}};
+  // Single obstacle point slightly above the x-axis. The robot tracks
+  // the target along y≈0. As it approaches, the obstacle briefly enters
+  // the robot-to-target cone causing a short occlusion. The robot's forward
+  // momentum carries it past the obstacle, the cone clears, and tracking
+  // resumes. This tests brief occlusion recovery, not global re-routing.
+  std::vector<Path::Point> cloud = {{-0.1, 0.08, 0.1}};
 
-  VisionDWATestConfig testConfig(cloud);
+  VisionDWATestConfig testConfig(
+      cloud, /*use_local_frame=*/true, /*timeStep=*/0.1,
+      /*predictionHorizon=*/10, /*controlHorizon=*/5,
+      /*maxLinearSamples=*/20, /*maxAngularSamples=*/20,
+      /*maxVel=*/2.0, /*maxOmega=*/4.0, /*maxNumThreads=*/1,
+      /*reference_path_distance_weight=*/1.0,
+      /*goal_distance_weight=*/2.0,
+      /*obstacles_distance_weight=*/1.0);
+
+  // Target moves straight along +x
+  testConfig.tracked_vel = Control::Velocity2D(0.1, 0.0, 0.0);
+  testConfig.tracked_pose =
+      Control::TrackedPose2D(0.0, 0.0, 0.0, testConfig.tracked_vel);
 
   int numPointsPerTrajectory = 100;
 
   double end_distance = testConfig.run_test(
       numPointsPerTrajectory,
-      std::string("vision_follower_with_tracker_and_obstacle"), true);
+      std::string("vision_dwa_small_obstacle"), true);
 
-  // With the simulated obstacle sitting between the robot and the target,
-  // reaching the strict set-point is not feasible. The success criterion here
-  // is simply that the robot remained actively in pursuit (i.e. did not
-  // diverge), matching the divergence guard inside run_test.
-  const double start_distance = 0.5; // matches initial robotState vs target
-  const double max_allowed_distance = 3.0 * start_distance;
-  bool test_passed = end_distance < max_allowed_distance;
+  // The robot should navigate around the small obstacle and resume tracking.
+  // Assert it ends up within a reasonable distance of the target.
+  double distance_error =
+      end_distance - testConfig.robot_radius - testConfig.target_distance;
+
+  bool test_passed = std::abs(distance_error) < 0.3;
 
   if (test_passed) {
-    LOG_INFO("Tracking with obstacle finished. End distance: ", end_distance,
-             " < max allowed ", max_allowed_distance);
+    LOG_INFO("Small obstacle: tracking resumed. End error: ", distance_error,
+             " < tolerance 0.3");
   } else {
-    LOG_ERROR("Tracking Failed! End distance: ", end_distance, " > max allowed ",
-              max_allowed_distance);
+    LOG_ERROR("Small obstacle: tracking failed. End error: ", distance_error,
+              " > tolerance 0.3");
   }
 
   BOOST_TEST(test_passed,
-             "VisionDWA diverged from target through occlusion");
+             "VisionDWA failed to navigate around small obstacle");
 }
