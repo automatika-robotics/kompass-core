@@ -101,9 +101,14 @@ def laser_scan_data(local_mapper: LocalMapper, range_option: str) -> LaserScanDa
     scan.range_min = data["range_min"]
     scan.range_max = data["range_max"]
 
-    angles_size = np.arange(
+    # Regenerate angles to match the JSON-loaded angle_min/max/increment.
+    # LaserScanData's __attrs_post_init__ runs at default-construction and
+    # seeds angles from the default fields; we have to rebuild it here so
+    # angles.size matches the ranges we populate below.
+    scan.angles = np.arange(
         scan.angle_min, scan.angle_max, scan.angle_increment,
-    ).shape[0]
+    )
+    angles_size = scan.angles.shape[0]
 
     scan.intensities = [0.0] * angles_size
     width = local_mapper.grid_width * local_mapper.config.resolution

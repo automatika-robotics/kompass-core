@@ -229,7 +229,9 @@ def test_gpu_binding_pointcloud_empty_cloud_does_not_crash():
 
     empty = np.zeros(0, dtype=np.int8)
 
-    # width=0 signals zero points — the kernel must short-circuit.
+    # width=0 signals zero points. The pointcloud overload short-circuits
+    # on this and returns an all-UNEXPLORED grid; it must NOT stamp EMPTY
+    # out to max_range, which would mask a dropped sensor frame.
     grid = mapper.scan_to_grid(
         data=empty,
         point_step=_PC_STRIDE,
@@ -242,10 +244,16 @@ def test_gpu_binding_pointcloud_empty_cloud_does_not_crash():
     )
     grid_np = np.asarray(grid)
 
-    # With no points but max_range set, the conversion yields max_range
-    # in every bin, so the ray-cast kernel still walks the grid. That's
-    # fine — we just want no crash + correct shape.
     assert grid_np.shape == (grid_height, grid_width)
+    n_occ, n_empty, n_unknown = _occupancy_counts(grid_np)
+    assert n_occ == 0, f"empty cloud: expected zero OCCUPIED, got {n_occ}"
+    assert n_empty == 0, (
+        f"empty cloud: expected zero EMPTY (should not mask sensor "
+        f"dropouts), got {n_empty}"
+    )
+    assert n_unknown == grid_np.size, (
+        f"empty cloud: expected all UNEXPLORED, got {n_unknown}/{grid_np.size}"
+    )
 
 
 # ---------------------------------------------------------------------------
