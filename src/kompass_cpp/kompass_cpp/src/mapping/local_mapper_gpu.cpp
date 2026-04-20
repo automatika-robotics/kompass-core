@@ -41,7 +41,10 @@ namespace {
  * @param x_offset          Byte offset of X within a point.
  * @param y_offset          Byte offset of Y within a point.
  * @param z_offset          Byte offset of Z within a point.
- * @param min_z             Minimum acceptable Z (inclusive).
+ * @param min_z             Minimum acceptable Z (inclusive). There is no
+ *                          disable-sentinel for the lower bound: callers
+ *                          that want a one-sided filter must pass a
+ *                          suitably negative value (e.g. -FLT_MAX).
  * @param max_z             Maximum acceptable Z. Negative disables the
  *                          upper bound (matches CPU behaviour).
  * @param point_field_type  Dtype of the X/Y/Z fields (dispatches
@@ -116,12 +119,8 @@ inline void submitPointCloudToLaserScanKernel(
                           static_cast<size_t>(col) * k_point_step;
           }
 
-          // Bounds check: max of the three offsets.
-          int max_offset = x_off;
-          if (y_off > max_offset)
-            max_offset = y_off;
-          if (z_off > max_offset)
-            max_offset = z_off;
+          // Bounds check: the furthest-out field of this point must fit.
+          const int max_offset = sycl::max(sycl::max(x_off, y_off), z_off);
           if (byte_offset + static_cast<size_t>(max_offset + k_elem_size) >
               k_total_bytes) {
             return;
@@ -263,6 +262,14 @@ inline void submitScanToGridKernel(
             steps[1] = (deltas[1] >= 0) ? 1 : -1;
           }
           item.barrier(sycl::access::fence_space::local_space);
+
+          // NOTE: Zero-range / coincident-endpoint rays produce deltas == (0, 0),
+          // Bail early for every thread in the group, there's nothing to rasterise.
+          // The pointcloud path already filters origin so it can't trigger this,
+          // but a laserscan caller can still pass this.
+          if (deltas[0] == 0 && deltas[1] == 0) {
+            return;
+          }
 
           float delta_x_f = static_cast<float>(deltas[0]);
           float delta_y_f = static_cast<float>(deltas[1]);

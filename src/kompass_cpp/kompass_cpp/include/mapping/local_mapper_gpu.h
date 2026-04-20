@@ -21,8 +21,7 @@ public:
                  const float rangeMax, const int maxPointsPerLine = 32)
       : LocalMapper(gridHeight, gridWidth, resolution, laserscanPosition,
                     laserscanOrientation, isPointCloud, scanSize, angleStep,
-                    maxHeight, minHeight, rangeMax, maxPointsPerLine),
-        m_isPointCloud(isPointCloud) {
+                    maxHeight, minHeight, rangeMax, maxPointsPerLine) {
     m_q = sycl::queue{sycl::default_selector_v,
                       sycl::property::queue::in_order{}};
     auto dev = m_q.get_device();
@@ -55,24 +54,14 @@ public:
       }
     }
 
-    if (m_isPointCloud) {
-      // Pointcloud path needs an additional device buffer for the raw
-      // PointCloud2 bytes. Size is not known at construction time (each
-      // scan can have a different point count), so we allocate lazily on
-      // first use and grow as required.
-      m_devicePtrRawBytes = nullptr;
-      m_rawCapacity = 0;
-
+    if (isPointCloud) {
       // Angles are pre-populated by the base LocalMapper ctor with the
       // `2π / scan_size` bin width the conversion kernel assumes; upload
-      // them once here and skip the per-call H→D copy.
+      // them once here and skip the per-call H→D copy. The laserscan
+      // path uploads angles per call instead.
       m_q.memcpy(m_devicePtrAngles, initializedAngles.data(),
                  sizeof(double) * scanSize);
       m_q.wait();
-    } else {
-      m_devicePtrRawBytes = nullptr; // unset ptr used for raw pointcloud
-      m_rawCapacity = 0;
-      // Laserscan path uploads angles per call
     }
   }
 
@@ -139,8 +128,10 @@ private:
   // Output grid.
   int *m_devicePtrGrid;
 
-  int8_t *m_devicePtrRawBytes; // for pointcloud path
-  size_t m_rawCapacity;
+  // Pointcloud-only. Grown lazily on first use in `scanToGrid(bytes,...)`
+  // because the per-scan point count isn't known at ctor time.
+  int8_t *m_devicePtrRawBytes = nullptr;
+  size_t m_rawCapacity = 0;
 
   // Host-side scratch buffer for the laserscan overload's double→float
   // narrowing
@@ -149,8 +140,6 @@ private:
   // Device-reported max work-group size. Used as the pointcloud conversion
   // kernel's block dim.
   size_t m_max_wg_size = 0;
-
-  const bool m_isPointCloud;
 
   sycl::queue m_q;
 };
