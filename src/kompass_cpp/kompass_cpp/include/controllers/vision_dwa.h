@@ -276,25 +276,71 @@ private:
       LOG_DEBUG("Robot current position: ", currentState.x, ", ",
                 currentState.y);
       // Generate reference to target
-      Trajectory2D ref_traj;
+      Trajectory2D ref_traj = getTrackingReferenceSegment(tracked_pose.value());
 
-      ref_traj = getTrackingReferenceSegment(tracked_pose.value());
-
-
-      TrajSearchResult result;
-      result.isTrajFound = true;
-      result.trajCost = 0.0;
-      result.trajectory = ref_traj;
-      latest_velocity_command_ = ref_traj.velocities.getFront();
-      // Update reference to use in case goal is lost
+      // Always update the reference path so the DWA fallback / search has
+      // something to plan against if the reference itself is rejected here.
       auto referenceToTarget =
           Path::Path(ref_traj.path.x, ref_traj.path.y, ref_traj.path.z);
       this->setCurrentPath(referenceToTarget, false);
-      return result;
+
+      // Check the reference trajectory against obstacles before committing.
+      // If it collides, fall through to DWA sampling so the robot avoids the
+      // obstacle instead of plowing through it.
+      //
+      // The reference path is sampled at control_time_step intervals — at max
+      // velocity that can leave 0.2m gaps between consecutive points, large
+      // enough for a small obstacle to fall between two non-colliding samples
+      // while the swept path crosses it.  Interpolate intermediate states so
+      // the discrete collision checker sees the full swept volume.
+      constexpr int kInterpSubSteps = 5;
+      const float cos_yaw = std::cos(currentState.yaw);
+      const float sin_yaw = std::sin(currentState.yaw);
+      auto refPointToWorld = [&](Eigen::Index i, float &wx, float &wy) {
+        if (track_velocity_) {
+          wx = ref_traj.path.x(i);
+          wy = ref_traj.path.y(i);
+        } else {
+          wx = currentState.x + ref_traj.path.x(i) * cos_yaw -
+               ref_traj.path.y(i) * sin_yaw;
+          wy = currentState.y + ref_traj.path.x(i) * sin_yaw +
+               ref_traj.path.y(i) * cos_yaw;
+        }
+      };
+      std::vector<Path::State> ref_states;
+      ref_states.reserve(ref_traj.path.x.size() * kInterpSubSteps);
+      for (Eigen::Index i = 0; i < ref_traj.path.x.size(); ++i) {
+        float wx, wy;
+        refPointToWorld(i, wx, wy);
+        ref_states.emplace_back(wx, wy, 0.0);
+        if (i + 1 < ref_traj.path.x.size()) {
+          float wx_next, wy_next;
+          refPointToWorld(i + 1, wx_next, wy_next);
+          for (int k = 1; k < kInterpSubSteps; ++k) {
+            const float t = static_cast<float>(k) / kInterpSubSteps;
+            ref_states.emplace_back(wx + (wx_next - wx) * t,
+                                    wy + (wy_next - wy) * t, 0.0);
+          }
+        }
+      }
+      const bool ref_has_collision =
+          trajSampler->checkStatesFeasibility(ref_states, sensor_points);
+
+      if (!ref_has_collision) {
+        TrajSearchResult result;
+        result.isTrajFound = true;
+        result.trajCost = 0.0;
+        result.trajectory = ref_traj;
+        latest_velocity_command_ = ref_traj.velocities.getFront();
+        return result;
+      }
+      LOG_DEBUG(
+          "Tracking reference has collisions — using DWA sampling instead");
+      // fall through to DWA branch below
     }
     if (this->hasPath() and !isGoalReached() and
         this->currentPath->getSize() > 1) {
-      // The tracking sample has collisions -> use DWA-like sampling and control
+      // Reference is missing or collides -> use DWA-like sampling and control
       return this->computeVelocityCommandsSet(current_vel, sensor_points);
     } else {
       // Start Search and/or Wait if enabled

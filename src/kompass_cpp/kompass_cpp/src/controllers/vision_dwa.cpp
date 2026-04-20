@@ -72,7 +72,9 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose, co
     psi = Angle::normalizeToMinusPiPlusPi(
         std::atan2(tracking_pose.y(), tracking_pose.x()));
   }
-  distance = std::max(distance, 0.0f);
+  // Floor distance to avoid division by zero in the omega formula below
+  constexpr float kMinDistance = 0.001f;
+  distance = std::max(distance, kMinDistance);
 
   float distance_error = config_.target_distance() - distance;
   float angle_error = Angle::normalizeToMinusPiPlusPi(
