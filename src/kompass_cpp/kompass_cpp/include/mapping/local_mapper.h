@@ -37,11 +37,20 @@ public:
 
     // initialize ranges and angles if working with pointcloud
     if (isPointCloud) {
-      // Prefill angles and ranges
+      // NOTE: Enforce scan_size / angle_step consistency. The pointcloud →
+      // laserscan step (CPU `pointCloudToLaserScanFromRaw` num_bins
+      // overload, and its GPU counterpart) buckets by a bin width of
+      // `2π / scan_size`. Downstream the ray-cast step consumes
+      // `initializedAngles[i] = i · angle_step`. If the caller passed an
+      // `angle_step` that doesn't match `2π / scan_size` the two steps
+      // drift by a fraction of a bin per ray (silent rotation). We
+      // override `angle_step` here so both halves see the same grid.
+      const double derived_step =
+          (2.0 * M_PI) / static_cast<double>(scanSize);
       initializedAngles.resize(scanSize);
       initializedRanges.resize(scanSize);
       for (int i = 0; i < scanSize; ++i) {
-        initializedAngles[i] = i * angleStep;
+        initializedAngles[i] = i * derived_step;
       }
     }
   }
@@ -74,11 +83,16 @@ public:
     previousGridDataProb.fill(m_pPrior);
     // initialize ranges and angles if working with pointcloud
     if (isPointCloud) {
-      // Prefill angles and ranges
+      // NOTE: See the non-Bayesian ctor above for the rationale: the
+      // pointcloud → laserscan step buckets by `2π / scan_size`, so the
+      // ray-cast step's `initializedAngles[i] = i · angle_step` must
+      // use the same step or the two halves drift. Override here.
+      const double derived_step =
+          (2.0 * M_PI) / static_cast<double>(scanSize);
       initializedAngles.resize(scanSize);
       initializedRanges.resize(scanSize);
       for (int i = 0; i < scanSize; ++i) {
-        initializedAngles[i] = i * angleStep;
+        initializedAngles[i] = i * derived_step;
         initializedRanges[i] = rangeMax;
       }
     }

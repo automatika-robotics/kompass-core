@@ -4,6 +4,7 @@
 #include "utils/logger.h"
 #include <Eigen/Dense>
 #include <sycl/sycl.hpp>
+#include <vector>
 
 namespace Kompass {
 namespace Mapping {
@@ -19,27 +20,48 @@ public:
                  const float maxHeight, const float minHeight,
                  const float rangeMax, const int maxPointsPerLine = 32)
       : LocalMapper(gridHeight, gridWidth, resolution, laserscanPosition,
-                    laserscanOrientation, isPointCloud, scanSize, angleStep, maxHeight,
-                    minHeight, rangeMax, maxPointsPerLine) {
+                    laserscanOrientation, isPointCloud, scanSize, angleStep,
+                    maxHeight, minHeight, rangeMax, maxPointsPerLine) {
     m_q = sycl::queue{sycl::default_selector_v,
                       sycl::property::queue::in_order{}};
     auto dev = m_q.get_device();
     LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
-    m_devicePtrRanges = sycl::malloc_device<double>(scanSize, m_q);
+
+    // Query the device's max work-group size for the pointcloud conversion
+    // kernel
+    m_max_wg_size = dev.get_info<sycl::info::device::max_work_group_size>();
+
+    // Buffers needed on both laserscan and pointcloud paths
+    // Ranges is `float` (not double)
+    m_devicePtrRanges = sycl::malloc_device<float>(scanSize, m_q);
     m_devicePtrAngles = sycl::malloc_device<double>(scanSize, m_q);
     m_devicePtrGrid = sycl::malloc_device<int>(m_gridHeight * m_gridWidth, m_q);
     m_devicePtrDistances =
         sycl::malloc_shared<float>(m_gridHeight * m_gridWidth, m_q);
 
-    // initialize distances
+    // Host-side staging buffer for the laserscan overload's
+    // double→float narrowing. Sized once here.
+    m_hostFloatRanges.resize(scanSize);
+
+    // Precompute per-cell distance from the laserscan origin.
+    // Used by the ray-cast kernel to gate super-cover line fills.
     Eigen::Vector3f destPointLocal;
-    std::cout << "Resolution: " << resolution << std::endl;
     for (size_t i = 0; i < m_gridHeight; ++i) {
       for (size_t j = 0; j < m_gridWidth; ++j) {
         destPointLocal = gridToLocal({i, j});
         m_devicePtrDistances[i + j * m_gridWidth] =
             (destPointLocal - m_laserscanPosition).norm();
       }
+    }
+
+    if (isPointCloud) {
+      // Angles are pre-populated by the base LocalMapper ctor with the
+      // `2π / scan_size` bin width the conversion kernel assumes; upload
+      // them once here and skip the per-call H→D copy. The laserscan
+      // path uploads angles per call instead.
+      m_q.memcpy(m_devicePtrAngles, initializedAngles.data(),
+                 sizeof(double) * scanSize);
+      m_q.wait();
     }
   }
 
@@ -57,6 +79,9 @@ public:
     }
     if (m_devicePtrDistances) {
       sycl::free(m_devicePtrDistances, m_q);
+    }
+    if (m_devicePtrRawBytes) {
+      sycl::free(m_devicePtrRawBytes, m_q);
     }
   }
 
@@ -91,10 +116,31 @@ public:
                               float x_offset, float y_offset, float z_offset);
 
 private:
-  double *m_devicePtrRanges;
-  double *m_devicePtrAngles;
-  int *m_devicePtrGrid;
+  // Per-cell distance from laserscan origin. Precomputed at construction;
+  // read by the ray-cast kernel
   float *m_devicePtrDistances;
+
+  // Laserscan device buffers.
+  double
+      *m_devicePtrAngles; // uploaded per-call (laserscan) or once (pointcloud)
+  float *m_devicePtrRanges; // fed to the ray-cast kernel
+
+  // Output grid.
+  int *m_devicePtrGrid;
+
+  // Pointcloud-only. Grown lazily on first use in `scanToGrid(bytes,...)`
+  // because the per-scan point count isn't known at ctor time.
+  int8_t *m_devicePtrRawBytes = nullptr;
+  size_t m_rawCapacity = 0;
+
+  // Host-side scratch buffer for the laserscan overload's double→float
+  // narrowing
+  std::vector<float> m_hostFloatRanges;
+
+  // Device-reported max work-group size. Used as the pointcloud conversion
+  // kernel's block dim.
+  size_t m_max_wg_size = 0;
+
   sycl::queue m_q;
 };
 } // namespace Mapping

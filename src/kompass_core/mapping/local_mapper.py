@@ -264,7 +264,16 @@ class LocalMapper:
         if not self.processed:
             self.is_pointcloud = isinstance(scan, PointCloudData)
             if self.is_pointcloud:
-                self._initialize_mapper(int(2 * np.pi / self.scan_model.angle_step) + 1)
+                # NOTE: `angle_step` is the canonical knob on the Python side; the
+                # bin count is derived from it with a ceil so every angle in
+                # [0, 2π) lands in a valid bin. The C++ ctor then enforces
+                # the inverse relation `angle_step = 2π / scan_size` so the
+                # conversion kernel (which bins by `scan_size`) and the
+                # ray-cast kernel (which reads `initializedAngles[i] =
+                # i * angle_step`) can't drift apart.
+                self._initialize_mapper(
+                    math.ceil(2 * np.pi / self.scan_model.angle_step)
+                )
             else:
                 self._initialize_mapper(scan.ranges.size)  # type: ignore
 
