@@ -282,15 +282,15 @@ inline void submitScanToGridKernel(
           if (x >= 0 && x < rows && y >= 0 && y < cols) {
             sycl::atomic_ref<int, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
-                             sycl::access::address_space::local_space>
+                             sycl::access::address_space::global_space>
                 atomic_val(devGrid[x + y * rows]);
             sycl::atomic_ref<int, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
-                             sycl::access::address_space::local_space>
+                             sycl::access::address_space::global_space>
                 atomic_val_xstep(devGrid[(x - steps[0]) + (y * rows)]);
             sycl::atomic_ref<int, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
-                             sycl::access::address_space::local_space>
+                             sycl::access::address_space::global_space>
                 atomic_val_ystep(devGrid[x + ((y - steps[1]) * rows)]);
             if (x == toPoint[0] && y == toPoint[1]) {
               atomic_val.fetch_max(
