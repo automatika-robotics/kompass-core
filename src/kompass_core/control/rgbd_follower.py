@@ -43,7 +43,7 @@ class VisionRGBDFollowerConfig(DWAConfig):
         distance_tolerance (float): Acceptable deviation in target distance (m).
         angle_tolerance (float): Acceptable deviation in target bearing (rad).
         target_orientation (float): Desired orientation relative to the target (rad).
-        use_local_coordinates (bool): Whether to use robot-local coordinates for tracking.
+        _use_local_coordinates (bool): Internal flag set automatically based on localization availability.
         error_pose (float): Estimated error in pose measurements (m).
         error_vel (float): Estimated error in velocity measurements (m/s).
         error_acc (float): Estimated error in acceleration measurements (m/s²).
@@ -79,9 +79,6 @@ class VisionRGBDFollowerConfig(DWAConfig):
     target_search_radius: float = field(
         default=0.5, validator=base_validators.in_range(min_value=1e-4, max_value=1e4)
     )
-    rotation_gain: float = field(
-        default=1.0, validator=base_validators.in_range(min_value=1e-9, max_value=1.0)
-    )
     enable_search: bool = field(default=True)
     distance_tolerance: float = field(
         default=0.05, validator=base_validators.in_range(min_value=1e-6, max_value=1e3)
@@ -104,9 +101,9 @@ class VisionRGBDFollowerConfig(DWAConfig):
         default=1.0, validator=base_validators.in_range(min_value=1e-2, max_value=10.0)
     )  # Gain for the speed control law
 
-    use_local_coordinates: bool = field(
-        default=True
-    )  # Track the target using robot local coordinates (no need for robot location at lop step)
+    _use_local_coordinates: bool = field(
+        default=True, alias="_use_local_coordinates"
+    )  # Internal: set automatically based on localization availability
 
     error_pose: float = field(
         default=0.05, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
@@ -333,14 +330,22 @@ class VisionRGBDFollower(ControllerTemplate):
         target_box: Bbox2D,
         aligned_depth_image: np.ndarray,
     ) -> bool:
-        """
-        Set initial tracking state
+        """Set initial tracking from a single 2D target box and depth image.
 
-        :param detected_boxes: Detected boxes
-        :type detected_boxes: List[Bbox3D]
+        In global mode the robot state is used by the depth detector to project
+        the 3D box into the world frame.  In local mode the state is ignored
+        and the box is computed relative to the robot.
+
+        :param current_state: Current robot state
+        :type current_state: RobotState
+        :param target_box: 2D bounding box of the target
+        :type target_box: Bbox2D
+        :param aligned_depth_image: Aligned depth image
+        :type aligned_depth_image: np.ndarray
         """
         try:
-            if current_state:
+            if not self._config._use_local_coordinates:
+                # Global mode: detector needs the robot pose for world-frame projection
                 self._planner.set_current_state(
                     current_state.x,
                     current_state.y,
@@ -383,14 +388,27 @@ class VisionRGBDFollower(ControllerTemplate):
         detected_boxes: List[Bbox2D],
         aligned_depth_image: np.ndarray,
     ) -> bool:
-        """
-        Set initial tracking state
+        """Set initial tracking by selecting a pixel inside one of the 2D
+        detection boxes.
 
-        :param detected_boxes: Detected boxes
-        :type detected_boxes: List[Bbox3D]
+        In global mode the robot state is used by the depth detector to project
+        the 3D box into the world frame.  In local mode the state is ignored
+        and the box is computed relative to the robot.
+
+        :param current_state: Current robot state
+        :type current_state: RobotState
+        :param pose_x_img: X pixel coordinate of the target in the image
+        :type pose_x_img: int
+        :param pose_y_img: Y pixel coordinate of the target in the image
+        :type pose_y_img: int
+        :param detected_boxes: List of 2D detection bounding boxes
+        :type detected_boxes: List[Bbox2D]
+        :param aligned_depth_image: Aligned depth image
+        :type aligned_depth_image: np.ndarray
         """
         try:
-            if self._config.use_local_coordinates:
+            if not self._config._use_local_coordinates:
+                # Global mode: detector needs the robot pose for world-frame projection
                 self._planner.set_current_state(
                     current_state.x,
                     current_state.y,
@@ -426,22 +444,48 @@ class VisionRGBDFollower(ControllerTemplate):
         local_map_resolution: Optional[float] = None,
         **_,
     ) -> bool:
-        """
-        One iteration of the DWA planner
+        """One iteration of the vision DWA planner.
 
-        :param current_state: Current robot state (position and velocity)
-        :type current_state: RobotState
-        :param laser_scan: Current laser scan value
-        :type laser_scan: LaserScanData
+        In global mode ``current_state`` is **mandatory** — it is used by the
+        depth detector (world-frame projection) and the control law (distance
+        and bearing computation).  In local mode ``current_state`` is ignored
+        for tracking; only the velocity component is extracted as a seed for
+        the DWA fallback when the target is temporarily lost.
 
-        :return: If planner found a valid solution
+        :param current_state: Current robot state.  Required in global mode.
+        :type current_state: Optional[RobotState]
+        :param detections_2d: 2D detection bounding boxes from the vision pipeline
+        :type detections_2d: Optional[List[Bbox2D]]
+        :param depth_image: Aligned depth image
+        :type depth_image: Optional[np.ndarray]
+        :param laser_scan: Current laser scan
+        :type laser_scan: Optional[LaserScanData]
+        :param point_cloud: Current point cloud
+        :type point_cloud: Optional[List[np.ndarray]]
+        :param local_map: Local costmap
+        :type local_map: Optional[np.ndarray]
+        :param local_map_resolution: Resolution of the local costmap (m/cell)
+        :type local_map_resolution: Optional[float]
+        :return: Whether the planner found a valid solution
         :rtype: bool
         """
         robot_cmd = None
-        if self._config.use_local_coordinates and current_state is not None:
+        if not self._config._use_local_coordinates:
+            # Global mode: state is mandatory — detector and control law need it
+            if current_state is None:
+                logging.error(
+                    "Global mode (use_local_coordinates=False) requires "
+                    "current_state in loop_step"
+                )
+                return False
             self._planner.set_current_state(
                 current_state.x, current_state.y, current_state.yaw, current_state.speed
             )
+            robot_cmd = Velocity2D(
+                vx=current_state.vx, vy=current_state.vy, omega=current_state.omega
+            )
+        elif current_state is not None:
+            # Local mode: ignore position, but extract velocity for DWA fallback
             robot_cmd = Velocity2D(
                 vx=current_state.vx, vy=current_state.vy, omega=current_state.omega
             )
@@ -450,7 +494,7 @@ class VisionRGBDFollower(ControllerTemplate):
             self._planner.set_resolution(local_map_resolution)
 
         if local_map is not None:
-            sensor_data = PointCloudData.numpy_to_kompass_cpp(local_map)
+            sensor_data = local_map
         elif laser_scan:
             sensor_data = LaserScan(ranges=laser_scan.ranges, angles=laser_scan.angles)
         elif point_cloud is not None:
