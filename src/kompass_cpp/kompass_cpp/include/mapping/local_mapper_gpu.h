@@ -4,6 +4,7 @@
 #include "utils/logger.h"
 #include <Eigen/Dense>
 #include <sycl/sycl.hpp>
+#include <vector>
 
 namespace Kompass {
 namespace Mapping {
@@ -34,6 +35,10 @@ public:
     m_devicePtrGrid = sycl::malloc_device<int>(m_gridHeight * m_gridWidth, m_q);
     m_devicePtrDistances =
         sycl::malloc_shared<float>(m_gridHeight * m_gridWidth, m_q);
+
+    // Host-side staging buffer for the laserscan overload's
+    // double→float narrowing. Sized once here.
+    m_hostFloatRanges.resize(scanSize);
 
     // Precompute per-cell distance from the laserscan origin.
     // Used by the ray-cast kernel to gate super-cover line fills.
@@ -132,6 +137,9 @@ private:
 
   int8_t *m_devicePtrRawBytes; // for pointcloud path
   size_t m_rawCapacity;
+
+  // Host-side scratch buffer for the laserscan overload's double→float narrowing
+  std::vector<float> m_hostFloatRanges;
 
   const bool m_isPointCloud;
 

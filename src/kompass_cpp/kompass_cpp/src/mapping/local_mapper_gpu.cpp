@@ -382,11 +382,10 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
 
     // Ranges arrive as double but the device buffer is float
     // (to keep atomic fetch_min on the pointcloud path cheap)
-    std::vector<float> host_float_ranges(m_scanSize);
     for (int i = 0; i < m_scanSize; ++i) {
-      host_float_ranges[i] = static_cast<float>(ranges[i]);
+      m_hostFloatRanges[i] = static_cast<float>(ranges[i]);
     }
-    m_q.memcpy(m_devicePtrRanges, host_float_ranges.data(),
+    m_q.memcpy(m_devicePtrRanges, m_hostFloatRanges.data(),
                sizeof(float) * m_scanSize);
 
     submitScanToGridKernel(m_q, m_devicePtrGrid, m_devicePtrDistances,
