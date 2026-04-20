@@ -28,6 +28,10 @@ public:
     auto dev = m_q.get_device();
     LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
 
+    // Query the device's max work-group size for the pointcloud conversion
+    // kernel
+    m_max_wg_size = dev.get_info<sycl::info::device::max_work_group_size>();
+
     // Buffers needed on both laserscan and pointcloud paths
     // Ranges is `float` (not double)
     m_devicePtrRanges = sycl::malloc_device<float>(scanSize, m_q);
@@ -66,7 +70,7 @@ public:
                  sizeof(double) * scanSize);
       m_q.wait();
     } else {
-      m_devicePtrRawBytes = nullptr;  // unset ptr used for raw pointcloud
+      m_devicePtrRawBytes = nullptr; // unset ptr used for raw pointcloud
       m_rawCapacity = 0;
       // Laserscan path uploads angles per call
     }
@@ -138,8 +142,13 @@ private:
   int8_t *m_devicePtrRawBytes; // for pointcloud path
   size_t m_rawCapacity;
 
-  // Host-side scratch buffer for the laserscan overload's double→float narrowing
+  // Host-side scratch buffer for the laserscan overload's double→float
+  // narrowing
   std::vector<float> m_hostFloatRanges;
+
+  // Device-reported max work-group size. Used as the pointcloud conversion
+  // kernel's block dim.
+  size_t m_max_wg_size = 0;
 
   const bool m_isPointCloud;
 

@@ -48,6 +48,10 @@ namespace {
  *                          load_and_cast_val).
  * @param element_size      sizeof(field) in bytes. Used for the
  *                          per-thread bounds guard.
+ * @param wg_size           Work-group size (block dim) for the kernel
+ *                          launch. Should be the device's
+ *                          `info::device::max_work_group_size` — the
+ *                          caller queries this at ctor time
  */
 inline void submitPointCloudToLaserScanKernel(
     sycl::queue &q, const int8_t *device_raw_bytes, const size_t total_bytes,
@@ -55,7 +59,7 @@ inline void submitPointCloudToLaserScanKernel(
     const int point_step, const int row_step, const int width, const int height,
     const int x_offset, const int y_offset, const int z_offset,
     const float min_z, const float max_z, const PointFieldType point_field_type,
-    const int element_size) {
+    const int element_size, const size_t wg_size) {
 
   // if data is missing; return
   if (device_raw_bytes == nullptr || device_ranges_out == nullptr ||
@@ -70,8 +74,9 @@ inline void submitPointCloudToLaserScanKernel(
 
   q.submit([&](sycl::handler &h) {
     // Capture constants by value so they're embedded in the kernel.
+    // Block dim uses the device-reported max work-group size
     const size_t num_points = static_cast<size_t>(width) * height;
-    const size_t WG_SIZE = 256;
+    const size_t WG_SIZE = wg_size;
     const size_t global_size = ((num_points + WG_SIZE - 1) / WG_SIZE) * WG_SIZE;
 
     const int k_width = width;
@@ -355,7 +360,7 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<int8_t> &data,
         static_cast<int>(x_offset), static_cast<int>(y_offset),
         static_cast<int>(z_offset), static_cast<float>(m_minHeight),
         static_cast<float>(m_maxHeight), PointFieldType::FLOAT32,
-        /*element_size*/ 4);
+        /*element_size*/ 4, m_max_wg_size);
 
     // Ray-cast from laserscan → occupancy grid.
     submitScanToGridKernel(m_q, m_devicePtrGrid, m_devicePtrDistances,
