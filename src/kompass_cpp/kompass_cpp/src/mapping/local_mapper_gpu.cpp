@@ -322,8 +322,20 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<int8_t> &data,
                                             float x_offset, float y_offset,
                                             float z_offset) {
   try {
-    // Grow the raw-bytes device buffer to fit this scan. Grow on demand pattern.
+    // Reset output grid to UNEXPLORED before any kernel runs.
+    m_q.fill(m_devicePtrGrid, static_cast<int>(OccupancyType::UNEXPLORED),
+             m_gridHeight * m_gridWidth);
+
+    // Empty cloud → nothing to project. Return the grid as all-UNEXPLORED
     const size_t total_bytes = data.size();
+    if (total_bytes == 0 || height == 0 || width == 0) {
+      m_q.memcpy(gridData.data(), m_devicePtrGrid,
+                 sizeof(int) * m_gridWidth * m_gridHeight);
+      m_q.wait_and_throw();
+      return gridData;
+    }
+
+    // Grow the raw-bytes device buffer to fit this scan.
     if (m_rawCapacity < total_bytes) {
       if (m_devicePtrRawBytes) {
         sycl::free(m_devicePtrRawBytes, m_q);
@@ -333,10 +345,6 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<int8_t> &data,
     }
 
     m_q.memcpy(m_devicePtrRawBytes, data.data(), total_bytes);
-
-    // Reset output grid to UNEXPLORED before the ray-cast kernel runs.
-    m_q.fill(m_devicePtrGrid, static_cast<int>(OccupancyType::UNEXPLORED),
-             m_gridHeight * m_gridWidth);
 
     // Pointcloud → per-bin laserscan ranges on device. Fills
     // m_devicePtrRanges with per-angle-bin minimum distance. Angles
@@ -377,6 +385,20 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
   try {
     m_q.fill(m_devicePtrGrid, static_cast<int>(OccupancyType::UNEXPLORED),
              m_gridHeight * m_gridWidth);
+
+    // Validate host inputs before issuing H→D copies. An undersized input
+    // is treated as a dropped frame return an all-UNEXPLORED grid.
+    const auto required = static_cast<size_t>(m_scanSize);
+    if (angles.size() < required || ranges.size() < required) {
+      LOG_WARNING(
+          "LocalMapperGPU::scanToGrid: angles/ranges shorter than scan_size ",
+          "(got angles=", angles.size(), " ranges=", ranges.size(),
+          " scan_size=", m_scanSize, "); skipping frame.");
+      m_q.memcpy(gridData.data(), m_devicePtrGrid,
+                 sizeof(int) * m_gridWidth * m_gridHeight);
+      m_q.wait_and_throw();
+      return gridData;
+    }
 
     m_q.memcpy(m_devicePtrAngles, angles.data(), sizeof(double) * m_scanSize);
 
