@@ -54,9 +54,9 @@ public:
       m_devicePtrRawBytes = nullptr;
       m_rawCapacity = 0;
 
-      // For the pointcloud path the angles are a fixed uniform grid over
-      // [0, 2π), derived from scanSize. initializedAngles is pre-populated
-      // by the base LocalMapper constructor
+      // Angles are pre-populated by the base LocalMapper ctor with the
+      // `2π / scan_size` bin width the conversion kernel assumes; upload
+      // them once here and skip the per-call H→D copy.
       m_q.memcpy(m_devicePtrAngles, initializedAngles.data(),
                  sizeof(double) * scanSize);
       m_q.wait();
