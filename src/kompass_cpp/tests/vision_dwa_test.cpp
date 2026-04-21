@@ -30,7 +30,7 @@ struct VisionDWATestConfig {
   int maxAngularSamples;
   int maxNumThreads;
 
-  double distance_tolerance = 0.1;
+  double distance_tolerance = 0.05;
   double target_distance = 0.2;
   float robot_radius = 0.1;
 
@@ -503,10 +503,10 @@ BOOST_AUTO_TEST_CASE(test_VisionDWA_small_obstacle) {
 
   VisionDWATestConfig testConfig(
       cloud, /*use_local_frame=*/true, /*timeStep=*/0.1,
-      /*predictionHorizon=*/10, /*controlHorizon=*/5,
+      /*predictionHorizon=*/40, /*controlHorizon=*/5,
       /*maxLinearSamples=*/20, /*maxAngularSamples=*/20,
-      /*maxVel=*/2.0, /*maxOmega=*/4.0, /*maxNumThreads=*/1,
-      /*reference_path_distance_weight=*/1.0,
+      /*maxVel=*/2.0, /*maxOmega=*/4.0, /*maxNumThreads=*/10,
+      /*reference_path_distance_weight=*/0.3,
       /*goal_distance_weight=*/2.0,
       /*obstacles_distance_weight=*/1.0);
 
@@ -538,4 +538,116 @@ BOOST_AUTO_TEST_CASE(test_VisionDWA_small_obstacle) {
 
   BOOST_TEST(test_passed,
              "VisionDWA failed to navigate around small obstacle");
+}
+
+// Two obstacles, one on each side of the target's path. The robot should
+// follow a doubled-curve trajectory: detour first one way, then the other,
+// while resuming tracking between the two avoidance maneuvers.
+BOOST_AUTO_TEST_CASE(test_VisionDWA_two_sided_obstacles) {
+  Timer time;
+
+  // Target moves straight along +x at y=0. First obstacle above the path,
+  // second obstacle below the path, separated along x so the robot has time
+  // to recover tracking between them.
+  std::vector<Path::Point> cloud = {
+      {0.3, 0.08, 0.1},   // first obstacle above the path
+      {0.9, -0.08, 0.1},  // second obstacle below the path
+  };
+
+  VisionDWATestConfig testConfig(
+      cloud, /*use_local_frame=*/true, /*timeStep=*/0.1,
+      /*predictionHorizon=*/40, /*controlHorizon=*/5,
+      /*maxLinearSamples=*/20, /*maxAngularSamples=*/20,
+      /*maxVel=*/2.0, /*maxOmega=*/4.0, /*maxNumThreads=*/10,
+      /*reference_path_distance_weight=*/0.3,
+      /*goal_distance_weight=*/2.0,
+      /*obstacles_distance_weight=*/1.0);
+
+  testConfig.tracked_vel = Control::Velocity2D(0.1, 0.0, 0.0);
+  testConfig.tracked_pose =
+      Control::TrackedPose2D(0.0, 0.0, 0.0, testConfig.tracked_vel);
+
+  int numPointsPerTrajectory = 100;
+
+  double end_distance = testConfig.run_test(
+      numPointsPerTrajectory,
+      std::string("vision_dwa_two_sided_obstacles"), true);
+
+  // The robot navigates around both obstacles and resumes tracking. Allow a
+  // looser tolerance than the obstacle-free case since each detour adds error.
+  double distance_error =
+      end_distance - testConfig.robot_radius - testConfig.target_distance;
+
+  bool test_passed = std::abs(distance_error) < 0.4;
+
+  if (test_passed) {
+    LOG_INFO("Two-sided obstacles: tracking resumed. End error: ",
+             distance_error, " < tolerance 0.4");
+  } else {
+    LOG_ERROR("Two-sided obstacles: tracking failed. End error: ",
+              distance_error, " > tolerance 0.4");
+  }
+
+  BOOST_TEST(test_passed,
+             "VisionDWA failed to navigate around two-sided obstacles");
+}
+
+// Wide wall directly between the robot and the target. The robot cannot
+// route around the wall with a local planner, so it must STOP rather than
+// drive into the wall or oscillate dangerously. Success criterion:
+//   1. The robot does not get any closer to the wall than its radius.
+//   2. The robot does not drift away uncontrollably (graceful stop).
+BOOST_AUTO_TEST_CASE(test_VisionDWA_blocking_wall) {
+  Timer time;
+
+  // Wall at x=0.3 spanning y ∈ [-0.5, 0.5]: too wide to circumnavigate.
+  std::vector<Path::Point> cloud;
+  for (float y = -0.5f; y <= 0.5f; y += 0.05f) {
+    cloud.push_back({0.3, y, 0.1});
+  }
+
+  VisionDWATestConfig testConfig(
+      cloud, /*use_local_frame=*/true, /*timeStep=*/0.1,
+      /*predictionHorizon=*/40, /*controlHorizon=*/5,
+      /*maxLinearSamples=*/20, /*maxAngularSamples=*/20,
+      /*maxVel=*/2.0, /*maxOmega=*/4.0, /*maxNumThreads=*/10,
+      /*reference_path_distance_weight=*/0.3,
+      /*goal_distance_weight=*/2.0,
+      /*obstacles_distance_weight=*/1.0);
+
+  testConfig.tracked_vel = Control::Velocity2D(0.1, 0.0, 0.0);
+  testConfig.tracked_pose =
+      Control::TrackedPose2D(0.0, 0.0, 0.0, testConfig.tracked_vel);
+
+  int numPointsPerTrajectory = 100;
+
+  double end_distance = testConfig.run_test(
+      numPointsPerTrajectory,
+      std::string("vision_dwa_blocking_wall"), true);
+
+  // Robot must stop before the wall (not collide with it).
+  // The wall is at x=0.3; with robot_radius=0.1 the robot center must stay
+  // at x < (0.3 - robot_radius) = 0.2.
+  const double wall_x = 0.3;
+  const double min_safe_distance = wall_x - testConfig.robot_radius;
+  bool stopped_before_wall = testConfig.robotState.x < min_safe_distance;
+
+  // Also verify the robot did not drift far off the path.
+  bool stayed_in_vicinity = std::abs(testConfig.robotState.y) < 0.5;
+
+  bool test_passed = stopped_before_wall && stayed_in_vicinity;
+
+  if (test_passed) {
+    LOG_INFO("Blocking wall: robot stopped safely at (",
+             testConfig.robotState.x, ", ", testConfig.robotState.y,
+             "). End distance to target: ", end_distance);
+  } else {
+    LOG_ERROR("Blocking wall: robot ended at (", testConfig.robotState.x,
+              ", ", testConfig.robotState.y,
+              ") — stopped_before_wall=", stopped_before_wall,
+              ", stayed_in_vicinity=", stayed_in_vicinity);
+  }
+
+  BOOST_TEST(test_passed,
+             "VisionDWA failed to stop safely before a blocking wall");
 }
