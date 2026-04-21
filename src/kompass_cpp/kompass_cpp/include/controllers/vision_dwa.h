@@ -293,6 +293,11 @@ private:
       // enough for a small obstacle to fall between two non-colliding samples
       // while the swept path crosses it.  Interpolate intermediate states so
       // the discrete collision checker sees the full swept volume.
+      //
+      // Also skip states near the tracked target: the target itself shows up
+      // in the sensor data and the reference naturally ends near it, so
+      // anything inside the target's footprint or the planned stopping zone
+      // is not a real obstacle.
       constexpr int kInterpSubSteps = 5;
       const float cos_yaw = std::cos(currentState.yaw);
       const float sin_yaw = std::sin(currentState.yaw);
@@ -307,23 +312,69 @@ private:
                ref_traj.path.y(i) * cos_yaw;
         }
       };
+
+      // World-frame position of the tracked target
+      float target_world_x, target_world_y;
+      if (track_velocity_) {
+        target_world_x = tracked_pose->x();
+        target_world_y = tracked_pose->y();
+      } else {
+        target_world_x = currentState.x + tracked_pose->x() * cos_yaw -
+                         tracked_pose->y() * sin_yaw;
+        target_world_y = currentState.y + tracked_pose->x() * sin_yaw +
+                         tracked_pose->y() * cos_yaw;
+      }
+      // Effective horizontal radius of the target's bounding box (half of
+      // the larger horizontal extent). Falls back to 0 if the raw box is
+      // unavailable.
+      float target_radius = 0.0f;
+      if (auto raw = tracker_->getRawTracking()) {
+        target_radius =
+            0.5f * std::max(raw->box.size.x(), raw->box.size.y());
+      }
+      // Skip anything inside the larger of:
+      //   * the target's footprint plus the robot's footprint plus a buffer
+      //     (so the target itself never trips the check)
+      //   * the planned stopping distance (target_distance + robot_radius)
+      const float robot_radius = trajSampler->getRobotRadius();
+      const float footprint_radius = target_radius + robot_radius + 0.05f;
+      const float stop_radius =
+          static_cast<float>(config_.target_distance()) + robot_radius;
+      const float target_skip_radius = std::max(footprint_radius, stop_radius);
+      const float target_skip_radius_sq =
+          target_skip_radius * target_skip_radius;
+      auto isNearTarget = [&](float wx, float wy) {
+        const float dx = wx - target_world_x;
+        const float dy = wy - target_world_y;
+        return (dx * dx + dy * dy) < target_skip_radius_sq;
+      };
+
       std::vector<Path::State> ref_states;
       ref_states.reserve(ref_traj.path.x.size() * kInterpSubSteps);
       for (Eigen::Index i = 0; i < ref_traj.path.x.size(); ++i) {
         float wx, wy;
         refPointToWorld(i, wx, wy);
-        ref_states.emplace_back(wx, wy, 0.0);
+        if (!isNearTarget(wx, wy)) {
+          ref_states.emplace_back(wx, wy, 0.0);
+        }
         if (i + 1 < ref_traj.path.x.size()) {
           float wx_next, wy_next;
           refPointToWorld(i + 1, wx_next, wy_next);
           for (int k = 1; k < kInterpSubSteps; ++k) {
             const float t = static_cast<float>(k) / kInterpSubSteps;
-            ref_states.emplace_back(wx + (wx_next - wx) * t,
-                                    wy + (wy_next - wy) * t, 0.0);
+            const float ix = wx + (wx_next - wx) * t;
+            const float iy = wy + (wy_next - wy) * t;
+            if (!isNearTarget(ix, iy)) {
+              ref_states.emplace_back(ix, iy, 0.0);
+            }
           }
         }
       }
+      // If every state was filtered out (entire reference is inside the
+      // target's exclusion zone, e.g. robot is already at the target) there
+      // is nothing to collide with — accept the reference as-is.
       const bool ref_has_collision =
+          !ref_states.empty() &&
           trajSampler->checkStatesFeasibility(ref_states, sensor_points);
 
       if (!ref_has_collision) {
