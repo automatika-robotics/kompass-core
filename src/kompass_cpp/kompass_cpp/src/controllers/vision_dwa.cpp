@@ -60,10 +60,14 @@ void VisionDWA::setCameraIntrinsics(const float focal_length_x,
 Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose, const bool update_global_error) {
   float distance, psi, gamma = 0.0f;
   if (track_velocity_) {
+    // World frame: target bearing must be measured from the robot's body,
+    // not from the world origin.
     distance = tracking_pose.distance(currentState.x, currentState.y, 0.0) -
                trajSampler->getRobotRadius();
     psi = Angle::normalizeToMinusPiPlusPi(
-        std::atan2(tracking_pose.y(), tracking_pose.x()) - currentState.yaw);
+        std::atan2(tracking_pose.y() - currentState.y,
+                   tracking_pose.x() - currentState.x) -
+        currentState.yaw);
     gamma =
         Angle::normalizeToMinusPiPlusPi(tracking_pose.yaw() - currentState.yaw);
   } else {
@@ -77,8 +81,11 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose, co
   distance = std::max(distance, kMinDistance);
 
   float distance_error = config_.target_distance() - distance;
-  float angle_error = Angle::normalizeToMinusPiPlusPi(
-      config_.target_orientation() - gamma - psi);
+  // target_orientation is the bearing-to-target to maintain in the robot
+  // frame; gamma (target heading relative to robot) belongs in the motion
+  // feedforward only, not in the angular error.
+  float angle_error =
+      Angle::normalizeToMinusPiPlusPi(config_.target_orientation() - psi);
 
   // Update error is enabled (to avoid update for simulated states)
   if (update_global_error) {
@@ -105,8 +112,7 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose, co
     followingVel.setVx(v);
     double omega;
 
-    omega = 2.0 *
-            (track_velocity_ * tracking_pose.v() * sin_diff / distance +
+    omega = (track_velocity_ * tracking_pose.v() * sin_diff / distance +
              v * sin(psi) / distance -
              config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
                  tanh(angle_error));
