@@ -11,6 +11,23 @@ namespace Control {
 
 constexpr float DEFAULT_MIN_DIST = std::numeric_limits<float>::max();
 
+// Split the total linear sample budget between vx and vy. For omni we
+// allocate 75% of the budget to vx and 25% to vy — forward/reverse motion
+// needs finer resolution than lateral strafe in typical path-following.
+// Each per-axis count is bumped odd so the symmetric [-v, +v] window
+// straddles zero and includes a "no-drift" sample.
+inline void computeLinearSampleSplit(ControlType ctrType, int maxLinearSamples,
+                                     int &vx_n, int &vy_n) {
+  auto makeOdd = [](int n) { return (n % 2 == 0) ? n + 1 : n; };
+  if (ctrType == ControlType::OMNI) {
+    vx_n = makeOdd(std::max(3, maxLinearSamples * 3 / 4));
+    vy_n = makeOdd(std::max(3, maxLinearSamples * 1 / 4));
+  } else {
+    vx_n = makeOdd(std::max(3, maxLinearSamples));
+    vy_n = 1;
+  }
+}
+
 // calculate number of trajectory samples based on ctrl type
 inline size_t getNumTrajectories(ControlType ctrType, int maxLinearSamples,
                                  int maxAngularSamples) {
