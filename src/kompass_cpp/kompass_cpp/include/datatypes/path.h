@@ -179,6 +179,13 @@ struct Path {
     return accumulated_path_length_[index];
   }
 
+  // Raw pointer to the per-point accumulated arc-length array. On an
+  // interpolated path, indices [0, getSize()) are valid and monotonically
+  // increasing from 0 to totalPathLength().
+  inline const float *getAccumulatedLengthsPointer() const {
+    return accumulated_path_length_.data();
+  }
+
   // distance between two points
   static inline float distance(const Point &p1, const Point &p2) {
     return (p1 - p2).norm();
