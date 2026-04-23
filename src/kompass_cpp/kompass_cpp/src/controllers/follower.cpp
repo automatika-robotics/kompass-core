@@ -280,9 +280,11 @@ void Follower::determineTarget() {
 
   currentTrackedTarget_->movement = closestPosition->state;
   currentTrackedTarget_->lookahead = lookahead_distance;
-  currentTrackedTarget_->heading_error =
-      Angle::normalizeTo0Pi(currentTrackedTarget_->movement.yaw) -
-      Angle::normalizeTo0Pi(currentState.yaw);
+  // Signed shortest angular distance in [-pi, pi]. Subtracting two separately
+  // normalized [0, 2*pi) values can spuriously return ~+/-2*pi at the wrap,
+  // which previously tripped the rotate-in-place guard on small real errors.
+  currentTrackedTarget_->heading_error = Angle::normalizeToMinusPiPlusPi(
+      currentTrackedTarget_->movement.yaw - currentState.yaw);
 
   currentTrackedTarget_->crosstrack_error = closestPosition->parallel_distance;
   currentTrackedTarget_->reverse = false;
@@ -296,9 +298,9 @@ bool Follower::isForwardSegment(const Path::Path &segment1,
       std::atan2(segment2.getStart().y() - segment1.getStart().y(),
                  segment2.getStart().x() - segment1.getStart().x());
 
-  return std::abs(Angle::normalizeTo0Pi(segment2.getStartOrientation() -
-                                        angle_between_points)) <=
-         (M_PI - std::abs(Angle::normalizeTo0Pi(
+  return std::abs(Angle::normalizeTo02Pi(segment2.getStartOrientation() -
+                                         angle_between_points)) <=
+         (M_PI - std::abs(Angle::normalizeTo02Pi(
                      angle_between_points - segment1.getStartOrientation())));
 }
 
