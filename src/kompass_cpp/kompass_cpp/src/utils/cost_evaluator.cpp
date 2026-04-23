@@ -61,8 +61,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     if ((ref_path_length = reference_path->totalPathLength()) > 0.0) {
       if ((weight = costWeights->getParameter<double>("goal_distance_weight")) >
           0.0) {
-        float goalCost =
-            goalCostFunc(traj, reference_path->getEnd(), ref_path_length);
+        float goalCost = goalCostFunc(traj, reference_path, ref_path_length);
         total_cost += weight * goalCost;
       }
       if ((weight = costWeights->getParameter<double>(
@@ -139,14 +138,31 @@ float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
   return (total_cost / trajectory.path.x.size() + end_dist_error) / 2;
 }
 
-// Compute the cost of a trajectory based on distance to a given reference path
 float CostEvaluator::goalCostFunc(const Trajectory2D &trajectory,
-                                  const Path::Point &reference_path_end_point,
+                                  const Path::Path *reference_path,
                                   const float ref_path_length) {
-  // end point distance normalized to range [0, 1]
-  return Path::Path::distance(trajectory.path.getEnd(),
-                              reference_path_end_point) /
-         ref_path_length;
+// Distance-along-path goal cost: finds the reference-path point closest to
+// the trajectory's endpoint, then returns the remaining arc length from that
+// point to the path end, normalized to [0, 1]. Using arc-remaining instead of
+// euclidean endpoint-to-goal avoids stalling/corner-cutting on curved or
+// closed paths where the goal lies opposite the local path tangent.
+  const Path::Point traj_end = trajectory.path.getEnd();
+  const size_t ref_size = reference_path->getSize();
+
+  float min_dist_sq = DEFAULT_MIN_DIST;
+  size_t closest_idx = 0;
+  for (size_t i = 0; i < ref_size; ++i) {
+    const float d_sq =
+        Path::Path::distanceSquared(traj_end, reference_path->getIndex(i));
+    if (d_sq < min_dist_sq) {
+      min_dist_sq = d_sq;
+      closest_idx = i;
+    }
+  }
+
+  const float arc_remaining =
+      ref_path_length - reference_path->getDistanceAtIndex(closest_idx);
+  return arc_remaining / ref_path_length;
 }
 
 float CostEvaluator::obstaclesDistCostFunc(const Trajectory2D &trajectory) {

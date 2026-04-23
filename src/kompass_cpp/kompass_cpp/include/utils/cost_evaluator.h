@@ -276,15 +276,18 @@ private:
                      const float tracked_segment_length);
 
   /**
-   * @brief Trajectory cost based on the distance to the end (goal) of a given
-   * reference path
+   * @brief Trajectory cost based on remaining arc-length along the reference
+   * path from the trajectory endpoint to the goal. Uses distance-along-path
+   * rather than euclidean endpoint-to-goal distance so the cost behaves
+   * correctly on curved or closed paths.
    *
    * @param trajectory
    * @param reference_path
-   * @return float
+   * @param ref_path_length   total arc length of the reference path
+   * @return float            remaining-arc-length / total-arc-length in [0, 1]
    */
   float goalCostFunc(const Trajectory2D &trajectory,
-                     const Path::Point &reference_path_end_point,
+                     const Path::Path *reference_path,
                      const float ref_path_length);
 
   /**
