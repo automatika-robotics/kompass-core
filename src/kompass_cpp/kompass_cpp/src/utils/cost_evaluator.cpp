@@ -67,8 +67,7 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
       }
       if ((weight = costWeights->getParameter<double>(
                "reference_path_distance_weight")) > 0.0) {
-        float refPathCost = pathCostFunc(traj, tracked_segment,
-                                         tracked_segment.totalSegmentLength());
+        float refPathCost = pathCostFunc(traj, tracked_segment);
         total_cost += weight * refPathCost;
       }
     }
@@ -109,38 +108,24 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
 }
 
 float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
-                                  const Path::Path::View &tracked_segment,
-                                  const float tracked_segment_length) {
+                                  const Path::Path::View &tracked_segment) {
+  // Average cross-track error: for each trajectory point, its minimum
+  // distance to the tracked reference segment. Units: meters.
+  // Caller must ensure the tracked segment spans the trajectory's reach
+  // (predictionHorizon * maxVel) to avoid penalizing trajectories that reach further by reading longitudinal overshoot as lateral error.
   float total_cost = 0.0;
-
-  float distError, dist;
-
   for (Eigen::Index i = 0; i < trajectory.path.x.size(); ++i) {
-    // Set min distance between trajectory sample point i and the reference to
-    // infinity
-    distError = DEFAULT_MIN_DIST;
-    // Get minimum distance to the reference
+    float min_dist = DEFAULT_MIN_DIST;
     for (size_t j = 0; j < tracked_segment.getSize(); ++j) {
-      dist = Path::Path::distance(tracked_segment.getIndex(j),
-                                  trajectory.path.getIndex(i));
-      if (dist < distError) {
-        distError = dist;
+      float d = Path::Path::distance(tracked_segment.getIndex(j),
+                                     trajectory.path.getIndex(i));
+      if (d < min_dist) {
+        min_dist = d;
       }
     }
-    // Total min distance to each point
-    total_cost += distError;
+    total_cost += min_dist;
   }
-
-  // end point distance
-  float end_dist_error =
-      Path::Path::distance(
-          trajectory.path.getEnd(),
-          tracked_segment.getIndex(tracked_segment.getSize() - 1)) /
-      tracked_segment_length;
-
-  // Divide by number of points to get average distance
-  // and normalize the total cost
-  return (total_cost / trajectory.path.x.size() + end_dist_error) / 2;
+  return total_cost / trajectory.path.x.size();
 }
 
 // Compute the cost of a trajectory based on distance to a given reference path

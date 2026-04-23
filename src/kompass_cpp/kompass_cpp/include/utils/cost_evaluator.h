@@ -273,8 +273,7 @@ private:
    * @return float
    */
   float pathCostFunc(const Trajectory2D &trajectory,
-                     const Path::Path::View &tracked_segment,
-                     const float tracked_segment_length);
+                     const Path::Path::View &tracked_segment);
 
   /**
    * @brief Trajectory cost based on the distance to the end (goal) of a given
