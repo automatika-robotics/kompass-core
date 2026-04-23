@@ -61,6 +61,7 @@ add_test(vision_tests vision_tracking_test)
 
 # add sycl based GPU tests
 if(AdaptiveCpp_FOUND)
+  # Mapper GPU test
   add_executable(mapper_test_gpu mapper_test_gpu.cpp)
   target_link_libraries(mapper_test_gpu PRIVATE ${MODULE_NAME} Boost::unit_test_framework)
   add_sycl_to_target(TARGET mapper_test_gpu SOURCES mapper_test_gpu.cpp)
@@ -72,6 +73,11 @@ if(AdaptiveCpp_FOUND)
   add_sycl_to_target(TARGET critical_zone_test_gpu SOURCES critical_zone_test_gpu.cpp)
   add_test(critical_zone_tests critical_zone_test_gpu)
 
-  # Add sycl to cost evaluator test if AdaptiveCpp found
+  # Cost evaluator test
+  # NOTE: Add private GPU flag since this target interacts with parts of
+  # the library where code is mixed and this flag is used. We don't make the
+  # flag public in the library since we don't want to force all downstream targets
+  # to carry it, but we do need it for this test.
+  target_compile_definitions(cost_evaluator_test PRIVATE GPU=1)
   add_sycl_to_target(TARGET cost_evaluator_test SOURCES cost_evaluator_test.cpp)
 endif()
