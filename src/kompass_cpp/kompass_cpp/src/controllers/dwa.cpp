@@ -153,9 +153,21 @@ Path::Path::View DWA::findTrackedPathSegment() {
     global_start_index = currentPath->getSize() - 1;
   }
 
-  // Lookahead index
-  size_t global_end_index = std::min(global_start_index + max_segment_size_,
-                                    currentPath->getSize() - 1);
+  // Extend the lookahead to at least the furthest point the trajectory can
+  // reach over the prediction horizon (max_forward_distance_ = maxVel *
+  // predictionHorizon).
+  // NOTE: Without this, any min-distance cost will read longitudinal
+  // overshoot as lateral error and penalizes fast trajectories.
+  size_t dynamic_lookahead = max_segment_size_;
+  if (max_point_interpolation_distance_ > 0.0) {
+    dynamic_lookahead = std::max(
+        max_segment_size_,
+        static_cast<size_t>(std::ceil(max_forward_distance_ /
+                                      max_point_interpolation_distance_)) + 1);
+  }
+
+  size_t global_end_index = std::min(global_start_index + dynamic_lookahead,
+                                     currentPath->getSize() - 1);
   // Create and Return the View
   return currentPath->getPart(global_start_index, global_end_index);
 }
