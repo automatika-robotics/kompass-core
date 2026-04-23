@@ -259,9 +259,8 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
         m_q.memcpy(m_devicePtrTrackedSegmentY, tracked_segment.getYPointer(),
                    sizeof(float) * tracked_segment_size)
             .wait();
-        events.push_back(pathCostFunc(trajs_size, tracked_segment_size,
-                                      tracked_segment.totalSegmentLength(),
-                                      weight));
+        events.push_back(
+            pathCostFunc(trajs_size, tracked_segment_size, weight));
       }
     }
     if ((weight = costWeights->getParameter<double>("smoothness_weight")) >
@@ -360,7 +359,6 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
 // path
 sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
                                         const size_t tracked_segment_size,
-                                        const float tracked_segment_length,
                                         const double cost_weight) {
 
   // -----------------------------------------------------
@@ -381,8 +379,6 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
     const size_t refSize = tracked_segment_size;
 
     // Pre-calculate inverses
-    const float invRefLength =
-        (tracked_segment_length > 0) ? 1.0f / tracked_segment_length : 0.0f;
     const float invRefSizeCount = (refSize > 0) ? 1.0f / refSize : 0.0f;
 
     // Infinity for padding local memory accessors
@@ -483,18 +479,8 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
             // Average over the reference path size
             float avg_path_dist = total_dist_sum * invRefSizeCount;
 
-            // End-point cost (Last Traj Point <-> Last Ref Point)
-            size_t last_traj_idx = traj_idx * pathSize + (pathSize - 1);
-            size_t last_ref_idx = refSize - 1;
-
-            float end_dx = X[last_traj_idx] - tracked_X[last_ref_idx];
-            float end_dy = Y[last_traj_idx] - tracked_Y[last_ref_idx];
-
-            float end_dist =
-                sycl::sqrt(end_dx * end_dx + end_dy * end_dy) * invRefLength;
-
             // Final cost
-            float final_val = costWeight * ((avg_path_dist + end_dist) * 0.5f);
+            float final_val = costWeight * avg_path_dist;
 
             // Atomic add to global cost
             sycl::atomic_ref<float, sycl::memory_order::relaxed,

@@ -221,7 +221,6 @@ private:
    */
   sycl::event pathCostFunc(const size_t trajs_size,
                            const size_t tracked_segment_size,
-                           const float tracked_segment_length,
                            const double cost_weight);
 
   /**
