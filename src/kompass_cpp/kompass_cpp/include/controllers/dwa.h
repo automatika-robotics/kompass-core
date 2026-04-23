@@ -9,6 +9,7 @@
 #include "utils/logger.h"
 #include "utils/trajectory_sampler.h"
 #include <Eigen/Dense>
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -191,7 +192,7 @@ protected:
     // find closest segment to use in cost computation
     determineTarget();
 
-    if (rotate_in_place and currentTrackedTarget_->heading_error >
+    if (rotate_in_place and std::abs(currentTrackedTarget_->heading_error) >
                                 goal_orientation_tolerance * 10.0) {
       // If the robot is rotating in place and the heading error is large, we
       // do not need to sample trajectories
