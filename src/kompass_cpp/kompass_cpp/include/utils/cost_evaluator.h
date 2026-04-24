@@ -50,18 +50,42 @@ public:
   };
 
   /**
-   * @brief Construct a new Cost evaluator object
+   * @brief Construct a new CostEvaluator.
    *
-   * @param costWeights
-   * @param controlType
-   * @param timeStep
-   * @param timeHorizon
-   * @param maxLinearSample
-   * @param maxAngularSample
+   * @param costsWeights              Per-cost weights (path, goal,
+   *                                  obstacles, smoothness, jerk).
+   * @param ctrLimits                 Robot control limits; acceleration
+   *                                  limits are used to normalize smoothness
+   *                                  and jerk costs.
+   * @param maxNumTrajectories        Upper bound on trajectories per batch
+   *                                  (sizes GPU device buffers at init).
+   * @param numPointsPerTrajectory    Upper bound on points per trajectory
+   *                                  (sizes GPU device buffers at init;
+   *                                  actual per-batch count may be smaller
+   *                                  and is read from the incoming samples).
+   * @param maxRefPathSegmentSize     Expected tracked-segment size; GPU
+   *                                  buffers grow on demand if exceeded.
    */
   CostEvaluator(TrajectoryCostsWeights &costsWeights,
                 ControlLimitsParams ctrLimits, size_t maxNumTrajectories,
                 size_t numPointsPerTrajectory, size_t maxRefPathSegmentSize);
+
+  /**
+   * @brief Construct a new CostEvaluator with a sensor-to-body transform.
+   *
+   * Obstacle points passed to setPointScan are interpreted in the sensor
+   * frame and transformed into the body frame using this pose.
+   *
+   * @param costsWeights              See primary constructor.
+   * @param sensor_position_body      Sensor position expressed in the body
+   *                                  frame.
+   * @param sensor_rotation_body      Sensor orientation (quaternion)
+   *                                  expressed in the body frame.
+   * @param ctrLimits                 See primary constructor.
+   * @param maxNumTrajectories        See primary constructor.
+   * @param numPointsPerTrajectory    See primary constructor.
+   * @param maxRefPathSegmentSize     See primary constructor.
+   */
   CostEvaluator(TrajectoryCostsWeights &costsWeights,
                 const Eigen::Vector3f &sensor_position_body,
                 const Eigen::Quaternionf &sensor_rotation_body,
@@ -95,13 +119,22 @@ public:
   };
 
   /**
-   * @brief Get the Trajectory Cost by applying all the defined cost functions
+   * @brief Evaluate every trajectory in `trajs` against `reference_path` and
+   * return the lowest-cost one, with its total weighted cost.
    *
-   * @param traj      The trajectory under evaluation
-   * @param reference_path        The reference path (global path)
-   * @param closest_segment_index     The segment of the closest segment from
-   * the global path
-   * @return TrajSearchResult
+   * Applies each enabled cost (path, goal, obstacles, smoothness, jerk, plus
+   * any custom costs) to every trajectory and returns the argmin. The tracked
+   * segment is the window of the reference path the path- and goal-cost
+   * kernels search over; callers should size it to at least cover the
+   * trajectory's reach (prediction_horizon * maxVel) so longitudinal
+   * overshoot isn't mis-read as lateral error.
+   *
+   * @param trajs             Batch of candidate trajectories.
+   * @param reference_path    Full global reference path (interpolated; used
+   *                          for prefix arc-length lookups in goal cost).
+   * @param tracked_segment   Active View into reference_path.
+   * @return TrajSearchResult Winning trajectory, a boolean "found" flag, and
+   *                          the winning total cost.
    */
   TrajSearchResult
   getMinTrajectoryCost(const std::unique_ptr<TrajectorySamples2D> &trajs,
@@ -121,10 +154,22 @@ public:
   };
 
   /**
-   * @brief Set the point scan with either laserscan or vector of points
+   * @brief Load obstacle points from a polar LaserScan.
    *
-   * @param scan / point cloud
-   * @param current_state
+   * Converts polar (range, angle) to Cartesian in the sensor frame, then
+   * transforms into the body frame using the sensor-to-body pose and the
+   * current robot pose. Results are used by the obstacles cost kernel.
+   *
+   * @param scan                              Polar scan.
+   * @param current_state                     Current robot pose (world).
+   * @param max_sensor_range                  Sensor's max valid range [m].
+   * @param max_obstacle_cost_range_multiple  Divisor applied to
+   *                                          max_sensor_range to produce
+   *                                          maxObstaclesDist — the
+   *                                          distance at which the
+   *                                          obstacles cost reaches zero.
+   *                                          Default 3.0 → cost vanishes
+   *                                          at range/3.
    */
   void setPointScan(const LaserScan &scan, const Path::State &current_state,
                     const float max_sensor_range,
@@ -147,6 +192,18 @@ public:
     }
   };
 
+  /**
+   * @brief Load obstacle points from a Cartesian point cloud.
+   *
+   * Point cloud is assumed to be in the sensor frame; points are transformed
+   * into the body frame using the sensor-to-body pose and the current robot
+   * pose.
+   *
+   * @param cloud                             Point cloud in the sensor frame.
+   * @param current_state                     Current robot pose (world).
+   * @param max_sensor_range                  Sensor's max valid range [m].
+   * @param max_obstacle_cost_range_multiple  See the LaserScan overload.
+   */
   void setPointScan(const std::vector<Path::Point> &cloud,
                     const Path::State &current_state,
                     const float max_sensor_range,
@@ -208,7 +265,7 @@ private:
   float *m_devicePtrTrackedSegmentX = nullptr;
   float *m_devicePtrTrackedSegmentY = nullptr;
   float *m_devicePtrTrackedSegmentAccLengths =
-      nullptr; // absolute prefix arc legnths for tracked segment points
+      nullptr; // absolute prefix arc lengths for tracked segment points
   float *m_devicePtrObstaclesX = nullptr;
   float *m_devicePtrObstaclesY = nullptr;
   float *m_devicePtrTempCosts = nullptr;
@@ -216,10 +273,21 @@ private:
   sycl::queue m_q;
   void initializeGPUMemory();
   /**
-   * @brief Trajectory cost based on the distance to a given reference path
+   * @brief Trajectory cost based on average cross-track error to the tracked
+   * reference segment, plus normalized end-point distance.
    *
-   * @param trajectories
-   * @param reference_path
+   * One workgroup per trajectory; each thread reduces over a stride-looped
+   * set of trajectory points and finds the closest tracked-segment point per
+   * trajectory point (tiled through local memory). Assumes tracked-segment
+   * X/Y have already been uploaded to device memory by getMinTrajectoryCost.
+   *
+   * @param trajs_size                Number of trajectories in the batch.
+   * @param tracked_segment_size      Number of points in the tracked segment.
+   * @param tracked_segment_length    Arc length of the tracked segment [m]
+   *                                  (used to normalize end-point distance).
+   * @param cost_weight               Weight applied to the final cost before
+   *                                  atomic-add into the per-trajectory
+   *                                  cost accumulator.
    */
   sycl::event pathCostFunc(const size_t trajs_size,
                            const size_t tracked_segment_size,
@@ -228,18 +296,28 @@ private:
 
   /**
    * @brief Trajectory cost based on remaining arc-length along the reference
-   * path from the trajectory endpoint to the goal. Each trajectory thread scans
-   * the tracked segment for the point closest to its endpoint, looks up the
-   * absolute prefix arc length at that local index (the uploaded slice holds
-   * absolute prefix values, so no index offset is applied), and emits
-   * arc_remaining / ref_path_length + sqrt(min_dist_sq) / ref_path_length (the
-   * second term is a tie-breaker preferring trajectories closer to the tracked
-   * segment).
+   * path from the trajectory endpoint to the goal.
    *
-   * @param trajs_size
-   * @param tracked_segment_size
-   * @param ref_path_length   total arc length of the full reference path
-   * @param cost_weight
+   * One workgroup per trajectory: each thread scans a stride-looped slice of
+   * tracked-segment points for the one closest to the trajectory's endpoint;
+   * a local-memory tree reduction then picks the workgroup-wide minimum.
+   * The uploaded acc-length slice holds absolute prefix values on the full
+   * reference path, so no segment-to-absolute index conversion is needed.
+   *
+   * Cost = arc_remaining / ref_path_length
+   *      + sqrt(min_dist_sq) / ref_path_length        (tie-breaker)
+   *
+   * The base term is in [0, 1]. The tie-breaker prefers trajectories closer
+   * to the tracked segment; it can push the total above 1 when the
+   * trajectory endpoint is farther from the segment than the reference path
+   * is long (rare, but not impossible on short paths with diverging samples).
+   *
+   * @param trajs_size            Number of trajectories in the batch.
+   * @param tracked_segment_size  Number of points in the tracked segment.
+   * @param ref_path_length       Total arc length of the full reference
+   *                              path [m].
+   * @param cost_weight           Weight applied before atomic-add into the
+   *                              per-trajectory cost accumulator.
    */
   sycl::event goalCostFunc(const size_t trajs_size,
                            const size_t tracked_segment_size,
@@ -247,58 +325,75 @@ private:
                            const double cost_weight);
 
   /**
-   * @brief Trajectory cost based on the smoothness along the trajectory
+   * @brief Trajectory smoothness cost: sum of squared first differences of
+   * velocity, normalized per component by the corresponding acceleration
+   * limit (cached as accLimits_ at construction).
    *
-   * @param trajectories
-   * @param accLimits     Robot acceleration limits [max acceleration on
-   * x-direction, max on y-direction, max angular acceleration]
+   * @param trajs_size    Number of trajectories in the batch.
+   * @param cost_weight   Weight applied before atomic-add.
    */
   sycl::event smoothnessCostFunc(const size_t trajs_size,
                                  const double cost_weight);
 
   /**
-   * @brief Trajectory cost based on the jerk along the trajectory
+   * @brief Trajectory jerk cost: sum of squared second differences of
+   * velocity, normalized per component by the corresponding acceleration
+   * limit (cached as accLimits_ at construction).
    *
-   * @param trajectories
-   * @param accLimits     Robot acceleration limits [max acceleration on
-   * x-direction, max on y-direction, max angular acceleration]
+   * @param trajs_size    Number of trajectories in the batch.
+   * @param cost_weight   Weight applied before atomic-add.
    */
   sycl::event jerkCostFunc(const size_t trajs_size, const double cost_weight);
 
   /**
-   * @brief Trajectory cost based on the distance obstacles
+   * @brief Trajectory cost based on minimum distance to any obstacle point.
    *
-   * @param trajectory
-   * @param obstaclePoints
-   * @return float
+   * Obstacle points are expected to already have been uploaded to device
+   * memory by getMinTrajectoryCost (after setPointScan). Cost decays
+   * linearly from 1 (obstacle touching a trajectory point) to 0 at
+   * maxObstaclesDist.
+   *
+   * @param trajs_size    Number of trajectories in the batch.
+   * @param cost_weight   Weight applied before atomic-add.
    */
   sycl::event obstaclesDistCostFunc(const size_t trajs_size,
                                     const double cost_weight);
 #else
   // Built-in functions for cost evaluation
   /**
-   * @brief Trajectory cost based on the distance to a given reference path
+   * @brief Average cross-track error from every trajectory point to the
+   * tracked reference segment, plus an end-point distance term.
    *
-   * @param trajectory
-   * @param reference_path
-   * @return float
+   * @param trajectory                Trajectory under evaluation.
+   * @param tracked_segment           Active View into the reference path.
+   * @param tracked_segment_length    Arc length of the tracked segment [m]
+   *                                  (used to normalize end-point distance).
+   * @return float                    Cost in meters (avg cross-track) with
+   *                                  a normalized end-point term added.
    */
   float pathCostFunc(const Trajectory2D &trajectory,
                      const Path::Path::View &tracked_segment,
                      const float tracked_segment_length);
 
   /**
-   * @brief Trajectory cost based on remaining arc-length along the reference
-   * path from the trajectory endpoint to the goal. The closest point search
-   * runs over the tracked segment (a View into the full reference path); the
-   * segment-local index is converted to an absolute reference-path index so
-   * the remaining arc length is looked up on the full path.
+   * @brief Remaining arc-length along the reference path from the trajectory
+   * endpoint to the goal. The closest point search runs over the tracked
+   * segment; the segment-local index is converted to an absolute reference-
+   * path index so the prefix arc length is looked up on the full path.
    *
-   * @param trajectory
-   * @param reference_path    full reference path (for prefix arc-lengths)
-   * @param tracked_segment   active View over reference_path
-   * @param ref_path_length   total arc length of the reference path
-   * @return float            remaining-arc-length / total-arc-length in [0, 1]
+   * Cost = arc_remaining / ref_path_length
+   *      + sqrt(min_dist_sq) / ref_path_length        (tie-breaker)
+   *
+   * The base term is in [0, 1]. The tie-breaker prefers trajectories closer
+   * to the tracked segment; it can push the total above 1 when the
+   * trajectory endpoint is farther from the segment than the reference path
+   * is long.
+   *
+   * @param trajectory        Trajectory under evaluation.
+   * @param reference_path    Full reference path (for prefix arc-lengths).
+   * @param tracked_segment   Active View over reference_path.
+   * @param ref_path_length   Total arc length of the reference path [m].
+   * @return float            arc_remaining/ref_len + tie-breaker.
    */
   float goalCostFunc(const Trajectory2D &trajectory,
                      const Path::Path *reference_path,
@@ -306,31 +401,32 @@ private:
                      const float ref_path_length);
 
   /**
-   * @brief Trajectory cost based on the distance obstacles
+   * @brief Trajectory cost based on minimum distance to any obstacle point
+   * loaded via setPointScan. Linearly decays from 1 (obstacle touches a
+   * trajectory point) to 0 at maxObstaclesDist.
    *
-   * @param trajectory
-   * @param obstaclePoints
-   * @return float
+   * @param trajectory    Trajectory under evaluation.
+   * @return float        Cost in [0, 1].
    */
   float obstaclesDistCostFunc(const Trajectory2D &trajectory);
 
   /**
-   * @brief Trajectory cost based on the smoothness along the trajectory
+   * @brief Trajectory smoothness cost: sum of squared first differences of
+   * velocity, normalized per component by the corresponding acceleration
+   * limit (cached as accLimits_ at construction).
    *
-   * @param trajectory
-   * @param accLimits     Robot acceleration limits [max acceleration on
-   * x-direction, max on y-direction, max angular acceleration]
-   * @return float
+   * @param trajectory    Trajectory under evaluation.
+   * @return float        Sum of (Δv)^2 / accLimit, averaged per component.
    */
   float smoothnessCostFunc(const Trajectory2D &trajectory);
 
   /**
-   * @brief Trajectory cost based on the jerk along the trajectory
+   * @brief Trajectory jerk cost: sum of squared second differences of
+   * velocity, normalized per component by the corresponding acceleration
+   * limit (cached as accLimits_ at construction).
    *
-   * @param trajectory
-   * @param accLimits     Robot acceleration limits [max acceleration on
-   * x-direction, max on y-direction, max angular acceleration]
-   * @return float
+   * @param trajectory    Trajectory under evaluation.
+   * @return float        Sum of (Δ²v)^2 / accLimit, averaged per component.
    */
   float jerkCostFunc(const Trajectory2D &trajectory);
 #endif //! GPU
