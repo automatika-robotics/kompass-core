@@ -38,6 +38,7 @@ TrajectorySampler::TrajectorySampler(
   ctrType = controlType;
   time_step_ = timeStep;
   max_time_ = predictionHorizon;
+  base_max_time_ = predictionHorizon;
   control_time_ = controlHorizon;
   lin_samples_max_ = maxLinearSamples;
   computeLinearSampleSplit(ctrType, lin_samples_max_, lin_samples_x_,
@@ -105,6 +106,7 @@ float TrajectorySampler::getRobotRadius() const {
 void TrajectorySampler::updateParams(TrajectorySamplerParameters config) {
   time_step_ = config.getParameter<double>("time_step");
   max_time_ = config.getParameter<double>("prediction_horizon");
+  base_max_time_ = max_time_;
   control_time_ = config.getParameter<double>("control_horizon");
   lin_samples_max_ = config.getParameter<int>("max_linear_samples");
   computeLinearSampleSplit(ctrType, lin_samples_max_, lin_samples_x_,
@@ -311,6 +313,18 @@ TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
   // Update the PointCloud values
   collChecker->updateSensorData(cloud);
   return getNewTrajectories(current_vel, current_pose);
+}
+
+void TrajectorySampler::setPredictionHorizon(double horizon) {
+  // Clamp to at least 2 time steps so rollout has room for a finite
+  // difference, and never exceed the horizon passed at construction.
+  const double min_horizon = 2.0 * time_step_;
+  if (horizon < min_horizon)
+    horizon = min_horizon;
+  if (horizon > base_max_time_)
+    horizon = base_max_time_;
+  max_time_ = horizon;
+  numPointsPerTrajectory = getNumPointsPerTrajectory(time_step_, max_time_);
 }
 
 void TrajectorySampler::UpdateReachableVelocityRange(

@@ -26,6 +26,8 @@ void Follower::setParams(const FollowerParameters &config) {
       this->config.getParameter<double>("goal_orientation_tolerance");
   loosing_goal_distance =
       this->config.getParameter<double>("loosing_goal_distance");
+  curvature_horizon_tolerance_ =
+      this->config.getParameter<double>("curvature_horizon_tolerance");
   path_segment_length_ =
       this->config.getParameter<double>("path_segment_length");
   max_point_interpolation_distance_ =

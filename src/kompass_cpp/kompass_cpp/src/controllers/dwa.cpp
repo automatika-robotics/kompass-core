@@ -3,6 +3,7 @@
 #include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
+#include "utils/logger.h"
 #include <cmath>
 #include <memory>
 #include <stdexcept>
@@ -143,6 +144,57 @@ void DWA::addCustomCost(
 void DWA::setCurrentState(const Path::State &position) {
   this->currentState = position;
   this->trajSampler->updateState(position);
+}
+
+void DWA::adaptPredictionHorizonToCurvature() {
+  const double base_horizon = trajSampler->getBasePredictionHorizon();
+  const double v_max = ctrlimitsParams.velXParams.maxVel;
+  if (!currentPath || v_max < 1e-3 || max_point_interpolation_distance_ <= 0.0) {
+    trajSampler->setPredictionHorizon(base_horizon);
+    max_forward_distance_ = base_horizon * v_max;
+    return;
+  }
+
+  // Scan curvature over the full reach the sampler could ever produce so we
+  // see approaching tight curves before the rollout runs into them.
+  const size_t start_idx = std::min(closestPosition->index,
+                                    currentPath->getSize() - 1);
+  const size_t peek_points = static_cast<size_t>(
+      std::ceil(base_horizon * v_max / max_point_interpolation_distance_));
+  const size_t end_idx =
+      std::min(start_idx + peek_points, currentPath->getSize() - 1);
+
+  float kappa_max = 0.0f;
+  for (size_t i = start_idx; i <= end_idx; ++i) {
+    kappa_max = std::max(
+        kappa_max, std::abs(static_cast<float>(currentPath->getCurvature(i))));
+  }
+
+  // Shrink the prediction horizon based on the max curvature ahead on the reference path.
+
+  // NOTE: This chord-arc bound is the same one used
+  // for clothoid path smoothing [1] and curvature-adaptive pure-pursuit
+  // lookahead [2], applied here to keep straight-tangent rollouts
+  // cost-competitive with stationary on tight-curvature paths.
+  //
+  // Small-angle sagitta (kappa * L << 1):  s ≈ L^2 * kappa / 8. Solving
+  // s ≤ tol for T gives  T ≤ sqrt(8 * tol / kappa) / v_max.
+  //
+  // [1] Brezak & Petrović, "Real-time approximation of clothoids with
+  //     bounded error for path planning applications", IEEE TRO 30(2),
+  //     507-515, 2014. doi:10.1109/TRO.2013.2294061
+  // [2] Snider, "Automatic steering methods for autonomous automobile path
+  //     tracking", CMU-RI-TR-09-08, 2009.
+  double adaptive_horizon = base_horizon;
+  if (kappa_max > curvature_horizon_tolerance_) {
+    const double horizon_cap =
+        std::sqrt(8.0 * curvature_horizon_tolerance_ / kappa_max) / v_max;
+    adaptive_horizon = std::min(base_horizon, horizon_cap);
+    LOG_DEBUG("Using Adaptive Horizon: ", adaptive_horizon);
+  }
+
+  trajSampler->setPredictionHorizon(adaptive_horizon);
+  max_forward_distance_ = adaptive_horizon * v_max;
 }
 
 Path::Path::View DWA::findTrackedPathSegment() {

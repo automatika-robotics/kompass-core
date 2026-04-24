@@ -204,6 +204,14 @@ protected:
       return TrajSearchResult{trajectory, true, 0.0};
     }
 
+    // Adapt the prediction horizon to local path curvature. At straight
+    // sections use the full constructor-provided horizon; as the reference
+    // curvature rises, shrink the horizon so straight-tangent samples don't
+    // diverge from the arc by more than `kSagittaTolerance` meters. A
+    // constant-curvature arc deviates from its tangent by ~(v·T)²·κ/8, so
+    // the cap is T ≤ sqrt(8·ε/κ) / v_max.
+    adaptPredictionHorizonToCurvature();
+
     // Generate set of valid trajectories in the DW
     std::unique_ptr<TrajectorySamples2D> samples_ =
         trajSampler->generateTrajectories(global_vel, currentState,
@@ -238,6 +246,11 @@ private:
   size_t getMaxPathLength();
 
   Path::Path::View findTrackedPathSegment();
+
+  // Shrink the sampler's rollout horizon based on the max curvature ahead
+  // on the reference path. Keeps straight-tangent samples from drifting too
+  // far off the arc and flat-lining the cost gradient at tight curves.
+  void adaptPredictionHorizonToCurvature();
 
   void initJitCompile();
 };

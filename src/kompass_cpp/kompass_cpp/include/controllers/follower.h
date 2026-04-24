@@ -54,6 +54,13 @@ public:
           "loosing_goal_distance",
           Parameter(0.5, 0.001, 1000.0)); // [m] If driving past the goal
                                           // we stop after this distance
+      // NOTE: curvature_horizon_tolerance is used to cap the rollout horizon on
+      // curved paths. Smaller => tighter curve tracking at the cost of goal
+      // lookahead. See DWA::adaptPredictionHorizonToCurvature() for the
+      // derivation.
+      addParameter("curvature_horizon_tolerance",
+                   Parameter(1.5, 0.5, 1000.0)); // [m] max chord-arc
+                                                   // deviation on curved paths
     }
   };
 
@@ -172,6 +179,9 @@ protected:
   double goal_dist_tolerance{0.0};
   double goal_orientation_tolerance{0.0};
   double loosing_goal_distance{0.0};
+  // Used by DWA to cap the rollout horizon on curved paths. See
+  // DWA::adaptPredictionHorizonToCurvature() for the derivation.
+  double curvature_horizon_tolerance_{1.0};
   bool rotate_in_place{false};
   double lookahead_distance{0.0};
   bool enable_reverse_driving{false};

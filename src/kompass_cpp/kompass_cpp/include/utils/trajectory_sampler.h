@@ -137,6 +137,17 @@ public:
   bool checkStatesFeasibility(const std::vector<Path::State> &states,
                               const T &sensor_points);
 
+  // Temporarily shrink the rollout horizon (e.g., when the reference path
+  // has high curvature ahead and straight-tangent samples would diverge too
+  // far from the arc). Updates numPointsPerTrajectory in lockstep so buffer
+  // sizing stays consistent. Clamped to >= 2 time steps and <= the sampler's
+  // originally-constructed horizon.
+  void setPredictionHorizon(double horizon);
+
+  // The prediction horizon the sampler was originally constructed with.
+  // Callers use this as the upper bound when adapting the horizon per cycle.
+  double getBasePredictionHorizon() const { return base_max_time_; }
+
   size_t numTrajectories;
   size_t numPointsPerTrajectory;
 
@@ -149,7 +160,8 @@ protected:
 
 private:
   double time_step_{0.0};
-  double max_time_{0.0};
+  double max_time_{0.0};       // current (possibly per-cycle-adapted) rollout horizon
+  double base_max_time_{0.0};  // constructor-provided upper bound; setter clamps to this
   double control_time_{0.0};
   int lin_samples_max_;
   int lin_samples_x_; // split of lin_samples_max_ used for the vx axis
