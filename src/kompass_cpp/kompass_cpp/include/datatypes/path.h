@@ -45,6 +45,10 @@ struct Path {
     ConstSegment Y;
     ConstSegment Z;
     ConstSegment Curvature;
+    // Pointer into the parent's accumulated_path_length_ array, offset
+    // to the segment's start. Values are absolute prefix arc lengths on the
+    // full reference path (not rebased to the segment start).
+    const float *AccumulatedLengths;
     size_t start_idx_;
 
     // Constructor
@@ -53,6 +57,7 @@ struct Path {
           Y(parent.Y_.segment(start, length)),
           Z(parent.Z_.segment(start, length)),
           Curvature(parent.Curvature_.segment(start, length)),
+          AccumulatedLengths(parent.accumulated_path_length_.data() + start),
           start_idx_(start) {}
 
     // --- Accessors ---
@@ -65,6 +70,10 @@ struct Path {
     const float *getYPointer() const { return Y.data(); }
     const float *getZPointer() const { return Z.data(); }
     const float *getCurvaturePointer() const { return Curvature.data(); }
+    // Absolute prefix arc lengths for the segment's points (size == getSize())
+    const float *getAccumulatedLengthsPointer() const {
+      return AccumulatedLengths;
+    }
 
     Point getIndex(size_t index) const {
       // Return a point constructed from the view's data at 'index'
