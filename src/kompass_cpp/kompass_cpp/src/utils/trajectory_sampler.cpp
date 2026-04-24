@@ -254,20 +254,18 @@ TrajectorySampler::generateTrajectoriesHolonomic(
   } else {
 
     for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+      // vx, vy
+      for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
+
+        getAdmissibleTrajsFromVel(Velocity2D(vx, vy, 0.0), current_pose,
+                                  admissible_velocity_trajectories.get());
+      }
       if (std::abs(vx) >= MIN_VEL) {
         // vx, omega
         for (double omega = min_omega_; omega <= max_omega_;
              omega += ang_sample_resolution_) {
 
           getAdmissibleTrajsFromVel(Velocity2D(vx, 0.0, omega), current_pose,
-                                    admissible_velocity_trajectories.get());
-        }
-
-        // vx, vy
-        for (double vy = min_vy_; vy <= max_vy_;
-             vy += lin_sample_y_resolution_) {
-
-          getAdmissibleTrajsFromVel(Velocity2D(vx, vy, 0.0), current_pose,
                                     admissible_velocity_trajectories.get());
         }
       }
