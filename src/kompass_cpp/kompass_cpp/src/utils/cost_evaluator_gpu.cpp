@@ -139,19 +139,10 @@ void CostEvaluator::updateCostWeights(TrajectoryCostsWeights &newCostsWeights) {
   };
   if (costWeights->getParameter<double>("obstacles_distance_weight") > 0.0 &&
       !m_devicePtrObstaclesX && !m_devicePtrObstaclesY) {
-    if (m_devicePtrObstaclesX) {
-      sycl::free(m_devicePtrObstaclesX, m_q);
-    }
-    if (m_devicePtrObstaclesY) {
-      sycl::free(m_devicePtrObstaclesY, m_q);
-    }
     m_devicePtrObstaclesX = sycl::malloc_device<float>(maxWGSize_, m_q);
     m_devicePtrObstaclesY = sycl::malloc_device<float>(maxWGSize_, m_q);
   }
   if (customTrajCostsPtrs_.size() > 0 && !m_devicePtrTempCosts) {
-    if (m_devicePtrTempCosts) {
-      sycl::free(m_devicePtrTempCosts, m_q);
-    }
     // Allocate shared memory for temporary costs
     m_devicePtrTempCosts = sycl::malloc_shared<float>(numTrajectories_, m_q);
   }
@@ -214,10 +205,10 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     size_t obs_size;
     size_t trajs_size = trajs->size();
 
-    // Refresh the current num-points-per-trajectory from the incoming batch.
-    // This number can shrink between calls; Device buffers were
-    // allocated to the construction-time max and are
-    // never resized the correct value for this call.
+    // NOTE: Refresh the current num-points-per-trajectory from the incoming batch.
+    // Device buffers were allocated at construction time to max value for this
+    // param and are never resized. This number can change between calls but
+    // never exceed max value, thus safe to overwrite per call.
     numPointsPerTrajectory_ = trajs->numPointsPerTrajectory_;
 
     std::vector<sycl::event> events;
