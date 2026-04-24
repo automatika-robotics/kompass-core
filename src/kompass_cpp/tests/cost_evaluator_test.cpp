@@ -1,429 +1,409 @@
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
-#include "json_export.h"
 #include "test.h"
-#include "utils/collision_check.h"
 #include "utils/cost_evaluator.h"
-#include "utils/logger.h"
-#include <cstddef>
 #include <memory>
 #define BOOST_TEST_MODULE KOMPASS COSTS TESTS
-#include <boost/dll/runtime_symbol_info.hpp> // for program_location
-#include <boost/filesystem.hpp>
 #include <boost/test/included/unit_test.hpp>
 #include <cmath>
 #include <vector>
 
-using namespace Kompass;
 using namespace Kompass::Control;
 
-// Helper to generate a dense 360-point LaserScan for stress testing
-LaserScan generate_dense_scan(size_t num_points = 360, double range = 5.0,
-                              double gap_angle_rad = 0.5) {
-  std::vector<double> ranges;
-  std::vector<double> angles;
-  ranges.reserve(num_points);
-  angles.reserve(num_points);
+// ==========================================================================
+//  Correctness-focused cost tests
+//  ------------------------------------------------------------------------
+//  Each BOOST_AUTO_TEST_CASE below exercises one specific behaviour of one
+//  cost function with a hand-computable expected value and a tolerance, so
+//  the test fails with a numerical mismatch (not an index mismatch) when the
+//  cost formula changes.
+// ==========================================================================
 
-  double angle_step = (2.0 * M_PI) / static_cast<double>(num_points);
-  double half_gap = gap_angle_rad / 2.0;
+namespace tt = boost::test_tools;
 
+namespace {
+
+// Build a straight reference path along +X from (0,0,0) to (length,0,0),
+// interpolated at `interp` and segmented at `seg`. Returns the interpolated
+// and segmented path.
+Path::Path makeInterpolatedStraightPath(float length, float interp, float seg) {
+  std::vector<Path::Point> pts{Path::Point(0.0f, 0.0f, 0.0f),
+                               Path::Point(length, 0.0f, 0.0f)};
+  Path::Path p(pts);
+  p.interpolate(interp, Path::InterpolationType::LINEAR);
+  p.segment(seg, 10000);
+  return p;
+}
+
+// Build a 3/4 CCW circular reference path, radius R, centered at origin,
+// starting at (R, 0) and ending near (0, -R). Interpolated at `interp` and
+// segmented at `seg` (pass seg larger than the total arc length to get a
+// single segment spanning the whole arc).
+Path::Path makeInterpolated34Circle(float R, size_t input_pts, float interp,
+                                    float seg) {
+  std::vector<Path::Point> pts;
+  pts.reserve(input_pts);
+  const double max_theta = 3.0 * M_PI / 2.0;
+  for (size_t i = 0; i < input_pts; ++i) {
+    const double theta =
+        (static_cast<double>(i) / static_cast<double>(input_pts - 1)) *
+        max_theta;
+    pts.emplace_back(R * std::cos(theta), R * std::sin(theta), 0.0);
+  }
+  Path::Path p(pts);
+  p.interpolate(interp, Path::InterpolationType::LINEAR);
+  p.segment(seg, 10000);
+  return p;
+}
+
+// A single-sample TrajectorySamples2D whose path has every point equal to
+// `endpoint` (constant-stationary path). Velocities are zero. Intended for
+// goal-cost tests that only care about the trajectory endpoint.
+std::unique_ptr<TrajectorySamples2D>
+makeSingleSampleAtEndpoint(size_t num_points, Path::Point endpoint) {
+  auto s = std::make_unique<TrajectorySamples2D>(1, num_points);
+  TrajectoryPath path(num_points);
+  TrajectoryVelocities2D vel(num_points);
   for (size_t i = 0; i < num_points; ++i) {
-    double current_angle = i * angle_step;
-
-    // The x-axis corresponds to angle 0.
-    // Since we wrap 0 to 2*PI, the "gap" is at the start and end of the
-    // interval. We ONLY add the obstacle if it is OUTSIDE this gap.
-    if (current_angle > half_gap && current_angle < (2.0 * M_PI - half_gap)) {
-      ranges.push_back(range);
-      angles.push_back(current_angle);
+    path.add(i, endpoint);
+    if (i < num_points - 1) {
+      vel.add(i, Velocity2D(0.0, 0.0, 0.0));
     }
   }
-  return LaserScan(ranges, angles);
+  s->push_back(vel, path);
+  return s;
 }
 
-Path::Path generate_points_from_scan(const LaserScan &scan) {
-  std::vector<Path::Point> points;
-  for (size_t i = 0; i < scan.ranges.size(); ++i) {
-    double x = scan.ranges[i] * std::cos(scan.angles[i]);
-    double y = scan.ranges[i] * std::sin(scan.angles[i]);
-    points.emplace_back(x, y, 0.0);
-  }
-  return Path::Path(points); // +1 buffer
+// Dummy control limits — only accLimits_ are read downstream, and only by
+// smoothness/jerk (which we don't enable unless testing those costs).
+ControlLimitsParams dummyControlLimits() {
+  LinearVelocityControlParams x(1.0, 1.0, 1.0);
+  LinearVelocityControlParams y(1.0, 1.0, 1.0);
+  AngularVelocityControlParams a(1.0, 1.0, 1.0, 1.0);
+  return ControlLimitsParams(x, y, a);
 }
 
+// Weights with every cost zero except `name`, which is set to `value`.
+CostEvaluator::TrajectoryCostsWeights soloWeight(const char *name,
+                                                 double value = 1.0) {
+  CostEvaluator::TrajectoryCostsWeights w;
+  w.setParameter("reference_path_distance_weight", 0.0);
+  w.setParameter("goal_distance_weight", 0.0);
+  w.setParameter("obstacles_distance_weight", 0.0);
+  w.setParameter("smoothness_weight", 0.0);
+  w.setParameter("jerk_weight", 0.0);
+  w.setParameter(name, value);
+  return w;
+}
+
+// Single-sample TrajectorySamples2D with the given path points (size defines
+// num_points) and zero velocities. For tests that exercise path-related
+// costs.
 std::unique_ptr<TrajectorySamples2D>
-generate_ref_path_test_samples(double predictionHorizon, double timeStep,
-                               int number_of_samples) {
-  size_t number_of_points = static_cast<size_t>(predictionHorizon / timeStep);
-  float vel = 1.0f;
-
-  // Define the maximum spread
-  float max_angle = static_cast<float>(M_PI) / 3.0f;
-
-  std::unique_ptr<TrajectorySamples2D> samples =
-      std::make_unique<TrajectorySamples2D>(number_of_samples,
-                                            number_of_points);
-
-  // Add the Center Reference (Angle 0)
-  TrajectoryPath center_path(number_of_points);
-  TrajectoryVelocities2D center_vel(number_of_points);
-
-  for (size_t i = 0; i < number_of_points; ++i) {
-    center_path.add(i, Path::Point(timeStep * vel * i, 0.0, 0.0));
-    if (i < number_of_points - 1) {
-      center_vel.add(i, Velocity2D(vel, 0.0, 0.0));
+makeSingleSampleWithPath(const std::vector<Path::Point> &path_pts) {
+  const size_t n = path_pts.size();
+  auto s = std::make_unique<TrajectorySamples2D>(1, n);
+  TrajectoryPath path(n);
+  TrajectoryVelocities2D vel(n);
+  for (size_t i = 0; i < n; ++i) {
+    path.add(i, path_pts[i]);
+    if (i < n - 1) {
+      vel.add(i, Velocity2D(0.0, 0.0, 0.0));
     }
   }
-  samples->push_back(center_vel, center_path);
-
-  // Add Pairs (Positive and Negative)
-  int pairs = (number_of_samples - 1) / 2;
-
-  // Calculate step so that the last pair reaches exactly max_angle
-  float ang_step = max_angle / static_cast<float>(pairs);
-
-  for (int p = 1; p <= pairs; ++p) {
-    float angle_magnitude = p * ang_step;
-
-    // We generate two samples per iteration: one positive, one negative
-    std::vector<float> current_angles = {angle_magnitude, -angle_magnitude};
-
-    for (float ang : current_angles) {
-      TrajectoryPath path(number_of_points);
-      TrajectoryVelocities2D vel_profile(number_of_points);
-
-      for (size_t i = 0; i < number_of_points; ++i) {
-        // Geometric path for a straight ray at 'ang'
-        double x = timeStep * vel * i * std::cos(ang);
-        double y = timeStep * vel * i * std::sin(ang);
-
-        path.add(i, Path::Point(x, y, 0.0));
-
-        if (i < number_of_points - 1) {
-          vel_profile.add(i, Velocity2D(vel, 0.0, ang));
-        }
-      }
-      samples->push_back(vel_profile, path);
-    }
-  }
-
-  return samples;
+  s->push_back(vel, path);
+  return s;
 }
 
+// Single-sample TrajectorySamples2D with the given path points AND explicit
+// velocities. `velocities` must have size path_pts.size() - 1.
 std::unique_ptr<TrajectorySamples2D>
-generate_smoothness_test_samples(double predictionHorizon, double timeStep,
-                                 int number_of_samples) {
-  size_t number_of_points = static_cast<size_t>(predictionHorizon / timeStep);
-  double v_1 = 1.0;
-
-  // Define max fluctuation amplitude (e.g. 0.5 m/s or 0.5 rad/s)
-  double max_fluctuation = 0.5;
-
-  std::unique_ptr<TrajectorySamples2D> samples =
-      std::make_unique<TrajectorySamples2D>(number_of_samples,
-                                            number_of_points);
-
-  // Add the Center Reference (Smooth)
-  // Constant velocity, no fluctuations.
-  TrajectoryPath center_path(number_of_points);
-  TrajectoryVelocities2D center_vel(number_of_points);
-
-  for (size_t i = 0; i < number_of_points; ++i) {
-    center_path.add(i, Path::Point(timeStep * v_1 * i, 0.0, 0.0));
-    if (i < number_of_points - 1) {
-      center_vel.add(i, Velocity2D(v_1, 0.0, 0.0));
+makeSingleSampleWithVelocities(const std::vector<Path::Point> &path_pts,
+                               const std::vector<Velocity2D> &velocities) {
+  const size_t n = path_pts.size();
+  BOOST_TEST_REQUIRE(velocities.size() == n - 1,
+                     "velocities must have size path_pts.size() - 1");
+  auto s = std::make_unique<TrajectorySamples2D>(1, n);
+  TrajectoryPath path(n);
+  TrajectoryVelocities2D vel(n);
+  for (size_t i = 0; i < n; ++i) {
+    path.add(i, path_pts[i]);
+    if (i < n - 1) {
+      vel.add(i, velocities[i]);
     }
   }
-  samples->push_back(center_vel, center_path);
-
-  // Add Pairs (Linear Fluctuation vs Angular Fluctuation)
-  int pairs = (number_of_samples - 1) / 2;
-  double amp_step = max_fluctuation / static_cast<double>(pairs);
-
-  for (int p = 1; p <= pairs; ++p) {
-    double current_amp = p * amp_step;
-
-    // --- Sample A: Linear Velocity Fluctuation (Simulates lateral jerk) ---
-    TrajectoryPath path_lin(number_of_points);
-    TrajectoryVelocities2D vel_lin(number_of_points);
-
-    for (size_t i = 0; i < number_of_points; ++i) {
-      // Fluctuation in Vy (Linear)
-      double fluct_v = current_amp * std::sin(2 * M_PI * i / number_of_points);
-
-      // x = v * t, y = t * fluctuation
-      path_lin.add(
-          i, Path::Point(timeStep * v_1 * i, timeStep * fluct_v * i, 0.0));
-
-      if (i < number_of_points - 1) {
-        // v_x constant, v_y fluctuates, omega 0
-        vel_lin.add(i, Velocity2D(v_1, fluct_v, 0.0));
-      }
-    }
-    samples->push_back(vel_lin, path_lin);
-
-    // --- Sample B: Angular Velocity Fluctuation (Simulates rotational jerk)
-    // ---
-    TrajectoryPath path_ang(number_of_points);
-    TrajectoryVelocities2D vel_ang(number_of_points);
-
-    for (size_t i = 0; i < number_of_points; ++i) {
-      // Fluctuation in Omega
-      double fluct_ang =
-          current_amp * std::cos(2 * M_PI * i / number_of_points);
-
-      // Calculate position based on fluctuating heading
-      double x = timeStep * v_1 * i * std::cos(fluct_ang);
-      double y = timeStep * v_1 * i * std::sin(fluct_ang);
-
-      path_ang.add(i, Path::Point(x, y, 0.0));
-
-      if (i < number_of_points - 1) {
-        // v_x constant, v_y 0, omega fluctuates
-        vel_ang.add(i, Velocity2D(v_1, 0.0, fluct_ang));
-      }
-    }
-    samples->push_back(vel_ang, path_ang);
-  }
-
-  return samples;
+  s->push_back(vel, path);
+  return s;
 }
 
-Trajectory2D run_test(CostEvaluator &costEval, Path::Path &reference_path,
-                      std::unique_ptr<TrajectorySamples2D> &samples,
-                      const size_t current_segment_index,
-                      const double reference_path_distance_weight,
-                      const double goal_distance_weight,
-                      const double obstacles_distance_weight,
-                      const double smoothness_weight, const double jerk_weight,
-                      const bool plot_results = false,
-                      const bool add_obstacles = false) {
-
-  // Cost weights
-  CostEvaluator::TrajectoryCostsWeights costWeights;
-  costWeights.setParameter("reference_path_distance_weight",
-                           reference_path_distance_weight);
-  costWeights.setParameter("obstacles_distance_weight",
-                           obstacles_distance_weight);
-  costWeights.setParameter("goal_distance_weight", goal_distance_weight);
-  costWeights.setParameter("smoothness_weight", smoothness_weight);
-  costWeights.setParameter("jerk_weight", jerk_weight);
-  costEval.updateCostWeights(costWeights);
-
-  // Path for saving files
-  boost::filesystem::path executablePath = boost::dll::program_location();
-  std::string file_location = executablePath.parent_path().string();
-  std::string filename_base =
-      "cost_eval_ref_cost_" +
-      std::to_string(static_cast<int>(reference_path_distance_weight * 100)) +
-      "_goal_cost_" +
-      std::to_string(static_cast<int>(goal_distance_weight * 100)) +
-      "_smooth_cost_" +
-      std::to_string(static_cast<int>(smoothness_weight * 100)) +
-      "_jerk_cost_" + std::to_string(static_cast<int>(jerk_weight * 100)) +
-      "_obs_cost_" +
-      std::to_string(static_cast<int>(obstacles_distance_weight * 100));
-
-  std::string traj_file = file_location + "/" + filename_base + "_traj";
-  std::string ref_file = file_location + "/" + filename_base + "_ref";
-  std::string obs_file = file_location + "/" + filename_base + "_obs";
-
-  if (add_obstacles) {
-    // Generate a dense scan (360 points) to stress the GPU kernel
-    // place obstacles at 5.0m. Trajs go up to ~10m
-    LaserScan robotScan = generate_dense_scan(360, 5.0);
-    float maxObstaclesDist = 10.0f;
-
-    // This converts LaserScan (Polar) -> PointCloud (Cartesian)
-    costEval.setPointScan(robotScan, Path::State(), maxObstaclesDist);
-    if (plot_results) {
-      Path::Path obsPathObj = generate_points_from_scan(robotScan); // +1 buffer
-      // save obstacles for plotting
-      savePathToJson(obsPathObj, obs_file + ".json");
-    }
+// Generic evaluator wrapper. If `obstacles` is non-empty, setPointScan is
+// called with those points (Cartesian, zero pose, max_sensor_range = 30 so
+// maxObstaclesDist = 10 via the default /3 multiple).
+float evalCost(CostEvaluator::TrajectoryCostsWeights weights,
+               const Path::Path &ref, size_t seg_idx,
+               std::unique_ptr<TrajectorySamples2D> samples,
+               const std::vector<Path::Point> &obstacles = {}) {
+  auto limits = dummyControlLimits();
+  CostEvaluator ev(weights, limits, samples->size(),
+                   samples->numPointsPerTrajectory_, ref.getSize());
+  if (!obstacles.empty()) {
+    ev.setPointScan(obstacles, Path::State(), /*max_sensor_range=*/30.0f,
+                    /*max_obstacle_cost_range_multiple=*/3.0f);
   }
-
-  TrajSearchResult result = costEval.getMinTrajectoryCost(
-      samples, &reference_path,
-      reference_path.getSegment(current_segment_index));
-
-  BOOST_TEST(result.isTrajFound,
-             "Minimum reference path cost trajectory is not found!");
-
-  if (result.isTrajFound) {
-    LOG_INFO("Cost Evaluator Returned a Minimum Cost Path With Cost: ",
-             result.trajCost);
-  } else {
-    throw std::logic_error(
-        "Did not find any valid trajectory, this should not happen.");
-  }
-
-  // PLOT THE RESULTING TRAJECTORIES
-  if (plot_results) {
-    // Save the results to json
-    saveTrajectoriesToJson(*samples.get(), traj_file + ".json");
-    savePathToJson(reference_path, ref_file + ".json");
-
-    // Command for running the python plot script using the saved files
-    std::string command;
-    if (add_obstacles) {
-      command = "python3 " + file_location +
-                "/trajectory_sampler_plt.py --samples \"" + traj_file +
-                "\" --reference \"" + ref_file + "\" --obstacles \"" +
-                obs_file + "\"";
-    } else {
-      command = "python3 " + file_location +
-                "/trajectory_sampler_plt.py --samples \"" + traj_file +
-                "\" --reference \"" + ref_file + "\"";
-    }
-
-    // Run the command
-    int res = system(command.c_str());
-    if (res != 0)
-      throw std::system_error(res, std::generic_category(),
-                              "Python script failed with error code");
-  }
-
-  return result.trajectory;
+  auto result = ev.getMinTrajectoryCost(samples, &ref, ref.getSegment(seg_idx));
+  BOOST_TEST_REQUIRE(result.isTrajFound,
+                     "CostEvaluator did not find a trajectory");
+  return result.trajCost;
 }
 
-bool check_sample_equal_result(TrajectoryPath sample_path,
-                               TrajectoryPath traj_path) {
-  if (sample_path.x.size() != traj_path.x.size()) {
-    LOG_INFO("Sample path and trajectory path do not contain the same number "
-             "of points");
-    return false;
-  }
-  double EPSILON = 0.001;
-  for (Eigen::Index i = 0; i < sample_path.x.size(); ++i) {
-    if ((std::abs(sample_path.x[i] - traj_path.x[i]) > EPSILON) ||
-        (std::abs(sample_path.y[i] - traj_path.y[i])) > EPSILON) {
-      return false;
-    }
-  }
-  return true;
+} // namespace
+
+// -------- Goal cost -------------------------------------------------
+// Sanity: endpoint sitting exactly on a known point of a straight tracked
+// segment. arc_remaining = total_length - prefix_at_closest_idx, tie-breaker
+// = 0. Cost is purely the normalized arc-remaining.
+BOOST_AUTO_TEST_CASE(goal_cost_on_straight_path) {
+  LOG_INFO(BOLD(FMAG("Running goal_cost_on_straight_path")));
+  Timer t;
+  // 10 m path, interp 1 m → 11 points at X = 0, 1, ..., 10.
+  // Segment length 5 m → segment 0 spans indices [0, 5),
+  //   i.e. points at X = 0, 1, 2, 3, 4.
+  Path::Path ref = makeInterpolatedStraightPath(10.0f, 1.0f, 5.0f);
+
+  // Endpoint exactly on interpolated point idx 4: closest_abs_idx = 4,
+  // prefix = 4.0, arc_remaining_normalized = (10 - 4)/10 = 0.6,
+  // tie-breaker = 0 / 10 = 0.
+  auto samples = makeSingleSampleAtEndpoint(5, Path::Point(4.0f, 0.0f, 0.0f));
+  const float cost = evalCost(soloWeight("goal_distance_weight"), ref,
+                              /*seg_idx=*/0, std::move(samples));
+
+  BOOST_TEST(cost == 0.6f, tt::tolerance(1e-4f));
 }
 
-struct TestConfig {
-  std::vector<Path::Point> points;
-  Path::Path reference_path;
-  double max_segment_length;
-  double max_interpolation_point_dist;
-  size_t current_segment_index;
-  double timeStep;
-  double predictionHorizon;
-  int maxNumThreads;
-  LinearVelocityControlParams x_params;
-  LinearVelocityControlParams y_params;
-  AngularVelocityControlParams angular_params;
-  ControlLimitsParams controlLimits;
-  CollisionChecker::ShapeType robotShapeType;
-  std::vector<float> robotDimensions;
-  Eigen::Vector3f sensor_position_body;
-  Eigen::Quaternionf sensor_rotation_body;
-  CostEvaluator::TrajectoryCostsWeights costWeights;
-  int numTrajectories;
-  CostEvaluator costEval;
-  bool plotResults;
+// Regression for issue #40: on a 3/4 circle, a chord-cutting endpoint that
+// falls outside the arc's angular sweep must receive a HIGHER goal cost
+// than an arc-following endpoint at the same travel distance. Under the old
+// euclidean goal cost the chord-cutter wins, which pulls DWA off the arc.
+BOOST_AUTO_TEST_CASE(goal_cost_arc_remaining_on_curved_path) {
+  LOG_INFO(BOLD(FMAG("Running goal_cost_arc_remaining_on_curved_path")));
+  Timer t;
+  const float R = 2.0f;
+  // Segment > total arc length so the tracked segment spans the whole arc
+  // (both endpoints below are therefore reachable from segment 0).
+  Path::Path ref = makeInterpolated34Circle(R, /*input_pts=*/60,
+                                            /*interp=*/0.05f, /*seg=*/20.0f);
+  const float total = ref.totalPathLength();
 
-  TestConfig()
-      : points{Path::Point(0.0, 0.0, 0.0), Path::Point(5.0, 0.0, 0.0),
-               Path::Point(10.0, 0.0, 0.0)},
-        reference_path(points), max_segment_length(1.0),
-        max_interpolation_point_dist(0.01), current_segment_index(0),
-        timeStep(0.01), predictionHorizon(10.0), maxNumThreads(10),
-        x_params(1, 3, 5), y_params(1, 3, 5), angular_params(3.14, 3, 5, 8),
-        controlLimits(x_params, y_params, angular_params),
-        robotShapeType(CollisionChecker::ShapeType::BOX),
-        robotDimensions{0.3, 0.3, 1.0}, sensor_position_body{0.0, 0.0, 0.5},
-        sensor_rotation_body{0, 0, 0, 1}, costWeights(), numTrajectories(1001),
-        costEval(costWeights, controlLimits, numTrajectories,
-                 predictionHorizon / timeStep,
-                 max_segment_length / max_interpolation_point_dist) {
-    reference_path.interpolate(max_interpolation_point_dist,
-                               Path::InterpolationType::LINEAR);
-    reference_path.segment(max_segment_length, 1000);
-    // NOTE: Change numTrajectories to a manageable size (e.g 11) when setting
-    // this to true
-    plotResults = false;
-  }
-};
+  // Arc-follower: endpoint sits on the arc at θ = 0.5 rad, arc prefix R*0.5.
+  const double theta_follow = 0.5;
+  const Path::Point follow_pt(R * std::cos(theta_follow),
+                              R * std::sin(theta_follow), 0.0);
+  const float follow_cost = evalCost(soloWeight("goal_distance_weight"), ref, 0,
+                                     makeSingleSampleAtEndpoint(5, follow_pt));
 
-BOOST_FIXTURE_TEST_SUITE(s, TestConfig)
+  // Chord-cutter: (1.5, -0.5) lies in the 4th quadrant at angle ≈ -18° — i.e.
+  // outside the arc's [0, 3π/2] angular sweep — and is closer to the arc
+  // start (R, 0) than to the arc end (0, -R). The kernel's closest-point
+  // search therefore snaps to idx 0, giving arc_remaining_normalized = 1.
+  const Path::Point chord_pt(1.5f, -0.5f, 0.0f);
+  const float chord_cost = evalCost(soloWeight("goal_distance_weight"), ref, 0,
+                                    makeSingleSampleAtEndpoint(5, chord_pt));
 
-BOOST_AUTO_TEST_CASE(test_all_costs) {
-  {
-    LOG_INFO("Running Reference Path Cost Test");
-    auto samples = generate_ref_path_test_samples(predictionHorizon, timeStep,
-                                                  numTrajectories);
-    Timer t;
-    Trajectory2D min_traj =
-        run_test(costEval, reference_path, samples, current_segment_index, 1.0,
-                 0.0, 0.0, 0.0, 0.0, plotResults);
+  // Expected values (loose tolerance to absorb interpolation rounding).
+  const float expected_follow = (total - R * 0.5f) / total; // tie-breaker ≈ 0
+  BOOST_TEST(follow_cost == expected_follow, tt::tolerance(0.02f));
 
-    // Validation (sample 0 is the best)
-    BOOST_TEST(
-        check_sample_equal_result(samples->getIndex(0).path, min_traj.path),
-        "Minimum reference path cost trajectory is found but not "
-        "equal to the correct minimum!");
-  }
+  // Chord-cutter: closest-arc-point = (R, 0), euclidean dist = sqrt(0.5).
+  const float expected_chord =
+      1.0f + static_cast<float>(std::sqrt(0.5)) / total;
+  BOOST_TEST(chord_cost == expected_chord, tt::tolerance(0.02f));
 
-  {
-    LOG_INFO("Running Goal Cost Test");
-    auto samples = generate_ref_path_test_samples(predictionHorizon, timeStep,
-                                                  numTrajectories);
-    Timer t;
-    Trajectory2D min_traj =
-        run_test(costEval, reference_path, samples, current_segment_index, 0.0,
-                 1.0, 0.0, 0.0, 0.0, plotResults);
-    BOOST_TEST(
-        check_sample_equal_result(samples->getIndex(0).path, min_traj.path),
-        "Minimum goal cost trajectory is found but not "
-        "equal to the correct minimum!");
-  }
-
-  {
-    LOG_INFO("Running Smoothness Cost Test");
-    auto samples = generate_smoothness_test_samples(predictionHorizon, timeStep,
-                                                    numTrajectories);
-    Timer t;
-    Trajectory2D min_traj =
-        run_test(costEval, reference_path, samples, current_segment_index, 0.0,
-                 0.0, 0.0, 1.0, 0.0, plotResults);
-    BOOST_TEST(
-        check_sample_equal_result(samples->getIndex(0).path, min_traj.path),
-        "Minimum smoothness cost trajectory is found but not "
-        "equal to the correct minimum!");
-  }
-
-  {
-    LOG_INFO("Running Jerk Cost Test");
-    auto samples = generate_smoothness_test_samples(predictionHorizon, timeStep,
-                                                    numTrajectories);
-    Timer t;
-    Trajectory2D min_traj =
-        run_test(costEval, reference_path, samples, current_segment_index, 0.0,
-                 0.0, 0.0, 0.0, 1.0, plotResults);
-    BOOST_TEST(
-        check_sample_equal_result(samples->getIndex(0).path, min_traj.path),
-        "Minimum jerk cost trajectory is found but not "
-        "equal to the correct minimum!");
-  }
-
-  {
-    LOG_INFO("Running Obstacles Cost Test");
-    auto samples = generate_ref_path_test_samples(predictionHorizon, timeStep,
-                                                  numTrajectories);
-    Timer t;
-    Trajectory2D min_traj =
-        run_test(costEval, reference_path, samples, current_segment_index, 0.0,
-                 0.0, 1.0, 0.0, 0.0, plotResults, true);
-    BOOST_TEST(
-        check_sample_equal_result(samples->getIndex(0).path, min_traj.path),
-        "Minimum obstacle cost trajectory is found but not "
-        "equal to the correct minimum!");
-  }
+  // Core regression assertion.
+  BOOST_TEST(follow_cost < chord_cost,
+             "Arc follower must beat chord cutter under arc-remaining goal "
+             "cost (issue #40).");
 }
 
-BOOST_AUTO_TEST_SUITE_END()
+// Tie-breaker: two samples with the same closest_abs_idx but different
+// lateral offsets should differ in cost by exactly the normalized euclidean
+// distance delta.
+BOOST_AUTO_TEST_CASE(goal_cost_tie_breaker) {
+  LOG_INFO(BOLD(FMAG("Running goal_cost_tie_breaker")));
+  Timer t;
+  Path::Path ref = makeInterpolatedStraightPath(10.0f, 1.0f, 5.0f);
+
+  // Both endpoints have X = 4 → closest_abs_idx = 4 on the straight path.
+  // arc_remaining_normalized = 0.6 for both; only tie-breaker differs.
+  auto sampleA = makeSingleSampleAtEndpoint(5, Path::Point(4.0f, 0.1f, 0.0f));
+  auto sampleB = makeSingleSampleAtEndpoint(5, Path::Point(4.0f, 0.5f, 0.0f));
+
+  const float cost_A =
+      evalCost(soloWeight("goal_distance_weight"), ref, 0, std::move(sampleA));
+  const float cost_B =
+      evalCost(soloWeight("goal_distance_weight"), ref, 0, std::move(sampleB));
+
+  // Expected: 0.6 + 0.1/10 = 0.61, and 0.6 + 0.5/10 = 0.65.
+  BOOST_TEST(cost_A == 0.61f, tt::tolerance(1e-4f));
+  BOOST_TEST(cost_B == 0.65f, tt::tolerance(1e-4f));
+  BOOST_TEST(cost_A < cost_B);
+}
+
+// -------- Path cost -------------------------------------------------------
+
+// Sample whose every point sits exactly on the tracked segment. Average
+// cross-track error = 0; end-point euclidean distance from the segment end
+// = 0. Cost = (0 + 0)/2 = 0.
+BOOST_AUTO_TEST_CASE(path_cost_centered_sample) {
+  LOG_INFO(BOLD(FMAG("Running path_cost_centered_sample")));
+  Timer t;
+  // Segment 0: points at X = 0, 1, 2, 3, 4 (5 points, total seg length 4 m).
+  Path::Path ref = makeInterpolatedStraightPath(10.0f, 1.0f, 5.0f);
+  const std::vector<Path::Point> on_path{
+      Path::Point(0.0f, 0.0f, 0.0f), Path::Point(1.0f, 0.0f, 0.0f),
+      Path::Point(2.0f, 0.0f, 0.0f), Path::Point(3.0f, 0.0f, 0.0f),
+      Path::Point(4.0f, 0.0f, 0.0f)};
+  auto samples = makeSingleSampleWithPath(on_path);
+  const float cost = evalCost(soloWeight("reference_path_distance_weight"), ref,
+                              0, std::move(samples));
+  BOOST_TEST(cost == 0.0f, tt::tolerance(1e-4f));
+}
+
+// Sample running parallel to the segment at constant lateral offset d.
+// Each trajectory point's closest segment point is directly opposite it, so
+// min_dist = d for every point → avg cross-track = d. The trajectory end
+// point is offset by d from the segment end → end_dist = d, normalized =
+// d / seg_length. Cost = (d + d/seg_length) / 2.
+BOOST_AUTO_TEST_CASE(path_cost_constant_lateral_offset) {
+  LOG_INFO(BOLD(FMAG("Running path_cost_constant_lateral_offset")));
+  Timer t;
+  Path::Path ref = makeInterpolatedStraightPath(10.0f, 1.0f, 5.0f);
+  // Segment length is sum of distances between the 5 segment points (X =
+  // 0..4, step 1) = 4 m.
+  const float seg_len = 4.0f;
+  const float d = 0.5f;
+  const std::vector<Path::Point> offset_path{
+      Path::Point(0.0f, d, 0.0f), Path::Point(1.0f, d, 0.0f),
+      Path::Point(2.0f, d, 0.0f), Path::Point(3.0f, d, 0.0f),
+      Path::Point(4.0f, d, 0.0f)};
+  auto samples = makeSingleSampleWithPath(offset_path);
+  const float cost = evalCost(soloWeight("reference_path_distance_weight"), ref,
+                              0, std::move(samples));
+  const float expected = (d + d / seg_len) / 2.0f;
+  BOOST_TEST(cost == expected, tt::tolerance(1e-4f));
+}
+
+// -------- Smoothness cost -------------------------------------------------
+
+// Constant velocity → zero velocity deltas → zero smoothness cost.
+BOOST_AUTO_TEST_CASE(smoothness_cost_constant_velocity) {
+  LOG_INFO(BOLD(FMAG("Running smoothness_cost_constant_velocity")));
+  Timer t;
+  Path::Path ref = makeInterpolatedStraightPath(10.0f, 1.0f, 5.0f);
+  // 5 path points, 4 velocities, all constant at (1, 0, 0).
+  const std::vector<Path::Point> pts(5, Path::Point(0.0f, 0.0f, 0.0f));
+  const std::vector<Velocity2D> vels(4, Velocity2D(1.0, 0.0, 0.0));
+  auto samples = makeSingleSampleWithVelocities(pts, vels);
+  const float cost =
+      evalCost(soloWeight("smoothness_weight"), ref, 0, std::move(samples));
+  BOOST_TEST(cost == 0.0f, tt::tolerance(1e-4f));
+}
+
+// Single step change in vx: velocities = [0, 1, 1, 1]. Loop iterates i in
+// {1,2,3}. Only i=1 contributes a nonzero delta (1). Squared delta = 1.
+// Divisor = accLimits_[0] (1.0 with dummy limits) × 3 × vx.size() (=4) = 12.
+// Cost = 1 / 12.
+BOOST_AUTO_TEST_CASE(smoothness_cost_single_step_change) {
+  LOG_INFO(BOLD(FMAG("Running smoothness_cost_single_step_change")));
+  Timer t;
+  Path::Path ref = makeInterpolatedStraightPath(10.0f, 1.0f, 5.0f);
+  const std::vector<Path::Point> pts(5, Path::Point(0.0f, 0.0f, 0.0f));
+  const std::vector<Velocity2D> vels{
+      Velocity2D(0.0, 0.0, 0.0), Velocity2D(1.0, 0.0, 0.0),
+      Velocity2D(1.0, 0.0, 0.0), Velocity2D(1.0, 0.0, 0.0)};
+  auto samples = makeSingleSampleWithVelocities(pts, vels);
+  const float cost =
+      evalCost(soloWeight("smoothness_weight"), ref, 0, std::move(samples));
+  BOOST_TEST(cost == 1.0f / 12.0f, tt::tolerance(1e-4f));
+}
+
+// -------- Jerk cost -------------------------------------------------------
+
+// Constant acceleration → zero second difference of velocity → zero jerk.
+BOOST_AUTO_TEST_CASE(jerk_cost_constant_acceleration) {
+  LOG_INFO(BOLD(FMAG("Running jerk_cost_constant_acceleration")));
+  Timer t;
+  Path::Path ref = makeInterpolatedStraightPath(10.0f, 1.0f, 5.0f);
+  // Linear vx ramp — second differences are zero.
+  const std::vector<Path::Point> pts(5, Path::Point(0.0f, 0.0f, 0.0f));
+  const std::vector<Velocity2D> vels{
+      Velocity2D(0.1, 0.0, 0.0), Velocity2D(0.2, 0.0, 0.0),
+      Velocity2D(0.3, 0.0, 0.0), Velocity2D(0.4, 0.0, 0.0)};
+  auto samples = makeSingleSampleWithVelocities(pts, vels);
+  const float cost =
+      evalCost(soloWeight("jerk_weight"), ref, 0, std::move(samples));
+  BOOST_TEST(cost == 0.0f, tt::tolerance(1e-4f));
+}
+
+// Known second difference in vx: velocities = [0, 1, 3, 6].
+//   i=2: v[2] - 2*v[1] + v[0] = 3 - 2 + 0 = 1   → sq = 1
+//   i=3: v[3] - 2*v[2] + v[1] = 6 - 6 + 1 = 1   → sq = 1
+// Sum = 2. Divisor = accLimits_[0] (1.0) × 3 × vx.size() (=4) = 12.
+// Cost = 2 / 12 = 1/6.
+BOOST_AUTO_TEST_CASE(jerk_cost_known_second_diff) {
+  LOG_INFO(BOLD(FMAG("Running jerk_cost_known_second_diff")));
+  Timer t;
+  Path::Path ref = makeInterpolatedStraightPath(10.0f, 1.0f, 5.0f);
+  const std::vector<Path::Point> pts(5, Path::Point(0.0f, 0.0f, 0.0f));
+  const std::vector<Velocity2D> vels{
+      Velocity2D(0.0, 0.0, 0.0), Velocity2D(1.0, 0.0, 0.0),
+      Velocity2D(3.0, 0.0, 0.0), Velocity2D(6.0, 0.0, 0.0)};
+  auto samples = makeSingleSampleWithVelocities(pts, vels);
+  const float cost =
+      evalCost(soloWeight("jerk_weight"), ref, 0, std::move(samples));
+  BOOST_TEST(cost == 2.0f / 12.0f, tt::tolerance(1e-4f));
+}
+
+// -------- Obstacles cost --------------------------------------------------
+// With the default scan setup (max_sensor_range = 30, /3 multiple) →
+// maxObstaclesDist = 10. Formula: max(maxObstaclesDist - min_dist, 0) /
+// maxObstaclesDist. min_dist is euclidean from any trajectory point to any
+// obstacle.
+
+// Obstacle placed far enough away that min_dist >= maxObstaclesDist → cost
+// clamps to 0.
+BOOST_AUTO_TEST_CASE(obstacles_cost_at_max_range) {
+  LOG_INFO(BOLD(FMAG("Running obstacles_cost_at_max_range")));
+  Timer t;
+  Path::Path ref = makeInterpolatedStraightPath(10.0f, 1.0f, 5.0f);
+  // All trajectory points at origin. Obstacle at (20, 0) → min_dist = 20 >
+  // maxObstaclesDist (10) → cost = 0.
+  auto samples = makeSingleSampleAtEndpoint(5, Path::Point(0.0f, 0.0f, 0.0f));
+  const std::vector<Path::Point> obstacles{Path::Point(20.0f, 0.0f, 0.0f)};
+  const float cost = evalCost(soloWeight("obstacles_distance_weight"), ref, 0,
+                              std::move(samples), obstacles);
+  BOOST_TEST(cost == 0.0f, tt::tolerance(1e-4f));
+}
+
+// Obstacle exactly on the trajectory → min_dist = 0 → cost = 1.
+BOOST_AUTO_TEST_CASE(obstacles_cost_at_zero_distance) {
+  LOG_INFO(BOLD(FMAG("Running obstacles_cost_at_zero_distance")));
+  Timer t;
+  Path::Path ref = makeInterpolatedStraightPath(10.0f, 1.0f, 5.0f);
+  auto samples = makeSingleSampleAtEndpoint(5, Path::Point(0.0f, 0.0f, 0.0f));
+  const std::vector<Path::Point> obstacles{Path::Point(0.0f, 0.0f, 0.0f)};
+  const float cost = evalCost(soloWeight("obstacles_distance_weight"), ref, 0,
+                              std::move(samples), obstacles);
+  BOOST_TEST(cost == 1.0f, tt::tolerance(1e-4f));
+}
+
+// Obstacle at half of maxObstaclesDist → cost = (10 - 5) / 10 = 0.5.
+BOOST_AUTO_TEST_CASE(obstacles_cost_at_half_range) {
+  LOG_INFO(BOLD(FMAG("Running obstacles_cost_at_half_range")));
+  Timer t;
+  Path::Path ref = makeInterpolatedStraightPath(10.0f, 1.0f, 5.0f);
+  auto samples = makeSingleSampleAtEndpoint(5, Path::Point(0.0f, 0.0f, 0.0f));
+  const std::vector<Path::Point> obstacles{Path::Point(5.0f, 0.0f, 0.0f)};
+  const float cost = evalCost(soloWeight("obstacles_distance_weight"), ref, 0,
+                              std::move(samples), obstacles);
+  BOOST_TEST(cost == 0.5f, tt::tolerance(1e-4f));
+}
