@@ -217,15 +217,20 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 
   for (auto projected_point : segment_path) {
     // find distance squared for faster comparision
-    distance_squared = currentPath->distanceSquared(currentState, projected_point);
+    distance_squared =
+        currentPath->distanceSquared(currentState, projected_point);
 
     if (distance_squared <= min_distance_squared) {
       min_distance_squared = distance_squared;
       closest_point = {projected_point.x(), projected_point.y(),
                        segment_heading};
       closest_point_index = point_index;
-      segment_position =
-          static_cast<double>(point_index) / (segment_path.getSize() - 1);
+      if (segment_path.getSize() > 1) {
+        segment_position =
+            static_cast<double>(point_index) / (segment_path.getSize() - 1);
+      } else {
+        segment_position = 1.0;
+      }
     }
     point_index++;
   }
