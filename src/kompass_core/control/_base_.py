@@ -75,6 +75,10 @@ class FollowerConfig(BaseAttrs):
       - `float`
       - `0.1`
       - Minimum speed regulation factor. Must be between `1e-3` and `1.0`.
+    * - curvature_horizon_tolerance
+      - `float`
+      - `1.5`
+      - Curvature horizon tolerance for adaptive prediction horizon. Must be between `0.5` and `100.0`.
 
     ```
     """
@@ -110,6 +114,9 @@ class FollowerConfig(BaseAttrs):
     )
     min_speed_regulation_factor: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-3, max_value=1.0)
+    )
+    curvature_horizon_tolerance: float = field(
+        default=1.5, validator=base_validators.in_range(min_value=0.5, max_value=1e2)
     )
 
 
