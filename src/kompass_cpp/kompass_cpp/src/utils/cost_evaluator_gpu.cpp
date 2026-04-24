@@ -205,10 +205,10 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     size_t obs_size;
     size_t trajs_size = trajs->size();
 
-    // NOTE: Refresh the current num-points-per-trajectory from the incoming batch.
-    // Device buffers were allocated at construction time to max value for this
-    // param and are never resized. This number can change between calls but
-    // never exceed max value, thus safe to overwrite per call.
+    // NOTE: Refresh the current num-points-per-trajectory from the incoming
+    // batch. Device buffers were allocated at construction time to max value
+    // for this param and are never resized. This number can change between
+    // calls but never exceed max value, thus safe to overwrite per call.
     numPointsPerTrajectory_ = trajs->numPointsPerTrajectory_;
 
     std::vector<sycl::event> events;
@@ -544,22 +544,15 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
 }
 
 // Distance-along-path goal cost kernel.
-//  - One workgroup per trajectory (workgroup id == trajectory id).
-//  - Each thread computes squared distance from the trajectory endpoint to
-//    its assigned tracked-segment point and stores (min_sq, idx) in local
-//    memory. If segSize > WG_SIZE a short stride loop covers the excess; in
-//    the common case segSize <= WG_SIZE it runs once per thread.
-//  - After a local barrier, thread 0 linearly reduces the WG_SIZE partial
-//    minima, then computes
-//        arc_remaining / ref_path_length + sqrt(min_dist_sq) / ref_path_length
-//    (the second term is a tie-breaker that prefers trajectories closer to
-//    the tracked segment) and atomic-adds the weighted cost to
-//    costs[traj_idx]. The uploaded acc-lengths slice holds absolute prefix
-//    arc lengths on the full reference path, so no index offset is applied.
 sycl::event CostEvaluator::goalCostFunc(const size_t trajs_size,
                                         const size_t tracked_segment_size,
                                         const float ref_path_length,
                                         const double cost_weight) {
+  // -----------------------------------------------------
+  //  Parallelize over trajectories. For each trajectory end point, find the
+  //  closest reference-path segment point. Calculate remaining path arc length.
+  //  Atomically add the lowest distance to the trajectory's cost.
+  // -----------------------------------------------------
   return m_q.submit([&](sycl::handler &h) {
     // local copies of class members to be used inside the kernel
     auto X = m_devicePtrPathsX;
