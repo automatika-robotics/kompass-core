@@ -228,56 +228,48 @@ TrajectorySampler::generateTrajectoriesHolonomic(
 
   if (maxNumThreads > 1) {
     ThreadPool pool(maxNumThreads);
-    // vx, vy
     for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
-      for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
-        // discard rotation only movements
-        if (std::abs(vx) < MIN_VEL && std::abs(vy) < MIN_VEL) {
-          continue;
-        }
-        pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this,
-                     Velocity2D(vx, vy, 0.0), current_pose,
-                     admissible_velocity_trajectories.get());
-      }
-    }
+      if (std::abs(vx) >= MIN_VEL) {
+        // vx, omega
+        for (double omega = min_omega_; omega <= max_omega_;
+             omega += ang_sample_resolution_) {
 
-    // vx, omega
-    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
-      for (double omega = min_omega_; omega <= max_omega_;
-           omega += ang_sample_resolution_) {
-        // discard rotation only movements
-        if (std::abs(vx) < MIN_VEL && std::abs(omega) < MIN_VEL) {
-          continue;
+          Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
+          // Get admissible trajectories in separate threads
+          pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
+                       current_pose, admissible_velocity_trajectories.get());
         }
-        pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this,
-                     Velocity2D(vx, 0.0, omega), current_pose,
-                     admissible_velocity_trajectories.get());
+
+        // vx, vy
+        for (double vy = min_vy_; vy <= max_vy_;
+             vy += lin_sample_y_resolution_) {
+
+          Velocity2D vel = Velocity2D(vx, vy, 0.0); // Limit Y movement
+          // Get admissible trajectories in separate threads
+          pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
+                       current_pose, admissible_velocity_trajectories.get());
+        }
       }
     }
   } else {
 
-    // vx, vy
     for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
-      for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
-        // discard rotation only movements
-        if (std::abs(vx) < MIN_VEL && std::abs(vy) < MIN_VEL) {
-          continue;
-        }
-        getAdmissibleTrajsFromVel(Velocity2D(vx, vy, 0.0), current_pose,
-                                  admissible_velocity_trajectories.get());
-      }
-    }
+      if (std::abs(vx) >= MIN_VEL) {
+        // vx, omega
+        for (double omega = min_omega_; omega <= max_omega_;
+             omega += ang_sample_resolution_) {
 
-    // vx, omega
-    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
-      for (double omega = min_omega_; omega <= max_omega_;
-           omega += ang_sample_resolution_) {
-        // discard rotation only movements
-        if (std::abs(vx) < MIN_VEL && std::abs(omega) < MIN_VEL) {
-          continue;
+          getAdmissibleTrajsFromVel(Velocity2D(vx, 0.0, omega), current_pose,
+                                    admissible_velocity_trajectories.get());
         }
-        getAdmissibleTrajsFromVel(Velocity2D(vx, 0.0, omega), current_pose,
-                                  admissible_velocity_trajectories.get());
+
+        // vx, vy
+        for (double vy = min_vy_; vy <= max_vy_;
+             vy += lin_sample_y_resolution_) {
+
+          getAdmissibleTrajsFromVel(Velocity2D(vx, vy, 0.0), current_pose,
+                                    admissible_velocity_trajectories.get());
+        }
       }
     }
   }
