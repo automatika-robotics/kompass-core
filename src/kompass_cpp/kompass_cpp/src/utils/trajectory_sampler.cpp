@@ -316,20 +316,23 @@ TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
 void TrajectorySampler::UpdateReachableVelocityRange(
     Control::Velocity2D currentVel) {
 
+  // The reachable velocity window is what the robot can physically change to
+  // in the next *control* cycle.
+
   max_vx_ = std::min(ctrlimits.velXParams.maxVel,
                      currentVel.vx() +
-                         ctrlimits.velXParams.maxAcceleration * max_time_);
+                         ctrlimits.velXParams.maxAcceleration * time_step_);
   min_vx_ = std::max(-ctrlimits.velXParams.maxVel,
                      currentVel.vx() -
-                         ctrlimits.velXParams.maxDeceleration * max_time_);
+                         ctrlimits.velXParams.maxDeceleration * time_step_);
 
   if (ctrType == ControlType::OMNI) {
     max_vy_ = std::min(ctrlimits.velYParams.maxVel,
                        currentVel.vy() +
-                           ctrlimits.velYParams.maxAcceleration * max_time_);
+                           ctrlimits.velYParams.maxAcceleration * time_step_);
     min_vy_ = std::max(-ctrlimits.velYParams.maxVel,
                        currentVel.vy() -
-                           ctrlimits.velYParams.maxDeceleration * max_time_);
+                           ctrlimits.velYParams.maxDeceleration * time_step_);
   } else {
     max_vy_ = 0.0;
     min_vy_ = 0.0;
@@ -347,10 +350,10 @@ void TrajectorySampler::UpdateReachableVelocityRange(
 
   max_omega_ = std::min(ctrlimits.omegaParams.maxOmega,
                         currentVel.omega() +
-                            ctrlimits.omegaParams.maxAcceleration * max_time_);
+                            ctrlimits.omegaParams.maxAcceleration * time_step_);
   min_omega_ = std::max(-ctrlimits.omegaParams.maxOmega,
                         currentVel.omega() -
-                            ctrlimits.omegaParams.maxDeceleration * max_time_);
+                            ctrlimits.omegaParams.maxDeceleration * time_step_);
 
   ang_sample_resolution_ =
       std::max((max_omega_ - min_omega_) / (ang_samples_max_ - 1), 0.001);
