@@ -252,6 +252,11 @@ private:
   // far off the arc and flat-lining the cost gradient at tight curves.
   void adaptPredictionHorizonToCurvature();
 
+  // One-shot warmup that dispatches every cost-evaluator kernel once with a
+  // dummy reference path, forcing the SYCL runtime to JIT-compile them at
+  // controller construction time rather than on the first real planner tick.
+  // Without this, the first call to computeVelocityCommandsSet pays the full
+  // JIT cost and misses its control-cycle deadline.
   void initJitCompile();
 };
 
