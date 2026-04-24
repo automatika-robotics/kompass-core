@@ -14,10 +14,15 @@ set(PYTHON_SCRIPT_2 ${CMAKE_CURRENT_SOURCE_DIR}/pointcloud_scan_plt.py)
 execute_process(COMMAND ln -s ${PYTHON_SCRIPT_1} ${PYTHON_SCRIPT_2} ${CMAKE_CURRENT_BINARY_DIR})
 
 
-# Controller Tests
-add_executable(controller_test controller_test.cpp)
-target_link_libraries(controller_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework nlohmann_json::nlohmann_json)
-add_test(controller_tests controller_test)
+# PurePursuit Controller Test
+add_executable(pure_pursuit_test pure_pursuit_test.cpp)
+target_link_libraries(pure_pursuit_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework nlohmann_json::nlohmann_json)
+add_test(pure_pursuit_tests pure_pursuit_test)
+
+# DWA Controller Test
+add_executable(dwa_test dwa_test.cpp)
+target_link_libraries(dwa_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework nlohmann_json::nlohmann_json)
+add_test(dwa_tests dwa_test)
 
 # Trajectory Sampler Test (Generate and Plot Samples)
 add_executable(trajectory_sampler_test trajectory_sampler_test.cpp)
@@ -81,7 +86,10 @@ if(AdaptiveCpp_FOUND)
   target_compile_definitions(cost_evaluator_test PRIVATE GPU=1)
   add_sycl_to_target(TARGET cost_evaluator_test SOURCES cost_evaluator_test.cpp)
 
-  # Controller Test
-  target_compile_definitions(controller_test PRIVATE GPU=1)
-  add_sycl_to_target(TARGET controller_test SOURCES controller_test.cpp)
+  # Controller Tests
+  target_compile_definitions(pure_pursuit_test PRIVATE GPU=1)
+  add_sycl_to_target(TARGET pure_pursuit_test SOURCES pure_pursuit_test.cpp)
+
+  target_compile_definitions(dwa_test PRIVATE GPU=1)
+  add_sycl_to_target(TARGET dwa_test SOURCES dwa_test.cpp)
 endif()
