@@ -88,22 +88,28 @@ void CostEvaluator::initializeGPUMemory() {
       numTrajectories_ * (numPointsPerTrajectory_ - 1), m_q);
   m_devicePtrCosts = sycl::malloc_device<float>(numTrajectories_, m_q);
 
-  // Cost specific memory allocation
+  // Cost specific memory allocation.
+  // Tracked segment X/Y are consumed by both the path-cost kernel and the
+  // goal-cost kernel
   if (costWeights->getParameter<double>("reference_path_distance_weight") >
-      0.0) {
+          0.0 ||
+      costWeights->getParameter<double>("goal_distance_weight") > 0.0) {
     m_devicePtrTrackedSegmentX =
         sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
     m_devicePtrTrackedSegmentY =
         sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
   };
+  // Accumulated lengths are only consumed by goal-cost kernel
   if (costWeights->getParameter<double>("goal_distance_weight") > 0.0) {
     m_devicePtrTrackedSegmentAccLengths =
         sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
   };
+  // obstacle points are only consumed by obstacle cost kernel
   if (costWeights->getParameter<double>("obstacles_distance_weight") > 0.0) {
     m_devicePtrObstaclesX = sycl::malloc_device<float>(maxWGSize_, m_q);
     m_devicePtrObstaclesY = sycl::malloc_device<float>(maxWGSize_, m_q);
   }
+  // custom costs are only allocated when custom costs are assigned
   if (customTrajCostsPtrs_.size() > 0) {
     m_devicePtrTempCosts = sycl::malloc_shared<float>(numTrajectories_, m_q);
   }
@@ -116,15 +122,11 @@ void CostEvaluator::initializeGPUMemory() {
 void CostEvaluator::updateCostWeights(TrajectoryCostsWeights &newCostsWeights) {
   this->costWeights = std::make_unique<TrajectoryCostsWeights>(newCostsWeights);
   // Do Cost specific memory allocation if not already done
-  if (costWeights->getParameter<double>("reference_path_distance_weight") >
-          0.0 &&
+  // Tracked segment X/Y are consumed by both path-cost and goal-cost
+  if ((costWeights->getParameter<double>("reference_path_distance_weight") >
+           0.0 ||
+       costWeights->getParameter<double>("goal_distance_weight") > 0.0) &&
       !m_devicePtrTrackedSegmentX && !m_devicePtrTrackedSegmentY) {
-    if (m_devicePtrTrackedSegmentX) {
-      sycl::free(m_devicePtrTrackedSegmentX, m_q);
-    }
-    if (m_devicePtrTrackedSegmentY) {
-      sycl::free(m_devicePtrTrackedSegmentY, m_q);
-    }
     m_devicePtrTrackedSegmentX =
         sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
     m_devicePtrTrackedSegmentY =
