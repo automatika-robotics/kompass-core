@@ -96,6 +96,10 @@ void CostEvaluator::initializeGPUMemory() {
     m_devicePtrTrackedSegmentY =
         sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
   };
+  if (costWeights->getParameter<double>("goal_distance_weight") > 0.0) {
+    m_devicePtrTrackedSegmentAccLengths =
+        sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
+  };
   if (costWeights->getParameter<double>("obstacles_distance_weight") > 0.0) {
     m_devicePtrObstaclesX = sycl::malloc_device<float>(maxWGSize_, m_q);
     m_devicePtrObstaclesY = sycl::malloc_device<float>(maxWGSize_, m_q);
@@ -124,6 +128,11 @@ void CostEvaluator::updateCostWeights(TrajectoryCostsWeights &newCostsWeights) {
     m_devicePtrTrackedSegmentX =
         sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
     m_devicePtrTrackedSegmentY =
+        sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
+  };
+  if (costWeights->getParameter<double>("goal_distance_weight") > 0.0 &&
+      !m_devicePtrTrackedSegmentAccLengths) {
+    m_devicePtrTrackedSegmentAccLengths =
         sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
   };
   if (costWeights->getParameter<double>("obstacles_distance_weight") > 0.0 &&
@@ -179,6 +188,9 @@ CostEvaluator::~CostEvaluator() {
   if (m_devicePtrTrackedSegmentY) {
     sycl::free(m_devicePtrTrackedSegmentY, m_q);
   }
+  if (m_devicePtrTrackedSegmentAccLengths) {
+    sycl::free(m_devicePtrTrackedSegmentAccLengths, m_q);
+  }
   if (m_devicePtrObstaclesX) {
     sycl::free(m_devicePtrObstaclesX, m_q);
   }
@@ -199,6 +211,13 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     float ref_path_length;
     size_t obs_size;
     size_t trajs_size = trajs->size();
+
+    // Refresh the current num-points-per-trajectory from the incoming batch.
+    // This number can shrink between calls; Device buffers were
+    // allocated to the construction-time max and are
+    // never resized the correct value for this call.
+    numPointsPerTrajectory_ = trajs->numPointsPerTrajectory_;
+
     std::vector<sycl::event> events;
 
     // TODO: Investigate error in AdaptiveCPP JIT compilation for filling
@@ -226,39 +245,63 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
              0.0 ||
          costWeights->getParameter<double>("goal_distance_weight") > 0.0) &&
         (ref_path_length = reference_path->totalPathLength()) > 0.0) {
+      size_t tracked_segment_size = tracked_segment.getSize();
+      const bool need_goal_cost =
+          (costWeights->getParameter<double>("goal_distance_weight") > 0.0);
+
+      // Grow tracked-segment device buffers if the incoming segment exceeds
+      // allocated capacity. The accumulated-lengths buffer is grown only when
+      // goal-cost is active on this call.
+      if (tracked_segment_size > maxRefPathSegmentSize_) {
+        // Free allocated buffers
+        if (m_devicePtrTrackedSegmentX)
+          sycl::free(m_devicePtrTrackedSegmentX, m_q);
+        if (m_devicePtrTrackedSegmentY)
+          sycl::free(m_devicePtrTrackedSegmentY, m_q);
+        if (m_devicePtrTrackedSegmentAccLengths) {
+          sycl::free(m_devicePtrTrackedSegmentAccLengths, m_q);
+          m_devicePtrTrackedSegmentAccLengths = nullptr;
+        }
+
+        // Update size
+        maxRefPathSegmentSize_ = tracked_segment_size;
+
+        // Resize buffers
+        m_devicePtrTrackedSegmentX =
+            sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
+        m_devicePtrTrackedSegmentY =
+            sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
+        if (need_goal_cost) { // only resize if goal cost is active
+          m_devicePtrTrackedSegmentAccLengths =
+              sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
+        }
+      }
+
+      // Upload tracked segment X/Y, consumed by both path-cost and
+      // goal-cost kernels.
+      m_q.memcpy(m_devicePtrTrackedSegmentX, tracked_segment.getXPointer(),
+                 sizeof(float) * tracked_segment_size)
+          .wait();
+      m_q.memcpy(m_devicePtrTrackedSegmentY, tracked_segment.getYPointer(),
+                 sizeof(float) * tracked_segment_size)
+          .wait();
+
+      // Upload arc ref path lengths at corresponding tracked segment, only for
+      // goal-cost
+      if (need_goal_cost) {
+        m_q.memcpy(m_devicePtrTrackedSegmentAccLengths,
+                   tracked_segment.getAccumulatedLengthsPointer(),
+                   sizeof(float) * tracked_segment_size)
+            .wait();
+      }
+
       if ((weight = costWeights->getParameter<double>("goal_distance_weight")) >
           0.0) {
-        auto last_point = reference_path->getEnd();
-        events.push_back(goalCostFunc(trajs_size, ref_path_length,
-                                      last_point.x(), last_point.y(), weight));
+        events.push_back(goalCostFunc(trajs_size, tracked_segment_size,
+                                      ref_path_length, weight));
       }
       if ((weight = costWeights->getParameter<double>(
                "reference_path_distance_weight")) > 0.0) {
-        size_t tracked_segment_size = tracked_segment.getSize();
-
-        // For safety check if incoming path segment exceeds allocated capacity
-        if (tracked_segment_size > maxRefPathSegmentSize_) {
-          // Free old memory
-          if (m_devicePtrTrackedSegmentX)
-            sycl::free(m_devicePtrTrackedSegmentX, m_q);
-          if (m_devicePtrTrackedSegmentY)
-            sycl::free(m_devicePtrTrackedSegmentY, m_q);
-
-          // Update capacity
-          maxRefPathSegmentSize_ = tracked_segment_size;
-
-          // Reallocate
-          m_devicePtrTrackedSegmentX =
-              sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
-          m_devicePtrTrackedSegmentY =
-              sycl::malloc_device<float>(maxRefPathSegmentSize_, m_q);
-        }
-        m_q.memcpy(m_devicePtrTrackedSegmentX, tracked_segment.getXPointer(),
-                   sizeof(float) * tracked_segment_size)
-            .wait();
-        m_q.memcpy(m_devicePtrTrackedSegmentY, tracked_segment.getYPointer(),
-                   sizeof(float) * tracked_segment_size)
-            .wait();
         events.push_back(pathCostFunc(trajs_size, tracked_segment_size,
                                       tracked_segment.totalSegmentLength(),
                                       weight));
@@ -507,28 +550,34 @@ sycl::event CostEvaluator::pathCostFunc(const size_t trajs_size,
   });
 }
 
-// Compute the cost of trajectory based on distance to the goal point
+// Distance-along-path goal cost kernel.
+//  - One workgroup per trajectory (workgroup id == trajectory id).
+//  - Each thread computes squared distance from the trajectory endpoint to
+//    its assigned tracked-segment point and stores (min_sq, idx) in local
+//    memory. If segSize > WG_SIZE a short stride loop covers the excess; in
+//    the common case segSize <= WG_SIZE it runs once per thread.
+//  - After a local barrier, thread 0 linearly reduces the WG_SIZE partial
+//    minima, then computes
+//        arc_remaining / ref_path_length + sqrt(min_dist_sq) / ref_path_length
+//    (the second term is a tie-breaker that prefers trajectories closer to
+//    the tracked segment) and atomic-adds the weighted cost to
+//    costs[traj_idx]. The uploaded acc-lengths slice holds absolute prefix
+//    arc lengths on the full reference path, so no index offset is applied.
 sycl::event CostEvaluator::goalCostFunc(const size_t trajs_size,
+                                        const size_t tracked_segment_size,
                                         const float ref_path_length,
-                                        const float goal_x, const float goal_y,
                                         const double cost_weight) {
-  // -----------------------------------------------------
-  //  Parallelize over trajectories.
-  //  Calculate distance of the last point in trajectory and reference path.
-  //  Atomically add to global trajectory’s cost.
-  // -----------------------------------------------------
-
-  // command scope
   return m_q.submit([&](sycl::handler &h) {
     // local copies of class members to be used inside the kernel
     auto X = m_devicePtrPathsX;
     auto Y = m_devicePtrPathsY;
+    auto trackedX = m_devicePtrTrackedSegmentX;
+    auto trackedY = m_devicePtrTrackedSegmentY;
+    auto trackedAcc = m_devicePtrTrackedSegmentAccLengths;
     auto costs = m_devicePtrCosts;
     const float costWeight = static_cast<float>(cost_weight);
     const size_t pathSize = numPointsPerTrajectory_;
-
-    // last point of the reference path
-    const sycl::vec<float, 2> goalPoint = {goal_x, goal_y};
+    const size_t segSize = tracked_segment_size;
 
     // Pre-calculate inverse length to multiply instead of divide
     const float invPathLength =
@@ -537,38 +586,83 @@ sycl::event CostEvaluator::goalCostFunc(const size_t trajs_size,
     // Set work-group size as per device limit to manage thread warps
     const size_t WG_SIZE = maxWGSize_;
 
-    // Round up global size to multiple of work-group size
-    size_t padded_global = ((trajs_size + WG_SIZE - 1) / WG_SIZE) * WG_SIZE;
-
-    auto global_range = sycl::range<1>(padded_global);
+    // One workgroup per trajectory; workgroup id == traj index.
+    auto global_range = sycl::range<1>(trajs_size * WG_SIZE);
     auto local_range = sycl::range<1>(WG_SIZE);
+
+    // local memory to hold the reduction state for this work-group
+    sycl::local_accessor<float, 1> slm_min_dist(local_range, h);
+    sycl::local_accessor<float, 1> slm_closest_acc(local_range, h);
 
     h.parallel_for<class goalCostKernel>(
         sycl::nd_range<1>(global_range, local_range),
         [=](sycl::nd_item<1> item) {
-          const size_t id = item.get_global_id(0);
+          const size_t traj_idx = item.get_group(0);    // trajectory index
+          const size_t local_id = item.get_local_id(0); // thread within WG
 
-          // ensure we don't access invalid trajectories because global size is
-          // padded
-          if (id >= trajs_size)
-            return;
+          // Trajectory endpoint (same value read by every thread in the WG)
+          // (L1 cache broadcast makes this cheap)
+          const size_t last_point_idx = traj_idx * pathSize + (pathSize - 1);
+          const float tx = X[last_point_idx];
+          const float ty = Y[last_point_idx];
 
-          size_t last_point_idx = id * pathSize + (pathSize - 1);
+          // ----------------------------------------------------------------
+          // STRIDE LOOP over Tracked Segment Points
+          // ----------------------------------------------------------------
+          // Per-thread partial argmin over strided tracked-segment points.
+          // In the common case segSize <= WG_SIZE the loop runs once.
+          float local_min_sq = DEFAULT_MIN_DIST;
+          float local_closest_acc = 0.0f;
+          for (size_t i = local_id; i < segSize; i += WG_SIZE) {
+            const float dx = trackedX[i] - tx;
+            const float dy = trackedY[i] - ty;
+            const float d_sq = dx * dx + dy * dy;
+            if (d_sq < local_min_sq) {
+              local_min_sq = d_sq;
+              local_closest_acc =
+                  trackedAcc[i]; // store accumulated length directly
+            }
+          }
 
-          sycl::vec<float, 2> last_path_point = {X[last_point_idx],
-                                                 Y[last_point_idx]};
+          // Write to SLM and sync for the WG
+          slm_min_dist[local_id] = local_min_sq;
+          slm_closest_acc[local_id] = local_closest_acc;
+          sycl::group_barrier(item.get_group());
 
-          // end point distance normalized by path length
-          float distance =
-              sycl::distance(last_path_point, goalPoint) * invPathLength;
+          // Parallel Tree Reduction in SLM
+          for (size_t stride = WG_SIZE / 2; stride > 0; stride >>= 1) {
+            if (local_id < stride) {
+              if (slm_min_dist[local_id + stride] < slm_min_dist[local_id]) {
+                slm_min_dist[local_id] = slm_min_dist[local_id + stride];
+                slm_closest_acc[local_id] = slm_closest_acc[local_id + stride];
+              }
+            }
+            // Must sync after every reduction step
+            sycl::group_barrier(item.get_group());
+          }
 
-          // Atomically add the computed trajectory cost to the global cost
-          // for this trajectory
-          sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                           sycl::memory_scope::device,
-                           sycl::access::address_space::global_space>
-              atomic_cost(costs[id]);
-          atomic_cost.fetch_add(costWeight * distance);
+          // Thread 0 calculates the final cost and atomically adds it
+          if (local_id == 0) {
+            const float opt_dist_sq = slm_min_dist[0];
+            const float opt_acc = slm_closest_acc[0];
+
+            // Remaining arc length along the full reference path from the
+            // closest point to the goal, normalized to [0, 1].
+            const float arc_remaining_normalized =
+                (ref_path_length - opt_acc) * invPathLength;
+
+            // Tie-breaker: normalized euclidean distance to the closest
+            // tracked-segment point (prefers trajectories near the path).
+            const float tie_breaker = sycl::sqrt(opt_dist_sq) * invPathLength;
+
+            // Add final cost, weighted
+            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                atomic_cost(costs[traj_idx]);
+            atomic_cost.fetch_add(costWeight *
+                                  (arc_remaining_normalized + tie_breaker));
+          }
         });
   });
 }

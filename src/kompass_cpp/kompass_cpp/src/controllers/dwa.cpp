@@ -36,6 +36,7 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
     max_forward_distance_ = controlLimits.velXParams.maxVel * predictionHorizon;
   }
 
+  // warmup
   initJitCompile();
 }
 
@@ -63,9 +64,14 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
     max_forward_distance_ = controlLimits.velXParams.maxVel * timeHorizon;
   }
 
+  // warmup
   initJitCompile();
 }
 
+// Warmup kernel launch: drives every CostEvaluator GPU kernel through a
+// single throwaway getMinTrajectoryCost() call at construction time so the
+// SYCL runtime performs JIT compilation here, not during the first real
+// planner tick (where it would blow the control-cycle deadline).
 void DWA::initJitCompile() {
   const int dummyNumSamples = 1;
   const int dummyNumPoints = 2;
@@ -74,7 +80,9 @@ void DWA::initJitCompile() {
   velocities.push_back({Velocity2D(1.0, 0.0, 0.0)});
   auto dummyPath = Path::Path(
       {Path::Point(0.0f, 0.0f, 0.0f), Path::Point(1.0f, 1.0f, 0.0f)});
-  auto dummyPathView = dummyPath.getPart(0, 1);
+  dummyPath.interpolate(0.5, Path::InterpolationType::LINEAR);
+  dummyPath.segment(1.0, 100);
+  auto dummyPathView = dummyPath.getSegment(0);
   paths.push_back(dummyPath);
   std::unique_ptr<TrajectorySamples2D> dummySamples =
       std::make_unique<TrajectorySamples2D>(velocities, paths);

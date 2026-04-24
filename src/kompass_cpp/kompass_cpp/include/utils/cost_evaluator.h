@@ -198,7 +198,7 @@ private:
   size_t numPointsPerTrajectory_;
   size_t maxRefPathSegmentSize_;
   size_t maxObstaclePoints_; // updated at runtime
-  size_t maxWGSize_; // initialized from accelerator cpabilities
+  size_t maxWGSize_;         // initialized from accelerator cpabilities
   float *m_devicePtrPathsX = nullptr;
   float *m_devicePtrPathsY = nullptr;
   float *m_devicePtrVelocitiesVx = nullptr;
@@ -207,6 +207,8 @@ private:
   float *m_devicePtrCosts = nullptr;
   float *m_devicePtrTrackedSegmentX = nullptr;
   float *m_devicePtrTrackedSegmentY = nullptr;
+  float *m_devicePtrTrackedSegmentAccLengths =
+      nullptr; // absolute prefix arc legnths for tracked segment points
   float *m_devicePtrObstaclesX = nullptr;
   float *m_devicePtrObstaclesY = nullptr;
   float *m_devicePtrTempCosts = nullptr;
@@ -225,14 +227,23 @@ private:
                            const double cost_weight);
 
   /**
-   * @brief Trajectory cost based on the distance to the end (goal) of a given
-   * reference path
+   * @brief Trajectory cost based on remaining arc-length along the reference
+   * path from the trajectory endpoint to the goal. Each trajectory thread scans
+   * the tracked segment for the point closest to its endpoint, looks up the
+   * absolute prefix arc length at that local index (the uploaded slice holds
+   * absolute prefix values, so no index offset is applied), and emits
+   * arc_remaining / ref_path_length + sqrt(min_dist_sq) / ref_path_length (the
+   * second term is a tie-breaker preferring trajectories closer to the tracked
+   * segment).
    *
-   * @param trajectories
-   * @param reference_path
+   * @param trajs_size
+   * @param tracked_segment_size
+   * @param ref_path_length   total arc length of the full reference path
+   * @param cost_weight
    */
-  sycl::event goalCostFunc(const size_t trajs_size, const float ref_path_length,
-                           const float goal_x, const float goal_y,
+  sycl::event goalCostFunc(const size_t trajs_size,
+                           const size_t tracked_segment_size,
+                           const float ref_path_length,
                            const double cost_weight);
 
   /**
