@@ -45,16 +45,21 @@ struct Path {
     ConstSegment Y;
     ConstSegment Z;
     ConstSegment Curvature;
+    size_t start_idx_;
 
     // Constructor
     View(const Path &parent, size_t start, size_t length)
         : X(parent.X_.segment(start, length)),
           Y(parent.Y_.segment(start, length)),
           Z(parent.Z_.segment(start, length)),
-          Curvature(parent.Curvature_.segment(start, length)) {}
+          Curvature(parent.Curvature_.segment(start, length)),
+          start_idx_(start) {}
 
     // --- Accessors ---
     size_t getSize() const { return X.size(); }
+
+    // Start index of this view in its parent Path (offset into the full path)
+    size_t getStartIndex() const { return start_idx_; }
 
     const float *getXPointer() const { return X.data(); }
     const float *getYPointer() const { return Y.data(); }

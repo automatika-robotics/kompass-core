@@ -61,7 +61,8 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     if ((ref_path_length = reference_path->totalPathLength()) > 0.0) {
       if ((weight = costWeights->getParameter<double>("goal_distance_weight")) >
           0.0) {
-        float goalCost = goalCostFunc(traj, reference_path, ref_path_length);
+        float goalCost = goalCostFunc(traj, reference_path, tracked_segment,
+                                      ref_path_length);
         total_cost += weight * goalCost;
       }
       if ((weight = costWeights->getParameter<double>(
@@ -138,30 +139,34 @@ float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
   return (total_cost / trajectory.path.x.size() + end_dist_error) / 2;
 }
 
+// Distance-along-path goal cost: finds the tracked-segment point closest to
+// the trajectory's endpoint (segment-local index), converts it to an absolute
+// index on the full reference path, and returns the remaining arc length from
+// that absolute point to the path end, normalized to [0, 1]. Using
+// arc-remaining instead of euclidean endpoint-to-goal avoids
+// stalling/corner-cutting on curved or closed paths where the goal lies
 float CostEvaluator::goalCostFunc(const Trajectory2D &trajectory,
                                   const Path::Path *reference_path,
+                                  const Path::Path::View &tracked_segment,
                                   const float ref_path_length) {
-// Distance-along-path goal cost: finds the reference-path point closest to
-// the trajectory's endpoint, then returns the remaining arc length from that
-// point to the path end, normalized to [0, 1]. Using arc-remaining instead of
-// euclidean endpoint-to-goal avoids stalling/corner-cutting on curved or
-// closed paths where the goal lies opposite the local path tangent.
   const Path::Point traj_end = trajectory.path.getEnd();
-  const size_t ref_size = reference_path->getSize();
+  const size_t seg_size = tracked_segment.getSize();
 
   float min_dist_sq = DEFAULT_MIN_DIST;
-  size_t closest_idx = 0;
-  for (size_t i = 0; i < ref_size; ++i) {
+  size_t closest_local_idx = 0;
+  for (size_t i = 0; i < seg_size; ++i) {
     const float d_sq =
-        Path::Path::distanceSquared(traj_end, reference_path->getIndex(i));
+        Path::Path::distanceSquared(traj_end, tracked_segment.getIndex(i));
     if (d_sq < min_dist_sq) {
       min_dist_sq = d_sq;
-      closest_idx = i;
+      closest_local_idx = i;
     }
   }
 
+  const size_t closest_abs_idx =
+      closest_local_idx + tracked_segment.getStartIndex();
   const float arc_remaining =
-      ref_path_length - reference_path->getDistanceAtIndex(closest_idx);
+      ref_path_length - reference_path->getDistanceAtIndex(closest_abs_idx);
   return arc_remaining / ref_path_length;
 }
 
