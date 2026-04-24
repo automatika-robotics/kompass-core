@@ -445,8 +445,8 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
 // blocking obstacle, without colliding and without timing out.
 BOOST_AUTO_TEST_CASE(test_DWA_All_Scenarios) {
   const double timeStep = 0.1;
-  const double predictionHorizon = 2.0;
-  const double controlHorizon = 0.2;
+  const double predictionHorizon = 4.0;
+  const double controlHorizon = 0.5;
   const int maxLinearSamples = 20;
   const int maxAngularSamples = 20;
   const int maxNumThreads = 10;
@@ -464,7 +464,7 @@ BOOST_AUTO_TEST_CASE(test_DWA_All_Scenarios) {
   // Cost weights
   Control::CostEvaluator::TrajectoryCostsWeights costWeights;
   costWeights.setParameter("reference_path_distance_weight", 1.0);
-  costWeights.setParameter("goal_distance_weight", 0.0);
+  costWeights.setParameter("goal_distance_weight", 1.0);
   costWeights.setParameter("obstacles_distance_weight", 0.0);
   costWeights.setParameter("smoothness_weight", 0.0);
   costWeights.setParameter("jerk_weight", 0.0);
@@ -484,7 +484,8 @@ BOOST_AUTO_TEST_CASE(test_DWA_All_Scenarios) {
   const std::map<std::string, std::pair<double, double>> obstacleLocations = {
       {"Straight", {4.0, 0.0}},
       {"UTurn", {10.0, 0.0}},
-      {"Circle", {5.0, 8.5}}};
+      {"Circle", {5.0, 8.5}}
+    };
 
   const auto robotShapeType = Kompass::CollisionChecker::ShapeType::CYLINDER;
   const float robotRadius = 0.1f;
