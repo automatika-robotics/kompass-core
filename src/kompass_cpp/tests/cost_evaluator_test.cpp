@@ -2,10 +2,15 @@
 #include "datatypes/trajectory.h"
 #include "test.h"
 #include "utils/cost_evaluator.h"
+#include <cstdlib> // std::getenv
+#include <fstream>
+#include <map>
 #include <memory>
+#include <string>
 #define BOOST_TEST_MODULE KOMPASS COSTS TESTS
 #include <boost/test/included/unit_test.hpp>
 #include <cmath>
+#include <nlohmann/json.hpp>
 #include <vector>
 
 using namespace Kompass::Control;
@@ -136,9 +141,21 @@ makeSingleSampleWithVelocities(const std::vector<Path::Point> &path_pts,
   return s;
 }
 
-// Generic evaluator wrapper. If `obstacles` is non-empty, setPointScan is
-// called with those points (Cartesian, zero pose, max_sensor_range = 30 so
-// maxObstaclesDist = 10 via the default /3 multiple).
+// Per-test cost accumulator. Keyed by Boost.Test current-case name; each
+// entry is a list to support tests that call evalCost() multiple times.
+// Populated by evalCost(); serialized to JSON on test-module teardown by
+// the global fixture below.
+std::map<std::string, std::vector<double>> &parityRecords() {
+  static std::map<std::string, std::vector<double>> records;
+  return records;
+}
+
+// Generic evaluator wrapper. Runs the CostEvaluator on `samples` against
+// `ref` and returns the (only) trajectory's total cost. If `obstacles` is
+// non-empty, setPointScan is called with those points (Cartesian, zero
+// pose, max_sensor_range = 30 so maxObstaclesDist = 10 via the default /3
+// multiple). Also records the cost under the current Boost.Test case name
+// so the global fixture can emit a CPU/GPU parity dump.
 float evalCost(CostEvaluator::TrajectoryCostsWeights weights,
                const Path::Path &ref, size_t seg_idx,
                std::unique_ptr<TrajectorySamples2D> samples,
@@ -153,10 +170,45 @@ float evalCost(CostEvaluator::TrajectoryCostsWeights weights,
   auto result = ev.getMinTrajectoryCost(samples, &ref, ref.getSegment(seg_idx));
   BOOST_TEST_REQUIRE(result.isTrajFound,
                      "CostEvaluator did not find a trajectory");
-  return result.trajCost;
+  const float cost = result.trajCost;
+  const std::string name =
+      boost::unit_test::framework::current_test_case().p_name.get();
+  parityRecords()[name].push_back(static_cast<double>(cost));
+  return cost;
 }
 
 } // namespace
+
+// Global fixture: on test-module teardown, serialize the accumulated parity
+// records to the path given by the COST_PARITY_JSON env var. If the env
+// var is unset, the dump is skipped — normal test runs leave no files
+// behind. Consumed by tests/test_cost_parity.py.
+struct ParityDumpFixture {
+  ParityDumpFixture() = default;
+  ~ParityDumpFixture() {
+    const char *out_path = std::getenv("COST_PARITY_JSON");
+    if (out_path == nullptr || out_path[0] == '\0') {
+      return;
+    }
+    nlohmann::json j;
+    j["schema_version"] = 1;
+#ifdef GPU
+    j["backend"] = "gpu";
+#else
+    j["backend"] = "cpu";
+#endif
+    nlohmann::json tests = nlohmann::json::object();
+    for (const auto &[name, costs] : parityRecords()) {
+      tests[name] = {{"costs", costs}};
+    }
+    j["tests"] = std::move(tests);
+
+    std::ofstream os(out_path);
+    os << j.dump(2) << std::endl;
+  }
+};
+
+BOOST_TEST_GLOBAL_FIXTURE(ParityDumpFixture);
 
 // -------- Goal cost -------------------------------------------------
 // Sanity: endpoint sitting exactly on a known point of a straight tracked
