@@ -274,7 +274,7 @@ void Follower::determineTarget() {
   if ((closestPosition->segment_length <= 0.0) ||
       (closestPosition->index >=
        currentPath->getSegmentEndIndex(current_segment_index_)) ||
-      (closestPosition->segment_length >= 1.0)) {
+      (closestPosition->segment_length >= 0.9)) {
     *closestPosition = findClosestPathPoint();
   }
   // If end of segment is not reached -> only find closest point on segment
