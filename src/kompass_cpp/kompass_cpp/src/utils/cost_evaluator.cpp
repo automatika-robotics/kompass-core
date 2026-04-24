@@ -146,7 +146,7 @@ float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
 // that absolute point to the path end, normalized to [0, 1]. Trajectories
 // closer to the segment are preferred via a tie breaker. Using arc-remaining
 // instead of euclidean endpoint-to-goal avoids stalling/corner-cutting on
-// curved or closed paths where the goal lies
+// curved or closed paths.
 float CostEvaluator::goalCostFunc(const Trajectory2D &trajectory,
                                   const Path::Path *reference_path,
                                   const Path::Path::View &tracked_segment,

@@ -274,6 +274,11 @@ void Follower::determineTarget() {
   if ((closestPosition->segment_length <= 0.0) ||
       (closestPosition->index >=
        currentPath->getSegmentEndIndex(current_segment_index_)) ||
+      // NOTE: We search for the next closest segment if the robot passes 90% of
+      // the length of the current segment. We do not wait to get to 100% (==1)
+      // because that triggers search only when the robot reaches the end; which
+      // leads the robot to get stuck in local minima in paths with high
+      // curvature.
       (closestPosition->segment_length >= 0.9)) {
     *closestPosition = findClosestPathPoint();
   }
