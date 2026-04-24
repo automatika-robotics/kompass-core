@@ -329,7 +329,7 @@ void TrajectorySampler::UpdateReachableVelocityRange(
     Control::Velocity2D currentVel) {
 
   // The reachable velocity window is what the robot can physically change to
-  // in the next *control* cycle.
+  // in the next *control* step.
 
   max_vx_ = std::min(ctrlimits.velXParams.maxVel,
                      currentVel.vx() +
