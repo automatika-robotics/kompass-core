@@ -202,8 +202,9 @@ Trajectory2D
 VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose) {
   Trajectory2D ref_traj(config_.prediction_horizon());
 
-  Path::State sim_state =
+  Path::State initialState =
       track_velocity_ ? Path::State(currentState) : Path::State(0, 0, 0);
+  Path::State sim_state = initialState;
   TrackedPose2D sim_target = tracking_pose;
   double dt = config_.control_time_step();
 
@@ -215,34 +216,24 @@ VisionDWA::getTrackingReferenceSegment(const TrackedPose2D &tracking_pose) {
     this->setCurrentState(sim_state);
     Velocity2D cmd = this->getPureTrackingCtrl(sim_target, (step == 0));
 
-    // Motion Model Adaptation
-    Velocity2D applied_cmd = cmd;
-    if (is_diff_drive_ && std::abs(cmd.vx()) >= config_.min_vel() &&
-        std::abs(cmd.omega()) >= config_.min_vel()) {
-      // For Diff-Drive, we alternate between rotation and translation
-      // to simulate the physical constraints more accurately
-      applied_cmd = (step % 2 == 0) ? Velocity2D(0.0, 0.0, cmd.omega())
-                                    : Velocity2D(cmd.vx(), 0.0, 0.0);
-    }
-
     // Update Robot State
-    sim_state.update(applied_cmd, dt);
+    sim_state.update(cmd, dt);
 
     // Update Target Pose
     if (track_velocity_) {
       sim_target.update(dt);
     } else {
       // Using the helper function suggested previously to fix the math
-      sim_target = updateLocalTarget(sim_target, applied_cmd, dt);
+      sim_target = updateLocalTarget(sim_target, cmd, dt);
     }
 
     // Store velocity in trajectory
     if (step < config_.prediction_horizon() - 1) {
-      ref_traj.velocities.add(step, applied_cmd);
+      ref_traj.velocities.add(step, cmd);
     }
   }
 
-  this->setCurrentState(currentState); // Restore original state
+  this->setCurrentState(initialState); // Restore original state
   return ref_traj;
 }
 
