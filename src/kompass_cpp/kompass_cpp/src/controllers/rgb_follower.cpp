@@ -15,7 +15,8 @@ RGBFollower::RGBFollower(const ControlType robotCtrlType,
                          const RGBFollowerConfig config) {
   ctrl_limits_ = robotCtrlLimits;
   config_ = config;
-  is_diff_drive_ = robotCtrlType == ControlType::DIFFERENTIAL_DRIVE;
+  rotate_in_place_ = (robotCtrlType == ControlType::DIFFERENTIAL_DRIVE ||
+                       robotCtrlType == ControlType::OMNI);
 }
 
 void RGBFollower::resetTarget(const Bbox2D &target) {
@@ -56,7 +57,7 @@ void RGBFollower::generateSearchCommands(float total_rotation,
   // Generate velocity commands
   for (float t = 0.0f; t <= max_rotation_time;
        t = t + config_.control_time_step()) {
-    if (is_diff_drive_) {
+    if (rotate_in_place_) {
       // In-place rotation
       search_commands_queue_.emplace(
           Eigen::Vector3d{0.0, 0.0, rotation_sign * omega_val});
@@ -216,16 +217,8 @@ void RGBFollower::trackTarget(const Bbox2D &target) {
   LOG_DEBUG("dist_error ", dist_error_, ", error_x: ", error_x);
   LOG_DEBUG("v=", v, ", omega= ", omega);
 
-  if (is_diff_drive_ and std::abs(v) >= config_.min_vel() and
-      std::abs(omega) >= config_.min_vel()) {
-    // Rotate then move
-    out_vel_ = TrajectoryVelocities2D(3);
-    out_vel_.add(0, 0.0, 0.0, omega);
-    out_vel_.add(1, v, 0.0, 0.0);
-  } else {
-    out_vel_ = TrajectoryVelocities2D(2);
-    out_vel_.add(0, v, 0.0, omega);
-  }
+  out_vel_ = TrajectoryVelocities2D(2);
+  out_vel_.add(0, v, 0.0, omega);
 
   return;
 }

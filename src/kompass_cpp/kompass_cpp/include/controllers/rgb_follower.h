@@ -83,7 +83,7 @@ public:
   }
 
 protected:
-  bool is_diff_drive_;
+  bool rotate_in_place_ = false;
   ControlLimitsParams ctrl_limits_;
   double recorded_search_time_ = 0.0, recorded_wait_time_ = 0.0;
   std::queue<Eigen::Vector3d> search_commands_queue_;
