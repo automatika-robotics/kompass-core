@@ -270,11 +270,7 @@ private:
       // Reset recorded wait and search times
       recorded_wait_time_ = 0.0;
       recorded_search_time_ = 0.0;
-      LOG_DEBUG("Tracking target at position: ", tracked_pose->x(), ", ",
-                tracked_pose->y(), " with velocity: ", tracked_pose->v(), ", ",
-                tracked_pose->omega());
-      LOG_DEBUG("Robot current position: ", currentState.x, ", ",
-                currentState.y);
+
       // Generate reference to target
       Trajectory2D ref_traj = getTrackingReferenceSegment(tracked_pose.value());
 
@@ -282,111 +278,13 @@ private:
       // something to plan against if the reference itself is rejected here.
       auto referenceToTarget =
           Path::Path(ref_traj.path.x, ref_traj.path.y, ref_traj.path.z);
-      this->setCurrentPath(referenceToTarget, false);
 
-      // Check the reference trajectory against obstacles before committing.
-      // If it collides, fall through to DWA sampling so the robot avoids the
-      // obstacle instead of plowing through it.
-      //
-      // The reference path is sampled at control_time_step intervals — at max
-      // velocity that can leave 0.2m gaps between consecutive points, large
-      // enough for a small obstacle to fall between two non-colliding samples
-      // while the swept path crosses it.  Interpolate intermediate states so
-      // the discrete collision checker sees the full swept volume.
-      //
-      // Also skip states near the tracked target: the target itself shows up
-      // in the sensor data and the reference naturally ends near it, so
-      // anything inside the target's footprint or the planned stopping zone
-      // is not a real obstacle.
-      constexpr int kInterpSubSteps = 5;
-      const float cos_yaw = std::cos(currentState.yaw);
-      const float sin_yaw = std::sin(currentState.yaw);
-      auto refPointToWorld = [&](Eigen::Index i, float &wx, float &wy) {
-        if (track_velocity_) {
-          wx = ref_traj.path.x(i);
-          wy = ref_traj.path.y(i);
-        } else {
-          wx = currentState.x + ref_traj.path.x(i) * cos_yaw -
-               ref_traj.path.y(i) * sin_yaw;
-          wy = currentState.y + ref_traj.path.x(i) * sin_yaw +
-               ref_traj.path.y(i) * cos_yaw;
-        }
-      };
+      // Set segment size and length so the path is segmented to only one segment that goes all the way to the target. This is to avoid the DWA local planner from trying to only follow a short segment of the reference and then replan.
+      path_segment_length_ = referenceToTarget.totalPathLength();
+      max_segment_size_ = referenceToTarget.getSize();
+      this->setCurrentPath(referenceToTarget, true);
 
-      // World-frame position of the tracked target
-      float target_world_x, target_world_y;
-      if (track_velocity_) {
-        target_world_x = tracked_pose->x();
-        target_world_y = tracked_pose->y();
-      } else {
-        target_world_x = currentState.x + tracked_pose->x() * cos_yaw -
-                         tracked_pose->y() * sin_yaw;
-        target_world_y = currentState.y + tracked_pose->x() * sin_yaw +
-                         tracked_pose->y() * cos_yaw;
-      }
-      // Effective horizontal radius of the target's bounding box (half of
-      // the larger horizontal extent). Falls back to 0 if the raw box is
-      // unavailable.
-      float target_radius = 0.0f;
-      if (auto raw = tracker_->getRawTracking()) {
-        target_radius =
-            0.5f * std::max(raw->box.size.x(), raw->box.size.y());
-      }
-      // Skip anything inside the larger of:
-      //   * the target's footprint plus the robot's footprint plus a buffer
-      //     (so the target itself never trips the check)
-      //   * the planned stopping distance (target_distance + robot_radius)
-      const float robot_radius = trajSampler->getRobotRadius();
-      const float footprint_radius = target_radius + robot_radius + 0.05f;
-      const float stop_radius =
-          static_cast<float>(config_.target_distance()) + robot_radius;
-      const float target_skip_radius = std::max(footprint_radius, stop_radius);
-      const float target_skip_radius_sq =
-          target_skip_radius * target_skip_radius;
-      auto isNearTarget = [&](float wx, float wy) {
-        const float dx = wx - target_world_x;
-        const float dy = wy - target_world_y;
-        return (dx * dx + dy * dy) < target_skip_radius_sq;
-      };
-
-      std::vector<Path::State> ref_states;
-      ref_states.reserve(ref_traj.path.x.size() * kInterpSubSteps);
-      for (Eigen::Index i = 0; i < ref_traj.path.x.size(); ++i) {
-        float wx, wy;
-        refPointToWorld(i, wx, wy);
-        if (!isNearTarget(wx, wy)) {
-          ref_states.emplace_back(wx, wy, 0.0);
-        }
-        if (i + 1 < ref_traj.path.x.size()) {
-          float wx_next, wy_next;
-          refPointToWorld(i + 1, wx_next, wy_next);
-          for (int k = 1; k < kInterpSubSteps; ++k) {
-            const float t = static_cast<float>(k) / kInterpSubSteps;
-            const float ix = wx + (wx_next - wx) * t;
-            const float iy = wy + (wy_next - wy) * t;
-            if (!isNearTarget(ix, iy)) {
-              ref_states.emplace_back(ix, iy, 0.0);
-            }
-          }
-        }
-      }
-      // If every state was filtered out (entire reference is inside the
-      // target's exclusion zone, e.g. robot is already at the target) there
-      // is nothing to collide with — accept the reference as-is.
-      const bool ref_has_collision =
-          !ref_states.empty() &&
-          trajSampler->checkStatesFeasibility(ref_states, sensor_points);
-
-      if (!ref_has_collision) {
-        TrajSearchResult result;
-        result.isTrajFound = true;
-        result.trajCost = 0.0;
-        result.trajectory = ref_traj;
-        latest_velocity_command_ = ref_traj.velocities.getFront();
-        return result;
-      }
-      LOG_DEBUG(
-          "Tracking reference has collisions — using DWA sampling instead");
+      return this->computeVelocityCommandsSet(current_vel, sensor_points);
       // fall through to DWA branch below
     }
     if (this->hasPath() and !isGoalReached() and
