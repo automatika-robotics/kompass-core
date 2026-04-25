@@ -11,17 +11,37 @@ namespace Control {
 
 constexpr float DEFAULT_MIN_DIST = std::numeric_limits<float>::max();
 
+// Split the total linear sample budget between vx and vy. For omni we
+// allocate 75% of the budget to vx and 25% to vy — forward/reverse motion
+// needs finer resolution than lateral strafe in typical path-following.
+// Each per-axis count is bumped odd so the symmetric [-v, +v] window
+// straddles zero and includes a "no-drift" sample.
+inline void computeLinearSampleSplit(ControlType ctrType, int maxLinearSamples,
+                                     int &vx_n, int &vy_n) {
+  auto makeOdd = [](int n) { return (n % 2 == 0) ? n + 1 : n; };
+  if (ctrType == ControlType::OMNI) {
+    vx_n = makeOdd(std::max(3, maxLinearSamples * 3 / 4));
+    vy_n = makeOdd(std::max(3, maxLinearSamples * 1 / 4));
+  } else {
+    vx_n = makeOdd(std::max(3, maxLinearSamples));
+    vy_n = 1;
+  }
+}
+
 // calculate number of trajectory samples based on ctrl type
 inline size_t getNumTrajectories(ControlType ctrType, int maxLinearSamples,
                                  int maxAngularSamples) {
-
+  // The sampler bumps an even maxAngularSamples by 1 to straddle 0; size the
+  // buffer against the bumped count so push_back never runs past the end.
+  const int angSlots = maxAngularSamples + 1 - (maxAngularSamples % 2);
+  int vx_n, vy_n;
+  computeLinearSampleSplit(ctrType, maxLinearSamples, vx_n, vy_n);
   if (ctrType == ControlType::OMNI) {
-    return (maxLinearSamples * 2) + (maxLinearSamples * maxAngularSamples * 2);
-  } else if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
-    return maxLinearSamples + maxLinearSamples * maxAngularSamples;
-  } else {
-    return maxLinearSamples * maxAngularSamples;
-  };
+    return static_cast<size_t>(vx_n) * static_cast<size_t>(angSlots) +
+           static_cast<size_t>(vx_n) * static_cast<size_t>(vy_n);
+  }
+  // Non-holonomic: (vx, omega) grid, with an unused vy axis.
+  return static_cast<size_t>(vx_n) * static_cast<size_t>(angSlots);
 }
 
 // calculate number of points per trajectory based on time step and horizon

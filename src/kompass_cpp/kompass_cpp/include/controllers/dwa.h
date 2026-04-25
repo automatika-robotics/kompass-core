@@ -9,6 +9,7 @@
 #include "utils/logger.h"
 #include "utils/trajectory_sampler.h"
 #include <Eigen/Dense>
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -191,7 +192,7 @@ protected:
     // find closest segment to use in cost computation
     determineTarget();
 
-    if (rotate_in_place and currentTrackedTarget_->heading_error >
+    if (rotate_in_place and std::abs(currentTrackedTarget_->heading_error) >
                                 goal_orientation_tolerance * 10.0) {
       // If the robot is rotating in place and the heading error is large, we
       // do not need to sample trajectories
@@ -202,6 +203,14 @@ protected:
                          ctrlimitsParams.omegaParams.maxOmega / M_PI));
       return TrajSearchResult{trajectory, true, 0.0};
     }
+
+    // Adapt the prediction horizon to local path curvature. At straight
+    // sections use the full constructor-provided horizon; as the reference
+    // curvature rises, shrink the horizon so straight-tangent samples don't
+    // diverge from the arc by more than `kSagittaTolerance` meters. A
+    // constant-curvature arc deviates from its tangent by ~(v·T)²·κ/8, so
+    // the cap is T ≤ sqrt(8·ε/κ) / v_max.
+    adaptPredictionHorizonToCurvature();
 
     // Generate set of valid trajectories in the DW
     std::unique_ptr<TrajectorySamples2D> samples_ =
@@ -238,6 +247,16 @@ private:
 
   Path::Path::View findTrackedPathSegment();
 
+  // Shrink the sampler's rollout horizon based on the max curvature ahead
+  // on the reference path. Keeps straight-tangent samples from drifting too
+  // far off the arc and flat-lining the cost gradient at tight curves.
+  void adaptPredictionHorizonToCurvature();
+
+  // One-shot warmup that dispatches every cost-evaluator kernel once with a
+  // dummy reference path, forcing the SYCL runtime to JIT-compile them at
+  // controller construction time rather than on the first real planner tick.
+  // Without this, the first call to computeVelocityCommandsSet pays the full
+  // JIT cost and misses its control-cycle deadline.
   void initJitCompile();
 };
 

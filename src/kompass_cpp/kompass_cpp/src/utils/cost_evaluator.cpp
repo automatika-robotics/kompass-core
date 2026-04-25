@@ -61,8 +61,8 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     if ((ref_path_length = reference_path->totalPathLength()) > 0.0) {
       if ((weight = costWeights->getParameter<double>("goal_distance_weight")) >
           0.0) {
-        float goalCost =
-            goalCostFunc(traj, reference_path->getEnd(), ref_path_length);
+        float goalCost = goalCostFunc(traj, reference_path, tracked_segment,
+                                      ref_path_length);
         total_cost += weight * goalCost;
       }
       if ((weight = costWeights->getParameter<double>(
@@ -111,26 +111,23 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
 float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
                                   const Path::Path::View &tracked_segment,
                                   const float tracked_segment_length) {
+  // Average cross-track error: for each trajectory point, its minimum
+  // distance to the tracked reference segment. Units: meters.
+  // Caller must ensure the tracked segment spans the trajectory's reach
+  // (predictionHorizon * maxVel) to avoid penalizing trajectories that reach
+  // further by reading longitudinal overshoot as lateral error.
   float total_cost = 0.0;
-
-  float distError, dist;
-
   for (Eigen::Index i = 0; i < trajectory.path.x.size(); ++i) {
-    // Set min distance between trajectory sample point i and the reference to
-    // infinity
-    distError = DEFAULT_MIN_DIST;
-    // Get minimum distance to the reference
+    float min_dist = DEFAULT_MIN_DIST;
     for (size_t j = 0; j < tracked_segment.getSize(); ++j) {
-      dist = Path::Path::distance(tracked_segment.getIndex(j),
-                                  trajectory.path.getIndex(i));
-      if (dist < distError) {
-        distError = dist;
+      float d = Path::Path::distance(tracked_segment.getIndex(j),
+                                     trajectory.path.getIndex(i));
+      if (d < min_dist) {
+        min_dist = d;
       }
     }
-    // Total min distance to each point
-    total_cost += distError;
+    total_cost += min_dist;
   }
-
   // end point distance
   float end_dist_error =
       Path::Path::distance(
@@ -143,14 +140,40 @@ float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
   return (total_cost / trajectory.path.x.size() + end_dist_error) / 2;
 }
 
-// Compute the cost of a trajectory based on distance to a given reference path
+// Distance-along-path goal cost: finds the tracked-segment point closest to
+// the trajectory's endpoint (segment-local index), converts it to an absolute
+// index on the full reference path, and returns the remaining arc length from
+// that absolute point to the path end, normalized to [0, 1]. Trajectories
+// closer to the segment are preferred via a tie breaker. Using arc-remaining
+// instead of euclidean endpoint-to-goal avoids stalling/corner-cutting on
+// curved or closed paths.
 float CostEvaluator::goalCostFunc(const Trajectory2D &trajectory,
-                                  const Path::Point &reference_path_end_point,
+                                  const Path::Path *reference_path,
+                                  const Path::Path::View &tracked_segment,
                                   const float ref_path_length) {
-  // end point distance normalized to range [0, 1]
-  return Path::Path::distance(trajectory.path.getEnd(),
-                              reference_path_end_point) /
-         ref_path_length;
+  const Path::Point traj_end = trajectory.path.getEnd();
+  const size_t seg_size = tracked_segment.getSize();
+
+  float min_dist_sq = DEFAULT_MIN_DIST;
+  size_t closest_local_idx = 0;
+  for (size_t i = 0; i < seg_size; ++i) {
+    const float d_sq =
+        Path::Path::distanceSquared(traj_end, tracked_segment.getIndex(i));
+    if (d_sq < min_dist_sq) {
+      min_dist_sq = d_sq;
+      closest_local_idx = i;
+    }
+  }
+
+  const size_t closest_abs_idx =
+      closest_local_idx + tracked_segment.getStartIndex();
+  const float arc_remaining_normalized =
+      (ref_path_length - reference_path->getDistanceAtIndex(closest_abs_idx)) /
+      ref_path_length;
+  return arc_remaining_normalized +
+         (std::sqrt(min_dist_sq) /
+          ref_path_length); // Add normalized euclidean distance to closest path
+                            // point as tie-breaker
 }
 
 float CostEvaluator::obstaclesDistCostFunc(const Trajectory2D &trajectory) {

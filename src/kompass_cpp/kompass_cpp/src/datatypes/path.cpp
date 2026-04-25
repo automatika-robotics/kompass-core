@@ -276,9 +276,8 @@ void Path::interpolate(double max_interpolation_point_dist,
     float val = dx * dx + dy * dy;
     float denominator = val * std::sqrt(val);
 
-    if (denominator > 1e-3f) {
+    if (denominator > 1e-6f) {
       pK[i] = (dx_old * ddy - ddx * dy_old) / denominator;
-      pK[i] = (dx * ddy - ddx * dy) / denominator;
     } else {
       pK[i] = 0.0f;
     }

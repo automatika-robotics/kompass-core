@@ -64,7 +64,7 @@ inline void initLaserscan(size_t N, double initRange, std::vector<double> &range
 
 inline size_t findClosestIndex_(double angle, std::vector<double> &angles) {
   // Normalize the angle to be within [0, 2*pi)
-  angle = Angle::normalizeTo0Pi(angle);
+  angle = Angle::normalizeTo02Pi(angle);
 
   double minDiff = 2.0 * M_PI;
   size_t closestIndex = 0;

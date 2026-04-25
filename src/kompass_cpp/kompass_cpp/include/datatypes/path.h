@@ -45,21 +45,35 @@ struct Path {
     ConstSegment Y;
     ConstSegment Z;
     ConstSegment Curvature;
+    // Pointer into the parent's accumulated_path_length_ array, offset
+    // to the segment's start. Values are absolute prefix arc lengths on the
+    // full reference path (not rebased to the segment start).
+    const float *AccumulatedLengths;
+    size_t start_idx_;
 
     // Constructor
     View(const Path &parent, size_t start, size_t length)
         : X(parent.X_.segment(start, length)),
           Y(parent.Y_.segment(start, length)),
           Z(parent.Z_.segment(start, length)),
-          Curvature(parent.Curvature_.segment(start, length)) {}
+          Curvature(parent.Curvature_.segment(start, length)),
+          AccumulatedLengths(parent.accumulated_path_length_.data() + start),
+          start_idx_(start) {}
 
     // --- Accessors ---
     size_t getSize() const { return X.size(); }
+
+    // Start index of this view in its parent Path (offset into the full path)
+    size_t getStartIndex() const { return start_idx_; }
 
     const float *getXPointer() const { return X.data(); }
     const float *getYPointer() const { return Y.data(); }
     const float *getZPointer() const { return Z.data(); }
     const float *getCurvaturePointer() const { return Curvature.data(); }
+    // Absolute prefix arc lengths for the segment's points (size == getSize())
+    const float *getAccumulatedLengthsPointer() const {
+      return AccumulatedLengths;
+    }
 
     Point getIndex(size_t index) const {
       // Return a point constructed from the view's data at 'index'
@@ -177,6 +191,13 @@ struct Path {
     if (index >= accumulated_path_length_.size())
       return 0.0;
     return accumulated_path_length_[index];
+  }
+
+  // Raw pointer to the per-point accumulated arc-length array. On an
+  // interpolated path, indices [0, getSize()) are valid and monotonically
+  // increasing from 0 to totalPathLength().
+  inline const float *getAccumulatedLengthsPointer() const {
+    return accumulated_path_length_.data();
   }
 
   // distance between two points

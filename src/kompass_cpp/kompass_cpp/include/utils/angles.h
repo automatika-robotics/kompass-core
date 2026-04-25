@@ -4,15 +4,16 @@
 
 class Angle {
 public:
-  inline static double normalizeTo0Pi(double angle) {
-    // Normalize the angle to [0, 2*pi]
+  /**
+   * @brief Normalize the angle to [0, 2*pi).
+   *  NOTE: For symmetric "shortest-angular-distance" use normalizeToMinusPiPlusPi(a - b) instead, subtracting two values from this function can return (-2pi, 2pi) which is rarely what callers want.
+   * @param angle
+   * @return double
+   */
+  inline static double normalizeTo02Pi(double angle) {
     angle = fmod(angle, 2 * M_PI);
     if (angle < 0) {
       angle += 2 * M_PI;
-    }
-    // If angle is greater than pi, subtract from 2*pi to get the range [0, pi]
-    if (angle > 2 * M_PI) {
-      angle = 2 * M_PI - angle;
     }
     return angle;
   }

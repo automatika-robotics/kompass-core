@@ -63,6 +63,12 @@ def plot_samples(figure_name, trajectories, reference=None, obstacles=None):
     plt.ylabel("Y")
     plt.title(name)
     plt.grid(True)
+    # Equal aspect so the plot reflects real geometry — stops matplotlib from
+    # magnifying floating-point-noise deviations (~1e-14 m) on a straight
+    # path into a dramatic curve via auto-scaling.
+    ax = plt.gca()
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.margins(0.1)
     plt.savefig(f"./{name}.png")
 
 

@@ -26,6 +26,8 @@ void Follower::setParams(const FollowerParameters &config) {
       this->config.getParameter<double>("goal_orientation_tolerance");
   loosing_goal_distance =
       this->config.getParameter<double>("loosing_goal_distance");
+  curvature_horizon_tolerance_ =
+      this->config.getParameter<double>("curvature_horizon_tolerance");
   path_segment_length_ =
       this->config.getParameter<double>("path_segment_length");
   max_point_interpolation_distance_ =
@@ -217,15 +219,20 @@ Path::PathPosition Follower::findClosestPointOnSegment(size_t segment_index) {
 
   for (auto projected_point : segment_path) {
     // find distance squared for faster comparision
-    distance_squared = currentPath->distanceSquared(currentState, projected_point);
+    distance_squared =
+        currentPath->distanceSquared(currentState, projected_point);
 
     if (distance_squared <= min_distance_squared) {
       min_distance_squared = distance_squared;
       closest_point = {projected_point.x(), projected_point.y(),
                        segment_heading};
       closest_point_index = point_index;
-      segment_position =
-          static_cast<double>(point_index) / (segment_path.getSize() - 1);
+      if (segment_path.getSize() > 1) {
+        segment_position =
+            static_cast<double>(point_index) / (segment_path.getSize() - 1);
+      } else {
+        segment_position = 1.0;
+      }
     }
     point_index++;
   }
@@ -267,7 +274,12 @@ void Follower::determineTarget() {
   if ((closestPosition->segment_length <= 0.0) ||
       (closestPosition->index >=
        currentPath->getSegmentEndIndex(current_segment_index_)) ||
-      (closestPosition->segment_length >= 1.0)) {
+      // NOTE: We search for the next closest segment if the robot passes 90% of
+      // the length of the current segment. We do not wait to get to 100% (==1)
+      // because that triggers search only when the robot reaches the end; which
+      // leads the robot to get stuck in local minima in paths with high
+      // curvature.
+      (closestPosition->segment_length >= 0.9)) {
     *closestPosition = findClosestPathPoint();
   }
   // If end of segment is not reached -> only find closest point on segment
@@ -280,9 +292,11 @@ void Follower::determineTarget() {
 
   currentTrackedTarget_->movement = closestPosition->state;
   currentTrackedTarget_->lookahead = lookahead_distance;
-  currentTrackedTarget_->heading_error =
-      Angle::normalizeTo0Pi(currentTrackedTarget_->movement.yaw) -
-      Angle::normalizeTo0Pi(currentState.yaw);
+  // Signed shortest angular distance in [-pi, pi]. Subtracting two separately
+  // normalized [0, 2*pi) values can spuriously return ~+/-2*pi at the wrap,
+  // which previously tripped the rotate-in-place guard on small real errors.
+  currentTrackedTarget_->heading_error = Angle::normalizeToMinusPiPlusPi(
+      currentTrackedTarget_->movement.yaw - currentState.yaw);
 
   currentTrackedTarget_->crosstrack_error = closestPosition->parallel_distance;
   currentTrackedTarget_->reverse = false;
@@ -296,9 +310,9 @@ bool Follower::isForwardSegment(const Path::Path &segment1,
       std::atan2(segment2.getStart().y() - segment1.getStart().y(),
                  segment2.getStart().x() - segment1.getStart().x());
 
-  return std::abs(Angle::normalizeTo0Pi(segment2.getStartOrientation() -
-                                        angle_between_points)) <=
-         (M_PI - std::abs(Angle::normalizeTo0Pi(
+  return std::abs(Angle::normalizeTo02Pi(segment2.getStartOrientation() -
+                                         angle_between_points)) <=
+         (M_PI - std::abs(Angle::normalizeTo02Pi(
                      angle_between_points - segment1.getStartOrientation())));
 }
 
