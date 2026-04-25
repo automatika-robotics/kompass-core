@@ -169,7 +169,6 @@ bool FeatureBasedBboxTracker::updateTracking(
     found_box = &label_boxes[similar_box_idx];
   }
 
-  LOG_DEBUG("Max similarity score = ", max_similarity_score);
   if (max_similarity_score > minAcceptedSimilarityScore_) {
     // Update raw tracking
     float dt = found_box->timestamp - trackedBox_->box.timestamp;
