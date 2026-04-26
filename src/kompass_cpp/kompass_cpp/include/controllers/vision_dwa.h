@@ -13,7 +13,8 @@
 #include <cmath>
 #include <memory>
 #include <optional>
-#include <queue>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace Kompass {
@@ -133,6 +134,7 @@ public:
               "Tracker failed to update target with the detected boxes");
         } else {
           tracked_pose = tracker_->getFilteredTrackedPose2D();
+          refreshTargetGeometry();
         }
       } else {
         throw std::runtime_error(
@@ -176,6 +178,7 @@ public:
               "Tracker failed to update target with the detected boxes");
         } else {
           tracked_pose = tracker_->getFilteredTrackedPose2D();
+          refreshTargetGeometry();
         }
       } else {
         LOG_WARNING("Detector failed to find 3D boxes");
@@ -221,6 +224,51 @@ public:
     return Eigen::Vector2f(dist_error_, orientation_error_);
   }
 
+  /**
+   * @brief Inscribed-circle radius of the currently tracked target's
+   * footprint: 0.5 * max(box.size.x, box.size.y). Refreshed whenever the
+   * tracker accepts a new detection (initial setup or update). Returns 0
+   * if the tracker has never accepted a target.
+   */
+  float currentTargetRadius() const { return currentTargetRadius_; }
+
+  /**
+   * @brief Convenience overload that handles frame projection and uses
+   * the cached currentTargetRadius_. Preferred for any caller that
+   * already has the controller in hand.
+   */
+  template <typename T>
+  T filterTargetFromSensorData(const T &sensor_points,
+                               const TrackedPose2D &target) const {
+    const auto [tx, ty] = targetInSensorFrame<T>(target);
+    return filterTargetFromSensorData<T>(sensor_points, tx, ty,
+                                         currentTargetRadius_);
+  }
+
+  /**
+   * @brief Remove tracked-target body returns from sensor data so they
+   * don't trip a false collision against the target itself.
+   *
+   * For a LaserScan, rays whose hit point lies within `target_radius` of
+   * (target_x, target_y) get their range set to +infinity (treated as
+   * "no return" by the collision checker). For a point cloud (vector of
+   * Path::Point), points within `target_radius` of (target_x, target_y)
+   * are dropped from the returned cloud.
+   *
+   * The caller is responsible for expressing (target_x, target_y) in the
+   * SAME frame as the sensor data: the proximity-sensor frame for a
+   * LaserScan, or the cloud's frame (world or robot-local) for a point
+   * cloud.
+   *
+   * Defined out-of-line in vision_dwa.cpp; explicitly instantiated for
+   * Control::LaserScan and std::vector<Path::Point>.
+   */
+  template <typename T>
+  static T filterTargetFromSensorData(const T &sensor_points,
+                                      const float target_x,
+                                      const float target_y,
+                                      const float target_radius);
+
 private:
   VisionDWAConfig config_;
   std::unique_ptr<FeatureBasedBboxTracker> tracker_;
@@ -228,143 +276,176 @@ private:
   Eigen::Isometry3f vision_sensor_tf_;
   int track_velocity_;
 
-  /**
-   * @brief Get the Tracking Reference Trajectory Segment
-   *
-   * @tparam T
-   * @param tracking_pose
-   * @return std::tuple<Trajectory2D, bool>
-   */
+  // Inscribed-circle radius of the tracked target's XY footprint, cached
+  // from the tracker's current Bbox3D so the early-exit and target filter
+  // don't recompute it each cycle. Refreshed by refreshTargetGeometry()
+  // after every successful tracker update; left untouched on failures so
+  // a transient miss doesn't zero out a previously-known radius.
+  float currentTargetRadius_ = 0.0f;
+
+  // Pull the latest target geometry off the tracker. No-op if the tracker
+  // has nothing to report.
+  void refreshTargetGeometry();
+
+  // Trim a reference trajectory so it ends at least `standoff` away from
+  // the target center. Returns nullopt if the trim leaves fewer than 2
+  // points (i.e. the reference is already inside the standoff zone) — the
+  // caller is expected to fall back to DWA against the untrimmed reference.
+  static std::optional<Trajectory2D>
+  trimReferenceToStandoff(const Trajectory2D &ref,
+                          const TrackedPose2D &target, float standoff);
+
+  // Build collision-check states from a trajectory's path. Yaw is
+  // approximated from the path tangent so non-circular footprints get
+  // checked at a meaningful orientation.
+  static std::vector<Path::State>
+  trajectoryToCollisionStates(const Trajectory2D &t);
+
+  // Build a control-horizon-long stationary trajectory (zero velocities,
+  // path pinned at origin). Pure: no side effects on timers or queues.
+  TrajSearchResult makeHoldResult() const;
+
+  // Build a result by popping commands off `search_commands_queue_`, one
+  // per control-horizon step. Pops up to (control_horizon - 1) commands
+  // and advances `recorded_search_time_` for each. If the queue runs dry
+  // mid-build, returns a default (no-trajectory) TrajSearchResult.
+  TrajSearchResult popSearchStepResult();
+
+  // ---- Pipeline stages used by the inner getTrackingCtrl ----
+  //
+  // The inner control step is a chain of "try this stage; if it produced
+  // a result, return it; otherwise fall through to the next stage". Each
+  // stage encapsulates one logical mode of the controller (hold at
+  // target, follow a clean reference, run DWA avoidance, etc.) so the
+  // top-level dispatch reads top-to-bottom.
+
+  // HoldAtTarget: emit a stationary command if the robot is already
+  // inside (or at) the configured edge-to-edge gap to the target. Returns
+  // nullopt if the robot is still farther away.
+  std::optional<TrajSearchResult>
+  tryHoldAtTarget(const TrackedPose2D &target) const;
+
+  // FollowReference: build the reference to the target, trim it to the
+  // standoff distance, publish it as currentPath (so the DWA fallback has
+  // something to plan against), and return the trimmed trajectory if it
+  // is collision-free against `filtered_sensor`. Returns nullopt when the
+  // trim degenerates or the trimmed reference collides — the caller falls
+  // through to a DWA sampling pass on the same filtered sensor.
+  //
+  // Defined out-of-line in vision_dwa.cpp; explicitly instantiated for
+  // Control::LaserScan and std::vector<Path::Point>.
+  template <typename T>
+  std::optional<TrajSearchResult>
+  tryFollowReference(const TrackedPose2D &target, const T &filtered_sensor);
+
+  // DwaWithLeftoverPath: when the target is missing but a previously-set
+  // path is still usable, run DWA against it. Returns nullopt if there is
+  // nothing meaningful left to plan against.
+  template <typename T>
+  std::optional<TrajSearchResult>
+  tryDWAWithLeftoverPath(const Velocity2D &current_vel,
+                         const T &sensor_points) {
+    if (this->hasPath() && !isGoalReached() &&
+        this->currentPath->getSize() > 1) {
+      return this->computeVelocityCommandsSet(current_vel, sensor_points);
+    }
+    return std::nullopt;
+  }
+
+  // Search: emit queued search commands when search is enabled and the
+  // search timeout has not been reached. Returns nullopt otherwise.
+  std::optional<TrajSearchResult> trySearch();
+
+  // Wait: hold position when search is disabled and the wait timeout has
+  // not been reached. Returns nullopt otherwise.
+  std::optional<TrajSearchResult> tryWait();
+
+  // GiveUp: target is gone and recovery has been exhausted. Resets the
+  // wait/search book-keeping and returns an empty (no-trajectory) result.
+  TrajSearchResult giveUp();
+
+  // Project the tracked target's (x, y) into the same frame as sensor data
+  // of type T:
+  //   - LaserScan returns in the proximity-sensor frame (≈ robot body), so
+  //     a world-frame target gets projected through currentState when
+  //     track_velocity_; in local-coordinate mode the target is already
+  //     robot-relative.
+  //   - PointCloud shares the trajectory's frame (world if
+  //     track_velocity_, robot-local otherwise) — no projection needed.
+  template <typename T>
+  std::pair<float, float>
+  targetInSensorFrame(const TrackedPose2D &target) const {
+    const float tx = static_cast<float>(target.x());
+    const float ty = static_cast<float>(target.y());
+    if constexpr (std::is_same_v<T, Control::LaserScan>) {
+      if (track_velocity_) {
+        const float c = std::cos(static_cast<float>(currentState.yaw));
+        const float s = std::sin(static_cast<float>(currentState.yaw));
+        const float dx = tx - static_cast<float>(currentState.x);
+        const float dy = ty - static_cast<float>(currentState.y);
+        return {c * dx + s * dy, -s * dx + c * dy};
+      }
+    }
+    return {tx, ty};
+  }
+
+  // Build a reference trajectory of `prediction_horizon()` steps that
+  // converges from the current robot state toward the tracked target,
+  // using the pure-pursuit law in `getPureTrackingCtrl`.
   Trajectory2D getTrackingReferenceSegment(const TrackedPose2D &tracking_pose);
 
-  Trajectory2D
-  getTrackingReferenceSegmentDiffDrive(const TrackedPose2D &tracking_pose);
-
+  // In local-coordinate mode, advance the target's robot-relative pose by
+  // one step of the robot's own motion (the "target gets pushed back" by
+  // the robot's forward step).
   TrackedPose2D updateLocalTarget(const TrackedPose2D &current_target,
                                   const Velocity2D &robot_cmd, double dt);
 
-  /**
-   * @brief Get the Pure Tracking Control Command
-   *
-   * @param tracking_pose
-   * @return Velocity2D
-   */
+  // Pure-pursuit control law toward the tracked target. When
+  // `update_global_error` is true, the dist/orientation errors are stored
+  // on the controller for telemetry; off when called from simulated
+  // forward-rollouts so they don't pollute the per-step error.
   Velocity2D getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
                                  const bool update_global_error = false);
 
-  /**
-   * @brief Get the Tracking Control Result based on object tracking and DWA
-   * sampling by direct following of the tracked target in local frame
-   *
-   * @tparam T
-   * @param tracking_pose
-   * @param current_vel
-   * @param sensor_points
-   * @return Control::TrajSearchResult
-   */
+  // Inner control-step dispatch: pipeline of stages tried in order. The
+  // public getTrackingCtrl wrappers funnel into this overload after
+  // resolving detections into an optional tracked pose.
   template <typename T>
   Control::TrajSearchResult
   getTrackingCtrl(const std::optional<TrackedPose2D> &tracked_pose,
                   const Velocity2D &current_vel, const T &sensor_points) {
-    if (tracked_pose.has_value()) {
-      // Reset recorded wait and search times
+    // Pipeline-of-stages dispatch: each stage returns nullopt when it
+    // doesn't apply, allowing the next stage to take a turn. The first
+    // stage that returns a result wins.
+    if (tracked_pose) {
+      // Target is back in view — clear any pending search/wait state.
       recorded_wait_time_ = 0.0;
       recorded_search_time_ = 0.0;
 
-      // Generate reference to target
-      Trajectory2D ref_traj = getTrackingReferenceSegment(tracked_pose.value());
-
-      // Always update the reference path so the DWA fallback / search has
-      // something to plan against if the reference itself is rejected here.
-      auto referenceToTarget =
-          Path::Path(ref_traj.path.x, ref_traj.path.y, ref_traj.path.z);
-
-      // Set segment size and length so the path is segmented to only one segment that goes all the way to the target. This is to avoid the DWA local planner from trying to only follow a short segment of the reference and then replan.
-      path_segment_length_ = referenceToTarget.totalPathLength();
-      max_segment_size_ = referenceToTarget.getSize();
-      this->setCurrentPath(referenceToTarget, true);
-
-      return this->computeVelocityCommandsSet(current_vel, sensor_points);
-      // fall through to DWA branch below
-    }
-    if (this->hasPath() and !isGoalReached() and
-        this->currentPath->getSize() > 1) {
-      // Reference is missing or collides -> use DWA-like sampling and control
-      return this->computeVelocityCommandsSet(current_vel, sensor_points);
-    } else {
-      // Start Search and/or Wait if enabled
-      if (config_.enable_search()) {
-        if (recorded_search_time_ < config_.target_search_timeout()) {
-          if (search_commands_queue_.empty()) {
-            LOG_DEBUG("Search commands queue is empty, generating new search "
-                      "commands");
-            int last_direction = 1;
-            if (latest_velocity_command_.omega() < 0) {
-              last_direction = -1;
-            }
-            getFindTargetCmds(last_direction);
-          }
-          LOG_DEBUG("Number of search commands remaining: ",
-                    search_commands_queue_.size(),
-                    "recorded search time: ", recorded_search_time_);
-          // Create search command
-          TrajectoryVelocities2D velocities(config_.control_horizon());
-          TrajectoryPath path(config_.control_horizon());
-          path.add(0, 0.0, 0.0);
-          Eigen::Vector3d search_command;
-          for (int i = 0; i < config_.control_horizon() - 1; i++) {
-            if (search_commands_queue_.empty()) {
-              LOG_DEBUG("Search commands queue is empty. Ending Search ");
-              return TrajSearchResult();
-            }
-            search_command = search_commands_queue_.front();
-            search_commands_queue_.pop();
-            recorded_search_time_ += config_.control_time_step();
-            path.add(i + 1, 0.0, 0.0);
-            velocities.add(i, Velocity2D(search_command[0], search_command[1],
-                                         search_command[2]));
-          }
-          LOG_DEBUG("Sending ", config_.control_horizon(),
-                    " search commands "
-                    "to the controller");
-          auto result = TrajSearchResult();
-          result.isTrajFound = true;
-          result.trajCost = 0.0;
-          result.trajectory = Trajectory2D(velocities, path);
-          return result;
-        }
-      } else {
-        if (recorded_wait_time_ < config_.target_wait_timeout()) {
-          auto timeout = config_.target_wait_timeout() - recorded_wait_time_;
-          LOG_DEBUG("Target lost, waiting to get tracked target again ... "
-                    "timeout in ",
-                    timeout, " seconds");
-          // Do nothing and wait
-          TrajectoryVelocities2D velocities(config_.control_horizon());
-          TrajectoryPath path(config_.control_horizon());
-          path.add(0, 0.0, 0.0);
-          for (int i = 0; i < config_.control_horizon() - 1; i++) {
-            recorded_wait_time_ += config_.control_time_step();
-            velocities.add(i, Velocity2D(0.0, 0.0, 0.0));
-            path.add(i + 1, 0.0, 0.0);
-          }
-          auto result = TrajSearchResult();
-          result.isTrajFound = true;
-          result.trajCost = 0.0;
-          result.trajectory = Trajectory2D(velocities, path);
-          return result;
-        }
+      if (auto r = tryHoldAtTarget(*tracked_pose)) {
+        return *r;
       }
-      // Target is lost and not recovered from search or wait
-      LOG_WARNING("Target is lost and not recovered from search or wait");
-      recorded_wait_time_ = 0.0;
-      recorded_search_time_ = 0.0;
-      // Empty the search commands queue
-      while (!search_commands_queue_.empty()) {
-        search_commands_queue_.pop();
+      // Filter the target out of the sensor data once; both the
+      // reference-collision check and the DWA fallback consume it.
+      const T filtered_sensor =
+          filterTargetFromSensorData<T>(sensor_points, *tracked_pose);
+      if (auto r = tryFollowReference<T>(*tracked_pose, filtered_sensor)) {
+        return *r;
       }
-      return TrajSearchResult();
+      // Trimmed reference exists but collides (or trim degenerated) —
+      // run DWA against the path tryFollowReference just published.
+      return this->computeVelocityCommandsSet(current_vel, filtered_sensor);
     }
+    if (auto r = tryDWAWithLeftoverPath<T>(current_vel, sensor_points)) {
+      return *r;
+    }
+    if (auto r = trySearch()) {
+      return *r;
+    }
+    if (auto r = tryWait()) {
+      return *r;
+    }
+    return giveUp();
   };
 };
 
