@@ -462,29 +462,33 @@ VisionDWA::tryFollowReference(const TrackedPose2D &target,
           : static_cast<float>(config_.dist_tolerance());
   auto trimmed_opt = trimReferenceToStandoff(ref_traj, target, standoff);
 
-  // Publish whichever path we have (trimmed if usable, else the full
-  // reference) as a single segment so the DWA fallback / search has
-  // something to plan against and won't replan against a tiny stub.
-  const Trajectory2D &to_publish = trimmed_opt ? *trimmed_opt : ref_traj;
-  auto pub_path = Path::Path(to_publish.path.x, to_publish.path.y,
-                             to_publish.path.z);
-  path_segment_length_ = pub_path.totalPathLength();
-  max_segment_size_ = pub_path.getSize();
-  this->setCurrentPath(pub_path, true);
+  // If trimmed_opt is null do not set a reference to DWA. trimmed_opt is null when the reference should be trimmed but the resulting size is less than 2 points which is not enough points for a DWA reference.
+  if(trimmed_opt) {
+    auto pub_path =
+        Path::Path(trimmed_opt->path.x, trimmed_opt->path.y, trimmed_opt->path.z);
+    path_segment_length_ = pub_path.totalPathLength();
+    max_segment_size_ = pub_path.getSize();
+    this->setCurrentPath(pub_path, true);
+    const bool collides = trajSampler->checkStatesFeasibility(
+        trajectoryToCollisionStates(*trimmed_opt), filtered_sensor);
+    if (collides) {
+      return std::nullopt;
+    }else{
+      TrajSearchResult result;
+      result.isTrajFound = true;
+      result.trajCost = 0.0f;
+      result.trajectory = *trimmed_opt;
+      return result;
+    }
+  }else{
+    // If the path trimmed to standoff is too short, we skip setting the reference and just return the untrimmed reference as the result. This allows VisionDWA to try to follow the reference as closely as possible even when the target is very close, instead of giving up immediately due to the trim failure.
+    TrajSearchResult result;
+    result.isTrajFound = true;
+    result.trajCost = 0.0f;
+    result.trajectory = ref_traj;
+    return result;
+  }
 
-  if (!trimmed_opt) {
-    return std::nullopt;
-  }
-  const bool collides = trajSampler->checkStatesFeasibility(
-      trajectoryToCollisionStates(*trimmed_opt), filtered_sensor);
-  if (collides) {
-    return std::nullopt;
-  }
-  TrajSearchResult result;
-  result.isTrajFound = true;
-  result.trajCost = 0.0f;
-  result.trajectory = *trimmed_opt;
-  return result;
 }
 
 // Explicit instantiations for the two sensor types the controller
