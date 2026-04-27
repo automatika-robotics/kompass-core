@@ -65,7 +65,7 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose, co
     // World frame: target bearing must be measured from the robot's body,
     // not from the world origin.
     distance = tracking_pose.distance(currentState.x, currentState.y, 0.0) -
-               trajSampler->getRobotRadius();
+               trajSampler->getRobotRadius() - currentTargetRadius_;
     psi = Angle::normalizeToMinusPiPlusPi(
         std::atan2(tracking_pose.y() - currentState.y,
                    tracking_pose.x() - currentState.x) -
