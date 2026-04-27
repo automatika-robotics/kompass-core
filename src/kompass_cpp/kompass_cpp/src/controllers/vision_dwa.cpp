@@ -73,8 +73,8 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose, co
     gamma =
         Angle::normalizeToMinusPiPlusPi(tracking_pose.yaw() - currentState.yaw);
   } else {
-    distance =
-        tracking_pose.distance(0.0, 0.0, 0.0) - trajSampler->getRobotRadius();
+    distance = tracking_pose.distance(0.0, 0.0, 0.0) -
+               trajSampler->getRobotRadius() - currentTargetRadius_;
     psi = Angle::normalizeToMinusPiPlusPi(
         std::atan2(tracking_pose.y(), tracking_pose.x()));
   }
