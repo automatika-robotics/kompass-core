@@ -422,14 +422,17 @@ private:
       recorded_wait_time_ = 0.0;
       recorded_search_time_ = 0.0;
 
-      if (auto r = tryHoldAtTarget(*tracked_pose)) {
-        return *r;
-      }
+      // TODO: decide if the forced stop should be kept or not
+      // if (auto r = tryHoldAtTarget(*tracked_pose)) {
+      //   LOG_WARNING("Target is at required distance, In hold state.");
+      //   return *r;
+      // }
       // Filter the target out of the sensor data once; both the
       // reference-collision check and the DWA fallback consume it.
       const T filtered_sensor =
           filterTargetFromSensorData<T>(sensor_points, *tracked_pose);
       if (auto r = tryFollowReference<T>(*tracked_pose, filtered_sensor)) {
+        LOG_DEBUG("Following reference trajectory.");
         return *r;
       }
       // Trimmed reference exists but collides (or trim degenerated) —
@@ -437,12 +440,15 @@ private:
       return this->computeVelocityCommandsSet(current_vel, filtered_sensor);
     }
     if (auto r = tryDWAWithLeftoverPath<T>(current_vel, sensor_points)) {
-      return *r;
-    }
-    if (auto r = trySearch()) {
+      LOG_DEBUG("Using DWA with leftover path.");
       return *r;
     }
     if (auto r = tryWait()) {
+      LOG_DEBUG("Waiting for target.");
+      return *r;
+    }
+    if (auto r = trySearch()) {
+      LOG_DEBUG("Searching for target.");
       return *r;
     }
     return giveUp();

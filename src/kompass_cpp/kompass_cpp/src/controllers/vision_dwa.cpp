@@ -82,7 +82,8 @@ Velocity2D VisionDWA::getPureTrackingCtrl(const TrackedPose2D &tracking_pose, co
   constexpr float kMinDistance = 0.001f;
   distance = std::max(distance, kMinDistance);
 
-  float distance_error = config_.target_distance() - distance;
+  float distance_error =
+      config_.target_distance() - distance;
   // target_orientation is the bearing-to-target to maintain in the robot
   // frame; gamma (target heading relative to robot) belongs in the motion
   // feedforward only, not in the angular error.
@@ -254,15 +255,18 @@ std::optional<TrajSearchResult> VisionDWA::trySearch() {
   if (!config_.enable_search()) {
     return std::nullopt;
   }
-  if (recorded_search_time_ >= config_.target_search_timeout()) {
-    return std::nullopt;
-  }
+  // Reset recorded wait time so that if we lose the target again while in search, we don't immediately give up but get a fresh wait timeout to try to reacquire it.
+  recorded_wait_time_ = 0.0;
   if (search_commands_queue_.empty()) {
     LOG_DEBUG("Search commands queue is empty, generating new search "
               "commands");
     const int last_direction =
         (latest_velocity_command_.omega() < 0) ? -1 : 1;
     getFindTargetCmds(last_direction);
+  }
+  if(recorded_search_time_ >= config_.target_search_timeout()) {
+    LOG_DEBUG("Search timeout reached. Giving up.");
+    return std::nullopt;
   }
   LOG_DEBUG("Number of search commands remaining: ",
             search_commands_queue_.size(),
@@ -272,7 +276,15 @@ std::optional<TrajSearchResult> VisionDWA::trySearch() {
 
 std::optional<TrajSearchResult> VisionDWA::tryWait() {
   if (config_.enable_search()) {
-    return std::nullopt; // search mode handles target-lost recovery
+    // wait for one control step to avoid going into search immediately after losing the target, which can cause the robot to move in an undesired way if the target is only lost for a very short time (e.g., due to a transient occlusion or detection miss)
+    LOG_DEBUG("Search is enabled, waiting for one control step before starting search");
+    if (recorded_wait_time_ >= config_.control_time_step()) {
+      LOG_DEBUG("Waited for one control step, now falling back to search");
+      return std::nullopt; // search mode handles target-lost recovery
+    }
+    recorded_wait_time_ +=
+        (config_.control_horizon() - 1) * config_.control_time_step();
+    return makeHoldResult();
   }
   if (recorded_wait_time_ >= config_.target_wait_timeout()) {
     return std::nullopt;
