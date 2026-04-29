@@ -346,8 +346,13 @@ private:
   tryDWAWithLeftoverPath(const Velocity2D &current_vel,
                          const T &sensor_points) {
     if (this->hasPath() && !isGoalReached() &&
-        this->currentPath->getSize() > 1) {
-      return this->computeVelocityCommandsSet(current_vel, sensor_points);
+        this->currentPath->getSize() > 2) {
+      auto result = this->computeVelocityCommandsSet(current_vel, sensor_points);
+      if (result.isTrajFound) {
+        // NOTE: If the reference path sent to DWA is too short, the DWA search and optimization can fail.
+        // In case of failure return null to fallback to wait/search instead of giving up immediately.
+        return result;
+      }
     }
     return std::nullopt;
   }
