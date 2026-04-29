@@ -275,6 +275,7 @@ std::optional<TrajSearchResult> VisionDWA::trySearch() {
 }
 
 std::optional<TrajSearchResult> VisionDWA::tryWait() {
+  recorded_search_time_ = 0.0;
   if (config_.enable_search()) {
     // wait for one control step to avoid going into search immediately after losing the target, which can cause the robot to move in an undesired way if the target is only lost for a very short time (e.g., due to a transient occlusion or detection miss)
     LOG_DEBUG("Search is enabled, waiting for one control step before starting search");
@@ -474,7 +475,9 @@ VisionDWA::tryFollowReference(const TrackedPose2D &target,
           : static_cast<float>(config_.dist_tolerance());
   auto trimmed_opt = trimReferenceToStandoff(ref_traj, target, standoff);
 
-  // If trimmed_opt is null do not set a reference to DWA. trimmed_opt is null when the reference should be trimmed but the resulting size is less than 2 points which is not enough points for a DWA reference.
+  // If trimmed_opt is null do not set a reference to DWA.
+  // trimmed_opt is null if the resulting size is less than 2 points which is not
+  // enough points for a DWA reference.
   if(trimmed_opt) {
     auto pub_path =
         Path::Path(trimmed_opt->path.x, trimmed_opt->path.y, trimmed_opt->path.z);
@@ -493,7 +496,8 @@ VisionDWA::tryFollowReference(const TrackedPose2D &target,
       return result;
     }
   }else{
-    // If the path trimmed to standoff is too short, we skip setting the reference and just return the untrimmed reference as the result. This allows VisionDWA to try to follow the reference as closely as possible even when the target is very close, instead of giving up immediately due to the trim failure.
+    // If the path trimmed to standoff is too short, we skip setting the reference and just return the untrimmed reference as the result.
+    // This allows VisionDWA to try to follow the reference as closely as possible even when the target is very close, instead of giving up immediately due to the trim failure.
     TrajSearchResult result;
     result.isTrajFound = true;
     result.trajCost = 0.0f;
