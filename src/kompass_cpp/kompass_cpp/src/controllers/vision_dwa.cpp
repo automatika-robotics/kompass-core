@@ -180,7 +180,7 @@ bool VisionDWA::setInitialTracking(
     detector_->updateBoxes(aligned_depth_image, {target_box_2d});
   }
   auto boxes_3d = detector_->get3dDetections();
-  if (!boxes_3d) {
+  if (!boxes_3d || boxes_3d->empty()) {
     LOG_DEBUG("Failed to get 3D box from 2D target box");
     return false;
   }
