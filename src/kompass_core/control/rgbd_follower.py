@@ -355,7 +355,7 @@ class VisionRGBDFollower(ControllerTemplate):
             return self._planner.set_initial_tracking(
                 aligned_depth_image,
                 target_box,
-                current_state.yaw,
+                current_state.yaw if current_state else 0.0,
             )
 
         except Exception as e:
@@ -421,7 +421,7 @@ class VisionRGBDFollower(ControllerTemplate):
                     pose_y_img,
                     aligned_depth_image,
                     detected_boxes,
-                    current_state.yaw,
+                    current_state.yaw if current_state else 0.0,
                 )
             logging.error(
                 "Could not set initial tracking state: No detections are provided"
