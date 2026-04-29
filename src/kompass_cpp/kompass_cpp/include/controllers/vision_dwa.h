@@ -435,9 +435,6 @@ private:
         LOG_DEBUG("Following reference trajectory.");
         return *r;
       }
-      // Trimmed reference exists but collides (or trim degenerated) —
-      // run DWA against the path tryFollowReference just published.
-      return this->computeVelocityCommandsSet(current_vel, filtered_sensor);
     }
     if (auto r = tryDWAWithLeftoverPath<T>(current_vel, sensor_points)) {
       LOG_DEBUG("Using DWA with leftover path.");
