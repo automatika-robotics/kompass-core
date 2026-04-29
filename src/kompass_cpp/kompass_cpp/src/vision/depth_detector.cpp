@@ -85,26 +85,11 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
   Bbox3D box3d(box2d);
   Eigen::Vector2i x_limits = box2d.getXLimits();
   Eigen::Vector2i y_limits = box2d.getYLimits();
-  // Eigen MatrixX is not bounds-checked in release; clamp to image extents so
-  // an oversized or misaligned bbox can't read past the depth image buffer.
-  const int img_rows = static_cast<int>(alignedDepthImg_.rows());
-  const int img_cols = static_cast<int>(alignedDepthImg_.cols());
-  const int row_lo = std::max(0, y_limits(0));
-  const int row_hi = std::min(img_rows - 1, y_limits(1));
-  const int col_lo = std::max(0, x_limits(0));
-  const int col_hi = std::min(img_cols - 1, x_limits(1));
-  if (row_hi < row_lo || col_hi < col_lo) {
-    LOG_WARNING("2D bounding box at ", box2d.top_corner.x(), ", ",
-                box2d.top_corner.y(),
-                " is fully outside the depth image (", img_cols, "x", img_rows,
-                ")");
-    return std::nullopt;
-  }
   float depth_meters;
   // All depth values in the 2D box within the range of interest
   std::vector<float> depth_values;
-  for (int row_idx = row_lo; row_idx <= row_hi; ++row_idx) {
-    for (int col_idx = col_lo; col_idx <= col_hi; ++col_idx) {
+  for (int row_idx = y_limits(0); row_idx <= y_limits(1); ++row_idx) {
+    for (int col_idx = x_limits(0); col_idx <= x_limits(1); ++col_idx) {
       depth_meters =
           alignedDepthImg_(row_idx, col_idx) * depthConversionFactor_;
       if (depth_meters <= maxDepth_ && depth_meters >= minDepth_) {
