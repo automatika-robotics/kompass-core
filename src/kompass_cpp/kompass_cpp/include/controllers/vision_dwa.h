@@ -440,10 +440,15 @@ private:
         LOG_DEBUG("Following reference trajectory.");
         return *r;
       }
-    }
-    if (auto r = tryDWAWithLeftoverPath<T>(current_vel, sensor_points)) {
-      LOG_DEBUG("Using DWA with leftover path.");
-      return *r;
+      if (auto r = tryDWAWithLeftoverPath<T>(current_vel, filtered_sensor)) {
+        LOG_DEBUG("Using DWA with filtered path.");
+        return *r;
+      }
+    }else{
+      if (auto r = tryDWAWithLeftoverPath<T>(current_vel, sensor_points)) {
+        LOG_DEBUG("Using DWA with leftover path.");
+        return *r;
+      }
     }
     if (auto r = tryWait()) {
       LOG_DEBUG("Waiting for target.");
