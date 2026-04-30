@@ -58,7 +58,7 @@ void DepthDetector::updateBoxes(
   }
   alignedDepthImg_ = aligned_depth_img;
   boxes_ = std::make_unique<std::vector<Bbox3D>>();
-  for (const auto& box2d : detections) {
+  for (const auto &box2d : detections) {
     auto converted_box = convert2Dboxto3Dbox(box2d);
     if (converted_box) {
       boxes_->push_back(converted_box.value());
@@ -116,32 +116,32 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
     }
   }
 
-  // Convert from 2D box center in the pixel frame to the 3D box center in the
-  // camera frame
+  // NOTE: Pinhole projection gives coordinates in the optical frame
+  // (x_opt: right, y_opt: down, z_opt: forward). Convert to the body-aligned
+  // camera frame (x: forward, y: left, z: up) so that camera_in_body_tf_ can be
+  // expressed as the physical sensor pose in the body frame.
+  const float x_opt =
+      (box2d.top_corner.x() + 0.5f * box2d.size.x() - cx_) * medianDepth / fx_;
+  const float y_opt =
+      (box2d.top_corner.y() + 0.5f * box2d.size.y() - cy_) * medianDepth / fy_;
+  const float z_opt = medianDepth;
+
   Eigen::Vector3f center_in_camera_frame, size_camera_frame;
+  center_in_camera_frame(0) = z_opt;
+  center_in_camera_frame(1) = -x_opt;
+  center_in_camera_frame(2) = -y_opt;
 
-  center_in_camera_frame(0) =
-      (box2d.top_corner.x() + 0.5 * box2d.size.x() - cx_) * medianDepth /
-      this->fx_;
-  center_in_camera_frame(1) =
-      (box2d.top_corner.y() + 0.5 * box2d.size.y() - cy_) * medianDepth /
-      this->fy_;
-  center_in_camera_frame(2) = medianDepth;
-
-  LOG_DEBUG("Median depth = ", medianDepth, ", min=", minimum_d,
-            ", max=", maximum_d);
-
-  // Size in meters
-  size_camera_frame(0) = box2d.size.x() * medianDepth / this->fx_;
-  size_camera_frame(1) = box2d.size.y() * medianDepth / this->fy_;
-  size_camera_frame(2) = maximum_d - minimum_d;
+  // Size in meters, also expressed in the body-aligned camera frame
+  const float size_x_opt = box2d.size.x() * medianDepth / fx_;
+  const float size_y_opt = box2d.size.y() * medianDepth / fy_;
+  size_camera_frame(0) = maximum_d - minimum_d;
+  size_camera_frame(1) = size_x_opt;
+  size_camera_frame(2) = size_y_opt;
 
   Eigen::Isometry3f camera_in_world_tf = body_in_world_tf_ * camera_in_body_tf_;
   // Register center in the world frame
   box3d.center = camera_in_world_tf * center_in_camera_frame;
 
-  LOG_DEBUG("Got detected box in 3D coordinates at :", box3d.center.x(), ", ",
-            box3d.center.y(), ", ", box3d.center.z());
 
   // Transform size from camera frame to world frame
   Eigen::Matrix3f abs_rotation = camera_in_world_tf.linear().cwiseAbs();
@@ -157,17 +157,13 @@ DepthDetector::convertPOIto3Dbox(const PointsOfInterest &poi) {
 }
 
 float DepthDetector::getMedian(const std::vector<float> &values) {
-  float median;
   auto sorted_value = values;
   std::sort(sorted_value.begin(), sorted_value.end());
-  // number of items
-  auto num = sorted_value.size() - 1;
-  if (num % 2 == 0) {
-    median = (sorted_value[num / 2] + sorted_value[num / 2 + 1]) / 2;
-  } else {
-    median = sorted_value[(num + 1) / 2];
+  const auto n = sorted_value.size();
+  if (n % 2 == 0) {
+    return 0.5f * (sorted_value[n / 2 - 1] + sorted_value[n / 2]);
   }
-  return median;
+  return sorted_value[n / 2];
 }
 
 void DepthDetector::calculateMAD(const std::vector<float> &depthValues,

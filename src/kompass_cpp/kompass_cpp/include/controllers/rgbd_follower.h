@@ -1,29 +1,28 @@
 #pragma once
 
+#include "controllers/follower.h"
 #include "controllers/rgb_follower.h"
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
-#include "datatypes/path.h"
 #include "datatypes/tracking.h"
 #include "datatypes/trajectory.h"
-#include "dwa.h"
+#include "utils/collision_check.h"
 #include "utils/logger.h"
 #include "vision/depth_detector.h"
 #include "vision/tracker.h"
 #include <cmath>
 #include <memory>
 #include <optional>
-#include <queue>
 #include <vector>
 
 namespace Kompass {
 namespace Control {
 
-class VisionDWA : public DWA, public RGBFollower {
+class RGBDFollower : public Follower, public RGBFollower {
 public:
-  class VisionDWAConfig : public RGBFollower::RGBFollowerConfig {
+  class RGBDFollowerConfig : public RGBFollower::RGBFollowerConfig {
   public:
-    VisionDWAConfig() : RGBFollower::RGBFollowerConfig() {
+    RGBDFollowerConfig() : RGBFollower::RGBFollowerConfig() {
       addParameter(
           "control_horizon",
           Parameter(2, 1, 1000, "Number of steps for applying the control"));
@@ -87,27 +86,25 @@ public:
     }
   };
 
-  VisionDWA(const ControlType &robotCtrlType,
-            const ControlLimitsParams &ctrlLimits, const int maxLinearSamples,
-            const int maxAngularSamples,
-            const CollisionChecker::ShapeType &robotShapeType,
-            const std::vector<float> &robotDimensions,
-            const Eigen::Vector3f &proximity_sensor_position_body,
-            const Eigen::Vector4f &proximity_sensor_rotation_body,
-            const Eigen::Vector3f &vision_sensor_position_body,
-            const Eigen::Vector4f &vision_sensor_rotation_body,
-            const double octreeRes,
-            const CostEvaluator::TrajectoryCostsWeights &costWeights,
-            const int maxNumThreads = 1,
-            const VisionDWAConfig &config = VisionDWAConfig());
+  RGBDFollower(const ControlType &robotCtrlType,
+               const ControlLimitsParams &ctrlLimits,
+               const CollisionChecker::ShapeType &robotShapeType,
+               const std::vector<float> &robotDimensions,
+               const Eigen::Vector3f &vision_sensor_position_body,
+               const Eigen::Vector4f &vision_sensor_rotation_body,
+               const RGBDFollowerConfig &config = RGBDFollowerConfig());
 
   // Default Destructor
-  ~VisionDWA() = default;
+  ~RGBDFollower() = default;
 
   void setCameraIntrinsics(const float focal_length_x,
                            const float focal_length_y,
                            const float principal_point_x,
                            const float principal_point_y);
+
+  static double
+  getRobotRadius(const CollisionChecker::ShapeType robot_shape_type,
+                 const std::vector<float> &robot_dimensions);
 
   /**
    * @brief Get the Tracking Control Result based on object tracking and DWA
@@ -119,10 +116,9 @@ public:
    * @param sensor_points
    * @return Control::TrajSearchResult
    */
-  template <typename T>
   Control::TrajSearchResult
   getTrackingCtrl(const std::vector<Bbox3D> &detected_boxes,
-                  const Velocity2D &current_vel, const T &sensor_points) {
+                  const Velocity2D &current_vel) {
     std::optional<TrackedPose2D> tracked_pose = std::nullopt;
     if (!detected_boxes.empty()) {
       if (tracker_->trackerInitialized()) {
@@ -133,30 +129,30 @@ public:
               "Tracker failed to update target with the detected boxes");
         } else {
           tracked_pose = tracker_->getFilteredTrackedPose2D();
+          refreshTargetGeometry();
         }
       } else {
         throw std::runtime_error(
             "Tracker is not initialized with an initial tracking target. Call "
-            "'VisionDWA::setInitialTracking' first");
+            "'RGBDFollower::setInitialTracking' first");
       }
     }
-    return this->getTrackingCtrl<T>(tracked_pose, current_vel, sensor_points);
+    return this->getTrackingCtrl(tracked_pose, current_vel);
   };
 
-  template <typename T>
   Control::TrajSearchResult
   getTrackingCtrl(const Eigen::MatrixX<unsigned short> &aligned_depth_img,
                   const std::vector<Bbox2D> &detected_boxes_2d,
-                  const Velocity2D &current_vel, const T &sensor_points) {
+                  const Velocity2D &current_vel) {
     if (!detector_) {
       throw std::runtime_error(
           "DepthDetector is not initialized with the camera intrinsics. Call "
-          "'VisionDWA::setCameraIntrinsics' first");
+          "'RGBDFollower::setCameraIntrinsics' first");
     }
     if (!tracker_->trackerInitialized()) {
       throw std::runtime_error(
           "Tracker is not initialized with an initial tracking target. Call "
-          "'VisionDWA::setInitialTracking' first");
+          "'RGBDFollower::setInitialTracking' first");
     }
     std::optional<TrackedPose2D> tracked_pose = std::nullopt;
     if (!detected_boxes_2d.empty()) {
@@ -176,12 +172,13 @@ public:
               "Tracker failed to update target with the detected boxes");
         } else {
           tracked_pose = tracker_->getFilteredTrackedPose2D();
+          refreshTargetGeometry();
         }
       } else {
         LOG_WARNING("Detector failed to find 3D boxes");
       }
     }
-    return this->getTrackingCtrl<T>(tracked_pose, current_vel, sensor_points);
+    return this->getTrackingCtrl(tracked_pose, current_vel);
   };
 
   /**
@@ -222,154 +219,86 @@ public:
   }
 
 private:
-  VisionDWAConfig config_;
+  RGBDFollowerConfig config_;
   std::unique_ptr<FeatureBasedBboxTracker> tracker_;
   std::unique_ptr<DepthDetector> detector_;
   Eigen::Isometry3f vision_sensor_tf_;
   int track_velocity_;
+  double robot_radius_;
 
-  /**
-   * @brief Get the Tracking Reference Trajectory Segment
-   *
-   * @tparam T
-   * @param tracking_pose
-   * @return std::tuple<Trajectory2D, bool>
-   */
+  float currentTargetRadius_ = 0.0f;
+
+  // Pull the latest target geometry off the tracker. No-op if the tracker
+  // has nothing to report.
+  void refreshTargetGeometry();
+
+  // Build a control-horizon-long stationary trajectory (zero velocities,
+  // path pinned at origin). Pure: no side effects on timers or queues.
+  TrajSearchResult makeHoldResult() const;
+
+  // Build a result by popping commands off `search_commands_queue_`
+  TrajSearchResult popSearchStepResult();
+
+  // ---- Pipeline stages used by the inner getTrackingCtrl ----
+
+  // Search: emit queued search commands when search is enabled and the
+  // search timeout has not been reached.
+  std::optional<TrajSearchResult> trySearch();
+
+  // Wait: hold position when search is disabled and the wait timeout has
+  // not been reached.
+  std::optional<TrajSearchResult> tryWait();
+
+  // GiveUp: target is gone and recovery has been exhausted.
+  TrajSearchResult giveUp();
+
+  // Build a reference trajectory of `prediction_horizon()` steps that
+  // converges from the current robot state toward the tracked target,
+  // using the pure-pursuit law in `getPureTrackingCtrl`.
   Trajectory2D getTrackingReferenceSegment(const TrackedPose2D &tracking_pose);
 
-  Trajectory2D
-  getTrackingReferenceSegmentDiffDrive(const TrackedPose2D &tracking_pose);
-
+  // In local-coordinate mode, advance the target's robot-relative pose by
+  // one step of the robot's own motion (the "target gets pushed back" by
+  // the robot's forward step).
   TrackedPose2D updateLocalTarget(const TrackedPose2D &current_target,
                                   const Velocity2D &robot_cmd, double dt);
 
-  /**
-   * @brief Get the Pure Tracking Control Command
-   *
-   * @param tracking_pose
-   * @return Velocity2D
-   */
+  // Pure-pursuit control law toward the tracked target.
   Velocity2D getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
                                  const bool update_global_error = false);
 
-  /**
-   * @brief Get the Tracking Control Result based on object tracking and DWA
-   * sampling by direct following of the tracked target in local frame
-   *
-   * @tparam T
-   * @param tracking_pose
-   * @param current_vel
-   * @param sensor_points
-   * @return Control::TrajSearchResult
-   */
-  template <typename T>
+  // Inner control-step dispatch
   Control::TrajSearchResult
   getTrackingCtrl(const std::optional<TrackedPose2D> &tracked_pose,
-                  const Velocity2D &current_vel, const T &sensor_points) {
-    if (tracked_pose.has_value()) {
-      // Reset recorded wait and search times
+                  const Velocity2D &current_vel) {
+    // Pipeline-of-stages dispatch: each stage returns nullopt when it
+    // doesn't apply, allowing the next stage to take a turn. The first
+    // stage that returns a result wins.
+    LOG_DEBUG("Last velocity command: ", latest_velocity_command_.vx(), ", ", latest_velocity_command_.omega());
+    if (tracked_pose) {
+      // Target is back in view — clear any pending search/wait state.
       recorded_wait_time_ = 0.0;
       recorded_search_time_ = 0.0;
-      LOG_DEBUG("Tracking target at position: ", tracked_pose->x(), ", ",
-                tracked_pose->y(), " with velocity: ", tracked_pose->v(), ", ",
-                tracked_pose->omega());
-      LOG_DEBUG("Robot current position: ", currentState.x, ", ",
-                currentState.y);
-      // Generate reference to target
-      Trajectory2D ref_traj;
+      LOG_DEBUG("Following target");
 
-      ref_traj = getTrackingReferenceSegment(tracked_pose.value());
-
-
+      const Trajectory2D ref_traj =
+          getTrackingReferenceSegment(tracked_pose.value());
       TrajSearchResult result;
       result.isTrajFound = true;
-      result.trajCost = 0.0;
+      result.trajCost = 0.0f;
       result.trajectory = ref_traj;
-      latest_velocity_command_ = ref_traj.velocities.getFront();
-      // Update reference to use in case goal is lost
-      auto referenceToTarget =
-          Path::Path(ref_traj.path.x, ref_traj.path.y, ref_traj.path.z);
-      this->setCurrentPath(referenceToTarget, false);
+      latest_velocity_command_ = result.trajectory.velocities.getFront();
       return result;
     }
-    if (this->hasPath() and !isGoalReached() and
-        this->currentPath->getSize() > 1) {
-      // The tracking sample has collisions -> use DWA-like sampling and control
-      return this->computeVelocityCommandsSet(current_vel, sensor_points);
-    } else {
-      // Start Search and/or Wait if enabled
-      if (config_.enable_search()) {
-        if (recorded_search_time_ < config_.target_search_timeout()) {
-          if (search_commands_queue_.empty()) {
-            LOG_DEBUG("Search commands queue is empty, generating new search "
-                      "commands");
-            int last_direction = 1;
-            if (latest_velocity_command_.omega() < 0) {
-              last_direction = -1;
-            }
-            getFindTargetCmds(last_direction);
-          }
-          LOG_DEBUG("Number of search commands remaining: ",
-                    search_commands_queue_.size(),
-                    "recorded search time: ", recorded_search_time_);
-          // Create search command
-          TrajectoryVelocities2D velocities(config_.control_horizon());
-          TrajectoryPath path(config_.control_horizon());
-          path.add(0, 0.0, 0.0);
-          Eigen::Vector3d search_command;
-          for (int i = 0; i < config_.control_horizon() - 1; i++) {
-            if (search_commands_queue_.empty()) {
-              LOG_DEBUG("Search commands queue is empty. Ending Search ");
-              return TrajSearchResult();
-            }
-            search_command = search_commands_queue_.front();
-            search_commands_queue_.pop();
-            recorded_search_time_ += config_.control_time_step();
-            path.add(i + 1, 0.0, 0.0);
-            velocities.add(i, Velocity2D(search_command[0], search_command[1],
-                                         search_command[2]));
-          }
-          LOG_DEBUG("Sending ", config_.control_horizon(),
-                    " search commands "
-                    "to the controller");
-          auto result = TrajSearchResult();
-          result.isTrajFound = true;
-          result.trajCost = 0.0;
-          result.trajectory = Trajectory2D(velocities, path);
-          return result;
-        }
-      } else {
-        if (recorded_wait_time_ < config_.target_wait_timeout()) {
-          auto timeout = config_.target_wait_timeout() - recorded_wait_time_;
-          LOG_DEBUG("Target lost, waiting to get tracked target again ... "
-                    "timeout in ",
-                    timeout, " seconds");
-          // Do nothing and wait
-          TrajectoryVelocities2D velocities(config_.control_horizon());
-          TrajectoryPath path(config_.control_horizon());
-          path.add(0, 0.0, 0.0);
-          for (int i = 0; i < config_.control_horizon() - 1; i++) {
-            recorded_wait_time_ += config_.control_time_step();
-            velocities.add(i, Velocity2D(0.0, 0.0, 0.0));
-            path.add(i + 1, 0.0, 0.0);
-          }
-          auto result = TrajSearchResult();
-          result.isTrajFound = true;
-          result.trajCost = 0.0;
-          result.trajectory = Trajectory2D(velocities, path);
-          return result;
-        }
-      }
-      // Target is lost and not recovered from search or wait
-      LOG_WARNING("Target is lost and not recovered from search or wait");
-      recorded_wait_time_ = 0.0;
-      recorded_search_time_ = 0.0;
-      // Empty the search commands queue
-      while (!search_commands_queue_.empty()) {
-        search_commands_queue_.pop();
-      }
-      return TrajSearchResult();
+    if (auto r = tryWait()) {
+      LOG_DEBUG("Waiting for target.");
+      return *r;
     }
+    if (auto r = trySearch()) {
+      LOG_DEBUG("Searching for target.");
+      return *r;
+    }
+    return giveUp();
   };
 };
 

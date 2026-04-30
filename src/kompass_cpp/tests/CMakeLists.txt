@@ -54,10 +54,15 @@ add_executable(critical_zone_test critical_zone_test.cpp)
 target_link_libraries(critical_zone_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework)
 add_test(critical_zone_tests critical_zone_test)
 
-# Vision DWA test
-add_executable(vision_dwa_test vision_dwa_test.cpp)
-target_link_libraries(vision_dwa_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework ${OpenCV_LIBS})
-add_test(vision_tests vision_dwa_test)
+# Vision Follower test
+add_executable(vision_follower_test vision_follower_test.cpp)
+target_link_libraries(vision_follower_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework ${OpenCV_LIBS})
+add_test(vision_tests vision_follower_test)
+
+# Vision Follower fixture-based parametrized test (mirrors test_vision_follower.py)
+add_executable(vision_follower_fixture_test vision_follower_fixture_test.cpp)
+target_link_libraries(vision_follower_fixture_test PRIVATE ${MODULE_NAME} Boost::unit_test_framework nlohmann_json::nlohmann_json ${OpenCV_LIBS})
+add_test(vision_tests vision_follower_fixture_test)
 
 # Vision Tracking test
 add_executable(vision_tracking_test vision_tracking_test.cpp)

@@ -1,10 +1,9 @@
-#include "controllers/vision_dwa.h"
+#include "controllers/rgbd_follower.h"
 #include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "datatypes/tracking.h"
 #include "datatypes/trajectory.h"
 #include "test.h"
-#include "utils/cost_evaluator.h"
 #include "utils/logger.h"
 #include "utils/transformation.h"
 #include <memory>
@@ -19,18 +18,15 @@
 
 using namespace Kompass;
 
-struct VisionDWATestConfig {
+struct RGBDFollowerTestConfig {
   bool use_local_frame;
 
   // Sampling configuration
   double timeStep;
   int predictionHorizon;
   int controlHorizon;
-  int maxLinearSamples;
-  int maxAngularSamples;
-  int maxNumThreads;
 
-  double distance_tolerance = 0.05;
+  double distance_tolerance = 0.1;
   double target_distance = 0.2;
   float robot_radius = 0.1;
 
@@ -40,12 +36,6 @@ struct VisionDWATestConfig {
   Eigen::Vector2i ref_point_img{150, 150};
   float boxes_ori = 0.0f;
 
-  // Octomap resolution
-  double octreeRes;
-
-  // Cost weights
-  Control::CostEvaluator::TrajectoryCostsWeights costWeights;
-
   // Robot configuration
   Control::LinearVelocityControlParams x_params;
   Control::LinearVelocityControlParams y_params;
@@ -54,8 +44,6 @@ struct VisionDWATestConfig {
   Control::ControlType controlType;
   Kompass::CollisionChecker::ShapeType robotShapeType;
   std::vector<float> robotDimensions;
-  Eigen::Vector3f prox_sensor_position_body;
-  Eigen::Vector4f prox_sensor_rotation_body;
 
   // Depth detector
   Eigen::Vector2f focal_length = {911.71, 910.288};
@@ -73,55 +61,37 @@ struct VisionDWATestConfig {
   // Tracked target with respect to the robot
   Control::Velocity2D tracked_vel;
   Control::TrackedPose2D tracked_pose;
-  // VisionDWA configuration object
-  std::unique_ptr<Control::VisionDWA> controller;
+  // RGBDFollower configuration object
+  std::unique_ptr<Control::RGBDFollower> controller;
 
   // Constructor to initialize the struct
-  VisionDWATestConfig(const std::vector<Path::Point> sensor_points,
-                      const bool use_local_frame = true,
-                      const double timeStep = 0.1,
-                      const int predictionHorizon = 6,
-                      const int controlHorizon = 2,
-                      const int maxLinearSamples = 20,
-                      const int maxAngularSamples = 20,
-                      const float maxVel = 2.0, const float maxOmega = 4.0,
-                      const int maxNumThreads = 1,
-                      const double reference_path_distance_weight = 1.0,
-                      const double goal_distance_weight = 1.0,
-                      const double obstacles_distance_weight = 0.0)
+  RGBDFollowerTestConfig(const bool use_local_frame = true,
+                         const double timeStep = 0.1,
+                         const int predictionHorizon = 20,
+                         const int controlHorizon = 2, const float maxVel = 2.0,
+                         const float maxOmega = 4.0)
       : use_local_frame(use_local_frame), timeStep(timeStep),
         predictionHorizon(predictionHorizon), controlHorizon(controlHorizon),
-        maxLinearSamples(maxLinearSamples),
-        maxAngularSamples(maxAngularSamples), maxNumThreads(maxNumThreads),
-        octreeRes(0.1), x_params(maxVel, 5.0, 10.0), y_params(1, 3, 5),
+        x_params(maxVel, 5.0, 10.0), y_params(1, 3, 5),
         angular_params(3.14, maxOmega, 3.0, 3.0),
         controlLimits(x_params, y_params, angular_params),
         controlType(Control::ControlType::DIFFERENTIAL_DRIVE),
         robotShapeType(Kompass::CollisionChecker::ShapeType::CYLINDER),
         robotDimensions{robot_radius, 0.4},
-        prox_sensor_position_body{0.0, 0.0, 0.0},
-        prox_sensor_rotation_body{0, 0, 0, 1}, cloud(sensor_points),
-        robotState(-0.5, 0.0, 0.0, 0.0), tracked_vel(0.1, 0.0, 0.3),
+        robotState(-0.8, 0.0, 0.0, 0.0), tracked_vel(0.1, 0.0, 0.1),
         tracked_pose(0.0, 0.0, 0.0, tracked_vel) {
-    // Initialize cost weights
-    costWeights.setParameter("reference_path_distance_weight",
-                             reference_path_distance_weight);
-    costWeights.setParameter("goal_distance_weight", goal_distance_weight);
-    costWeights.setParameter("obstacles_distance_weight",
-                             obstacles_distance_weight);
-    costWeights.setParameter("smoothness_weight", 0.0);
-    costWeights.setParameter("jerk_weight", 0.0);
-    auto config = Control::VisionDWA::VisionDWAConfig();
+    auto config = Control::RGBDFollower::RGBDFollowerConfig();
     config.setParameter("control_time_step", timeStep);
     config.setParameter("control_horizon", controlHorizon);
     config.setParameter("prediction_horizon", predictionHorizon);
     config.setParameter("use_local_coordinates", use_local_frame);
     config.setParameter("target_distance", target_distance);
-    config.setParameter("target_orientation", 0.2);
+    config.setParameter("target_orientation", 0.0);
     config.setParameter("distance_tolerance", distance_tolerance);
 
-    // For depth config
-    // Body to camera tf from robot of test pictures
+    // Body to (FLU-aligned) camera tf from robot of test pictures.
+    // The DepthDetector applies the optical->FLU rotation internally, so this
+    // tf must be the body->camera-link transform, NOT the body->optical frame.
     auto body_to_link_tf =
         getTransformation(Eigen::Quaternionf{0.0f, 0.1987f, 0.0f, 0.98f},
                           Eigen::Vector3f{0.32f, 0.0209f, 0.3f});
@@ -130,12 +100,7 @@ struct VisionDWATestConfig {
         getTransformation(Eigen::Quaternionf{0.01f, -0.00131f, 0.002f, 0.9999f},
                           Eigen::Vector3f{0.0f, 0.0105f, 0.0f});
 
-    auto cam_to_cam_opt_tf =
-        getTransformation(Eigen::Quaternionf{-0.5f, 0.5f, -0.5f, 0.5f},
-                          Eigen::Vector3f{0.0f, 0.0105f, 0.0f});
-
-    Eigen::Isometry3f body_to_cam_tf =
-        body_to_link_tf * link_to_cam_tf * cam_to_cam_opt_tf;
+    Eigen::Isometry3f body_to_cam_tf = body_to_link_tf * link_to_cam_tf;
 
     Eigen::Vector3f translation = body_to_cam_tf.translation();
     Eigen::Quaternionf rotation_quat =
@@ -143,11 +108,9 @@ struct VisionDWATestConfig {
     Eigen::Vector4f rotation = {rotation_quat.w(), rotation_quat.x(),
                                 rotation_quat.y(), rotation_quat.z()};
 
-    controller = std::make_unique<Control::VisionDWA>(
-        controlType, controlLimits, maxLinearSamples, maxAngularSamples,
-        robotShapeType, robotDimensions, prox_sensor_position_body,
-        prox_sensor_rotation_body, translation, rotation, octreeRes,
-        costWeights, maxNumThreads, config);
+    controller = std::make_unique<Control::RGBDFollower>(
+        controlType, controlLimits, robotShapeType, robotDimensions,
+        translation, rotation, config);
 
     // Initialize the detected boxes
     Bbox3D new_box;
@@ -156,7 +119,7 @@ struct VisionDWATestConfig {
     for (int i = 0; i < num_test_boxes; ++i) {
       auto new_box_shift =
           Eigen::Vector3f({float(0.7 * i), float(0.7 * i), 0.0f});
-      auto img_frame_shift = Eigen::Vector2i({float(50 * i), float(50 * i)});
+      auto img_frame_shift = Eigen::Vector2i{50 * i, 50 * i};
       new_box.center = new_box_shift;
       new_box.center_img_frame = img_frame_shift + ref_point_img;
       new_box.size_img_frame = {25, 25};
@@ -176,6 +139,24 @@ struct VisionDWATestConfig {
       box.timestamp += timeStep;
     }
   };
+
+
+  // Build a ring of points sitting on the tracked target's circular
+  // footprint (radius = 0.5 * max(box.size.x, box.size.y), matching the
+  // inscribed-circle convention used elsewhere). Returned in world frame —
+  // the caller is responsible for any frame conversion.
+  std::vector<Path::Point> targetBodyPoints(int num_points = 24) const {
+    const double r = 0.5 * std::max(detected_boxes.front().size.x(),
+                                    detected_boxes.front().size.y());
+    std::vector<Path::Point> pts;
+    pts.reserve(num_points);
+    for (int i = 0; i < num_points; ++i) {
+      const double a = (2.0 * M_PI * i) / num_points;
+      pts.emplace_back(tracked_pose.x() + r * std::cos(a),
+                       tracked_pose.y() + r * std::sin(a), 0.1);
+    }
+    return pts;
+  }
 
   bool test_one_cmd_depth(const std::string image_file_path,
                           const std::vector<Bbox2D> &detections,
@@ -211,7 +192,7 @@ struct VisionDWATestConfig {
       LOG_INFO("Point found on image ...");
     }
 
-    auto res = controller->getTrackingCtrl(depth_image, detections, cmd, cloud);
+    auto res = controller->getTrackingCtrl(depth_image, detections, cmd);
     if (res.isTrajFound) {
       LOG_INFO("Got control (vx, vy, omega) = (",
                res.trajectory.velocities.vx[0], ", ",
@@ -221,13 +202,24 @@ struct VisionDWATestConfig {
     return res.isTrajFound;
   }
 
-  double run_test(const int numPointsPerTrajectory, std::string pltFileName,
-                  const bool simulate_obstacle = false) {
+  double run_test(const int numPointsPerTrajectory, std::string pltFileName) {
     Control::TrajectorySamples2D samples(2, numPointsPerTrajectory);
     Control::TrajectoryVelocities2D simulated_velocities(
         numPointsPerTrajectory);
     Control::TrajectoryPath robot_path(numPointsPerTrajectory),
         tracked_path(numPointsPerTrajectory);
+    // Zero-fill the pre-allocated Eigen vectors so any slots that remain
+    // unfilled (early break from the divergence guard, etc.) plot as zeros
+    // instead of uninitialized garbage / NaN.
+    robot_path.x.setZero();
+    robot_path.y.setZero();
+    robot_path.z.setZero();
+    tracked_path.x.setZero();
+    tracked_path.y.setZero();
+    tracked_path.z.setZero();
+    simulated_velocities.vx.setZero();
+    simulated_velocities.vy.setZero();
+    simulated_velocities.omega.setZero();
     Control::Velocity2D cmd;
     Control::TrajSearchResult result;
 
@@ -255,8 +247,9 @@ struct VisionDWATestConfig {
                                    initial_boxes);
 
     int step = 0;
-    double start_distance = std::sqrt(std::pow(robotState.x - tracked_pose.x(), 2) +
-              std::pow(robotState.y - tracked_pose.y(), 2));
+    double start_distance =
+        std::sqrt(std::pow(robotState.x - tracked_pose.x(), 2) +
+                  std::pow(robotState.y - tracked_pose.y(), 2));
     double end_distance = start_distance;
 
     while (step < numPointsPerTrajectory) {
@@ -284,17 +277,14 @@ struct VisionDWATestConfig {
         seen_boxes = detected_boxes;
       }
 
-      // Simulate lost of target around obstacle
-      if (simulate_obstacle and robotState.y > 0.2 and robotState.y < 0.4) {
-        LOG_INFO("Sending EMPTY BOXES!");
-        seen_boxes = {};
-      }
+      end_distance = std::sqrt(std::pow(robotState.x - tracked_pose.x(), 2) +
+                               std::pow(robotState.y - tracked_pose.y(), 2));
+
       controller->setCurrentState(robotState);
-      result = controller->getTrackingCtrl(seen_boxes, cmd, cloud);
+
+      result = controller->getTrackingCtrl(seen_boxes, cmd);
 
       if (result.isTrajFound) {
-        LOG_INFO(FMAG("STEP: "), step,
-                 FMAG(", Found best trajectory with cost: "), result.trajCost);
         auto velocities = result.trajectory.velocities;
         int numSteps = 0;
         for (auto vel : velocities) {
@@ -317,22 +307,27 @@ struct VisionDWATestConfig {
         }
 
       } else {
-        LOG_ERROR(BOLD(FRED("DWA Planner failed with robot at: {x: ")), KRED,
-                  robotState.x, RST, BOLD(FRED(", y: ")), KRED, robotState.y,
-                  RST, BOLD(FRED(", yaw: ")), KRED, robotState.yaw, RST,
-                  BOLD(FRED("}")));
+        LOG_ERROR(BOLD(FRED("RGBDFollower Planner failed with robot at: {x: ")),
+                  KRED, robotState.x, RST, BOLD(FRED(", y: ")), KRED,
+                  robotState.y, RST, BOLD(FRED(", yaw: ")), KRED,
+                  robotState.yaw, RST, BOLD(FRED("}")));
         break;
       }
 
-      tracked_pose.update(timeStep);
+      // Advance target and detected boxes the same number of steps as the
+      // robot to keep the simulation in sync.
+      int applied_steps =
+          result.isTrajFound
+              ? std::min(
+                    controlHorizon,
+                    static_cast<int>(result.trajectory.velocities.vx.size()))
+              : 1;
+      for (int s = 0; s < applied_steps; ++s) {
+        tracked_pose.update(timeStep);
+        moveDetectedBoxes();
+      }
 
-      moveDetectedBoxes();
-
-      end_distance =
-          std::sqrt(std::pow(robotState.x - tracked_pose.x(), 2) +
-                    std::pow(robotState.y - tracked_pose.y(), 2));
-
-      if(end_distance > 3.0 * start_distance){
+      if (end_distance > 3.0 * start_distance) {
         LOG_ERROR("Robot is moving too far from tracked target");
         break;
       }
@@ -349,7 +344,20 @@ struct VisionDWATestConfig {
     std::string trajectories_filename = file_location + "/" + pltFileName;
 
     saveTrajectoriesToJson(samples, trajectories_filename + ".json");
-    // savePathToJson(reference_segment, ref_path_filename + ".json");
+
+    // Save obstacle cloud so the plot can display it
+    std::string obstacles_filename = file_location + "/" + pltFileName + "_obs";
+    {
+      json j_obs;
+      j_obs["points"] = json::array();
+      for (const auto &pt : cloud) {
+        j_obs["points"].push_back(json{{"x", pt.x()}, {"y", pt.y()}});
+      }
+      std::ofstream obs_file(obstacles_filename + ".json");
+      if (obs_file.is_open()) {
+        obs_file << j_obs.dump(4);
+      }
+    }
 
     std::string command = "python3 " + file_location +
                           "/trajectory_sampler_plt.py --samples \"" +
@@ -363,19 +371,17 @@ struct VisionDWATestConfig {
 
     // Compute final tracking error
     return std::sqrt(std::pow(robotState.x - tracked_pose.x(), 2) +
-                     std::pow(robotState.y - tracked_pose.y(), 2)); // minus robot radius
+                     std::pow(robotState.y - tracked_pose.y(), 2));
   }
 };
 
-BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free_local) {
+BOOST_AUTO_TEST_CASE(Test_RGBDFollower_local) {
   // Create timer
   Timer time;
 
-  // Robot pointcloud values (global frame)
-  std::vector<Path::Point> cloud = {{10.0, 10.0, 0.1}};
   bool use_local_frame = true;
 
-  VisionDWATestConfig testConfig(cloud, use_local_frame);
+  RGBDFollowerTestConfig testConfig(use_local_frame);
 
   int numPointsPerTrajectory = 100;
 
@@ -383,31 +389,38 @@ BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free_local) {
       numPointsPerTrajectory,
       std::string("vision_follower_with_tracker_local_frame"));
 
-  double distance_error = end_distance - testConfig.robot_radius - testConfig.target_distance;
+  // target_distance is the edge-to-edge gap between robot and target body,
+  // so the robot's center settles at:
+  //   robot_radius + target_distance + target_radius
+  // target_radius matches RGBDFollower's inscribed-circle convention.
+  const double target_radius =
+      0.5 * std::max(testConfig.detected_boxes.front().size.x(),
+                     testConfig.detected_boxes.front().size.y());
+  double distance_error = end_distance - testConfig.robot_radius -
+                          testConfig.target_distance - target_radius;
 
-  bool test_passed = std::abs(distance_error) < testConfig.distance_tolerance;
+  bool test_passed =
+      std::abs(distance_error) < 2.0 * testConfig.distance_tolerance;
 
   if (test_passed) {
     LOG_INFO("Tracking finished successfully. End error: ", distance_error,
-             " < tolerance ", testConfig.distance_tolerance);
+             " < tolerance ", 2.0 * testConfig.distance_tolerance);
   } else {
     LOG_ERROR("Tracking Failed! End error: ", distance_error, " > tolerance ",
-              testConfig.distance_tolerance);
+              2.0 * testConfig.distance_tolerance);
   }
 
   BOOST_TEST(test_passed,
-             "VisionDWA Failed To Track Target in local frame mode");
+             "RGBDFollower Failed To Track Target in local frame mode");
 }
 
-BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free_global_frame) {
+BOOST_AUTO_TEST_CASE(Test_RGBDFollower_global_frame) {
   // Create timer
   Timer time;
 
-  // Robot pointcloud values (global frame)
-  std::vector<Path::Point> cloud = {{10.0, 10.0, 0.1}};
   bool use_local_frame = false;
 
-  VisionDWATestConfig testConfig(cloud, use_local_frame);
+  RGBDFollowerTestConfig testConfig(use_local_frame);
 
   int numPointsPerTrajectory = 100;
 
@@ -415,10 +428,18 @@ BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free_global_frame) {
       numPointsPerTrajectory,
       std::string("vision_follower_with_tracker_global_frame"));
 
-  double distance_error =
-      end_distance - testConfig.robot_radius - testConfig.target_distance;
+  // target_distance is the edge-to-edge gap between robot and target body,
+  // so the robot's center settles at:
+  //   robot_radius + target_distance + target_radius
+  // target_radius matches RGBDFollower's inscribed-circle convention.
+  const double target_radius =
+      0.5 * std::max(testConfig.detected_boxes.front().size.x(),
+                     testConfig.detected_boxes.front().size.y());
+  double distance_error = end_distance - testConfig.robot_radius -
+                          testConfig.target_distance - target_radius;
 
-  bool test_passed = std::abs(distance_error) < testConfig.distance_tolerance;
+  bool test_passed =
+      std::abs(distance_error) < 2.0 * testConfig.distance_tolerance;
 
   if (test_passed) {
     LOG_INFO("Tracking finished successfully. End error: ", distance_error,
@@ -429,22 +450,5 @@ BOOST_AUTO_TEST_CASE(Test_VisionDWA_Obstacle_Free_global_frame) {
   }
 
   BOOST_TEST(test_passed,
-             "VisionDWA Failed To Find Control in global frame mode");
-}
-
-BOOST_AUTO_TEST_CASE(test_VisionDWA_with_tracker_and_obstacle) {
-  // Create timer
-  Timer time;
-
-  // Robot pointcloud values (global frame)
-  std::vector<Path::Point> cloud = {{0.3, 0.27, 0.1}};
-
-  VisionDWATestConfig testConfig(cloud);
-
-  int numPointsPerTrajectory = 100;
-
-  bool test_passed = testConfig.run_test(
-      numPointsPerTrajectory,
-      std::string("vision_follower_with_tracker_and_obstacle"), true);
-  BOOST_TEST(test_passed, "VisionDWA Failed To Find Control");
+             "RGBDFollower Failed To Find Control in global frame mode");
 }

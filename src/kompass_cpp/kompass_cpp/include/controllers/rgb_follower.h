@@ -33,7 +33,7 @@ public:
       // Pure tracking control law parameters
       addParameter("rotation_gain", Parameter(1.0, 1e-2, 10.0));
       addParameter("speed_gain", Parameter(1.0, 1e-2, 10.0));
-      addParameter("min_vel", Parameter(0.01, 1e-9, 1e9));
+      addParameter("min_vel", Parameter(0.1, 1e-9, 1e9));
       addParameter("enable_search", Parameter(false));
     }
     bool enable_search() const { return getParameter<bool>("enable_search"); }
@@ -83,7 +83,7 @@ public:
   }
 
 protected:
-  bool is_diff_drive_;
+  bool rotate_in_place_ = false;
   ControlLimitsParams ctrl_limits_;
   double recorded_search_time_ = 0.0, recorded_wait_time_ = 0.0;
   std::queue<Eigen::Vector3d> search_commands_queue_;

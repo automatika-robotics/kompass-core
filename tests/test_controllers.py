@@ -497,100 +497,6 @@ def test_pure_pursuit(
     assert reached_end is True
 
 
-def test_vision_dwa_with_depth_img():
-    """Run VisionRGBDFollower pytest and assert reaching end"""
-    global global_path, my_robot, robot_ctr_limits, control_time_step
-
-    from kompass_core import set_logging_level
-
-    set_logging_level("DEBUG")
-
-    my_robot.state.x = -0.5
-
-    image_file_path = f"{control_resources}/bag_image_depth.tif"
-    # clicked point on image to track target
-    clicked_point = [610, 200]
-    # Detected 2D box
-    box = Bbox2D(top_left_corner=np.array([410, 0]), size=np.array([410, 390]))
-    detections = [box]
-
-    point_cloud = [np.array([10.3, 10.5, 0.2], dtype=np.float32)]
-
-    control_horizon = 2
-    prediction_horizon = 10
-
-    focal_length = [911.71, 910.288]
-    principal_point = [643.06, 366.72]
-
-    cost_weights = TrajectoryCostsWeights(
-        reference_path_distance_weight=2.0,
-        goal_distance_weight=1.0,
-        smoothness_weight=0.0,
-        jerk_weight=0.0,
-        obstacles_distance_weight=0.0,
-    )
-    config = VisionRGBDFollowerConfig(
-        control_time_step=control_time_step,
-        control_horizon=control_horizon,
-        prediction_horizon=prediction_horizon,
-        speed_gain=1.0,
-        rotation_gain=1.0,
-        costs_weights=cost_weights,
-        max_linear_samples=20,
-        max_angular_samples=20,
-        octree_resolution=0.1,
-        max_num_threads=1,
-        min_depth=0.001,
-        max_depth=5.0,
-        depth_conversion_factor=0.001,
-        camera_position_to_robot=np.array([0.32, 0.02089, 0.2999]),
-        camera_rotation_to_robot=np.array([0.385, -0.5846, 0.595, -0.395]),
-    )
-
-    controller = VisionRGBDFollower(
-        robot=my_robot,
-        ctrl_limits=robot_ctr_limits,
-        config=config,
-        camera_focal_length=focal_length,
-        camera_principal_point=principal_point,
-    )
-
-    # Get image
-    cv_img = cv2.imread(image_file_path, cv2.IMREAD_UNCHANGED)
-
-    if cv_img is None:
-        logging.error("Could not open or find the image")
-        return
-
-    # Create a NumPy array from the OpenCV Mat
-    depth_image = np.array(cv_img, dtype=np.ushort, order="F")
-
-    found_target = controller.set_initial_tracking_image(
-        my_robot.state, clicked_point[0], clicked_point[1], detections, depth_image
-    )
-
-    if not found_target:
-        print("Point not found on image")
-        return
-    else:
-        print("Point found on image ...")
-
-    res = controller.loop_step(
-        current_state=my_robot.state,
-        detections_2d=detections,
-        depth_image=depth_image,
-        point_cloud=point_cloud,
-    )
-    if not res:
-        print("No control found")
-
-    assert res
-
-    velocities = controller.control_till_horizon
-    (vx, vy, omega) = velocities.vx[0], velocities.vy[0], velocities.omega[0]
-    print(f"Found Control {vx}, {vy}, {omega}")
-
-
 def test_vision_rgb_follower():
     """Run VisionRGBFollower pytest and assert reaching end"""
     global global_path, my_robot, robot_ctr_limits, control_time_step
@@ -721,10 +627,6 @@ def main():
     ## TESTING DWA ##
     print("RUNNING DWA CONTROLLER TEST")
     test_dwa(plot=True, figure_name="dwa", figure_tag="DWA Controller Test Results")
-
-    # ## TESTING VISION RGBD Follower (VISION DWA) ##
-    # print("RUNNING VISION DWA CONTROLLER TEST")
-    # test_vision_dwa_with_depth_img()
 
     # ## TESTING VISION RGB Follower ##
     # print("RUNNING VISION RGB FOLLOWER TEST")
