@@ -93,7 +93,7 @@ void RGBFollower::getFindTargetCmds(const int last_direction) {
   generateSearchCommands(-2.0 * last_direction * M_PI, config_.target_search_radius(),
                          2.0 * target_searchtimeout_part);
 
-  // go back
+  // go back again
   generateSearchCommands(last_direction * M_PI, config_.target_search_radius(),
                          target_searchtimeout_part);
 }

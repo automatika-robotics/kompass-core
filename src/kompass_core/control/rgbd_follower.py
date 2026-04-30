@@ -21,33 +21,138 @@ from ..models import Robot, RobotState, RobotCtrlLimits, RobotGeometry, RobotTyp
 @define
 class VisionRGBDFollowerConfig(FollowerConfig):
     """
-    Configuration class for a vision-based RGB-D target follower using Dynamic Window Approach (DWA) planning.
+    VisionRGBDFollower Configuration Parameters
 
-    Attributes:
-        control_time_step (float): Time interval between control updates (s).
-        control_horizon (int): Number of steps in the control horizon.
-        prediction_horizon (int): Number of steps in the prediction horizon.
-        buffer_size (int): Size of the trajectory buffer.
-        target_distance (Optional[float]): Desired distance to maintain from the target (m).
-        target_wait_timeout (float): Time to wait for the target to reappear before giving up (s).
-        target_search_timeout (float): Time limit for the search process if the target is lost (s).
-        target_search_pause (float): Pause between successive search attempts (s).
-        target_search_radius (float): Radius within which to search for the lost target (m).
-        rotation_gain (float): Gain applied to rotational control (unitless).
-        speed_gain (float): Gain applied to speed control (unitless).
-        enable_search (bool): Enables or disables the target search behavior.
-        distance_tolerance (float): Acceptable deviation in target distance (m).
-        angle_tolerance (float): Acceptable deviation in target bearing (rad).
-        target_orientation (float): Desired orientation relative to the target (rad).
-        _use_local_coordinates (bool): Internal flag set automatically based on localization availability.
-        error_pose (float): Estimated error in pose measurements (m).
-        error_vel (float): Estimated error in velocity measurements (m/s).
-        error_acc (float): Estimated error in acceleration measurements (m/s²).
-        depth_conversion_factor (float): Factor to convert raw depth image values to meters.
-        min_depth (float): Minimum depth value considered valid (m).
-        max_depth (float): Maximum depth value considered valid (m).
-        camera_position_to_robot (np.ndarray): 3D translation vector from the camera frame to the robot base (m).
-        camera_rotation_to_robot (np.ndarray): Quaternion representing camera-to-robot rotation.
+    ```{list-table}
+    :widths: 10 10 10 70
+    :header-rows: 1
+
+    * - Name
+      - Type
+      - Default
+      - Description
+
+    * - control_time_step
+      - `float`
+      - `0.1`
+      - Time interval between control updates (sec). Must be between `1e-4` and `1e6`.
+
+    * - control_horizon
+      - `int`
+      - `2`
+      - Number of steps in the control horizon. Must be between `1` and `1000`.
+
+    * - prediction_horizon
+      - `int`
+      - `10`
+      - Number of steps in the prediction horizon. Must be between `1` and `1000`.
+
+    * - buffer_size
+      - `int`
+      - `1`
+      - Size of the trajectory buffer. Must be between `1` and `10`.
+
+    * - target_distance
+      - `Optional[float]`
+      - `None`
+      - Edge-to-edge distance to maintain from the target (m). `None` lets the controller decide.
+
+    * - target_wait_timeout
+      - `float`
+      - `30.0`
+      - Time to wait for the target to reappear before giving up (sec). Used when search is disabled. Must be between `0.0` and `1e3`.
+
+    * - target_search_timeout
+      - `float`
+      - `30.0`
+      - Time limit for the search process when the target is lost (sec). Must be between `0.0` and `1e3`.
+
+    * - target_search_pause
+      - `float`
+      - `2.0`
+      - Pause between successive search actions (sec). Must be between `0.0` and `1e3`.
+
+    * - target_search_radius
+      - `float`
+      - `0.5`
+      - Radius around the last known target position used during search (m). Must be between `1e-4` and `1e4`.
+
+    * - enable_search
+      - `bool`
+      - `True`
+      - Enables target search behavior when the target is lost.
+
+    * - distance_tolerance
+      - `float`
+      - `0.05`
+      - Acceptable deviation in target distance (m). Must be between `1e-6` and `1e3`.
+
+    * - angle_tolerance
+      - `float`
+      - `0.1`
+      - Acceptable deviation in target bearing (rad). Must be between `1e-6` and `1e3`.
+
+    * - target_orientation
+      - `float`
+      - `0.0`
+      - Bearing-to-target to maintain in the robot frame (rad). Must be between `-π` and `π`.
+
+    * - rotation_gain
+      - `float`
+      - `0.5`
+      - Gain applied in the rotational control law. Must be between `1e-2` and `10.0`.
+
+    * - speed_gain
+      - `float`
+      - `1.0`
+      - Gain applied in the speed control law. Must be between `1e-2` and `10.0`.
+
+    * - _use_local_coordinates
+      - `bool`
+      - `True`
+      - Track the target in the robot's local frame (no world pose required). Set to `False` to track in the world frame, in which case `current_state` becomes mandatory in `loop_step`. Underscore-prefixed because it is plumbed through to the C++ planner rather than being a typical user knob.
+
+    * - error_pose
+      - `float`
+      - `0.05`
+      - Error in pose estimation (m). Must be between `1e-9` and `1e9`.
+
+    * - error_vel
+      - `float`
+      - `0.05`
+      - Error in velocity estimation (m/s). Must be between `1e-9` and `1e9`.
+
+    * - error_acc
+      - `float`
+      - `0.05`
+      - Error in acceleration estimation (m/s²). Must be between `1e-9` and `1e9`.
+
+    * - depth_conversion_factor
+      - `float`
+      - `1e-3`
+      - Factor to convert raw depth image values to meters. Must be between `1e-9` and `1e9`.
+
+    * - min_depth
+      - `float`
+      - `0.0`
+      - Minimum depth value considered valid (m). Must be between `0.0` and `1e3`.
+
+    * - max_depth
+      - `float`
+      - `1e3`
+      - Maximum depth value considered valid (m). Must be between `1e-3` and `1e9`.
+
+    * - camera_position_to_robot
+      - `np.ndarray`
+      - `[0.0, 0.0, 0.0]`
+      - Translation vector from the robot base to the camera frame (m).
+
+    * - camera_rotation_to_robot
+      - `np.ndarray`
+      - `[0.0, 0.0, 0.0, 1.0]`
+      - Quaternion `(x, y, z, w)` from the robot base to the camera frame.
+
+    ```
     """
 
     control_time_step: float = field(
@@ -99,7 +204,7 @@ class VisionRGBDFollowerConfig(FollowerConfig):
 
     _use_local_coordinates: bool = field(
         default=True, alias="_use_local_coordinates"
-    )  # Internal: set automatically based on localization availability
+    )  # Track in local frame (default) or world frame (when False)
 
     error_pose: float = field(
         default=0.05, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
@@ -137,7 +242,7 @@ class VisionRGBDFollowerConfig(FollowerConfig):
         """
         Convert to kompass_cpp lib config format
 
-        :return: _description_
+        :return: C++ parameter object populated from this config
         :rtype: kompass_cpp.control.RGBDFollowerParameters
         """
         vision_dwa_params = RGBDFollowerParameters()
@@ -154,34 +259,38 @@ class VisionRGBDFollowerConfig(FollowerConfig):
 
 class VisionRGBDFollower(ControllerTemplate):
     """
-    VisionRGBDFollower is a controller for vision-based target tracking using RGB-D (color + depth) image data.
+    Vision-based target follower driven by RGB-D (color + depth) input.
 
-    This controller combines image-based detections (2D bounding boxes) and depth data to estimate 3D positions
-    of visual targets and uses a sampling-based planner (similar to DWA) to compute optimal local motion commands.
-    It integrates camera intrinsics, robot geometry, and multiple sensor modalities (e.g., point clouds, laser scans,
-    local maps) to generate robust and feasible trajectories for following dynamic or static targets in the environment.
+    The controller takes 2D bounding-box detections plus an aligned depth
+    image, projects the selected target into 3D using the camera intrinsics
+    and the body-to-camera transform, tracks it across frames, and emits a
+    pure-pursuit-style velocity command toward it. When the target is lost,
+    the controller falls back to a configurable wait/search behavior before
+    giving up.
 
-    - Usage Example:
+    Tracking can run in either the robot's local frame (default) or the world
+    frame; toggle via `_use_local_coordinates` on the config. World-frame
+    tracking requires `current_state` on every `loop_step` call.
 
     ```python
     import numpy as np
     from kompass_core.control import VisionRGBDFollower, VisionRGBDFollowerConfig
     from kompass_core.models import (
-        Robot,
-        RobotType,
-        RobotCtrlLimits,
-        LinearCtrlLimits,
         AngularCtrlLimits,
+        LinearCtrlLimits,
+        Robot,
+        RobotCtrlLimits,
         RobotGeometry,
         RobotState,
+        RobotType,
     )
-    from kompass_core.datatypes import Bbox2D, LaserScanData
+    from kompass_core.datatypes import Bbox2D
 
     # Define robot
     my_robot = Robot(
-        robot_type=RobotType.ACKERMANN,
+        robot_type=RobotType.DIFFERENTIAL_DRIVE,
         geometry_type=RobotGeometry.Type.CYLINDER,
-        geometry_params=np.array([0.3, 0.6])
+        geometry_params=np.array([0.3, 0.6]),
     )
 
     # Define control limits
@@ -189,15 +298,14 @@ class VisionRGBDFollower(ControllerTemplate):
         vx_limits=LinearCtrlLimits(max_vel=1.5, max_acc=3.0, max_decel=3.0),
         omega_limits=AngularCtrlLimits(
             max_vel=2.5, max_acc=2.5, max_decel=2.5, max_steer=np.pi / 2
-        )
+        ),
     )
 
     # Configure controller
     config = VisionRGBDFollowerConfig(
-        max_linear_samples=15,
-        max_angular_samples=15,
-        control_horizon=10,
-        enable_obstacle_avoidance=True,
+        control_horizon=2,
+        prediction_horizon=10,
+        target_distance=0.5,
     )
     controller = VisionRGBDFollower(
         robot=my_robot,
@@ -207,11 +315,10 @@ class VisionRGBDFollower(ControllerTemplate):
         camera_principal_point=[319.5, 239.5],
     )
 
-    # Prepare sensor inputs
+    # Prepare detections + depth image
     bbox = Bbox2D(top_left_corner=np.array([200, 150]), size=np.array([50, 100]))
     bbox.set_img_size(np.array([640, 480]))
-
-    aligned_depth_image = np.random.rand(480, 640).astype(np.int32)  # Fake depth
+    aligned_depth_image = np.zeros((480, 640), dtype=np.uint16)  # mm depth
     robot_state = RobotState(x=0.0, y=0.0, yaw=0.0, speed=0.0)
 
     # Initialize target tracking
@@ -221,13 +328,11 @@ class VisionRGBDFollower(ControllerTemplate):
         aligned_depth_image=aligned_depth_image,
     )
 
-    # Run control loop step
+    # Run one control step
     success = controller.loop_step(
         current_state=robot_state,
         detections_2d=[bbox],
         depth_image=aligned_depth_image,
-        local_map=np.random.rand(100, 100),  # Fake local map
-        local_map_resolution=0.05
     )
 
     # Access control outputs
@@ -322,7 +427,7 @@ class VisionRGBDFollower(ControllerTemplate):
         """Set initial tracking from a single 2D target box and depth image.
 
         In global mode the robot state is used by the depth detector to project
-        the 3D box into the world frame.  In local mode the state is ignored
+        the 3D box into the world frame. In local mode the state is ignored
         and the box is computed relative to the robot.
 
         :param current_state: Current robot state
@@ -331,6 +436,8 @@ class VisionRGBDFollower(ControllerTemplate):
         :type target_box: Bbox2D
         :param aligned_depth_image: Aligned depth image
         :type aligned_depth_image: np.ndarray
+        :return: Whether tracking was successfully initialized
+        :rtype: bool
         """
         try:
             if not self._config._use_local_coordinates:
@@ -381,7 +488,7 @@ class VisionRGBDFollower(ControllerTemplate):
         detection boxes.
 
         In global mode the robot state is used by the depth detector to project
-        the 3D box into the world frame.  In local mode the state is ignored
+        the 3D box into the world frame. In local mode the state is ignored
         and the box is computed relative to the robot.
 
         :param current_state: Current robot state
@@ -394,6 +501,8 @@ class VisionRGBDFollower(ControllerTemplate):
         :type detected_boxes: List[Bbox2D]
         :param aligned_depth_image: Aligned depth image
         :type aligned_depth_image: np.ndarray
+        :return: Whether tracking was successfully initialized
+        :rtype: bool
         """
         try:
             if not self._config._use_local_coordinates:
@@ -429,28 +538,23 @@ class VisionRGBDFollower(ControllerTemplate):
         depth_image: Optional[np.ndarray] = None,
         **_,
     ) -> bool:
-        """One iteration of the vision DWA planner.
+        """Run one iteration of the vision follower.
 
-        In global mode ``current_state`` is **mandatory** — it is used by the
-        depth detector (world-frame projection) and the control law (distance
-        and bearing computation).  In local mode ``current_state`` is ignored
-        for tracking; only the velocity component is extracted as a seed for
-        the DWA fallback when the target is temporarily lost.
+        In global mode (``_use_local_coordinates=False``) ``current_state`` is
+        **mandatory** — it is used by the depth detector (world-frame
+        projection) and the control law (distance and bearing computation). In
+        local mode ``current_state`` is optional; if provided, only its
+        velocity component is used as the seed for the next command.
 
-        :param current_state: Current robot state.  Required in global mode.
+        Extra keyword arguments are accepted but ignored, for compatibility
+        with callers that drive multiple controllers from a single dispatch.
+
+        :param current_state: Current robot state. Required in global mode.
         :type current_state: Optional[RobotState]
         :param detections_2d: 2D detection bounding boxes from the vision pipeline
         :type detections_2d: Optional[List[Bbox2D]]
         :param depth_image: Aligned depth image
         :type depth_image: Optional[np.ndarray]
-        :param laser_scan: Current laser scan
-        :type laser_scan: Optional[LaserScanData]
-        :param point_cloud: Current point cloud
-        :type point_cloud: Optional[List[np.ndarray]]
-        :param local_map: Local costmap
-        :type local_map: Optional[np.ndarray]
-        :param local_map_resolution: Resolution of the local costmap (m/cell)
-        :type local_map_resolution: Optional[float]
         :return: Whether the planner found a valid solution
         :rtype: bool
         """
@@ -486,12 +590,12 @@ class VisionRGBDFollower(ControllerTemplate):
 
         return self._result.is_found
 
-    def has_result(self) -> None:
+    def has_result(self) -> bool:
         """
-        Set global path to be tracked by the planner
+        Check whether the last `loop_step` produced a valid trajectory.
 
-        :param global_path: Global reference path
-        :type global_path: Path
+        :return: True if a valid trajectory was found on the last iteration
+        :rtype: bool
         """
         return self._result.is_found
 

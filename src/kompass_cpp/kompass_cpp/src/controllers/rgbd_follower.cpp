@@ -28,6 +28,8 @@ RGBDFollower::RGBDFollower(const ControlType &robotCtrlType,
   config_ = config;
   // Set the reaching goal distance (used in the DWA mode when vision target is
   // lost)
+  // TODO: Empirical testing shows that tracked velocity is not accurately
+  // estimated, this term should be dropped if no accurate estimation found
   track_velocity_ = config_.enable_vel_tracking();
   goal_dist_tolerance = config_.e_pose();
   // Initialize the bounding box tracker
@@ -48,6 +50,8 @@ RGBDFollower::getRobotRadius(const CollisionChecker::ShapeType robot_shape_type,
   if (robot_shape_type == CollisionChecker::ShapeType::CYLINDER) {
     robot_radius = robot_dimensions.at(0);
   } else if (robot_shape_type == CollisionChecker::ShapeType::BOX) {
+    // NOTE: We are using the circumradius here for being conservative with
+    // collisions
     robot_radius = std::sqrt(pow(robot_dimensions.at(0), 2) +
                              pow(robot_dimensions.at(1), 2)) /
                    2;
