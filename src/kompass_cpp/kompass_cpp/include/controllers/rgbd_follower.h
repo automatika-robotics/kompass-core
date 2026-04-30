@@ -285,6 +285,7 @@ private:
       result.isTrajFound = true;
       result.trajCost = 0.0f;
       result.trajectory = ref_traj;
+      latest_velocity_command_ = result.trajectory.velocities.getFront();
       return result;
     }
     if (auto r = tryWait()) {
