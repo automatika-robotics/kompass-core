@@ -90,11 +90,9 @@ void RGBFollower::getFindTargetCmds(const int last_direction) {
   generateSearchCommands(last_direction * M_PI, config_.target_search_radius(),
                          target_searchtimeout_part);
   // go back
-  generateSearchCommands(-last_direction * M_PI, config_.target_search_radius(),
-                         target_searchtimeout_part);
-  // rotate -pi
-  generateSearchCommands(-last_direction * M_PI, config_.target_search_radius(),
-                         target_searchtimeout_part);
+  generateSearchCommands(-2.0 * last_direction * M_PI, config_.target_search_radius(),
+                         2.0 * target_searchtimeout_part);
+
   // go back
   generateSearchCommands(last_direction * M_PI, config_.target_search_radius(),
                          target_searchtimeout_part);
