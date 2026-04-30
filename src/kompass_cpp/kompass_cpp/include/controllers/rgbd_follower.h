@@ -274,6 +274,7 @@ private:
     // Pipeline-of-stages dispatch: each stage returns nullopt when it
     // doesn't apply, allowing the next stage to take a turn. The first
     // stage that returns a result wins.
+    LOG_DEBUG("Last velocity command: ", latest_velocity_command_.vx(), ", ", latest_velocity_command_.omega());
     if (tracked_pose) {
       // Target is back in view — clear any pending search/wait state.
       recorded_wait_time_ = 0.0;
@@ -295,8 +296,6 @@ private:
     }
     if (auto r = trySearch()) {
       LOG_DEBUG("Searching for target.");
-      // Reset the latest velocity command to zero to avoid applying stale commands from before the target was lost.
-      latest_velocity_command_ = Velocity2D();
       return *r;
     }
     return giveUp();
