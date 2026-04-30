@@ -131,9 +131,6 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
   center_in_camera_frame(1) = -x_opt;
   center_in_camera_frame(2) = -y_opt;
 
-  LOG_DEBUG("Median depth = ", medianDepth, ", min=", minimum_d,
-            ", max=", maximum_d);
-
   // Size in meters, also expressed in the body-aligned camera frame
   const float size_x_opt = box2d.size.x() * medianDepth / fx_;
   const float size_y_opt = box2d.size.y() * medianDepth / fy_;
@@ -145,8 +142,6 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
   // Register center in the world frame
   box3d.center = camera_in_world_tf * center_in_camera_frame;
 
-  LOG_DEBUG("Got detected box in 3D coordinates at :", box3d.center.x(), ", ",
-            box3d.center.y(), ", ", box3d.center.z());
 
   // Transform size from camera frame to world frame
   Eigen::Matrix3f abs_rotation = camera_in_world_tf.linear().cwiseAbs();

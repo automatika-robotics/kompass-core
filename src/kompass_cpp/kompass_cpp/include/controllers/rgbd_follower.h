@@ -278,6 +278,7 @@ private:
       // Target is back in view — clear any pending search/wait state.
       recorded_wait_time_ = 0.0;
       recorded_search_time_ = 0.0;
+      LOG_DEBUG("Following target");
 
       const Trajectory2D ref_traj =
           getTrackingReferenceSegment(tracked_pose.value());
