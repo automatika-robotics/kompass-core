@@ -1,29 +1,25 @@
 from attrs import define, field
 from ..utils.common import base_validators
 from kompass_cpp.control import (
-    VisionDWA as VisionDWACpp,
-    VisionDWAParameters,
+    RGBDFollower as RGBDFollowerCpp,
+    RGBDFollowerParameters,
     SamplingControlResult,
 )
 from kompass_cpp.types import (
     Bbox2D,
     Velocity2D,
-    LaserScan,
     TrajectoryVelocities2D,
     TrajectoryPath,
 )
 from typing import Optional, List, Union
 import numpy as np
 import logging
-from ._base_ import ControllerTemplate
+from ._base_ import ControllerTemplate, FollowerConfig
 from ..models import Robot, RobotState, RobotCtrlLimits, RobotGeometry, RobotType
-from ..datatypes.laserscan import LaserScanData
-from ..datatypes.pointcloud import PointCloudData
-from .dwa import DWAConfig
 
 
 @define
-class VisionRGBDFollowerConfig(DWAConfig):
+class VisionRGBDFollowerConfig(FollowerConfig):
     """
     Configuration class for a vision-based RGB-D target follower using Dynamic Window Approach (DWA) planning.
 
@@ -137,14 +133,14 @@ class VisionRGBDFollowerConfig(DWAConfig):
         default=np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
     )
 
-    def to_kompass_cpp(self) -> VisionDWAParameters:
+    def to_kompass_cpp(self) -> RGBDFollowerParameters:
         """
         Convert to kompass_cpp lib config format
 
         :return: _description_
-        :rtype: kompass_cpp.control.VisionDWAParameters
+        :rtype: kompass_cpp.control.RGBDFollowerParameters
         """
-        vision_dwa_params = VisionDWAParameters()
+        vision_dwa_params = RGBDFollowerParameters()
 
         # Special handling for None values that are represented by -1 in C++
         params_dict = self.asdict()
@@ -281,20 +277,13 @@ class VisionRGBDFollower(ControllerTemplate):
         if control_time_step:
             self._config.control_time_step = control_time_step
 
-        self._planner = VisionDWACpp(
+        self._planner = RGBDFollowerCpp(
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
-            max_linear_samples=self._config.max_linear_samples,
-            max_angular_samples=self._config.max_angular_samples,
             robot_shape_type=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
             robot_dimensions=robot.geometry_params,
-            proximity_sensor_position_wrt_body=self._config.proximity_sensor_position_to_robot,
-            proximity_sensor_rotation_wrt_body=self._config.proximity_sensor_rotation_to_robot,
             vision_sensor_position_wrt_body=self._config.camera_position_to_robot,
             vision_sensor_rotation_wrt_body=self._config.camera_rotation_to_robot,
-            octree_res=self._config.octree_resolution,
-            cost_weights=self._config.costs_weights.to_kompass_cpp(),
-            max_num_threads=self._config.max_num_threads,
             config=self._config.to_kompass_cpp(),
         )
         if camera_focal_length is not None and camera_principal_point is not None:
@@ -308,7 +297,7 @@ class VisionRGBDFollower(ControllerTemplate):
         # Init the following result
         self._result = SamplingControlResult()
         self._end_of_ctrl_horizon: int = max(self._config.control_horizon, 1)
-        logging.info("VisionDWA CONTROLLER IS READY")
+        logging.info("RGBDFollower CONTROLLER IS READY")
 
     def set_camera_intrinsics(self, fx: float, fy: float, cx: float, cy: float) -> None:
         """Set depth camera intrinsics for the planner
@@ -438,10 +427,6 @@ class VisionRGBDFollower(ControllerTemplate):
         current_state: Optional[RobotState] = None,
         detections_2d: Optional[List[Bbox2D]] = None,
         depth_image: Optional[np.ndarray] = None,
-        laser_scan: Optional[LaserScanData] = None,
-        point_cloud: Optional[List[np.ndarray]] = None,
-        local_map: Optional[np.ndarray] = None,
-        local_map_resolution: Optional[float] = None,
         **_,
     ) -> bool:
         """One iteration of the vision DWA planner.
@@ -490,24 +475,9 @@ class VisionRGBDFollower(ControllerTemplate):
                 vx=current_state.vx, vy=current_state.vy, omega=current_state.omega
             )
 
-        if local_map_resolution:
-            self._planner.set_resolution(local_map_resolution)
-
-        if local_map is not None:
-            sensor_data = local_map
-        elif laser_scan:
-            sensor_data = LaserScan(ranges=laser_scan.ranges, angles=laser_scan.angles)
-        elif point_cloud is not None:
-            sensor_data = point_cloud
-        else:
-            logging.error(
-                "Cannot compute control without sensor data. Provide 'laser_scan' or 'point_cloud' input"
-            )
-            return False
-
         try:
             self._result = self._planner.get_tracking_ctrl(
-                depth_image, detections_2d, robot_cmd or self._last_cmd, sensor_data
+                depth_image, detections_2d, robot_cmd or self._last_cmd
             )
 
         except Exception as e:
@@ -528,11 +498,9 @@ class VisionRGBDFollower(ControllerTemplate):
     def logging_info(self) -> str:
         """logging_info."""
         if self._result.is_found:
-            return (
-                f"VisionDWA Controller found trajectory with cost: {self._result.cost}"
-            )
+            return f"RGBDFollower Controller found trajectory with cost: {self._result.cost}"
         else:
-            return "VisionDWA Controller Failed to find a valid trajectory"
+            return "RGBDFollower Controller Failed to find a valid trajectory"
 
     @property
     def control_till_horizon(

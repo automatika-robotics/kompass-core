@@ -10,8 +10,8 @@
 #include "controllers/pid.h"
 #include "controllers/pure_pursuit.h"
 #include "controllers/rgb_follower.h"
+#include "controllers/rgbd_follower.h"
 #include "controllers/stanley.h"
-#include "controllers/vision_dwa.h"
 #include "datatypes/control.h"
 #include "datatypes/trajectory.h"
 
@@ -290,68 +290,57 @@ void bindings_control(py::module_ &m) {
            py::arg("detection") = py::none());
 
   // Vision DWA
-  py::class_<Control::VisionDWA::VisionDWAConfig,
+  py::class_<Control::RGBDFollower::RGBDFollowerConfig,
              Control::RGBFollower::RGBFollowerConfig>(m_control,
-                                                      "VisionDWAParameters")
+                                                      "RGBDFollowerParameters")
       .def(py::init<>());
 
-  py::class_<Control::VisionDWA, Control::DWA>(m_control, "VisionDWA")
+  py::class_<Control::RGBDFollower, Control::Follower>(m_control, "RGBDFollower")
       .def(py::init<const Control::ControlType &,
-                    const Control::ControlLimitsParams &, const int, const int,
+                    const Control::ControlLimitsParams &,
                     const CollisionChecker::ShapeType &,
                     const std::vector<float> &, const Eigen::Vector3f &,
-                    const Eigen::Vector4f &, const Eigen::Vector3f &,
-                    const Eigen::Vector4f &, const double,
-                    const Control::CostEvaluator::TrajectoryCostsWeights &,
-                    const int, const Control::VisionDWA::VisionDWAConfig &>(),
+                    const Eigen::Vector4f &,
+                    const Control::RGBDFollower::RGBDFollowerConfig &>(),
            py::arg("control_type"), py::arg("control_limits"),
-           py::arg("max_linear_samples"), py::arg("max_angular_samples"),
            py::arg("robot_shape_type"), py::arg("robot_dimensions"),
-           py::arg("proximity_sensor_position_wrt_body"),
-           py::arg("proximity_sensor_rotation_wrt_body"),
            py::arg("vision_sensor_position_wrt_body"),
-           py::arg("vision_sensor_rotation_wrt_body"), py::arg("octree_res"),
-           py::arg("cost_weights"), py::arg("max_num_threads") = 1,
-           py::arg("config") = Control::VisionDWA::VisionDWAConfig())
-      .def("set_camera_intrinsics", &Control::VisionDWA::setCameraIntrinsics,
+           py::arg("vision_sensor_rotation_wrt_body"),
+           py::arg("config") = Control::RGBDFollower::RGBDFollowerConfig())
+      .def("set_camera_intrinsics", &Control::RGBDFollower::setCameraIntrinsics,
            py::arg("focal_length_x"), py::arg("focal_length_y"),
            py::arg("principal_point_x"), py::arg("principal_point_y"))
       .def("set_initial_tracking",
            py::overload_cast<const int, const int, const std::vector<Bbox3D> &,
                              const float>(
-               &Control::VisionDWA::setInitialTracking),
+               &Control::RGBDFollower::setInitialTracking),
            py::arg("pixel_x"), py::arg("pixel_y"), py::arg("detected_boxes_3d"),
            py::arg("robot_orientation") = 0.0)
       .def("set_initial_tracking",
            py::overload_cast<const int, const int,
                              const Eigen::MatrixX<unsigned short> &,
                              const std::vector<Bbox2D> &, const float>(
-               &Control::VisionDWA::setInitialTracking),
+               &Control::RGBDFollower::setInitialTracking),
            py::arg("pixel_x"), py::arg("pixel_y"),
            py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
            py::arg("robot_orientation") = 0.0)
       .def("set_initial_tracking",
            py::overload_cast<const Eigen::MatrixX<unsigned short> &,
                              const Bbox2D &, const float>(
-               &Control::VisionDWA::setInitialTracking),
+               &Control::RGBDFollower::setInitialTracking),
            py::arg("aligned_depth_image"), py::arg("target_box_2d"),
            py::arg("robot_orientation") = 0.0)
-      .def("get_errors", &Control::VisionDWA::getErrors)
+      .def("get_errors", &Control::RGBDFollower::getErrors)
+      .def("get_tracking_ctrl",
+           py::overload_cast<const std::vector<Bbox3D> &,
+                             const Control::Velocity2D &>(
+               &Control::RGBDFollower::getTrackingCtrl),
+           py::arg("detected_boxes_3d"), py::arg("robot_velocity"))
       .def("get_tracking_ctrl",
            py::overload_cast<const Eigen::MatrixX<unsigned short> &,
                              const std::vector<Bbox2D> &,
-                             const Control::Velocity2D &,
-                             const std::vector<Eigen::Vector3f> &>(
-               &Control::VisionDWA::getTrackingCtrl<
-                   std::vector<Eigen::Vector3f>>),
-           py::arg("aligned_depth_image"), py::arg("detected_boxes"),
-           py::arg("robot_velocity"), py::arg("sensor_data"))
-      .def("get_tracking_ctrl",
-           py::overload_cast<const Eigen::MatrixX<unsigned short> &,
-                             const std::vector<Bbox2D> &,
-                             const Control::Velocity2D &,
-                             const Control::LaserScan &>(
-               &Control::VisionDWA::getTrackingCtrl<Control::LaserScan>),
-           py::arg("aligned_depth_image"), py::arg("detected_boxes"),
-           py::arg("robot_velocity"), py::arg("sensor_data"));
+                             const Control::Velocity2D &>(
+               &Control::RGBDFollower::getTrackingCtrl),
+           py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
+           py::arg("robot_velocity"));
 }
