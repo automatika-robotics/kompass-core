@@ -295,6 +295,8 @@ private:
     }
     if (auto r = trySearch()) {
       LOG_DEBUG("Searching for target.");
+      // Reset the latest velocity command to zero to avoid applying stale commands from before the target was lost.
+      latest_velocity_command_ = Velocity2D();
       return *r;
     }
     return giveUp();
