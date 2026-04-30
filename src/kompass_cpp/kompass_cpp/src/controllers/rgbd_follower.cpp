@@ -248,6 +248,9 @@ std::optional<TrajSearchResult> RGBDFollower::tryWait() {
       LOG_DEBUG("Waited for one control step, now falling back to search");
       return std::nullopt; // search mode handles target-lost recovery
     }
+    // Reset the search command queue
+    std::queue<Eigen::Vector3d> empty;
+    std::swap(search_commands_queue_, empty);
     recorded_wait_time_ +=
         (config_.control_horizon() - 1) * config_.control_time_step();
     return makeHoldResult();
