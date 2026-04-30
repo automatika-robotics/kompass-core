@@ -1,21 +1,20 @@
-// Parametrized fixture-based test for VisionDWA.
+// Parametrized fixture-based test for RGBDFollower.
 //
-// Loads each fixture under tests/resources/vision_dwa/<case>/ which contains:
+// Loads each fixture under tests/resources/vision_follower/<case>/ which contains:
 //   - depth.png: 16-bit single-channel depth image (millimeters)
 //   - case.json: camera intrinsics, robot state, 2D detections, click pixel,
 //                and loose expected bounds for the resulting control command.
 //
-// Mirrors tests/test_vision_dwa_follower.py so both layers exercise the same
-// data. To add cases, edit tests/resources/vision_dwa/generate_fixtures.py and
+// Mirrors tests/test_vision_follower.py so both layers exercise the same
+// data. To add cases, edit tests/resources/vision_follower/generate_fixtures.py and
 // re-run it (or drop a new fixture directory in by hand).
 
-#include "controllers/vision_dwa.h"
+#include "controllers/rgbd_follower.h"
 #include "datatypes/control.h"
 #include "datatypes/tracking.h"
-#include "utils/cost_evaluator.h"
 #include "utils/logger.h"
 
-#define BOOST_TEST_MODULE VISION_DWA_FIXTURE_TESTS
+#define BOOST_TEST_MODULE VISION_FOLLOWER_FIXTURE_TESTS
 #include <boost/dll/runtime_symbol_info.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/test/included/unit_test.hpp>
@@ -40,11 +39,11 @@ struct FixtureCase {
 // Discover fixtures by walking up from the executable to find the source tree
 // resources. The kompass build layout drops binaries in
 // build/<py-tag>/src/kompass_cpp/tests/ so we walk to the repo root and append
-// tests/resources/vision_dwa.
+// tests/resources/vision_follower.
 fs::path locate_fixture_root() {
   fs::path here = boost::dll::program_location().parent_path();
   for (int i = 0; i < 8; ++i) {
-    fs::path candidate = here / "tests" / "resources" / "vision_dwa";
+    fs::path candidate = here / "tests" / "resources" / "vision_follower";
     if (fs::is_directory(candidate)) {
       return candidate;
     }
@@ -57,7 +56,7 @@ fs::path locate_fixture_root() {
   // Fall back to the source-tree path (cmake current source dir).
   fs::path src_default = fs::path(__FILE__).parent_path().parent_path()
                              .parent_path().parent_path() /
-                         "tests" / "resources" / "vision_dwa";
+                         "tests" / "resources" / "vision_follower";
   return src_default;
 }
 
@@ -113,26 +112,20 @@ std::vector<Bbox2D> parse_detections(const json &case_json) {
   return dets;
 }
 
-std::unique_ptr<Control::VisionDWA> build_controller(const json &case_json) {
+std::unique_ptr<Control::RGBDFollower> build_controller(const json &case_json) {
   using namespace Control;
-  LinearVelocityControlParams x_params(1.5f, 3.0f, 3.0f);
-  LinearVelocityControlParams y_params(1.0f, 3.0f, 3.0f);
-  AngularVelocityControlParams angular_params(M_PI / 2, 2.5f, 2.5f, 2.5f);
+  LinearVelocityControlParams x_params(2.0f, 5.0f, 10.0f);
+  LinearVelocityControlParams y_params(1.0f, 3.0f, 5.0f);
+  AngularVelocityControlParams angular_params(3.14f, 4.0f, 3.0f, 3.0f);
   ControlLimitsParams ctrl_limits(x_params, y_params, angular_params);
 
-  CostEvaluator::TrajectoryCostsWeights cost_weights;
-  cost_weights.setParameter("reference_path_distance_weight", 1.0);
-  cost_weights.setParameter("goal_distance_weight", 1.0);
-  cost_weights.setParameter("obstacles_distance_weight", 0.0);
-  cost_weights.setParameter("smoothness_weight", 0.0);
-  cost_weights.setParameter("jerk_weight", 0.0);
-
-  VisionDWA::VisionDWAConfig config;
+  RGBDFollower::RGBDFollowerConfig config;
   config.setParameter("control_time_step", 0.1);
   config.setParameter("control_horizon", 2);
-  config.setParameter("prediction_horizon", 6);
+  config.setParameter("prediction_horizon", 20);
   config.setParameter("use_local_coordinates", true);
-  config.setParameter("target_distance", 0.5);
+  config.setParameter("target_distance", 0.2);
+  config.setParameter("target_orientation", 0.0);
   config.setParameter("distance_tolerance", 0.1);
   config.setParameter(
       "depth_conversion_factor",
@@ -143,15 +136,15 @@ std::unique_ptr<Control::VisionDWA> build_controller(const json &case_json) {
                       case_json["camera"]["max_depth"].get<double>());
 
   std::vector<float> robot_dimensions{0.1f, 0.4f};
-  Eigen::Vector3f prox_pos{0.0f, 0.0f, 0.0f};
-  Eigen::Vector4f prox_rot{0.0f, 0.0f, 0.0f, 1.0f};
+  // Synthetic fixtures are rendered as if the camera coincides with the
+  // robot body frame, so use an identity body->camera transform here.
   Eigen::Vector3f cam_pos{0.0f, 0.0f, 0.0f};
   Eigen::Vector4f cam_rot{0.0f, 0.0f, 0.0f, 1.0f};
 
-  auto controller = std::make_unique<VisionDWA>(
-      ControlType::DIFFERENTIAL_DRIVE, ctrl_limits, 15, 15,
-      CollisionChecker::ShapeType::CYLINDER, robot_dimensions, prox_pos,
-      prox_rot, cam_pos, cam_rot, 0.1, cost_weights, 1, config);
+  auto controller = std::make_unique<RGBDFollower>(
+      ControlType::DIFFERENTIAL_DRIVE, ctrl_limits,
+      CollisionChecker::ShapeType::CYLINDER, robot_dimensions, cam_pos, cam_rot,
+      config);
 
   const auto &cam = case_json["camera"];
   controller->setCameraIntrinsics(cam["fx"].get<float>(),
@@ -188,9 +181,7 @@ void run_one_fixture(const FixtureCase &fx) {
   if (!init_ok) return;
 
   Control::Velocity2D current_vel;
-  std::vector<Eigen::Vector3f> empty_cloud;
-  auto result = controller->getTrackingCtrl(depth, detections, current_vel,
-                                            empty_cloud);
+  auto result = controller->getTrackingCtrl(depth, detections, current_vel);
   BOOST_TEST(result.isTrajFound,
              fx.name << ": planner failed to find a control");
   if (!result.isTrajFound) return;
@@ -216,10 +207,10 @@ void run_one_fixture(const FixtureCase &fx) {
 
 }  // namespace
 
-BOOST_AUTO_TEST_CASE(VisionDWA_fixture_cases) {
+BOOST_AUTO_TEST_CASE(RGBDFollower_fixture_cases) {
   auto fixtures = discover_fixtures();
   BOOST_REQUIRE_MESSAGE(!fixtures.empty(),
-                        "No vision_dwa fixtures discovered");
+                        "No vision_follower fixtures discovered");
   for (const auto &fx : fixtures) {
     run_one_fixture(fx);
   }

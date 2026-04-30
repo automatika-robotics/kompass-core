@@ -1,6 +1,6 @@
 """Parametrized tests for VisionRGBDFollower against fixture cases.
 
-Each fixture is a directory under tests/resources/vision_dwa/ containing a
+Each fixture is a directory under tests/resources/vision_follower/ containing a
 depth.png (16-bit, mm) and a case.json. See generate_fixtures.py for the
 schema and how to add new cases (synthetic or recorded from the robot).
 """
@@ -28,7 +28,7 @@ from kompass_core.models import (
 )
 
 
-FIXTURE_ROOT = Path(__file__).parent / "resources" / "vision_dwa"
+FIXTURE_ROOT = Path(__file__).parent / "resources" / "vision_follower"
 
 
 def _discover_fixtures() -> List[Path]:
@@ -73,8 +73,6 @@ def _make_follower(case: dict) -> VisionRGBDFollower:
         control_time_step=0.1,
         control_horizon=2,
         prediction_horizon=6,
-        max_linear_samples=15,
-        max_angular_samples=15,
         target_distance=0.5,
         distance_tolerance=0.1,
         _use_local_coordinates=True,
@@ -94,7 +92,7 @@ def _make_follower(case: dict) -> VisionRGBDFollower:
 @pytest.mark.parametrize(
     "case_dir", _discover_fixtures(), ids=lambda p: p.name
 )
-def test_vision_dwa_fixture(case_dir: Path) -> None:
+def test_vision_follower_fixture(case_dir: Path) -> None:
     case = _load_case(case_dir)
     depth = cv2.imread(str(case_dir / "depth.png"), cv2.IMREAD_UNCHANGED)
     assert depth is not None and depth.dtype == np.uint16, (
@@ -127,7 +125,6 @@ def test_vision_dwa_fixture(case_dir: Path) -> None:
         current_state=state,
         detections_2d=detections,
         depth_image=depth,
-        point_cloud=[],
     )
     assert found, f"{case_dir.name}: planner failed to find a control"
 
