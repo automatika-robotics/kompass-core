@@ -16,6 +16,7 @@
 
 // Only include if power monitoring is enabled
 #ifdef ENABLE_POWER_MONITOR
+#include <atomic>
 #include <filesystem>
 #include <regex>
 #include <thread>
