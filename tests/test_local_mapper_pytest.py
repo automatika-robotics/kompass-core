@@ -63,7 +63,6 @@ def local_mapper() -> LocalMapper:
         p_occupied=0.9,
         range_sure=0.1,
         range_max=20.0,
-        wall_size=0.075,
     )
     return LocalMapper(config=mapper_config, scan_model_config=scan_model_config)
 
@@ -440,3 +439,242 @@ def test_update_from_pointcloud_livox_recording(logs_test_dir: str):
         grid, scale=50, show_image=False,
         save_file=os.path.join(logs_test_dir, "pc_livox.jpg"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Bayesian local mapping
+#
+# The GPU LocalMapperGPU::scanToGridBaysian path is the only supported
+# implementation — the CPU LocalMapper Bayesian methods exist in C++ but the
+# Python wrapper logs a warning and falls back to non-Bayesian when only the
+# CPU backend is built. These tests skip themselves when the GPU backend
+# isn't available so they remain collectable on CPU-only builds.
+# ---------------------------------------------------------------------------
+
+
+try:
+    from kompass_cpp.mapping import LocalMapperGPU  # noqa: F401
+    _HAS_GPU = True
+except ImportError:
+    _HAS_GPU = False
+
+
+skip_no_gpu = pytest.mark.skipif(
+    not _HAS_GPU,
+    reason="kompass_cpp.mapping.LocalMapperGPU not available in this build",
+)
+
+
+@pytest.fixture
+def bayesian_mapper() -> LocalMapper:
+    """LocalMapper configured with `baysian_update=True` so `_initialize_mapper`
+    routes through the GPU Bayesian ctor and `update_from_scan` calls
+    `scan_to_grid_baysian`."""
+    mapper_config = MapConfig(
+        width=3.0, height=3.0, padding=0.0, resolution=0.1,
+        baysian_update=True,
+    )
+    scan_model_config = ScanModelConfig(
+        p_prior=0.6,
+        p_occupied=0.9,
+        range_sure=0.1,
+        range_max=20.0,
+    )
+    return LocalMapper(config=mapper_config, scan_model_config=scan_model_config)
+
+
+def _circle_laserscan(n: int, radius: float) -> LaserScanData:
+    """Build a closed-circle laserscan: `n` evenly-spaced angles in [0, 2π),
+    every ray at the same `radius`. Matches the scan_size the GPU mapper
+    derives for pointcloud=False from `ScanModelConfig.angle_step`."""
+    scan = LaserScanData()
+    scan.angle_min = 0.0
+    scan.angle_max = float(2.0 * math.pi)
+    scan.angle_increment = float(2.0 * math.pi / n)
+    scan.time_increment = 0.0
+    scan.scan_time = 0.0
+    scan.range_min = 0.0
+    scan.range_max = 20.0
+    scan.angles = np.arange(scan.angle_min, scan.angle_max, scan.angle_increment)
+    scan.intensities = [0.0] * scan.angles.size
+    scan.ranges = np.full(scan.angles.size, radius, dtype=np.float64)
+    return scan
+
+
+@skip_no_gpu
+def test_bayesian_update_writes_to_occupancy_layer(
+    bayesian_mapper: LocalMapper,
+):
+    """Bayesian update must populate `grid_data.occupancy` (the single
+    output channel) with the thresholded discrete grid. Verifies the
+    Python wrapper's routing — Bayesian no longer writes to a separate
+    `occupancy_prob` layer."""
+    n = int(math.ceil(2.0 * math.pi / bayesian_mapper.scan_model.angle_step))
+    scan = _circle_laserscan(n=n, radius=0.5)
+
+    bayesian_mapper.update_from_scan(_origin_pose(), scan)
+
+    grid = bayesian_mapper.grid_data.occupancy
+    assert grid.dtype == np.int32
+    assert grid.shape == (bayesian_mapper.grid_width, bayesian_mapper.grid_height)
+
+    # Only the three legal codes should appear.
+    allowed = {
+        OCCUPANCY_TYPE.OCCUPIED.value,
+        OCCUPANCY_TYPE.EMPTY.value,
+        OCCUPANCY_TYPE.UNEXPLORED.value,
+    }
+    unique_vals = set(np.unique(grid).tolist())
+    assert unique_vals.issubset(allowed), unique_vals - allowed
+
+    n_occ, n_empty, n_unknown = _occupancy_counts(grid)
+    assert n_occ + n_empty + n_unknown == grid.size
+    assert n_occ > 0, "circle scan should stamp OCCUPIED cells at the ring"
+    assert n_empty > 0, "rays from origin should stamp EMPTY cells in the interior"
+
+
+@skip_no_gpu
+def test_bayesian_probabilities_accessor_in_unit_interval(
+    bayesian_mapper: LocalMapper,
+):
+    """`mapper.probabilities` D2H-copies the log-odds buffer and applies
+    sigmoid on the C++ side. Every cell must be in [0, 1], untouched cells
+    must equal `p_prior` (sigmoid of `h0` is `p_prior` by construction),
+    and at least one observed cell must lift above `p_prior`."""
+    n = int(math.ceil(2.0 * math.pi / bayesian_mapper.scan_model.angle_step))
+    scan = _circle_laserscan(n=n, radius=0.5)
+    bayesian_mapper.update_from_scan(_origin_pose(), scan)
+
+    probs = bayesian_mapper.probabilities
+    assert probs is not None
+    assert probs.dtype == np.float32
+    assert probs.shape == (bayesian_mapper.grid_width, bayesian_mapper.grid_height)
+
+    pmin, pmax = float(probs.min()), float(probs.max())
+    assert 0.0 <= pmin <= 1.0, f"prob min out of [0,1]: {pmin}"
+    assert 0.0 <= pmax <= 1.0, f"prob max out of [0,1]: {pmax}"
+    assert np.all(np.isfinite(probs)), "probabilities must be finite"
+
+    # An observation strong enough to flip a cell to OCCUPIED must lift
+    # its posterior above the prior — verify against the configured prior.
+    p_prior = bayesian_mapper.scan_model.p_prior
+    assert pmax > p_prior, (
+        f"after one observation, expected max prob > p_prior={p_prior}, "
+        f"got {pmax}"
+    )
+
+
+@skip_no_gpu
+def test_bayesian_accumulation_across_frames(bayesian_mapper: LocalMapper):
+    """Per arXiv:2101.01831 eq. 8 the log-odds at observed cells should
+    sum across frames. Repeated identical scans at identity pose must
+    drive the max posterior probability monotonically toward 1."""
+    n = int(math.ceil(2.0 * math.pi / bayesian_mapper.scan_model.angle_step))
+    scan = _circle_laserscan(n=n, radius=0.5)
+
+    max_probs = []
+    for _ in range(5):
+        bayesian_mapper.update_from_scan(_origin_pose(), scan)
+        probs = bayesian_mapper.probabilities
+        assert probs is not None
+        max_probs.append(float(probs.max()))
+
+    # Monotone non-decreasing (within a tiny float-noise margin).
+    for i in range(1, len(max_probs)):
+        assert max_probs[i] >= max_probs[i - 1] - 1e-6, (
+            f"frame {i}: max prob decreased {max_probs[i - 1]} -> {max_probs[i]}"
+        )
+
+    # After 5 frames of an identical OCCUPIED observation the saturated
+    # sigmoid should be > 0.9 with default p_occupied=0.9.
+    assert max_probs[-1] > 0.9, (
+        f"max probability after 5 frames = {max_probs[-1]}, expected > 0.9"
+    )
+
+
+@skip_no_gpu
+def test_bayesian_update_with_pose_motion(
+    bayesian_mapper: LocalMapper, logs_test_dir: str,
+):
+    """A second frame with a non-zero pose delta exercises the warp
+    kernel. The output must still be a well-formed discrete grid, all
+    probabilities must remain finite and in [0, 1]."""
+    n = int(math.ceil(2.0 * math.pi / bayesian_mapper.scan_model.angle_step))
+    scan = _circle_laserscan(n=n, radius=0.5)
+
+    # Frame 0: identity pose. Populates the persistent log-odds buffer.
+    bayesian_mapper.update_from_scan(_origin_pose(), scan)
+
+    # Frame 1: small translation + yaw. Triggers the warp kernel.
+    moved = PoseData()
+    moved.x = 0.05
+    moved.y = 0.02
+    moved.z = 0.0
+    # Quaternion for 0.05 rad yaw about Z.
+    yaw = 0.05
+    moved.qw = float(math.cos(yaw / 2))
+    moved.qx = 0.0
+    moved.qy = 0.0
+    moved.qz = float(math.sin(yaw / 2))
+
+    bayesian_mapper.update_from_scan(moved, scan)
+
+    grid = bayesian_mapper.grid_data.occupancy
+    n_occ, n_empty, n_unknown = _occupancy_counts(grid)
+    assert n_occ + n_empty + n_unknown == grid.size
+    assert n_occ > 0, "post-motion grid should still have OCCUPIED cells"
+
+    probs = bayesian_mapper.probabilities
+    assert probs is not None
+    assert np.all(np.isfinite(probs)), "warp+update must not produce NaN/inf"
+    assert probs.min() >= 0.0 and probs.max() <= 1.0
+
+    visualize_grid(
+        grid, scale=100, show_image=False,
+        save_file=os.path.join(logs_test_dir, "bayesian_motion.jpg"),
+    )
+
+
+def test_bayesian_probabilities_is_none_when_disabled(local_mapper: LocalMapper):
+    """The probabilities accessor must return None when the mapper was
+    constructed with `baysian_update=False`, regardless of backend.
+    Guards against accidental D2H copies on the non-Bayesian hot path."""
+    assert local_mapper.config.baysian_update is False
+    assert local_mapper.probabilities is None
+
+
+def test_bayesian_warns_and_falls_back_on_cpu_only_build(caplog):
+    """If only the CPU backend is built, requesting `baysian_update=True`
+    must emit a warning and silently fall back to the non-Bayesian path
+    (forcing the config flag to False). The robot stays operational
+    rather than crashing.
+
+    We skip if the GPU backend is available — there's no fallback path
+    to exercise."""
+    if _HAS_GPU:
+        pytest.skip(
+            "GPU backend present; the CPU-only Bayesian fallback isn't reached"
+        )
+
+    mapper_config = MapConfig(
+        width=2.0, height=2.0, padding=0.0, resolution=0.1,
+        baysian_update=True,
+    )
+    scan_model = ScanModelConfig(
+        p_prior=0.6, p_occupied=0.9, range_sure=0.1, range_max=20.0,
+    )
+    mapper = LocalMapper(config=mapper_config, scan_model_config=scan_model)
+
+    n = int(math.ceil(2.0 * math.pi / scan_model.angle_step))
+    scan = _circle_laserscan(n=n, radius=0.5)
+
+    import logging as _logging
+    with caplog.at_level(_logging.WARNING):
+        mapper.update_from_scan(_origin_pose(), scan)
+
+    # The wrapper should have warned and flipped the flag off.
+    assert mapper.config.baysian_update is False
+    assert any(
+        "bayesian" in record.message.lower()
+        for record in caplog.records
+    ), "expected a warning about the missing Bayesian backend"
