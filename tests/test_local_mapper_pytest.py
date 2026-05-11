@@ -635,6 +635,62 @@ def test_bayesian_update_with_pose_motion(
     )
 
 
+@skip_no_gpu
+def test_bayesian_update_from_pointcloud_synthetic_ring(logs_test_dir: str):
+    """The Python wrapper must route Bayesian + pointcloud inputs to the
+    pointcloud overload of `scan_to_grid_baysian`. A deterministic ring
+    of points should stamp OCCUPIED cells along the circle and EMPTY
+    cells along the rays back to the sensor, just like the non-Bayesian
+    pointcloud test."""
+    mapper_config = MapConfig(
+        width=3.0, height=3.0, padding=0.0, resolution=0.1,
+        baysian_update=True,
+    )
+    scan_model = ScanModelConfig(
+        p_prior=0.6,
+        p_occupied=0.9,
+        range_sure=0.1,
+        range_max=5.0,
+        angle_step=0.01,
+        min_height=-0.5,
+        max_height=1.5,
+    )
+    mapper = LocalMapper(config=mapper_config, scan_model_config=scan_model)
+
+    n = 360
+    theta = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
+    ring = np.column_stack([
+        0.5 * np.cos(theta),
+        0.5 * np.sin(theta),
+        np.full(n, 0.1),
+    ])
+    cloud = _make_synthetic_pointcloud(ring)
+
+    mapper.update_from_scan(_origin_pose(), cloud)
+
+    grid = mapper.grid_data.occupancy
+    n_occ, n_empty, n_unknown = _occupancy_counts(grid)
+    logging.info(
+        "bayesian pc ring: OCCUPIED=%d EMPTY=%d UNEXPLORED=%d",
+        n_occ, n_empty, n_unknown,
+    )
+    assert n_occ + n_empty + n_unknown == grid.size
+    assert n_occ > 0, "ring should stamp OCCUPIED cells"
+    assert n_empty > 0, "rays back to origin should stamp EMPTY cells"
+
+    # Posterior must round-trip cleanly through the post-PC pipeline.
+    probs = mapper.probabilities
+    assert probs is not None
+    assert np.all(np.isfinite(probs))
+    assert probs.min() >= 0.0 and probs.max() <= 1.0
+    assert probs.max() > scan_model.p_prior
+
+    visualize_grid(
+        grid, scale=50, show_image=False,
+        save_file=os.path.join(logs_test_dir, "bayesian_pc_ring.jpg"),
+    )
+
+
 def test_bayesian_probabilities_is_none_when_disabled(local_mapper: LocalMapper):
     """The probabilities accessor must return None when the mapper was
     constructed with `baysian_update=False`, regardless of backend.

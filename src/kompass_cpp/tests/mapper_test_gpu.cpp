@@ -149,6 +149,41 @@ BayesianMapConfig &get_bayesian_motion() {
   return *cfg;
 }
 
+// Bayesian + pointcloud singleton. isPointCloud=true so the ctor
+// pre-uploads angles and the Bayesian-pointcloud overload only has to
+// dispatch the conversion kernel + the warp/Bayesian/threshold sequence.
+struct BayesianPointCloudMapConfig {
+  int grid_height;
+  int grid_width;
+  float grid_res;
+  int scan_size;
+  float pPrior;
+  float pOccupied;
+  float pEmpty;
+  float rangeSure;
+  float rangeMax;
+  float angleStep;
+  float minHeight;
+  float maxHeight;
+
+  Mapping::LocalMapperGPU mapper;
+
+  BayesianPointCloudMapConfig()
+      : grid_height(21), grid_width(21), grid_res(0.1f), scan_size(360),
+        pPrior(0.6f), pOccupied(0.9f), pEmpty(1.0f - 0.9f), rangeSure(0.1f),
+        rangeMax(5.0f), angleStep(static_cast<float>(2.0 * M_PI / 360.0)),
+        minHeight(-1.0f), maxHeight(1.0f),
+        mapper(Mapping::LocalMapperGPU(
+            grid_height, grid_width, grid_res, {0.0f, 0.0f, 0.0f}, 0.0f,
+            /*isPointCloud*/ true, scan_size, pPrior, pOccupied, pEmpty,
+            rangeSure, rangeMax, angleStep, maxHeight, minHeight)) {}
+};
+
+BayesianPointCloudMapConfig &get_bayesian_pc() {
+  static BayesianPointCloudMapConfig *cfg = new BayesianPointCloudMapConfig();
+  return *cfg;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -489,4 +524,80 @@ BOOST_AUTO_TEST_CASE(test_mapper_bayesian_motion) {
                                                  << p);
     }
   }
+}
+
+// Bayesian pointcloud overload: a deterministic ring of points on a 0.5 m
+// circle (same shape the non-Bayesian pointcloud test uses) should drive
+// the same recursive Bayes pipeline as the laserscan path. Verifies the
+// on-device pointcloud→laserscan conversion feeds the Bayesian update
+// correctly and the discrete output is well-formed.
+BOOST_AUTO_TEST_CASE(test_mapper_bayesian_pointcloud_ring) {
+  auto &cfg = get_bayesian_pc();
+
+  std::vector<int8_t> cloud;
+  constexpr int N = 200;
+  for (int i = 0; i < N; ++i) {
+    float theta = 2.0f * static_cast<float>(M_PI) * i / N;
+    addPointToCloud(cloud, 0.5f * std::cos(theta), 0.5f * std::sin(theta),
+                    0.1f);
+  }
+  // Filtered: above ceiling.
+  addPointToCloud(cloud, 0.3f, 0.0f, 2.0f);
+  // Filtered: below floor.
+  addPointToCloud(cloud, 0.0f, 0.3f, -2.0f);
+  // Filtered: origin.
+  addPointToCloud(cloud, 0.0f, 0.0f, 0.1f);
+
+  const int point_step = static_cast<int>(sizeof(PointXYZ));
+  const int num_points = static_cast<int>(cloud.size() / point_step);
+  const int width = num_points;
+  const int height = 1;
+  const int row_step = width * point_step;
+
+  Eigen::MatrixXi *grid = nullptr;
+  {
+    Timer t;
+    grid = &cfg.mapper.scanToGridBaysian(
+        cloud, point_step, row_step, height, width,
+        /*x_offset*/ static_cast<float>(offsetof(PointXYZ, x)),
+        /*y_offset*/ static_cast<float>(offsetof(PointXYZ, y)),
+        /*z_offset*/ static_cast<float>(offsetof(PointXYZ, z)),
+        Eigen::Vector2f(0.0f, 0.0f), /*orientationInPrevPose*/ 0.0);
+  }
+
+  const int total = static_cast<int>(grid->size());
+  const int n_occ = countPointsInGrid(
+      *grid, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  const int n_empty =
+      countPointsInGrid(*grid, static_cast<int>(Mapping::OccupancyType::EMPTY));
+  const int n_unknown = countPointsInGrid(
+      *grid, static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+  LOG_INFO("[bayesian pointcloud] OCCUPIED=", n_occ, " EMPTY=", n_empty,
+           " UNEXPLORED=", n_unknown);
+  std::cout << "[bayesian pointcloud] discrete grid:\n" << *grid << std::endl;
+
+  BOOST_TEST(n_occ + n_empty + n_unknown == total,
+             "discrete cell counts must sum to total (" << total << ")");
+  BOOST_TEST(n_occ > 0,
+             "expected some OCCUPIED cells from the pointcloud ring");
+  BOOST_TEST(n_empty > 0, "expected some EMPTY cells along the rays");
+
+  // Probabilities must round-trip cleanly through the post-PC pipeline.
+  const Eigen::MatrixXf &probs = cfg.mapper.getProbabilities();
+  std::cout << "[bayesian pointcloud] probabilities:\n" << probs << std::endl;
+  float pmin = 1.0f, pmax = 0.0f;
+  for (int i = 0; i < probs.rows(); ++i) {
+    for (int j = 0; j < probs.cols(); ++j) {
+      const float p = probs(i, j);
+      pmin = std::min(pmin, p);
+      pmax = std::max(pmax, p);
+      BOOST_TEST(std::isfinite(p),
+                 "probability must be finite at (" << i << ", " << j
+                                                   << "), got " << p);
+    }
+  }
+  BOOST_TEST(pmin >= 0.0f, "probabilities must be >= 0");
+  BOOST_TEST(pmax <= 1.0f, "probabilities must be <= 1");
+  BOOST_TEST(pmax > cfg.pPrior,
+             "max probability should exceed the prior after observation");
 }

@@ -429,6 +429,74 @@ def test_gpu_binding_get_probabilities_returns_unit_interval():
 
 
 @pytestmark_gpu
+def test_gpu_binding_bayesian_pointcloud_scan_to_grid_basic():
+    """Bayesian pointcloud overload: same recursive-Bayes pipeline as the
+    laserscan path, but takes raw PointCloud2 bytes. Verifies the second
+    overload signature and that the pointcloud→laserscan conversion feeds
+    the Bayesian update on the same persistent log-odds buffer."""
+    grid_height = 21
+    grid_width = 21
+    n_rays = 360
+    mapper = LocalMapperGPU(
+        grid_height=grid_height,
+        grid_width=grid_width,
+        resolution=0.1,
+        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
+        laserscan_orientation=0.0,
+        is_pointcloud=True,
+        scan_size=n_rays,
+        p_prior=0.6,
+        p_occupied=0.9,
+        p_empty=0.1,
+        range_sure=0.1,
+        range_max=5.0,
+        angle_step=float(2.0 * np.pi / n_rays),
+        max_height=1.5,
+        min_height=-0.5,
+    )
+
+    cloud_bytes = _ring_cloud(n=200, radius=0.5, z=0.1)
+    num_points = cloud_bytes.size // _PC_STRIDE
+
+    grid = mapper.scan_to_grid_baysian(
+        data=cloud_bytes,
+        point_step=_PC_STRIDE,
+        row_step=num_points * _PC_STRIDE,
+        height=1,
+        width=num_points,
+        x_offset=0.0,
+        y_offset=4.0,
+        z_offset=8.0,
+        position_in_previous_pose=np.array([0.0, 0.0], dtype=np.float32),
+        orientation_in_previous_pose=0.0,
+    )
+    grid_np = np.asarray(grid)
+
+    assert grid_np.shape == (grid_height, grid_width)
+    assert grid_np.dtype == np.int32
+
+    allowed = {
+        OCCUPANCY_TYPE.OCCUPIED.value,
+        OCCUPANCY_TYPE.EMPTY.value,
+        OCCUPANCY_TYPE.UNEXPLORED.value,
+    }
+    unique_vals = set(np.unique(grid_np).tolist())
+    assert unique_vals.issubset(allowed), unique_vals - allowed
+
+    n_occ, n_empty, n_unknown = _occupancy_counts(grid_np)
+    assert n_occ + n_empty + n_unknown == grid_np.size
+    assert n_occ > 0, "Bayesian pointcloud ring should stamp OCCUPIED cells"
+    assert n_empty > 0, "rays back to origin should stamp EMPTY cells"
+
+    # And the post-PC log-odds buffer must read out as valid probabilities.
+    probs = np.asarray(mapper.get_probabilities())
+    assert probs.shape == (grid_height, grid_width)
+    assert np.all(np.isfinite(probs))
+    assert float(probs.min()) >= 0.0
+    assert float(probs.max()) <= 1.0
+
+
+@pytestmark_gpu
 def test_gpu_binding_get_probabilities_throws_on_non_bayesian_ctor():
     """`get_probabilities` must throw if the mapper was built with the
     non-Bayesian ctor (the log-odds buffers aren't allocated). Catches
