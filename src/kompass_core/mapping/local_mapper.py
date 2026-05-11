@@ -13,7 +13,7 @@ from kompass_cpp.mapping import (
 from ..utils.geometry import transform_point_from_local_to_global, get_relative_pose
 
 from ..datatypes.scan_model import ScanModelConfig
-from ..utils.common import BaseAttrs, base_validators
+from ..utils.common import BaseAttrs, base_validators, logging
 
 
 @define
@@ -34,14 +34,12 @@ class GridData(BaseAttrs):
     height: int = field()
     p_prior: float = field(default=0.5)
     occupancy: np.ndarray = field(init=False)
-    occupancy_prob: np.ndarray = field(init=False)
     # TODO: Add semantic occupancy
     # semantic_occupancy : np.ndarray = field(init=False)
     # semantic : np.ndarray = field(init=False)
 
     def __attrs_post_init__(self):
         self.occupancy = self.get_initial_grid_data()
-        self.occupancy_prob = self.get_initial_grid_data()
 
     def get_initial_grid_data(self) -> np.ndarray:
         """
@@ -178,35 +176,83 @@ class LocalMapper:
         return self.grid_data.occupancy
 
     @property
-    def probabilistic_occupancy(self) -> np.ndarray:
-        """Getter of current grid probabilistic occupancy
+    def probabilities(self) -> Optional[np.ndarray]:
+        """Debug view of the current Bayesian probability grid.
 
-        :return: Grid probabilistic layer
-        :rtype: np.ndarray
+        Copies the log-odds GPU buffer and applies sigmoid on the C++
+        side; values are in [0, 1]. Only valid when `config.baysian_update`
+        is enabled AND the GPU backend is available.
+
+        Call after `update_from_scan` to inspect the posterior produced by
+        the current scan-model parameters. Useful for tuning `p_occupied`,
+        `range_sure`, `range_max`, etc.
+
+        :return: Probability grid (float32) or None on the CPU backend.
+        :rtype: Optional[np.ndarray]
         """
-        return self.grid_data.occupancy_prob
+        if not self.config.baysian_update:
+            return None
+        getter = getattr(self.local_mapper, "get_probabilities", None)
+        if getter is None:
+            return None
+        return np.copy(getter())
 
     def _initialize_mapper(self, scan_size: int) -> None:
-        """Initialize cpp local mapper"""
+        """Initialize cpp local mapper.
+
+        If `config.baysian_update` is true, attempts to construct the GPU mapper
+        via its Bayesian ctor.
+
+        The CPU Bayesian path is not exposed and will be removed. Switches to
+        non-Bayesian when GPU unavailable.
+        """
         try:
             from kompass_cpp.mapping import LocalMapperGPU
 
-            self.local_mapper = LocalMapperGPU(
-                grid_height=self.grid_height,
-                grid_width=self.grid_width,
-                resolution=self.config.resolution,
-                laserscan_position=self.pose_laserscanner_in_robot.get_position(),
-                laserscan_orientation=self.laserscan_orientation_in_robot,
-                is_pointcloud=self.is_pointcloud,
-                scan_size=scan_size,
-                angle_step=self.scan_model.angle_step,
-                max_height=self.scan_model.max_height,
-                min_height=self.scan_model.min_height,
-                range_max=self.scan_model.range_max,
-                max_points_per_line=self.config.max_points_per_line,
-            )
+            if self.config.baysian_update:
+                self.local_mapper = LocalMapperGPU(
+                    grid_height=self.grid_height,
+                    grid_width=self.grid_width,
+                    resolution=self.config.resolution,
+                    laserscan_position=self.pose_laserscanner_in_robot.get_position(),
+                    laserscan_orientation=self.laserscan_orientation_in_robot,
+                    is_pointcloud=self.is_pointcloud,
+                    scan_size=scan_size,
+                    p_prior=self.scan_model.p_prior,
+                    p_occupied=self.scan_model.p_occupied,
+                    p_empty=self.scan_model.p_empty,
+                    range_sure=self.scan_model.range_sure,
+                    range_max=self.scan_model.range_max,
+                    angle_step=self.scan_model.angle_step,
+                    max_height=self.scan_model.max_height,
+                    min_height=self.scan_model.min_height,
+                    max_points_per_line=self.config.max_points_per_line,
+                )
+            else:
+                self.local_mapper = LocalMapperGPU(
+                    grid_height=self.grid_height,
+                    grid_width=self.grid_width,
+                    resolution=self.config.resolution,
+                    laserscan_position=self.pose_laserscanner_in_robot.get_position(),
+                    laserscan_orientation=self.laserscan_orientation_in_robot,
+                    is_pointcloud=self.is_pointcloud,
+                    scan_size=scan_size,
+                    angle_step=self.scan_model.angle_step,
+                    max_height=self.scan_model.max_height,
+                    min_height=self.scan_model.min_height,
+                    range_max=self.scan_model.range_max,
+                    max_points_per_line=self.config.max_points_per_line,
+                )
         except ImportError:
             from kompass_cpp.mapping import LocalMapper as LocalMapperCpp
+
+            if self.config.baysian_update:
+                _logger.warning(
+                    "Bayesian mapping is not available on the CPU backend in "
+                    "this build; falling back to non-Bayesian scan_to_grid for "
+                    "this session."
+                )
+                self.config.baysian_update = False
 
             self.local_mapper = LocalMapperCpp(
                 grid_height=self.grid_height,
@@ -220,31 +266,6 @@ class LocalMapper:
                 max_points_per_line=self.config.max_points_per_line,
                 max_num_threads=self.config.max_num_threads,
             )
-
-    def _calculate_grid_shift(self, current_robot_pose: PoseData):
-        """Calculates 3D global pose shift of the last step probability grid based on the current robot position
-
-        :param current_robot_pose: Current robot position in global frame
-        :type current_robot_pose: PoseData
-        """
-        # self._pose_robot_in_world has been set already at least once
-        # i.e. we have a t+1 state
-        # get current shift in translation and orientation of the new center
-        # with respect to the previous old center
-        pose_current_robot_in_previous_robot = get_relative_pose(
-            pose_1_in_ref=self._pose_robot_in_world, pose_2_in_ref=current_robot_pose
-        )
-        # new position and orientation with respect to the previous pose
-        _position_in_previous_pose = pose_current_robot_in_previous_robot.get_position()
-        _orientation_in_previous_pose = pose_current_robot_in_previous_robot.get_yaw()
-
-        self.previous_grid_prob_transformed = (
-            self.local_mapper.get_previous_grid_in_current_pose(
-                current_position_in_previous_pose=_position_in_previous_pose[:2],
-                current_orientation_in_previous_pose=_orientation_in_previous_pose,
-                unknown_value=self.scan_model.p_prior,
-            )
-        )
 
     def update_from_scan(
         self,
@@ -277,6 +298,10 @@ class LocalMapper:
             else:
                 self._initialize_mapper(scan.ranges.size)  # type: ignore
 
+        # Capture the previous robot pose BEFORE overwriting it. The Bayesian
+        # path needs (prev_pose, current_pose) to compute the warp delta.
+        previous_robot_pose = self._pose_robot_in_world
+
         # Calculate new grid pose
         self._pose_robot_in_world = robot_pose
         self.lower_right_corner_pose = transform_point_from_local_to_global(
@@ -284,39 +309,34 @@ class LocalMapper:
         )
 
         if self.config.baysian_update:
+            # Compute odometry delta vs the previous frame. On the first
+            # frame there's no previous pose, so we pass zeros and the
+            # kernel skips the warp.
             if self.processed:
-                self._calculate_grid_shift(robot_pose)
-            if self.is_pointcloud:
-                scan_occupancy, scan_occupancy_prob = (
-                    self.local_mapper.scan_to_grid_baysian(
-                        **scan.asdict(),
-                    )
+                pose_delta = get_relative_pose(
+                    pose_1_in_ref=previous_robot_pose,
+                    pose_2_in_ref=robot_pose,
                 )
+                _pos = pose_delta.get_position()
+                position_in_previous_pose = np.asarray(_pos[:2], dtype=np.float32)
+                orientation_in_previous_pose = float(pose_delta.get_yaw())
             else:
-                # filter out negative range and points outside grid limit
-                filtered_ranges = np.minimum(
-                    self.config.filter_limit,
-                    np.maximum(0.0, scan.ranges),  # type: ignore
-                )
-                scan_occupancy, scan_occupancy_prob = (
-                    self.local_mapper.scan_to_grid_baysian(
-                        angles=scan.angles,  # type: ignore
-                        ranges=filtered_ranges,
-                    )
-                )
+                position_in_previous_pose = np.zeros(2, dtype=np.float32)
+                orientation_in_previous_pose = 0.0
 
-            # Update grid
-            self.grid_data.occupancy = np.copy(scan_occupancy)
+            # TODO: Pointcloud Bayesian path
 
-            self.grid_data.occupancy_prob[
-                scan_occupancy_prob > self.scan_model.p_prior
-            ] = OCCUPANCY_TYPE.OCCUPIED.value
-            self.grid_data.occupancy_prob[
-                scan_occupancy_prob == self.scan_model.p_prior
-            ] = OCCUPANCY_TYPE.UNEXPLORED.value
-            self.grid_data.occupancy_prob[
-                scan_occupancy_prob < self.scan_model.p_prior
-            ] = OCCUPANCY_TYPE.EMPTY.value
+            # filter out negative range and points outside grid limit
+            filtered_ranges = np.minimum(
+                self.config.filter_limit,
+                np.maximum(0.0, scan.ranges),  # type: ignore
+            )
+            scan_occupancy = self.local_mapper.scan_to_grid_baysian(
+                angles=scan.angles,  # type: ignore
+                ranges=filtered_ranges,
+                position_in_previous_pose=position_in_previous_pose,
+                orientation_in_previous_pose=orientation_in_previous_pose,
+            )
 
         else:
             if self.is_pointcloud:
@@ -334,13 +354,13 @@ class LocalMapper:
                     ranges=filtered_ranges,
                 )
 
-            # Update grid
-            self.grid_data.occupancy = np.copy(scan_occupancy)
+        # Update grid (both Bayesian and non-Bayesian return a discreet grid)
+        self.grid_data.occupancy = np.copy(scan_occupancy)
 
         # flag to enable fetching the mapping data
         self.processed = True
 
-        # robot occupied zone - TODO: make it in a separate function and proportional to the actual robot size\
+        # TODO: robot occupied zone: make it in a separate function and proportional to the actual robot size\
         # self.grid_data["scan_occupancy"][
         #     self.grid_robot_point[0] : self.grid_robot_point[0] + 2,
         #     self.grid_robot_point[1] : self.grid_robot_point[1] + 2,

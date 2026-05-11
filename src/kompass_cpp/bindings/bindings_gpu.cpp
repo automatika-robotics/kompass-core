@@ -19,6 +19,16 @@ void bindings_mapping_gpu(py::module_ &m) {
            py::arg("angle_step"), py::arg("max_height"), py::arg("min_height"),
            py::arg("range_max"), py::arg("max_points_per_line") = 32)
 
+      .def(py::init<const int, const int, float, const Eigen::Vector3f &, float,
+                    bool, int, float, float, float, float, float, float, float,
+                    float, int>(),
+           py::arg("grid_height"), py::arg("grid_width"), py::arg("resolution"),
+           py::arg("laserscan_position"), py::arg("laserscan_orientation"),
+           py::arg("is_pointcloud"), py::arg("scan_size"), py::arg("p_prior"),
+           py::arg("p_occupied"), py::arg("p_empty"), py::arg("range_sure"),
+           py::arg("range_max"), py::arg("angle_step"), py::arg("max_height"),
+           py::arg("min_height"), py::arg("max_points_per_line") = 32)
+
       .def("scan_to_grid",
            py::overload_cast<const std::vector<double> &,
                              const std::vector<double> &>(
@@ -33,7 +43,23 @@ void bindings_mapping_gpu(py::module_ &m) {
            "Convert raw point cloud data to occupancy grid", py::arg("data"),
            py::arg("point_step"), py::arg("row_step"), py::arg("height"),
            py::arg("width"), py::arg("x_offset"), py::arg("y_offset"),
-           py::arg("z_offset"), py::rv_policy::reference_internal);
+           py::arg("z_offset"), py::rv_policy::reference_internal)
+
+      .def("scan_to_grid_baysian",
+           &Mapping::LocalMapperGPU::scanToGridBaysian,
+           "Bayesian (recursive Bayes) update of an internal log-odds map; "
+           "returns a discrete occupancy grid thresholded against the prior.",
+           py::arg("angles"), py::arg("ranges"),
+           py::arg("position_in_previous_pose"),
+           py::arg("orientation_in_previous_pose"),
+           py::rv_policy::reference_internal)
+
+      .def("get_probabilities",
+           &Mapping::LocalMapperGPU::getProbabilities,
+           "Debug / tuning. Copies the current log-odds buffer back to host "
+           "and returns the sigmoid-transformed probability grid (values in "
+           "[0, 1]). Not on the hot path.",
+           py::rv_policy::reference_internal);
 }
 
 // Utils bindings submodule
