@@ -103,6 +103,52 @@ PointCloudMapConfig &get_pc_config() {
   return *cfg;
 }
 
+// Bayesian-mode mapper singletons. The Bayesian path holds a persistent
+// log-odds device buffer across calls — tests that depend on a clean initial
+// state get their own mapper to avoid order-dependent flakes (Boost does not
+// guarantee test-case order). One process-wide allocation per test, leaked
+// for the same AdaptiveCpp teardown reason as the others.
+struct BayesianMapConfig {
+  int grid_height;
+  int grid_width;
+  float grid_res;
+  int scan_size;
+  double angle_increment;
+  float pPrior;
+  float pOccupied;
+  float pEmpty;
+  float rangeSure;
+  float rangeMax;
+  float angleStep;
+  float minHeight;
+  float maxHeight;
+
+  Mapping::LocalMapperGPU mapper;
+
+  BayesianMapConfig()
+      : grid_height(21), grid_width(21), grid_res(0.1f), scan_size(63),
+        angle_increment(2.0 * M_PI / 63), pPrior(0.6f), pOccupied(0.9f),
+        pEmpty(1.0f - 0.9f), rangeSure(0.1f), rangeMax(20.0f),
+        angleStep(0.01f), minHeight(0.0f), maxHeight(0.0f),
+        mapper(Mapping::LocalMapperGPU(
+            grid_height, grid_width, grid_res, {0.0f, 0.0f, 0.0f}, 0.0f,
+            /*isPointCloud*/ false, scan_size, pPrior, pOccupied, pEmpty,
+            rangeSure, rangeMax, angleStep, maxHeight, minHeight)) {}
+};
+
+BayesianMapConfig &get_bayesian_basic() {
+  static BayesianMapConfig *cfg = new BayesianMapConfig();
+  return *cfg;
+}
+BayesianMapConfig &get_bayesian_accumulation() {
+  static BayesianMapConfig *cfg = new BayesianMapConfig();
+  return *cfg;
+}
+BayesianMapConfig &get_bayesian_motion() {
+  static BayesianMapConfig *cfg = new BayesianMapConfig();
+  return *cfg;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -264,4 +310,183 @@ BOOST_AUTO_TEST_CASE(test_mapper_pointcloud_circle) {
              "expected some OCCUPIED cells from the pointcloud circle");
   BOOST_TEST(n_empty > 0,
              "expected some EMPTY cells along the rays from origin");
+}
+
+// ---------------------------------------------------------------------------
+// Bayesian path tests
+// ---------------------------------------------------------------------------
+
+// Generate a 360° circle laserscan sized to the singleton's scan_size.
+// The mapper was constructed with scan_size and an angle_step = 2π/scan_size,
+// so the angles vector here must produce exactly scan_size beams in [0, 2π).
+static Control::LaserScan
+make_bayesian_circle_scan(double radius, int scan_size) {
+  std::vector<double> angles, ranges;
+  angles.reserve(scan_size);
+  ranges.reserve(scan_size);
+  const double step = 2.0 * M_PI / static_cast<double>(scan_size);
+  for (int i = 0; i < scan_size; ++i) {
+    angles.emplace_back(i * step);
+    ranges.emplace_back(radius);
+  }
+  return {ranges, angles};
+}
+
+// Single-frame invariants: counts sum to total, probabilities are in [0, 1],
+// at least one cell becomes OCCUPIED somewhere (the scan endpoints lie on
+// the grid for radius 0.5 m at 0.1 m / cell).
+BOOST_AUTO_TEST_CASE(test_mapper_bayesian_basic) {
+  auto &cfg = get_bayesian_basic();
+  auto scan = make_bayesian_circle_scan(0.5, cfg.scan_size);
+
+  Eigen::MatrixXi *grid = nullptr;
+  {
+    Timer t;
+    grid = &cfg.mapper.scanToGridBaysian(
+        scan.angles, scan.ranges,
+        Eigen::Vector2f(0.0f, 0.0f), /*orientationInPrevPose*/ 0.0);
+  }
+
+  const int total = static_cast<int>(grid->size());
+  const int n_occ = countPointsInGrid(
+      *grid, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  const int n_empty =
+      countPointsInGrid(*grid, static_cast<int>(Mapping::OccupancyType::EMPTY));
+  const int n_unknown = countPointsInGrid(
+      *grid, static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+  LOG_INFO("[bayesian basic] OCCUPIED=", n_occ, " EMPTY=", n_empty,
+           " UNEXPLORED=", n_unknown);
+  std::cout << "[bayesian basic] discrete grid:\n" << *grid << std::endl;
+
+  BOOST_TEST(n_occ + n_empty + n_unknown == total,
+             "discrete cell counts must sum to total (" << total << ")");
+  BOOST_TEST(n_occ > 0,
+             "expected at least one OCCUPIED cell at the scan endpoints");
+
+  // Probabilities round-trip through D2H + sigmoid; values must be in [0, 1].
+  const Eigen::MatrixXf &probs = cfg.mapper.getProbabilities();
+  std::cout << "[bayesian basic] probabilities:\n" << probs << std::endl;
+  float pmin = 1.0f, pmax = 0.0f;
+  for (int i = 0; i < probs.rows(); ++i) {
+    for (int j = 0; j < probs.cols(); ++j) {
+      const float p = probs(i, j);
+      pmin = std::min(pmin, p);
+      pmax = std::max(pmax, p);
+    }
+  }
+  LOG_INFO("[bayesian basic] prob min=", pmin, " max=", pmax);
+  BOOST_TEST(pmin >= 0.0f, "probabilities must be >= 0");
+  BOOST_TEST(pmax <= 1.0f, "probabilities must be <= 1");
+  // At least one cell got an OCCUPIED stamp, so its log-odds is above h0
+  // (the initial prior log-odds); after sigmoid this is strictly above
+  // pPrior. We use pPrior as the floor since cells unobserved on the first
+  // frame sit at exactly pPrior.
+  BOOST_TEST(pmax > cfg.pPrior,
+             "max probability should exceed the prior after observation");
+}
+
+// Recursive Bayes accumulation (arXiv:2101.01831 eq. 8). Applying the same
+// scan from an identical pose multiple times must monotonically grow the
+// log-odds at endpoint cells. Track the max probability frame-over-frame.
+BOOST_AUTO_TEST_CASE(test_mapper_bayesian_accumulation) {
+  auto &cfg = get_bayesian_accumulation();
+  auto scan = make_bayesian_circle_scan(0.5, cfg.scan_size);
+
+  const Eigen::Vector2f zero_pos(0.0f, 0.0f);
+  std::vector<float> max_probs;
+  max_probs.reserve(5);
+
+  Eigen::MatrixXi *final_grid = nullptr;
+  for (int frame = 0; frame < 5; ++frame) {
+    final_grid =
+        &cfg.mapper.scanToGridBaysian(scan.angles, scan.ranges, zero_pos, 0.0);
+    const Eigen::MatrixXf &probs = cfg.mapper.getProbabilities();
+    float pmax = 0.0f;
+    for (int i = 0; i < probs.rows(); ++i) {
+      for (int j = 0; j < probs.cols(); ++j) {
+        pmax = std::max(pmax, probs(i, j));
+      }
+    }
+    max_probs.push_back(pmax);
+    LOG_INFO("[bayesian accumulation] frame ", frame, " max prob=", pmax);
+  }
+
+  std::cout << "[bayesian accumulation] final discrete grid:\n"
+            << *final_grid << std::endl;
+  std::cout << "[bayesian accumulation] final probabilities:\n"
+            << cfg.mapper.getProbabilities() << std::endl;
+
+  // Frame-to-frame, the max probability must be non-decreasing: each frame's
+  // observation atomically adds (l_i - h0) to the same endpoint cells, so
+  // the log-odds (and therefore the sigmoid) at those cells grows or
+  // saturates but never shrinks.
+  for (size_t i = 1; i < max_probs.size(); ++i) {
+    BOOST_TEST(max_probs[i] >= max_probs[i - 1] - 1e-6f,
+               "max probability must be non-decreasing across frames (frame "
+                   << i << ": " << max_probs[i] << " < " << max_probs[i - 1]
+                   << ")");
+  }
+  // After 5 frames of the same observation, the max prob should be visibly
+  // above the prior (substantially closer to 1). The exact value depends on
+  // p_occupied + range_sure parameters but for default p_occupied=0.9 the
+  // first frame already pushes log-odds well above h0; 5 frames should be
+  // saturating toward 1.
+  BOOST_TEST(max_probs.back() > 0.9f,
+             "expected max probability > 0.9 after 5 frames of identical "
+             "observation, got "
+                 << max_probs.back());
+}
+
+// Pose-delta path: the warp kernel runs from frame 2 onwards. Frame 1 (post-
+// first-frame) feeds a non-zero position delta; verify the call completes
+// and the resulting grid is well-formed (counts sum to total, no NaN/inf in
+// probabilities).
+BOOST_AUTO_TEST_CASE(test_mapper_bayesian_motion) {
+  auto &cfg = get_bayesian_motion();
+  auto scan = make_bayesian_circle_scan(0.5, cfg.scan_size);
+
+  // Frame 0: identity pose. Populates the persistent log-odds buffer.
+  cfg.mapper.scanToGridBaysian(scan.angles, scan.ranges,
+                               Eigen::Vector2f(0.0f, 0.0f), 0.0);
+
+  // Frame 1: robot moved by (0.1 m, 0.0 m) and yawed by 0.05 rad. Triggers
+  // the warp kernel on the persistent buffer.
+  Eigen::MatrixXi *grid = nullptr;
+  {
+    Timer t;
+    grid = &cfg.mapper.scanToGridBaysian(
+        scan.angles, scan.ranges, Eigen::Vector2f(0.1f, 0.0f),
+        /*orientationInPrevPose*/ 0.05);
+  }
+
+  const int total = static_cast<int>(grid->size());
+  const int n_occ = countPointsInGrid(
+      *grid, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  const int n_empty =
+      countPointsInGrid(*grid, static_cast<int>(Mapping::OccupancyType::EMPTY));
+  const int n_unknown = countPointsInGrid(
+      *grid, static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+  LOG_INFO("[bayesian motion] OCCUPIED=", n_occ, " EMPTY=", n_empty,
+           " UNEXPLORED=", n_unknown);
+  std::cout << "[bayesian motion] discrete grid:\n" << *grid << std::endl;
+
+  BOOST_TEST(n_occ + n_empty + n_unknown == total,
+             "discrete cell counts must sum to total after motion frame");
+  BOOST_TEST(n_occ > 0,
+             "expected some OCCUPIED cells after warp + Bayesian update");
+
+  // Probabilities must remain in [0, 1] and free of NaN/inf after the warp.
+  const Eigen::MatrixXf &probs = cfg.mapper.getProbabilities();
+  std::cout << "[bayesian motion] probabilities:\n" << probs << std::endl;
+  for (int i = 0; i < probs.rows(); ++i) {
+    for (int j = 0; j < probs.cols(); ++j) {
+      const float p = probs(i, j);
+      BOOST_TEST(std::isfinite(p),
+                 "probability must be finite at (" << i << ", " << j
+                                                   << "), got " << p);
+      BOOST_TEST((p >= 0.0f && p <= 1.0f),
+                 "probability out of [0,1] at (" << i << ", " << j << "): "
+                                                 << p);
+    }
+  }
 }
