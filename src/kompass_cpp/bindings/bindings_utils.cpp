@@ -27,13 +27,13 @@ read_pcd_py(const std::string &filename) {
   float *raw_ptr = reinterpret_cast<float *>(points.data());
 
   // Capsule takes ownership of the vector
-  auto capsule = py ::capsule(
+  auto capsule = py::capsule(
       new std::vector<std::array<float, 3>>(std::move(points)),
       [](void *p) noexcept {
         delete reinterpret_cast<std::vector<std::array<float, 3>> *>(p);
       });
 
-  py ::ndarray<py ::numpy, float, py ::shape<-1, 3>, py::c_contig> arr(
+  py::ndarray<py::numpy, float, py::shape<-1, 3>, py::c_contig> arr(
       raw_ptr, {n, 3}, capsule);
 
   return arr;

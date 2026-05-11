@@ -119,7 +119,7 @@ public:
    *
    * Each call executes three kernels in sequence on the SYCL queue:
    *   1. Warp (skipped on the first frame): bilinear remap of the previous
-   *      posterior into the current robot frame, using the odometry.
+   *      posterior into the current robot frame, using the odometry delta.
    *   2. Bayesian update: for every ray, walk cells from sensor to
    *      endpoint and atomic-add a log-odds delta computed from the
    *      graded inverse sensor model.
