@@ -192,7 +192,7 @@ cd "$PROJECT_DIR"
 rm -rf dist/
 
 # Version pins must match pyproject.toml [build-system] requires
-$PYTHON -m pip install patchelf "scikit-build-core>=0.8" "nanobind>=1.8,<2.9.2" "packaging>=22.0"
+$PYTHON -m pip install patchelf "scikit-build-core>=0.8" "nanobind>=2.0.0,<2.9.2" "packaging>=22.0"
 
 # Use acpp as compiler; point CMake at Conan-generated find modules for OMPL/FCL
 # Use CMAKE_PREFIX_PATH instead of CMAKE_TOOLCHAIN_FILE to avoid Conan
