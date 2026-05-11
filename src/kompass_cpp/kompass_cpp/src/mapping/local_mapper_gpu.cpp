@@ -515,6 +515,19 @@ inline void submitBayesianUpdateKernel(
           const float range = devRanges[group_id];
           const double angle = devAngles[group_id];
 
+          // No-observation guard: a range >= rangeMax means this angle bin
+          // was either not hit by any point (pointcloud → laserscan
+          // conversion fills empty bins with rangeMax) or genuinely
+          // saturated the sensor's max range. Either way, eq. 10
+          // "otherwise" → no information → no log-odds update on any cell
+          // along the ray. Without this guard the empty-bin rays from a
+          // pointcloud-converted laserscan accumulate large negative
+          // free-class deltas at every cell they walk through, drowning
+          // out the OCCUPIED endpoint stamps from the real-point rays.
+          if (range >= rangeMax_local) {
+            return;
+          }
+
           // calculate start and end points in first thread of the group
           if (local_id == 0) {
             sycl::vec<float, 2> toPointLocal;
@@ -664,6 +677,7 @@ inline void submitThresholdKernel(sycl::queue &q, const float *log_odds_buf,
 
 } // namespace
 
+// pointcloud variant
 Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<int8_t> &data,
                                             int point_step, int row_step,
                                             int height, int width,
@@ -727,6 +741,7 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<int8_t> &data,
   return gridData;
 }
 
+// laserscan variant
 Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
                                             const std::vector<double> &ranges) {
 
@@ -779,6 +794,83 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
   return gridData;
 }
 
+// Bayesian helper: Both Bayesian overloads delegate here once
+// `m_devicePtrRanges` and `m_devicePtrAngles` are populated.
+void LocalMapperGPU::runBayesianPipeline(
+    const Eigen::Vector2f &positionInPrevPose,
+    double orientationInPrevPose) {
+  // Source = current posterior. Destination = the other buffer (warp
+  // output).
+  float *src = m_pingState ? m_devicePtrLogOddsB : m_devicePtrLogOddsA;
+  float *dst = m_pingState ? m_devicePtrLogOddsA : m_devicePtrLogOddsB;
+
+  if (m_frameIdx == 0) {
+    // First frame: no previous posterior to warp. The src persistent buffer
+    // was initialized to h0. Direct copy into dst.
+    m_q.memcpy(dst, src,
+               sizeof(float) * static_cast<size_t>(m_gridHeight) *
+                   static_cast<size_t>(m_gridWidth));
+  } else {
+    // Build the inverse affine coefficients (output cell -> source cell in
+    // the last frame grid).
+    //
+    // Derivation: output cell (col=fx, row=fy) in the CURRENT frame is
+    // at local position
+    //   pos_curr.x_axis = (fy - cx_row) * res    // row axis = kompass x
+    //   pos_curr.y_axis = (fx - cy_col) * res    // col axis = kompass y
+    // The same physical point in the LAST frame is at
+    //   pos_prev = positionInPrevPose + R(θ) * pos_curr
+    // Mapping back to the last frame grid:
+    //   src_row = pos_prev.x_axis / res + cx_row
+    //   src_col = pos_prev.y_axis / res + cy_col
+    // Expanding yields the affine below. For pos=(0,0), θ=0 it reduces
+    // to identity.
+    const float cx_row = static_cast<float>(m_centralPoint(0));
+    const float cy_col = static_cast<float>(m_centralPoint(1));
+    const float dx_cells = positionInPrevPose.x() / m_resolution;
+    const float dy_cells = positionInPrevPose.y() / m_resolution;
+    const double angle = orientationInPrevPose;
+    const float cosT = static_cast<float>(std::cos(angle));
+    const float sinT = static_cast<float>(std::sin(angle));
+
+    // srcX (source column) = cosT*fx + sinT*fy + (dy_cells + cy_col*(1-cosT)
+    //                                              - sinT*cx_row)
+    // srcY (source row)    = -sinT*fx + cosT*fy + (dx_cells + cx_row*(1-cosT)
+    //                                              + sinT*cy_col)
+    const float inv_a00 = cosT;
+    const float inv_a01 = sinT;
+    const float inv_a02 = dy_cells + cy_col * (1.0f - cosT) - sinT * cx_row;
+    const float inv_a10 = -sinT;
+    const float inv_a11 = cosT;
+    const float inv_a12 = dx_cells + cx_row * (1.0f - cosT) + sinT * cy_col;
+
+    submitWarpLogOddsKernel(m_q, src, dst, m_gridHeight, m_gridWidth, m_h0,
+                            inv_a00, inv_a01, inv_a02, inv_a10, inv_a11,
+                            inv_a12);
+  }
+
+  // Bayesian update on the warped posterior.
+  submitBayesianUpdateKernel(
+      m_q, dst, m_devicePtrDistances, m_devicePtrAngles, m_devicePtrRanges,
+      m_gridHeight, m_gridWidth, m_resolution, m_laserscanOrientation,
+      m_centralPoint, m_laserscanPosition, m_startPoint, m_scanSize,
+      m_maxPointsPerLine, m_h0, m_pPrior, m_pEmpty, m_pOccupied, m_rangeSure,
+      m_rangeMax);
+
+  // Threshold the final log-odds into the discrete output grid.
+  submitThresholdKernel(m_q, dst, m_devicePtrGrid, m_gridHeight, m_gridWidth,
+                        m_h0);
+
+  m_q.memcpy(gridData.data(), m_devicePtrGrid,
+             sizeof(int) * m_gridWidth * m_gridHeight);
+  m_q.wait_and_throw();
+
+  // Swap roles so next frame's warp source is the buffer we just wrote.
+  m_pingState = !m_pingState;
+  m_frameIdx++;
+}
+
+// laserscan variant
 Eigen::MatrixXi &LocalMapperGPU::scanToGridBaysian(
     const std::vector<double> &angles, const std::vector<double> &ranges,
     const Eigen::Vector2f &positionInPrevPose, double orientationInPrevPose) {
@@ -813,75 +905,67 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGridBaysian(
     m_q.memcpy(m_devicePtrRanges, m_hostFloatRanges.data(),
                sizeof(float) * m_scanSize);
 
-    // Source = current posterior. Destination = the other buffer (warp
-    // output).
-    float *src = m_pingState ? m_devicePtrLogOddsB : m_devicePtrLogOddsA;
-    float *dst = m_pingState ? m_devicePtrLogOddsA : m_devicePtrLogOddsB;
+    runBayesianPipeline(positionInPrevPose, orientationInPrevPose);
+  } catch (sycl::exception const &e) {
+    LOG_ERROR("SYCL exception caught: ", e.what());
+    throw;
+  } catch (std::exception const &e) {
+    LOG_ERROR("Standard exception caught: ", e.what());
+    throw;
+  }
+  return gridData;
+}
 
-    if (m_frameIdx == 0) {
-      // First frame: no previous posterior to warp. The src persistent buffer
-      // was initialized to h0. Direct copy into dst
-      m_q.memcpy(dst, src,
-                 sizeof(float) * static_cast<size_t>(m_gridHeight) *
-                     static_cast<size_t>(m_gridWidth));
-    } else {
-      // Build the inverse affine coefficients (output cell -> source cell in
-      // the last frame grid).
-      //
-      // Derivation: output cell (col=fx, row=fy) in the CURRENT frame is
-      // at local position
-      //   pos_curr.x_axis = (fy - cx_row) * res    // row axis = kompass x
-      //   pos_curr.y_axis = (fx - cy_col) * res    // col axis = kompass y
-      // The same physical point in the LAST frame is at
-      //   pos_prev = positionInPrevPose + R(θ) * pos_curr
-      // Mapping back to the last frame grid:
-      //   src_row = pos_prev.x_axis / res + cx_row
-      //   src_col = pos_prev.y_axis / res + cy_col
-      // Expanding yields the affine below. For pos=(0,0), θ=0 it reduces
-      // to identity.
-      const float cx_row = static_cast<float>(m_centralPoint(0));
-      const float cy_col = static_cast<float>(m_centralPoint(1));
-      const float dx_cells = positionInPrevPose.x() / m_resolution;
-      const float dy_cells = positionInPrevPose.y() / m_resolution;
-      const double angle = orientationInPrevPose;
-      const float cosT = static_cast<float>(std::cos(angle));
-      const float sinT = static_cast<float>(std::sin(angle));
-
-      // srcX (source column) = cosT*fx + sinT*fy + (dy_cells + cy_col*(1-cosT)
-      // - sinT*cx_row) srcY (source row)= -sinT*fx + cosT*fy + (dx_cells +
-      // cx_row*(1-cosT) + sinT*cy_col)
-      const float inv_a00 = cosT;
-      const float inv_a01 = sinT;
-      const float inv_a02 = dy_cells + cy_col * (1.0f - cosT) - sinT * cx_row;
-      const float inv_a10 = -sinT;
-      const float inv_a11 = cosT;
-      const float inv_a12 = dx_cells + cx_row * (1.0f - cosT) + sinT * cy_col;
-
-      submitWarpLogOddsKernel(m_q, src, dst, m_gridHeight, m_gridWidth, m_h0,
-                              inv_a00, inv_a01, inv_a02, inv_a10, inv_a11,
-                              inv_a12);
+// pointcloud variant
+Eigen::MatrixXi &LocalMapperGPU::scanToGridBaysian(
+    const std::vector<int8_t> &data, int point_step, int row_step,
+    int height, int width, float x_offset, float y_offset, float z_offset,
+    const Eigen::Vector2f &positionInPrevPose,
+    double orientationInPrevPose) {
+  if (!m_useBayesian) {
+    LOG_ERROR("scanToGridBaysian called on a LocalMapperGPU constructed "
+              "without Bayesian parameters; use the Bayesian ctor.");
+    throw std::runtime_error(
+        "scanToGridBaysian requires the Bayesian LocalMapperGPU ctor");
+  }
+  try {
+    const size_t total_bytes = data.size();
+    if (total_bytes == 0 || height == 0 || width == 0) {
+      LOG_WARNING("LocalMapperGPU::scanToGridBaysian(pointcloud): empty "
+                  "cloud (total_bytes=",
+                  total_bytes, " height=", height, " width=", width,
+                  "); skipping frame.");
+      float *current_log_odds =
+          m_pingState ? m_devicePtrLogOddsB : m_devicePtrLogOddsA;
+      submitThresholdKernel(m_q, current_log_odds, m_devicePtrGrid,
+                            m_gridHeight, m_gridWidth, m_h0);
+      m_q.memcpy(gridData.data(), m_devicePtrGrid,
+                 sizeof(int) * m_gridWidth * m_gridHeight);
+      m_q.wait_and_throw();
+      return gridData;
     }
 
-    // Bayesian update the warped posterior
-    submitBayesianUpdateKernel(
-        m_q, dst, m_devicePtrDistances, m_devicePtrAngles, m_devicePtrRanges,
-        m_gridHeight, m_gridWidth, m_resolution, m_laserscanOrientation,
-        m_centralPoint, m_laserscanPosition, m_startPoint, m_scanSize,
-        m_maxPointsPerLine, m_h0, m_pPrior, m_pEmpty, m_pOccupied, m_rangeSure,
-        m_rangeMax);
+    // Lazily grow the raw-bytes device buffer to fit this scan
+    if (m_rawCapacity < total_bytes) {
+      if (m_devicePtrRawBytes) {
+        sycl::free(m_devicePtrRawBytes, m_q);
+      }
+      m_devicePtrRawBytes = sycl::malloc_device<int8_t>(total_bytes, m_q);
+      m_rawCapacity = total_bytes;
+    }
 
-    // Threshold the final log-odds into the discrete output grid.
-    submitThresholdKernel(m_q, dst, m_devicePtrGrid, m_gridHeight, m_gridWidth,
-                          m_h0);
+    m_q.memcpy(m_devicePtrRawBytes, data.data(), total_bytes);
 
-    m_q.memcpy(gridData.data(), m_devicePtrGrid,
-               sizeof(int) * m_gridWidth * m_gridHeight);
-    m_q.wait_and_throw();
+    // Pointcloud -> per-bin laserscan ranges on-device.
+    submitPointCloudToLaserScanKernel(
+        m_q, m_devicePtrRawBytes, total_bytes, m_devicePtrRanges, m_scanSize,
+        static_cast<float>(m_rangeMax), point_step, row_step, width, height,
+        static_cast<int>(x_offset), static_cast<int>(y_offset),
+        static_cast<int>(z_offset), static_cast<float>(m_minHeight),
+        static_cast<float>(m_maxHeight), PointFieldType::FLOAT32,
+        /*element_size*/ 4, m_max_wg_size);
 
-    // Swap roles so next frame's warp source is the buffer we just wrote.
-    m_pingState = !m_pingState;
-    m_frameIdx++;
-
+    runBayesianPipeline(positionInPrevPose, orientationInPrevPose);
   } catch (sycl::exception const &e) {
     LOG_ERROR("SYCL exception caught: ", e.what());
     throw;

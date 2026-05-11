@@ -149,6 +149,37 @@ public:
                     double orientationInPrevPose);
 
   /**
+   * Pointcloud overload of `scanToGridBaysian`. Takes a raw
+   * PointCloud2 style byte buffer.
+   *
+   * Each call additionally runs the pointcloud -> laserscan conversion
+   * kernel before the warp / Bayesian update / threshold sequence:
+   *
+   * @param data                   Flattened PointCloud2 byte buffer
+   *                               (int8); same layout as the non-Bayesian
+   *                               `scanToGrid` pointcloud overload.
+   * @param point_step             Bytes between successive points.
+   * @param row_step               Bytes between rows (may exceed
+   *                               `width * point_step` for padded rows).
+   * @param height                 Number of rows in the cloud.
+   * @param width                  Number of points per row.
+   * @param x_offset,y_offset,z_offset  Byte offsets of the X/Y/Z float
+   *                                    fields inside one point.
+   * @param positionInPrevPose,orientationInPrevPose  Odometry delta used
+   *        by the warp kernel; see the laserscan overload for the
+   *        coordinate-system convention. Zero on the first frame.
+   * @return Reference to the internal discrete occupancy grid
+   *         (`OccupancyType` codes). Storage is reused across calls;
+   *         copy if you need to retain it.
+   */
+  Eigen::MatrixXi &
+  scanToGridBaysian(const std::vector<int8_t> &data, int point_step,
+                    int row_step, int height, int width, float x_offset,
+                    float y_offset, float z_offset,
+                    const Eigen::Vector2f &positionInPrevPose,
+                    double orientationInPrevPose);
+
+  /**
    * Debug accessor for the current frame's posterior probability grid.
    *
    * Performs a one-shot D2H copy of the current log-odds device buffer
@@ -164,6 +195,10 @@ public:
   const Eigen::MatrixXf &getProbabilities();
 
 private:
+  // Bayesian helper for shared Bayesian pipeline.
+  void runBayesianPipeline(const Eigen::Vector2f &positionInPrevPose,
+                           double orientationInPrevPose);
+
   // Common GPU init shared by both constructors.
   void initializeGPU(bool isPointCloud, int scanSize) {
     m_q = sycl::queue{sycl::default_selector_v,
