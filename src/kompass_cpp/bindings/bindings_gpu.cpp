@@ -46,16 +46,33 @@ void bindings_mapping_gpu(py::module_ &m) {
            py::arg("z_offset"), py::rv_policy::reference_internal)
 
       .def("scan_to_grid_baysian",
-           &Mapping::LocalMapperGPU::scanToGridBaysian,
-           "Bayesian (recursive Bayes) update of an internal log-odds map; "
-           "returns a discrete occupancy grid thresholded against the prior.",
+           py::overload_cast<const std::vector<double> &,
+                             const std::vector<double> &,
+                             const Eigen::Vector2f &, double>(
+               &Mapping::LocalMapperGPU::scanToGridBaysian),
+           "Bayesian (recursive Bayes) update from a laserscan; returns a "
+           "discrete occupancy grid thresholded against the prior.",
            py::arg("angles"), py::arg("ranges"),
            py::arg("position_in_previous_pose"),
            py::arg("orientation_in_previous_pose"),
            py::rv_policy::reference_internal)
 
-      .def("get_probabilities",
-           &Mapping::LocalMapperGPU::getProbabilities,
+      .def("scan_to_grid_baysian",
+           py::overload_cast<const std::vector<int8_t> &, int, int, int, int,
+                             float, float, float, const Eigen::Vector2f &,
+                             double>(
+               &Mapping::LocalMapperGPU::scanToGridBaysian),
+           "Bayesian (recursive Bayes) update from a raw PointCloud2 buffer; "
+           "runs the on-device pointcloud→laserscan conversion and the same "
+           "warp/Bayesian/threshold pipeline as the laserscan overload.",
+           py::arg("data"), py::arg("point_step"), py::arg("row_step"),
+           py::arg("height"), py::arg("width"), py::arg("x_offset"),
+           py::arg("y_offset"), py::arg("z_offset"),
+           py::arg("position_in_previous_pose"),
+           py::arg("orientation_in_previous_pose"),
+           py::rv_policy::reference_internal)
+
+      .def("get_probabilities", &Mapping::LocalMapperGPU::getProbabilities,
            "Debug / tuning. Copies the current log-odds buffer back to host "
            "and returns the sigmoid-transformed probability grid (values in "
            "[0, 1]). Not on the hot path.",

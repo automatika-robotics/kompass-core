@@ -247,7 +247,7 @@ class LocalMapper:
             from kompass_cpp.mapping import LocalMapper as LocalMapperCpp
 
             if self.config.baysian_update:
-                _logger.warning(
+                logging.warning(
                     "Bayesian mapping is not available on the CPU backend in "
                     "this build; falling back to non-Bayesian scan_to_grid for "
                     "this session."
@@ -324,19 +324,25 @@ class LocalMapper:
                 position_in_previous_pose = np.zeros(2, dtype=np.float32)
                 orientation_in_previous_pose = 0.0
 
-            # TODO: Pointcloud Bayesian path
-
-            # filter out negative range and points outside grid limit
-            filtered_ranges = np.minimum(
-                self.config.filter_limit,
-                np.maximum(0.0, scan.ranges),  # type: ignore
-            )
-            scan_occupancy = self.local_mapper.scan_to_grid_baysian(
-                angles=scan.angles,  # type: ignore
-                ranges=filtered_ranges,
-                position_in_previous_pose=position_in_previous_pose,
-                orientation_in_previous_pose=orientation_in_previous_pose,
-            )
+            if self.is_pointcloud:
+                # Pointcloud Bayesian path
+                scan_occupancy = self.local_mapper.scan_to_grid_baysian(
+                    **scan.asdict(),
+                    position_in_previous_pose=position_in_previous_pose,
+                    orientation_in_previous_pose=orientation_in_previous_pose,
+                )
+            else:
+                # filter out negative range and points outside grid limit
+                filtered_ranges = np.minimum(
+                    self.config.filter_limit,
+                    np.maximum(0.0, scan.ranges),  # type: ignore
+                )
+                scan_occupancy = self.local_mapper.scan_to_grid_baysian(
+                    angles=scan.angles,  # type: ignore
+                    ranges=filtered_ranges,
+                    position_in_previous_pose=position_in_previous_pose,
+                    orientation_in_previous_pose=orientation_in_previous_pose,
+                )
 
         else:
             if self.is_pointcloud:
