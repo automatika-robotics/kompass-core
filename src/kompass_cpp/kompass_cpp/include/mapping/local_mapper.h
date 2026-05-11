@@ -20,7 +20,7 @@ public:
       : m_gridHeight(gridHeight), m_gridWidth(gridWidth),
         m_resolution(resolution), m_laserscanOrientation(laserscanOrientation),
         m_pPrior(0.5f), m_pEmpty(0.4f), m_pOccupied(0.6f), m_rangeSure(1.0f),
-        m_rangeMax(rangeMax), m_wallSize(0.2f), m_angleStep(angleStep),
+        m_rangeMax(rangeMax), m_angleStep(angleStep),
         m_maxHeight(maxHeight), m_minHeight(minHeight),
         m_maxPointsPerLine(maxPointsPerLine),
         m_centralPoint(std::round(gridHeight / 2) - 1,
@@ -61,14 +61,14 @@ public:
               const float laserscanOrientation, const bool isPointCloud,
               const int scanSize, const float pPrior, const float pOccupied,
               const float pEmpty, const float rangeSure, const float rangeMax,
-              const float wallSize, const float angleStep,
-              const float maxHeight, const float minHeight,
-              const int maxPointsPerLine, const int maxNumThreads = 1)
+              const float angleStep, const float maxHeight,
+              const float minHeight, const int maxPointsPerLine,
+              const int maxNumThreads = 1)
       : m_gridHeight(gridHeight), m_gridWidth(gridWidth),
         m_resolution(resolution), m_laserscanOrientation(laserscanOrientation),
         m_pPrior(pPrior), m_pEmpty(pEmpty), m_pOccupied(pOccupied),
-        m_rangeSure(rangeSure), m_rangeMax(rangeMax), m_wallSize(wallSize),
-        m_angleStep(angleStep), m_maxHeight(maxHeight), m_minHeight(minHeight),
+        m_rangeSure(rangeSure), m_rangeMax(rangeMax), m_angleStep(angleStep),
+        m_maxHeight(maxHeight), m_minHeight(minHeight),
         m_maxPointsPerLine(maxPointsPerLine),
         m_centralPoint(std::round(gridHeight / 2) - 1,
                        std::round(gridWidth / 2) - 1),
@@ -249,7 +249,6 @@ protected:
   const float m_pOccupied;
   const float m_rangeSure;
   const float m_rangeMax;
-  const float m_wallSize;
   const float m_angleStep;
   const float m_maxHeight;
   const float m_minHeight;
