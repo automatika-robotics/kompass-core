@@ -590,15 +590,23 @@ inline void submitBayesianUpdateKernel(
           }
 
           // Inverse observation model:
-          //   - cell contains the endpoint -> occupied
-          //   - cell is along the ray but not the endpoint -> free
-          //   - cell is not intersected -> no info (gated out above)
-          const float pF = is_endpoint ? pOccupied_local : pEmpty_local;
-          const float grade = (cell_distance_m < rangeSure_local) ? 0.0f : 1.0f;
-          const float pSensor =
-              pF + grade *
-                       ((cell_distance_m - rangeSure_local) / rangeMax_local) *
-                       (pPrior_local - pF);
+          //   - endpoint -> occupied at full pOccupied confidence (no range
+          //     falloff, so a single observation flips the cell to OCCUPIED
+          //     even at long range).
+          //   - along-ray free cells use graded falloff toward pPrior:
+          //     distant (less confident).
+          float pSensor;
+          if (is_endpoint) {
+            pSensor = pOccupied_local;
+          } else {
+            const float grade =
+                (cell_distance_m < rangeSure_local) ? 0.0f : 1.0f;
+            pSensor =
+                pEmpty_local +
+                grade *
+                    ((cell_distance_m - rangeSure_local) / rangeMax_local) *
+                    (pPrior_local - pEmpty_local);
+          }
           const float l_i = sycl::log(pSensor / (1.0f - pSensor));
           const float delta_h = l_i - h0_local;
 
