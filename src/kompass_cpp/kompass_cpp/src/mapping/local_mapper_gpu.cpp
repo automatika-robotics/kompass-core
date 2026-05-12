@@ -328,11 +328,11 @@ inline void submitScanToGridKernel(
 
 /**
  * @brief Warp the last frame log-odds grid into the current robot frame
- *        using a 2D affine inverse-map with bilinear resampling.
+ *        using a 2D affine inverse-map with nearest-neighbour sampling.
  *
  * One thread per output cell. Each thread applies the precomputed 2x3 inverse
  * affine `(a00..a12)` to its (col, row) coordinates to find the source position
- * in the last frame grid, then performs a 4-tap bilinear gather from
+ * in the last frame grid, rounds it to the nearest cell, and reads from
  * `in_buf` and stores the result into `out_buf`. Cells whose source coordinates
  * fall outside the input grid are filled with `h0` (the initial prior
  * log-odds), so the warped grid keeps the "no information" value.
@@ -390,24 +390,13 @@ inline void submitWarpLogOddsKernel(sycl::queue &q, const float *in_buf,
           const float srcX = c00 * fx + c01 * fy + c02;
           const float srcY = c10 * fx + c11 * fy + c12;
 
-          if (srcX >= 0.0f && srcX < static_cast<float>(cols - 1) &&
-              srcY >= 0.0f && srcY < static_cast<float>(rows - 1)) {
-            const int x0 = static_cast<int>(sycl::floor(srcX));
-            const int y0 = static_cast<int>(sycl::floor(srcY));
-            const int x1 = x0 + 1;
-            const int y1 = y0 + 1;
-            const float w0 = srcX - static_cast<float>(x0);
-            const float w1 = 1.0f - w0;
-            const float h0w = srcY - static_cast<float>(y0);
-            const float h1w = 1.0f - h0w;
+          // Nearest-neighbour gather. Might cause single cell jitter
+          // when robot moves by subcell distance
+          const int srcXi = static_cast<int>(sycl::round(srcX));
+          const int srcYi = static_cast<int>(sycl::round(srcY));
+          if (srcXi >= 0 && srcXi < cols && srcYi >= 0 && srcYi < rows) {
             // Eigen column-major layout: linear index = row + col * rows
-            const float v00 = in_buf[y0 + x0 * rows];
-            const float v01 = in_buf[y0 + x1 * rows];
-            const float v10 = in_buf[y1 + x0 * rows];
-            const float v11 = in_buf[y1 + x1 * rows];
-            const float value =
-                h1w * (w1 * v00 + w0 * v01) + h0w * (w1 * v10 + w0 * v11);
-            out_buf[y + x * rows] = value;
+            out_buf[y + x * rows] = in_buf[srcYi + srcXi * rows];
           } else {
             out_buf[y + x * rows] = h0_local;
           }
@@ -603,8 +592,7 @@ inline void submitBayesianUpdateKernel(
                 (cell_distance_m < rangeSure_local) ? 0.0f : 1.0f;
             pSensor =
                 pEmpty_local +
-                grade *
-                    ((cell_distance_m - rangeSure_local) / rangeMax_local) *
+                grade * ((cell_distance_m - rangeSure_local) / rangeMax_local) *
                     (pPrior_local - pEmpty_local);
           }
           const float l_i = sycl::log(pSensor / (1.0f - pSensor));
@@ -805,8 +793,7 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
 // Bayesian helper: Both Bayesian overloads delegate here once
 // `m_devicePtrRanges` and `m_devicePtrAngles` are populated.
 void LocalMapperGPU::runBayesianPipeline(
-    const Eigen::Vector2f &positionInPrevPose,
-    double orientationInPrevPose) {
+    const Eigen::Vector2f &positionInPrevPose, double orientationInPrevPose) {
   // Source = current posterior. Destination = the other buffer (warp
   // output).
   float *src = m_pingState ? m_devicePtrLogOddsB : m_devicePtrLogOddsA;
@@ -858,12 +845,12 @@ void LocalMapperGPU::runBayesianPipeline(
   }
 
   // Bayesian update on the warped posterior.
-  submitBayesianUpdateKernel(
-      m_q, dst, m_devicePtrDistances, m_devicePtrAngles, m_devicePtrRanges,
-      m_gridHeight, m_gridWidth, m_resolution, m_laserscanOrientation,
-      m_centralPoint, m_laserscanPosition, m_startPoint, m_scanSize,
-      m_maxPointsPerLine, m_h0, m_pPrior, m_pEmpty, m_pOccupied, m_rangeSure,
-      m_rangeMax);
+  submitBayesianUpdateKernel(m_q, dst, m_devicePtrDistances, m_devicePtrAngles,
+                             m_devicePtrRanges, m_gridHeight, m_gridWidth,
+                             m_resolution, m_laserscanOrientation,
+                             m_centralPoint, m_laserscanPosition, m_startPoint,
+                             m_scanSize, m_maxPointsPerLine, m_h0, m_pPrior,
+                             m_pEmpty, m_pOccupied, m_rangeSure, m_rangeMax);
 
   // Threshold the final log-odds into the discrete output grid.
   submitThresholdKernel(m_q, dst, m_devicePtrGrid, m_gridHeight, m_gridWidth,
@@ -926,10 +913,9 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGridBaysian(
 
 // pointcloud variant
 Eigen::MatrixXi &LocalMapperGPU::scanToGridBaysian(
-    const std::vector<int8_t> &data, int point_step, int row_step,
-    int height, int width, float x_offset, float y_offset, float z_offset,
-    const Eigen::Vector2f &positionInPrevPose,
-    double orientationInPrevPose) {
+    const std::vector<int8_t> &data, int point_step, int row_step, int height,
+    int width, float x_offset, float y_offset, float z_offset,
+    const Eigen::Vector2f &positionInPrevPose, double orientationInPrevPose) {
   if (!m_useBayesian) {
     LOG_ERROR("scanToGridBaysian called on a LocalMapperGPU constructed "
               "without Bayesian parameters; use the Bayesian ctor.");
