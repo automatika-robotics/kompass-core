@@ -635,6 +635,116 @@ def test_bayesian_update_with_pose_motion(
     )
 
 
+def _pose_at(x: float, y: float, yaw: float) -> PoseData:
+    p = PoseData()
+    p.x = x
+    p.y = y
+    p.z = 0.0
+    p.qw = float(math.cos(yaw / 2))
+    p.qx = 0.0
+    p.qy = 0.0
+    p.qz = float(math.sin(yaw / 2))
+    return p
+
+
+@skip_no_gpu
+def test_bayesian_warp_no_explosion_under_sub_cell_motion(logs_test_dir: str):
+    """Regression: a bilinear warp would compound sub-cell pose shifts into
+    exponential growth of the OCCUPIED region. The nearest-neighbour warp
+    keeps it bounded. We drive the robot forward in 0.03 m steps (0.3 cells
+    at 0.1 m resolution) for 20 frames with the same scan, then assert the
+    OCCUPIED count stayed close to its single-frame baseline."""
+    mapper_config = MapConfig(
+        width=2.0, height=2.0, padding=0.0, resolution=0.1,
+        baysian_update=True,
+    )
+    scan_model = ScanModelConfig(
+        p_prior=0.6, p_occupied=0.9, range_sure=0.1, range_max=20.0,
+    )
+    mapper = LocalMapper(config=mapper_config, scan_model_config=scan_model)
+    n = int(math.ceil(2.0 * math.pi / scan_model.angle_step))
+    scan = _circle_laserscan(n=n, radius=0.5)
+
+    # Frame 0: identity pose, capture baseline.
+    mapper.update_from_scan(_pose_at(0.0, 0.0, 0.0), scan)
+    n_occ_baseline = _occupancy_counts(mapper.grid_data.occupancy)[0]
+
+    # 20 frames of sub-cell forward motion.
+    for frame in range(1, 21):
+        mapper.update_from_scan(_pose_at(0.03 * frame, 0.0, 0.0), scan)
+
+    grid = mapper.grid_data.occupancy
+    n_occ_after, _, _ = _occupancy_counts(grid)
+    logging.info(
+        "bayesian warp sub-cell: baseline=%d after-20-frames=%d total=%d",
+        n_occ_baseline, n_occ_after, grid.size,
+    )
+
+    assert n_occ_after <= n_occ_baseline * 2, (
+        f"OCCUPIED grew past 2x baseline ({n_occ_baseline} -> {n_occ_after}) "
+        "— warp may be smearing"
+    )
+    assert n_occ_after < grid.size // 4, (
+        f"OCCUPIED count exceeded 25% of grid ({n_occ_after}/{grid.size}) "
+        "— explosion regression"
+    )
+
+    visualize_grid(
+        grid, scale=100, show_image=False,
+        save_file=os.path.join(logs_test_dir, "bayesian_warp_subcell.jpg"),
+    )
+
+
+@skip_no_gpu
+def test_bayesian_warp_super_cell_drift_bounded(logs_test_dir: str):
+    """Multi-cell motion exercises the warp's actual shift path (NN rounds
+    1-cell deltas cleanly). The warped previous ring drifts behind the
+    robot and decays as free stamps land on it; OCCUPIED stays bounded."""
+    mapper_config = MapConfig(
+        width=2.0, height=2.0, padding=0.0, resolution=0.1,
+        baysian_update=True,
+    )
+    scan_model = ScanModelConfig(
+        p_prior=0.6, p_occupied=0.9, range_sure=0.1, range_max=20.0,
+    )
+    mapper = LocalMapper(config=mapper_config, scan_model_config=scan_model)
+    n = int(math.ceil(2.0 * math.pi / scan_model.angle_step))
+    scan = _circle_laserscan(n=n, radius=0.5)
+
+    mapper.update_from_scan(_pose_at(0.0, 0.0, 0.0), scan)
+    n_occ_baseline = _occupancy_counts(mapper.grid_data.occupancy)[0]
+
+    # 10 frames of one-cell-per-frame motion.
+    for frame in range(1, 11):
+        mapper.update_from_scan(_pose_at(0.1 * frame, 0.0, 0.0), scan)
+
+    grid = mapper.grid_data.occupancy
+    n_occ_after, _, _ = _occupancy_counts(grid)
+    logging.info(
+        "bayesian warp super-cell: baseline=%d after-10-frames=%d total=%d",
+        n_occ_baseline, n_occ_after, grid.size,
+    )
+
+    assert n_occ_after <= n_occ_baseline * 4, (
+        f"OCCUPIED grew past 4x baseline ({n_occ_baseline} -> {n_occ_after}) "
+        "under multi-cell motion"
+    )
+    assert n_occ_after < grid.size // 2, (
+        f"OCCUPIED exceeded 50% of grid ({n_occ_after}/{grid.size}) "
+        "— explosion regression"
+    )
+
+    probs = mapper.probabilities
+    assert probs is not None
+    assert np.all(np.isfinite(probs)), "non-finite probability after drift"
+    assert probs.min() >= 0.0 and probs.max() <= 1.0
+
+    visualize_grid(
+        grid, scale=100, show_image=False,
+        save_file=os.path.join(logs_test_dir, "bayesian_warp_supercell.jpg"),
+    )
+
+
 @skip_no_gpu
 def test_bayesian_update_from_pointcloud_synthetic_ring(logs_test_dir: str):
     """The Python wrapper must route Bayesian + pointcloud inputs to the

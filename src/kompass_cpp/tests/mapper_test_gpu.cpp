@@ -148,6 +148,14 @@ BayesianMapConfig &get_bayesian_motion() {
   static BayesianMapConfig *cfg = new BayesianMapConfig();
   return *cfg;
 }
+BayesianMapConfig &get_bayesian_warp_subcell() {
+  static BayesianMapConfig *cfg = new BayesianMapConfig();
+  return *cfg;
+}
+BayesianMapConfig &get_bayesian_warp_supercell() {
+  static BayesianMapConfig *cfg = new BayesianMapConfig();
+  return *cfg;
+}
 
 // Bayesian + pointcloud singleton. isPointCloud=true so the ctor
 // pre-uploads angles and the Bayesian-pointcloud overload only has to
@@ -600,4 +608,100 @@ BOOST_AUTO_TEST_CASE(test_mapper_bayesian_pointcloud_ring) {
   BOOST_TEST(pmax <= 1.0f, "probabilities must be <= 1");
   BOOST_TEST(pmax > cfg.pPrior,
              "max probability should exceed the prior after observation");
+}
+
+// Regression: bilinear warp would compound sub-cell shifts into exponential
+// growth of the OCCUPIED region. Nearest-neighbour sampling must keep it
+// bounded — the obstacle moves with the robot here, so the same scan is
+// applied each frame from a slightly different pose. With NN the warped
+// previous ring stays at the same grid cells (sub-cell shifts round to
+// zero), so OCCUPIED count should hover near its single-frame value.
+BOOST_AUTO_TEST_CASE(test_mapper_bayesian_warp_no_explosion_sub_cell) {
+  auto &cfg = get_bayesian_warp_subcell();
+  auto scan = make_bayesian_circle_scan(0.5, cfg.scan_size);
+
+  // Frame 0: identity pose, capture baseline OCCUPIED count.
+  Eigen::MatrixXi &grid0 = cfg.mapper.scanToGridBaysian(
+      scan.angles, scan.ranges, Eigen::Vector2f(0.0f, 0.0f), 0.0);
+  const int n_occ_baseline = countPointsInGrid(
+      grid0, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+
+  // 20 frames of 0.03 m motion (0.3 cells at 0.1 m / cell — sub-cell). With
+  // the obstacle held fixed in the robot frame, NN warp rounds each shift
+  // to zero cells and the buffer stays put.
+  const Eigen::Vector2f sub_cell_delta(0.03f, 0.0f);
+  Eigen::MatrixXi *gridN = nullptr;
+  for (int frame = 1; frame <= 20; ++frame) {
+    gridN = &cfg.mapper.scanToGridBaysian(scan.angles, scan.ranges,
+                                          sub_cell_delta, 0.0);
+  }
+
+  const int n_occ_after = countPointsInGrid(
+      *gridN, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  const int total = static_cast<int>(gridN->size());
+  LOG_INFO("[bayesian warp sub-cell] baseline OCCUPIED=", n_occ_baseline,
+           " after 20 frames OCCUPIED=", n_occ_after, " total=", total);
+
+  // Bilinear-explosion would saturate the grid at ~total within ~10 frames.
+  // NN should keep us within a small factor of baseline.
+  BOOST_TEST(n_occ_after <= n_occ_baseline * 2,
+             "OCCUPIED count grew past 2x baseline ("
+                 << n_occ_baseline << " -> " << n_occ_after
+                 << ") — warp may be smearing");
+  BOOST_TEST(n_occ_after < total / 4,
+             "OCCUPIED count exceeded 25% of grid ("
+                 << n_occ_after << "/" << total
+                 << ") — explosion regression");
+}
+
+// Multi-cell motion: each frame shifts the buffer by exactly one cell. The
+// warped previous-frame ring drifts behind the robot; the new scan stamps
+// a fresh ring at the current relative position. The discrete grid should
+// show a short OCCUPIED trail, not an exponentially-growing region.
+BOOST_AUTO_TEST_CASE(test_mapper_bayesian_warp_super_cell_drift_bounded) {
+  auto &cfg = get_bayesian_warp_supercell();
+  auto scan = make_bayesian_circle_scan(0.5, cfg.scan_size);
+
+  Eigen::MatrixXi &grid0 = cfg.mapper.scanToGridBaysian(
+      scan.angles, scan.ranges, Eigen::Vector2f(0.0f, 0.0f), 0.0);
+  const int n_occ_baseline = countPointsInGrid(
+      grid0, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+
+  // 10 frames of one-cell-per-frame motion.
+  const Eigen::Vector2f one_cell_delta(0.1f, 0.0f);
+  Eigen::MatrixXi *gridN = nullptr;
+  for (int frame = 1; frame <= 10; ++frame) {
+    gridN = &cfg.mapper.scanToGridBaysian(scan.angles, scan.ranges,
+                                          one_cell_delta, 0.0);
+  }
+
+  const int n_occ_after = countPointsInGrid(
+      *gridN, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  const int total = static_cast<int>(gridN->size());
+  LOG_INFO("[bayesian warp super-cell] baseline OCCUPIED=", n_occ_baseline,
+           " after 10 frames OCCUPIED=", n_occ_after, " total=", total);
+
+  // The drifting trail can lift OCCUPIED a few times baseline, but must
+  // not run away.
+  BOOST_TEST(n_occ_after <= n_occ_baseline * 4,
+             "OCCUPIED count grew past 4x baseline ("
+                 << n_occ_baseline << " -> " << n_occ_after
+                 << ") under multi-cell motion");
+  BOOST_TEST(n_occ_after < total / 2,
+             "OCCUPIED count exceeded 50% of grid ("
+                 << n_occ_after << "/" << total
+                 << ") — explosion regression");
+
+  // Probabilities must remain valid through the repeated warp/update cycles.
+  const Eigen::MatrixXf &probs = cfg.mapper.getProbabilities();
+  for (int i = 0; i < probs.rows(); ++i) {
+    for (int j = 0; j < probs.cols(); ++j) {
+      const float p = probs(i, j);
+      BOOST_TEST(std::isfinite(p),
+                 "non-finite probability after multi-cell drift");
+      BOOST_TEST((p >= 0.0f && p <= 1.0f),
+                 "probability out of [0,1] at (" << i << "," << j << "): "
+                                                 << p);
+    }
+  }
 }
