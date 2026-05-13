@@ -328,7 +328,8 @@ inline void submitScanToGridKernel(
 
 /**
  * @brief Warp the last frame log-odds grid into the current robot frame
- *        using a 2D affine inverse-map with nearest-neighbour sampling.
+ *        using a 2D affine inverse-map with bilinear sampling and a
+ *        log-odds clamp.
  *
  * One thread per output cell. Each thread applies the precomputed 2x3 inverse
  * affine `(a00..a12)` to its (col, row) coordinates to find the source position
@@ -390,16 +391,31 @@ inline void submitWarpLogOddsKernel(sycl::queue &q, const float *in_buf,
           const float srcX = c00 * fx + c01 * fy + c02;
           const float srcY = c10 * fx + c11 * fy + c12;
 
-          // Nearest-neighbour gather. Might cause single cell jitter
-          // when robot moves by subcell distance
-          const int srcXi = static_cast<int>(sycl::round(srcX));
-          const int srcYi = static_cast<int>(sycl::round(srcY));
-          if (srcXi >= 0 && srcXi < cols && srcYi >= 0 && srcYi < rows) {
+          // 4-tap bilinear gather. Clamping each cell at MAX_LOG_ODDS bounds
+          // the spread reach to ~4-5 cells even under continuous observation
+          constexpr float MAX_LOG_ODDS = 5.0f;
+          float value;
+          if (srcX >= 0.0f && srcX < static_cast<float>(cols - 1) &&
+              srcY >= 0.0f && srcY < static_cast<float>(rows - 1)) {
+            const int x0 = static_cast<int>(sycl::floor(srcX));
+            const int y0 = static_cast<int>(sycl::floor(srcY));
+            const int x1 = x0 + 1;
+            const int y1 = y0 + 1;
+            const float w0 = srcX - static_cast<float>(x0);
+            const float w1 = 1.0f - w0;
+            const float h0w = srcY - static_cast<float>(y0);
+            const float h1w = 1.0f - h0w;
             // Eigen column-major layout: linear index = row + col * rows
-            out_buf[y + x * rows] = in_buf[srcYi + srcXi * rows];
+            const float v00 = in_buf[y0 + x0 * rows];
+            const float v01 = in_buf[y0 + x1 * rows];
+            const float v10 = in_buf[y1 + x0 * rows];
+            const float v11 = in_buf[y1 + x1 * rows];
+            value = h1w * (w1 * v00 + w0 * v01) +
+                    h0w * (w1 * v10 + w0 * v11);
           } else {
-            out_buf[y + x * rows] = h0_local;
+            value = h0_local;
           }
+          out_buf[y + x * rows] = sycl::clamp(value, -MAX_LOG_ODDS, MAX_LOG_ODDS);
         });
   });
 }
