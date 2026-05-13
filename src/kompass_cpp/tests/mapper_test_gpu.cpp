@@ -460,9 +460,7 @@ BOOST_AUTO_TEST_CASE(test_mapper_bayesian_accumulation) {
             << cfg.mapper.getProbabilities() << std::endl;
 
   // Frame-to-frame, the max probability must be non-decreasing: each frame's
-  // observation atomically adds (l_i - h0) to the same endpoint cells, so
-  // the log-odds (and therefore the sigmoid) at those cells grows or
-  // saturates but never shrinks.
+  // observation atomically adds (l_i - h0) to the same endpoint cells.
   for (size_t i = 1; i < max_probs.size(); ++i) {
     BOOST_TEST(max_probs[i] >= max_probs[i - 1] - 1e-6f,
                "max probability must be non-decreasing across frames (frame "
@@ -470,10 +468,7 @@ BOOST_AUTO_TEST_CASE(test_mapper_bayesian_accumulation) {
                    << ")");
   }
   // After 5 frames of the same observation, the max prob should be visibly
-  // above the prior (substantially closer to 1). The exact value depends on
-  // p_occupied + range_sure parameters but for default p_occupied=0.9 the
-  // first frame already pushes log-odds well above h0; 5 frames should be
-  // saturating toward 1.
+  // above the prior (substantially closer to 1).
   BOOST_TEST(max_probs.back() > 0.9f,
              "expected max probability > 0.9 after 5 frames of identical "
              "observation, got "
@@ -481,9 +476,7 @@ BOOST_AUTO_TEST_CASE(test_mapper_bayesian_accumulation) {
 }
 
 // Pose-delta path: the warp kernel runs from frame 2 onwards. Frame 1 (post-
-// first-frame) feeds a non-zero position delta; verify the call completes
-// and the resulting grid is well-formed (counts sum to total, no NaN/inf in
-// probabilities).
+// first-frame) feeds a non-zero position delta.
 BOOST_AUTO_TEST_CASE(test_mapper_bayesian_motion) {
   auto &cfg = get_bayesian_motion();
   auto scan = make_bayesian_circle_scan(0.5, cfg.scan_size);
@@ -535,10 +528,7 @@ BOOST_AUTO_TEST_CASE(test_mapper_bayesian_motion) {
 }
 
 // Bayesian pointcloud overload: a deterministic ring of points on a 0.5 m
-// circle (same shape the non-Bayesian pointcloud test uses) should drive
-// the same recursive Bayes pipeline as the laserscan path. Verifies the
-// on-device pointcloud→laserscan conversion feeds the Bayesian update
-// correctly and the discrete output is well-formed.
+// circle (same shape the non-Bayesian pointcloud test).
 BOOST_AUTO_TEST_CASE(test_mapper_bayesian_pointcloud_ring) {
   auto &cfg = get_bayesian_pc();
 
@@ -610,12 +600,13 @@ BOOST_AUTO_TEST_CASE(test_mapper_bayesian_pointcloud_ring) {
              "max probability should exceed the prior after observation");
 }
 
-// Regression: bilinear warp would compound sub-cell shifts into exponential
-// growth of the OCCUPIED region. Nearest-neighbour sampling must keep it
-// bounded — the obstacle moves with the robot here, so the same scan is
-// applied each frame from a slightly different pose. With NN the warped
-// previous ring stays at the same grid cells (sub-cell shifts round to
-// zero), so OCCUPIED count should hover near its single-frame value.
+// Regression: without log-odds clamping, bilinear sub-cell warp compounded
+// continuously-observed cells into a runaway OCCUPIED region . The clamp on
+// the warped value bounds the spread reach to ~4-5 cells.
+//
+// In this scenario the obstacle is held fixed in the robot's body frame
+// (same scan each frame as the robot translates), so the ring drags
+// with the robot.
 BOOST_AUTO_TEST_CASE(test_mapper_bayesian_warp_no_explosion_sub_cell) {
   auto &cfg = get_bayesian_warp_subcell();
   auto scan = make_bayesian_circle_scan(0.5, cfg.scan_size);
@@ -627,8 +618,7 @@ BOOST_AUTO_TEST_CASE(test_mapper_bayesian_warp_no_explosion_sub_cell) {
       grid0, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
 
   // 20 frames of 0.03 m motion (0.3 cells at 0.1 m / cell — sub-cell). With
-  // the obstacle held fixed in the robot frame, NN warp rounds each shift
-  // to zero cells and the buffer stays put.
+  // the obstacle held fixed in the robot frame.
   const Eigen::Vector2f sub_cell_delta(0.03f, 0.0f);
   Eigen::MatrixXi *gridN = nullptr;
   for (int frame = 1; frame <= 20; ++frame) {
@@ -642,22 +632,18 @@ BOOST_AUTO_TEST_CASE(test_mapper_bayesian_warp_no_explosion_sub_cell) {
   LOG_INFO("[bayesian warp sub-cell] baseline OCCUPIED=", n_occ_baseline,
            " after 20 frames OCCUPIED=", n_occ_after, " total=", total);
 
-  // Bilinear-explosion would saturate the grid at ~total within ~10 frames.
-  // NN should keep us within a small factor of baseline.
-  BOOST_TEST(n_occ_after <= n_occ_baseline * 2,
-             "OCCUPIED count grew past 2x baseline ("
+  // Without log-odds clamping the runaway spread would saturate the grid
+  BOOST_TEST(n_occ_after <= n_occ_baseline * 4,
+             "OCCUPIED count grew past 4x baseline ("
                  << n_occ_baseline << " -> " << n_occ_after
-                 << ") — warp may be smearing");
+                 << ") — log-odds clamp may be missing or warp may be smearing");
   BOOST_TEST(n_occ_after < total / 4,
              "OCCUPIED count exceeded 25% of grid ("
                  << n_occ_after << "/" << total
                  << ") — explosion regression");
 }
 
-// Multi-cell motion: each frame shifts the buffer by exactly one cell. The
-// warped previous-frame ring drifts behind the robot; the new scan stamps
-// a fresh ring at the current relative position. The discrete grid should
-// show a short OCCUPIED trail, not an exponentially-growing region.
+// Multi-cell motion: each frame shifts the buffer by exactly one cell.
 BOOST_AUTO_TEST_CASE(test_mapper_bayesian_warp_super_cell_drift_bounded) {
   auto &cfg = get_bayesian_warp_supercell();
   auto scan = make_bayesian_circle_scan(0.5, cfg.scan_size);
