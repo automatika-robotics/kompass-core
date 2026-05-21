@@ -457,7 +457,7 @@ if [[ $KEEP_SOURCE_FILES == false ]]; then
     # Cleanup: AdaptiveCpp
     if [[ "$DID_CLONE_ACPP" == "true" ]]; then
         log INFO "Removing AdaptiveCpp (auto-cloned)..."
-        rm -rf AdaptiveCpp
+        $SUDO rm -rf AdaptiveCpp
     else
         log INFO "Skipping removal of AdaptiveCpp (existed before script ran)"
     fi
