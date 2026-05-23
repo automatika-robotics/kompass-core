@@ -28,7 +28,6 @@ struct GridMapConfig {
   float pEmpty;
   float rangeSure;
   float rangeMax;
-  float wallSize;
   float angleStep;
   float minHeight;
   float maxHeight;
@@ -48,14 +47,14 @@ struct GridMapConfig {
         centralPoint(std::round(grid_height / 2) - 1,
                      std::round(grid_width / 2) - 1),
         pPrior(0.6), pOccupied(0.9), pEmpty(1 - pOccupied), rangeSure(0.1),
-        rangeMax(20.0), wallSize(0.2), angleStep(0.01), minHeight(0.0),
-        maxHeight(0.0), maxNumThreads(10),
+        rangeMax(20.0), angleStep(0.01), minHeight(0.0), maxHeight(0.0),
+        maxNumThreads(10),
         limit(grid_width > grid_height ? grid_width * grid_res * std::sqrt(2)
                                        : grid_height * grid_res * std::sqrt(2)),
         maxPointsPerLine(static_cast<int>((limit / grid_res) * 1.5)),
         local_mapper(Mapping::LocalMapper(
-            grid_height, grid_width, grid_res, {0.0, 0.0, 0.0}, 0.0, false, 0, pPrior,
-            pOccupied, pEmpty, rangeSure, rangeMax, wallSize, angleStep,
+            grid_height, grid_width, grid_res, {0.0, 0.0, 0.0}, 0.0, false, 0,
+            pPrior, pOccupied, pEmpty, rangeSure, rangeMax, angleStep,
             maxHeight, minHeight, maxPointsPerLine, maxNumThreads)) {
 
     // Logging the central point and limit circle radius

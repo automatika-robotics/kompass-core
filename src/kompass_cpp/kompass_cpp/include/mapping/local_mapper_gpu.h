@@ -3,6 +3,7 @@
 #include "local_mapper.h"
 #include "utils/logger.h"
 #include <Eigen/Dense>
+#include <cmath>
 #include <sycl/sycl.hpp>
 #include <vector>
 
@@ -22,47 +23,36 @@ public:
       : LocalMapper(gridHeight, gridWidth, resolution, laserscanPosition,
                     laserscanOrientation, isPointCloud, scanSize, angleStep,
                     maxHeight, minHeight, rangeMax, maxPointsPerLine) {
-    m_q = sycl::queue{sycl::default_selector_v,
-                      sycl::property::queue::in_order{}};
-    auto dev = m_q.get_device();
-    LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
+    initializeGPU(isPointCloud, scanSize);
+  }
 
-    // Query the device's max work-group size for the pointcloud conversion
-    // kernel
-    m_max_wg_size = dev.get_info<sycl::info::device::max_work_group_size>();
+  // Constructor with Bayesian parameters. Allocates two persistent log-odds
+  // device buffers that keep the recursive Bayes state. Not reset between frames.
+  LocalMapperGPU(const int gridHeight, const int gridWidth,
+                 const float resolution,
+                 const Eigen::Vector3f &laserscanPosition,
+                 const float laserscanOrientation, const bool isPointCloud,
+                 const int scanSize, const float pPrior, const float pOccupied,
+                 const float pEmpty, const float rangeSure,
+                 const float rangeMax, const float angleStep,
+                 const float maxHeight, const float minHeight,
+                 const int maxPointsPerLine = 32)
+      : LocalMapper(gridHeight, gridWidth, resolution, laserscanPosition,
+                    laserscanOrientation, isPointCloud, scanSize, pPrior,
+                    pOccupied, pEmpty, rangeSure, rangeMax, angleStep,
+                    maxHeight, minHeight, maxPointsPerLine) {
+    initializeGPU(isPointCloud, scanSize);
 
-    // Buffers needed on both laserscan and pointcloud paths
-    // Ranges is `float` (not double)
-    m_devicePtrRanges = sycl::malloc_device<float>(scanSize, m_q);
-    m_devicePtrAngles = sycl::malloc_device<double>(scanSize, m_q);
-    m_devicePtrGrid = sycl::malloc_device<int>(m_gridHeight * m_gridWidth, m_q);
-    m_devicePtrDistances =
-        sycl::malloc_shared<float>(m_gridHeight * m_gridWidth, m_q);
+    m_useBayesian = true;
+    m_h0 = std::log(pPrior / (1.0f - pPrior));  // log prob prior
 
-    // Host-side staging buffer for the laserscan overload's
-    // double→float narrowing. Sized once here.
-    m_hostFloatRanges.resize(scanSize);
-
-    // Precompute per-cell distance from the laserscan origin.
-    // Used by the ray-cast kernel to gate super-cover line fills.
-    Eigen::Vector3f destPointLocal;
-    for (size_t i = 0; i < m_gridHeight; ++i) {
-      for (size_t j = 0; j < m_gridWidth; ++j) {
-        destPointLocal = gridToLocal({i, j});
-        m_devicePtrDistances[i + j * m_gridWidth] =
-            (destPointLocal - m_laserscanPosition).norm();
-      }
-    }
-
-    if (isPointCloud) {
-      // Angles are pre-populated by the base LocalMapper ctor with the
-      // `2π / scan_size` bin width the conversion kernel assumes; upload
-      // them once here and skip the per-call H→D copy. The laserscan
-      // path uploads angles per call instead.
-      m_q.memcpy(m_devicePtrAngles, initializedAngles.data(),
-                 sizeof(double) * scanSize);
-      m_q.wait();
-    }
+    const size_t cellCount =
+        static_cast<size_t>(m_gridHeight) * static_cast<size_t>(m_gridWidth);
+    m_devicePtrLogOddsA = sycl::malloc_device<float>(cellCount, m_q);
+    m_devicePtrLogOddsB = sycl::malloc_device<float>(cellCount, m_q);
+    m_q.fill(m_devicePtrLogOddsA, m_h0, cellCount);
+    m_q.wait();
+    gridProb = Eigen::MatrixXf(gridHeight, gridWidth);
   }
 
   // Destructor
@@ -82,6 +72,12 @@ public:
     }
     if (m_devicePtrRawBytes) {
       sycl::free(m_devicePtrRawBytes, m_q);
+    }
+    if (m_devicePtrLogOddsA) {
+      sycl::free(m_devicePtrLogOddsA, m_q);
+    }
+    if (m_devicePtrLogOddsB) {
+      sycl::free(m_devicePtrLogOddsB, m_q);
     }
   }
 
@@ -115,7 +111,127 @@ public:
                               int row_step, int height, int width,
                               float x_offset, float y_offset, float z_offset);
 
+  /**
+   * Run the GPU Bayesian local-mapping update for one new laserscan frame.
+   *
+   * Implements the recursive Bayes filter, on a persistent device-resident
+   * log-odds buffer. The buffer is initialized to the initial prior log-odds
+   *
+   * Each call executes three kernels in sequence on the SYCL queue:
+   *   1. Warp (skipped on the first frame): bilinear remap of the previous
+   *      posterior into the current robot frame, using the odometry delta.
+   *   2. Bayesian update: for every ray, walk cells from sensor to
+   *      endpoint and atomic-add a log-odds delta computed from the
+   *      graded inverse sensor model.
+   *   3. Threshold: compare each cell's final log-odds against the initial
+   *      prior and stamp OCCUPIED / EMPTY / UNEXPLORED into the discrete
+   *      output grid.
+   *
+   * @param angles                   Per-ray angles in radians; size must
+   *                                 equal the constructor's `scanSize`.
+   * @param ranges                   Per-ray ranges in metres; same size.
+   * @param positionInPrevPose       Current robot position expressed in
+   *                                 the PREVIOUS frame's coordinate system,
+   *                                 in metres. Zero on the first frame and
+   *                                 whenever the robot is stationary
+   *                                 relative to the previous frame.
+   * @param orientationInPrevPose    Current robot yaw expressed in the
+   *                                 PREVIOUS frame, in radians. Zero on
+   *                                 the first frame.
+   * @return Reference to the internal discrete occupancy grid
+   *         (`OccupancyType` codes) for this frame. Storage is reused
+   *         across calls; copy if you need to retain it.
+   */
+  Eigen::MatrixXi &
+  scanToGridBaysian(const std::vector<double> &angles,
+                    const std::vector<double> &ranges,
+                    const Eigen::Vector2f &positionInPrevPose,
+                    double orientationInPrevPose);
+
+  /**
+   * Pointcloud overload of `scanToGridBaysian`. Takes a raw
+   * PointCloud2 style byte buffer.
+   *
+   * Each call additionally runs the pointcloud -> laserscan conversion
+   * kernel before the warp / Bayesian update / threshold sequence:
+   *
+   * @param data                   Flattened PointCloud2 byte buffer
+   *                               (int8); same layout as the non-Bayesian
+   *                               `scanToGrid` pointcloud overload.
+   * @param point_step             Bytes between successive points.
+   * @param row_step               Bytes between rows (may exceed
+   *                               `width * point_step` for padded rows).
+   * @param height                 Number of rows in the cloud.
+   * @param width                  Number of points per row.
+   * @param x_offset,y_offset,z_offset  Byte offsets of the X/Y/Z float
+   *                                    fields inside one point.
+   * @param positionInPrevPose,orientationInPrevPose  Odometry delta used
+   *        by the warp kernel; see the laserscan overload for the
+   *        coordinate-system convention. Zero on the first frame.
+   * @return Reference to the internal discrete occupancy grid
+   *         (`OccupancyType` codes). Storage is reused across calls;
+   *         copy if you need to retain it.
+   */
+  Eigen::MatrixXi &
+  scanToGridBaysian(const std::vector<int8_t> &data, int point_step,
+                    int row_step, int height, int width, float x_offset,
+                    float y_offset, float z_offset,
+                    const Eigen::Vector2f &positionInPrevPose,
+                    double orientationInPrevPose);
+
+  /**
+   * Debug accessor for the current frame's posterior probability grid.
+   *
+   * Performs a one-shot D2H copy of the current log-odds device buffer
+   * into a host-side `Eigen::MatrixXf`, then applies the sigmoid
+   * `p = 1 / (1 + exp(-l))` in place on the host so the returned values
+   *
+   * Intended for inspecting scan-model parameter effects from Python
+
+   * @return Reference to the host-side probability grid for the most
+   *         recent frame. Storage is reused across calls; copy if you
+   *         need to retain it.
+   */
+  const Eigen::MatrixXf &getProbabilities();
+
 private:
+  // Bayesian helper for shared Bayesian pipeline.
+  void runBayesianPipeline(const Eigen::Vector2f &positionInPrevPose,
+                           double orientationInPrevPose);
+
+  // Common GPU init shared by both constructors.
+  void initializeGPU(bool isPointCloud, int scanSize) {
+    m_q = sycl::queue{sycl::default_selector_v,
+                      sycl::property::queue::in_order{}};
+    auto dev = m_q.get_device();
+    LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
+
+    m_max_wg_size = dev.get_info<sycl::info::device::max_work_group_size>();
+
+    m_devicePtrRanges = sycl::malloc_device<float>(scanSize, m_q);
+    m_devicePtrAngles = sycl::malloc_device<double>(scanSize, m_q);
+    m_devicePtrGrid = sycl::malloc_device<int>(m_gridHeight * m_gridWidth, m_q);
+    m_devicePtrDistances =
+        sycl::malloc_shared<float>(m_gridHeight * m_gridWidth, m_q);
+
+    m_hostFloatRanges.resize(scanSize);
+
+    Eigen::Vector3f destPointLocal;
+    for (size_t i = 0; i < m_gridHeight; ++i) {
+      for (size_t j = 0; j < m_gridWidth; ++j) {
+        destPointLocal = gridToLocal({i, j});
+        m_devicePtrDistances[i + j * m_gridWidth] =
+            (destPointLocal - m_laserscanPosition).norm();
+      }
+    }
+
+    if (isPointCloud) {
+      m_q.memcpy(m_devicePtrAngles, initializedAngles.data(),
+                 sizeof(double) * scanSize);
+      m_q.wait();
+    }
+  }
+
   // Per-cell distance from laserscan origin. Precomputed at construction;
   // read by the ray-cast kernel
   float *m_devicePtrDistances;
@@ -140,6 +256,20 @@ private:
   // Device-reported max work-group size. Used as the pointcloud conversion
   // kernel's block dim.
   size_t m_max_wg_size = 0;
+
+  // Bayesian recursive-Bayes state.
+  // One buffer is the persistent posterior (warp source), the other is the
+  // warp output. Roles swap each frame via m_pingState. Both stay on device.
+  float *m_devicePtrLogOddsA = nullptr;
+  float *m_devicePtrLogOddsB = nullptr;
+  bool m_useBayesian = false;
+  bool m_pingState = false; // false: A holds posterior; true: B holds posterior
+  int m_frameIdx = 0;       // first frame skips the warp kernel
+  float m_h0 = 0.0f;        // initial prior log-odds
+
+  // Debug / tuning: host-side mirror of the log-odds grid, sigmoid-transformed
+  // on the host before return. Allocated by the Bayesian ctor.
+  Eigen::MatrixXf gridProb;
 
   sycl::queue m_q;
 };

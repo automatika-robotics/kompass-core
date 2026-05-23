@@ -108,7 +108,6 @@ float LocalMapper::updateGridCellProbability(float distance, float currentRange,
   // get the current sensor probability of being occupied for an area in a given
   // distance from the scanner
   distance = distance * m_resolution;
-  currentRange = currentRange - m_wallSize;
 
   float pF = (distance < currentRange) ? m_pEmpty : m_pOccupied;
   float delta = (distance < m_rangeSure) ? 0.0 : 1.0;

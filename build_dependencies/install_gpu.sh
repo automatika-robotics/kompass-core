@@ -438,7 +438,7 @@ log INFO "Installing kompass-core with pip"
 export PIP_BREAK_SYSTEM_PACKAGES=1
 
 # Install build dependencies explicitly (avoids broken build isolation on old pip)
-python3 -m pip install "scikit-build-core>=0.8" "nanobind>=1.8,<2.9.2" "packaging>=22.0"
+python3 -m pip install "scikit-build-core>=0.8" "nanobind>=2.0.0,<2.9.2" "packaging>=22.0"
 python3 -m pip uninstall -y kompass-core
 
 # Build and Install

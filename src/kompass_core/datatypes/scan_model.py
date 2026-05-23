@@ -29,8 +29,6 @@ class ScanModelConfig(BaseAttrs):
         Distance from the sensor within which measurements are considered almost certain.
     range_max : float
         Maximum range of the sensor. Measurements beyond this range are ignored.
-    wall_size : float
-        Thickness (in meters) beyond the measured range where a cell is assumed to be occupied (e.g., for modeling walls or obstacles).
     max_height : float
         Maximum Z-axis height (in meters) of a point to be considered valid for occupancy updates.
     min_height : float
@@ -53,10 +51,6 @@ class ScanModelConfig(BaseAttrs):
 
     range_max: float = field(
         default=20.0, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
-    )
-
-    wall_size: float = field(
-        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e6)
     )
 
     angle_step: float = field(
