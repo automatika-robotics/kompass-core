@@ -103,7 +103,7 @@ struct PointXYZ {
     float padding; // Essential for 16-byte alignment
 };
 
-inline void addPointToCloud(std::vector<int8_t> &cloud_data, float x, float y, float z) {
+inline void addPointToCloud(std::vector<uint8_t> &cloud_data, float x, float y, float z) {
     PointXYZ pt;
     pt.x = x;
     pt.y = y;
@@ -111,6 +111,6 @@ inline void addPointToCloud(std::vector<int8_t> &cloud_data, float x, float y, f
     pt.padding = 0.0f;
 
     // Append raw bytes to vector
-    const int8_t* raw = reinterpret_cast<const int8_t*>(&pt);
+    const uint8_t* raw = reinterpret_cast<const uint8_t*>(&pt);
     cloud_data.insert(cloud_data.end(), raw, raw + sizeof(PointXYZ));
 }

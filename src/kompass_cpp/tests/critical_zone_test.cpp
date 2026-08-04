@@ -208,7 +208,7 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
       pc_angles, // Size 360
       0.1 /*min_h*/, 2.0 /*max_h*/, 20.0);
 
-  std::vector<int8_t> cloud_data;
+  std::vector<uint8_t> cloud_data;
 
   // Use sizeof and offsetof to guarantee alignment matches the helper
   int point_step = sizeof(PointXYZ);

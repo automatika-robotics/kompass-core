@@ -99,7 +99,7 @@ const int PC_X_OFF = offsetof(PointXYZ, x);
 const int PC_Y_OFF = offsetof(PointXYZ, y);
 const int PC_Z_OFF = offsetof(PointXYZ, z);
 
-float run_pc_check(const std::vector<int8_t> &cloud, bool forward) {
+float run_pc_check(const std::vector<uint8_t> &cloud, bool forward) {
   const int num_points = static_cast<int>(cloud.size() / PC_POINT_STEP);
   const int width = num_points;
   const int height = num_points > 0 ? 1 : 0;
@@ -215,14 +215,14 @@ BOOST_AUTO_TEST_CASE(test_laserscan_front_slowdown_moving_forward) {
 
 BOOST_AUTO_TEST_CASE(test_pointcloud_empty_is_safe) {
   Timer time;
-  std::vector<int8_t> cloud;
+  std::vector<uint8_t> cloud;
   float result = run_pc_check(cloud, /*forward*/ true);
   BOOST_TEST(result == 1.0f, "Empty point cloud should be safe (1.0)");
 }
 
 BOOST_AUTO_TEST_CASE(test_pointcloud_critical_obstacle_front) {
   Timer time;
-  std::vector<int8_t> cloud;
+  std::vector<uint8_t> cloud;
   addPointToCloud(cloud, 0.7f, 0.0f, 0.5f);
 
   float result = run_pc_check(cloud, /*forward*/ true);
@@ -231,7 +231,7 @@ BOOST_AUTO_TEST_CASE(test_pointcloud_critical_obstacle_front) {
 
 BOOST_AUTO_TEST_CASE(test_pointcloud_height_filter_drops_point) {
   Timer time;
-  std::vector<int8_t> cloud;
+  std::vector<uint8_t> cloud;
   addPointToCloud(cloud, 0.7f, 0.0f, /*z above max*/ 3.0f);
 
   float result = run_pc_check(cloud, /*forward*/ true);
@@ -240,7 +240,7 @@ BOOST_AUTO_TEST_CASE(test_pointcloud_height_filter_drops_point) {
 
 BOOST_AUTO_TEST_CASE(test_pointcloud_slowdown_zone) {
   Timer time;
-  std::vector<int8_t> cloud;
+  std::vector<uint8_t> cloud;
   addPointToCloud(cloud, 0.95f, 0.0f, 0.5f);
 
   float result = run_pc_check(cloud, /*forward*/ true);
@@ -250,7 +250,7 @@ BOOST_AUTO_TEST_CASE(test_pointcloud_slowdown_zone) {
 
 BOOST_AUTO_TEST_CASE(test_pointcloud_mixed_stop_wins) {
   Timer time;
-  std::vector<int8_t> cloud;
+  std::vector<uint8_t> cloud;
   // Slowdown candidates
   addPointToCloud(cloud, 0.95f, 0.0f, 0.5f);
   addPointToCloud(cloud, 1.0f, 1.0f, 0.5f);
@@ -270,7 +270,7 @@ BOOST_AUTO_TEST_CASE(test_pointcloud_mixed_stop_wins) {
 
 BOOST_AUTO_TEST_CASE(test_pointcloud_mixed_slowdown_backward) {
   Timer time;
-  std::vector<int8_t> cloud;
+  std::vector<uint8_t> cloud;
   addPointToCloud(cloud, 0.95f, 0.0f, 0.5f);
   addPointToCloud(cloud, -0.95f, 0.0f, 0.5f);
   addPointToCloud(cloud, 1.0f, 1.0f, 0.5f);
