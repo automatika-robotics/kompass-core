@@ -6,7 +6,6 @@ from ..models import RobotState
 from attrs import define, field
 from ..utils.common import BaseAttrs, base_validators
 from ..utils.geometry import convert_to_plus_minus_pi
-from ..datatypes.laserscan import LaserScanData
 from kompass_cpp.types import PathInterpolationType
 
 
@@ -141,7 +140,6 @@ class ControllerTemplate:
     def loop_step(
         self,
         *,
-        laser_scan: LaserScanData,
         initial_control_seq: np.ndarray,
         current_state: RobotState,
         goal_state: RobotState,
@@ -151,8 +149,10 @@ class ControllerTemplate:
         Implements one loop iteration of the controller
         Contains the main controller logic - should be reimplemented by child
 
-        :param laser_scan: 2d laser scan data, defaults to None
-        :type laser_scan: LaserScanData | None, optional
+        Sensor data is taken through the child's own keywords, as its shape
+        depends on what the controller consumes: ``ranges``/``angles`` for a
+        laser scan, cartesian ``points``, or an occupancy ``local_map``.
+
         :param initial_control_seq: Reference control sequence normally provided by a pure follower, defaults to None
         :type initial_control_seq: np.ndarray | None, optional
         :param current_state: Robot current state, defaults to None

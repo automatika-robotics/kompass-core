@@ -1,7 +1,6 @@
 from typing import Optional, List
 import logging
 import numpy as np
-from ..datatypes.laserscan import LaserScanData
 
 import kompass_cpp
 from ..algorithms import DeformableVirtualZoneParams, DeformableVirtualZone
@@ -11,7 +10,6 @@ from ._base_ import FollowerTemplate
 from .stanley import Stanley, StanleyConfig
 from attrs import define, field
 from ..utils.common import base_validators
-from ..utils.geometry import convert_to_0_2pi
 
 
 @define
@@ -151,7 +149,8 @@ class DVZ(FollowerTemplate):
     def loop_step(
         self,
         *,
-        laser_scan: LaserScanData,
+        ranges: np.ndarray,
+        angles: np.ndarray,
         current_state: RobotState,
         initial_control_seq: Optional[np.ndarray] = None,
         debug: bool = False,
@@ -160,8 +159,10 @@ class DVZ(FollowerTemplate):
         """
         Implements a loop iteration of the controller
 
-        :param laser_scan_callback: 2D laserscan handler
-        :type laser_scan_callback: LaserScanCallback
+        :param ranges: Measured range along each angle of a laser scan (m)
+        :type ranges: np.ndarray
+        :param angles: Angle of each range measurement (rad)
+        :type angles: np.ndarray
         :param initial_control_seq: Initial (reference) control sequence
         :type initial_control_seq: np.ndarray
         """
@@ -185,7 +186,7 @@ class DVZ(FollowerTemplate):
                 _ref_angular_cmd = self.__reference_cmd_generator.angular_control[0]
 
         # Get new dvz control
-        self._get_dvz_deformation(laser_scan, debug)
+        self._get_dvz_deformation(ranges=ranges, angles=angles, debug=debug)
         self._dvz_linear = self._path_controller.compute_linear_control(
             _ref_linear_x_cmd, self._dvz_linear, self._control_time_step
         )
@@ -194,29 +195,20 @@ class DVZ(FollowerTemplate):
         )
         return True
 
-    def _get_dvz_deformation(self, laser_scan_data: LaserScanData, debug: bool = False):
+    def _get_dvz_deformation(
+        self, *, ranges: np.ndarray, angles: np.ndarray, debug: bool = False
+    ):
         """
         Update DVZ deformation with new scan
 
-        :param laser_scan_data: 2D LiDAR scan
-        :type laser_scan_data: LaserScanData
+        :param ranges: Measured range along each angle of a laser scan (m)
+        :type ranges: np.ndarray
+        :param angles: Angle of each range measurement (rad)
+        :type angles: np.ndarray
         """
         # Set new scan data
-
-        if laser_scan_data.angles.any():
-            angles = laser_scan_data.angles
-        else:
-            angles = np.arange(
-                laser_scan_data.angle_min,
-                laser_scan_data.angle_max,
-                laser_scan_data.angle_increment,
-            )
-            angles: np.ndarray = convert_to_0_2pi(angles)
-
         self._path_controller.update_zone_size(self._dvz_linear)
-        self._path_controller.set_scan_values(
-            scan_values=laser_scan_data.ranges, scan_angles=angles
-        )
+        self._path_controller.set_scan_values(scan_values=ranges, scan_angles=angles)
         self._path_controller.get_total_deformation(compute_deformation_plot=debug)
 
     @property

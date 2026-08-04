@@ -2,8 +2,6 @@ import logging
 from typing import Optional, Union, List
 import numpy as np
 from attrs import Factory, define, field
-from ..datatypes.laserscan import LaserScanData
-from ..datatypes.pointcloud import PointCloudData
 from ..utils.common import base_validators
 
 import kompass_cpp
@@ -256,8 +254,9 @@ class DWA(FollowerTemplate):
         self,
         *,
         current_state: RobotState,
-        laser_scan: Optional[LaserScanData] = None,
-        point_cloud: Optional[PointCloudData] = None,
+        ranges: Optional[np.ndarray] = None,
+        angles: Optional[np.ndarray] = None,
+        points: Optional[np.ndarray] = None,
         local_map: Optional[np.ndarray] = None,
         local_map_resolution: Optional[float] = None,
         debug: bool = False,
@@ -266,10 +265,20 @@ class DWA(FollowerTemplate):
         """
         One iteration of the DWA planner
 
+        Takes obstacles from exactly one source, in order of precedence:
+        ``local_map``, then a laser scan (``ranges`` with ``angles``), then a
+        cartesian point cloud (``points``).
+
         :param current_state: Current robot state (position and velocity)
         :type current_state: RobotState
-        :param laser_scan: Current laser scan value
-        :type laser_scan: LaserScanData
+        :param ranges: Measured range along each angle of a laser scan (m)
+        :type ranges: Optional[np.ndarray]
+        :param angles: Angle of each range measurement (rad)
+        :type angles: Optional[np.ndarray]
+        :param points: Cartesian obstacle points as an Nx3 array (m)
+        :type points: Optional[np.ndarray]
+        :param local_map: Occupancy grid around the robot
+        :type local_map: Optional[np.ndarray]
 
         :return: If planner found a valid solution
         :rtype: bool
@@ -297,20 +306,18 @@ class DWA(FollowerTemplate):
 
         if local_map is not None:
             sensor_data = local_map
-        elif laser_scan:
-            if len(laser_scan.angles) != len(laser_scan.ranges):
+        elif ranges is not None and angles is not None:
+            if len(angles) != len(ranges):
                 logging.error(
                     "Received incompatible LaserScan data -> Cannot compute control"
                 )
                 return False
-            sensor_data = kompass_cpp.types.LaserScan(
-                ranges=laser_scan.ranges, angles=laser_scan.angles
-            )
-        elif point_cloud:
-            sensor_data = point_cloud.data
+            sensor_data = kompass_cpp.types.LaserScan(ranges=ranges, angles=angles)
+        elif points is not None:
+            sensor_data = points
         else:
             logging.error(
-                "Cannot compute control without sensor data. Provide 'laser_scan' or 'point_cloud' input"
+                "Cannot compute control without sensor data. Provide 'ranges' and 'angles', 'points' or 'local_map' input"
             )
             return False
 

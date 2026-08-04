@@ -4,7 +4,6 @@ from typing import List, Union, Tuple
 import numpy as np
 
 from ..datatypes.pose import PoseData
-from ..datatypes.laserscan import LaserScanData
 
 
 def distance(obj_1_x: float, obj_2_x: float, obj_1_y: float, obj_2_y: float) -> float:
@@ -401,83 +400,3 @@ def get_transform_polar_coordinates(
     )
 
     return (radius_new, angle_new)
-
-
-def get_laserscan_transformed_polar_coordinates(
-    angle_min: float,
-    angle_max: float,
-    angle_increment: float,
-    laser_scan_ranges: np.ndarray,
-    max_scan_range: float,
-    translation: List[float],
-    rotation: List[float],
-) -> LaserScanData:
-    """
-    Transform list of angles and ranges to laserscan data using a given polar transformation
-
-    :param angle_min: Scan min angle (rad)
-    :type angle_min: float
-    :param angle_max: Scan max angle (rad)
-    :type angle_max: float
-    :param angle_increment: Scan angle step (rad)
-    :type angle_increment: float
-    :param laser_scan_ranges: Values of the laser scan along the angles range (m)
-    :type laser_scan_ranges: list[float]
-    :param max_scan_range: Max range for the scan (m)
-    :type max_scan_range: float
-    :param trans_vec: Polar translation vector [x, y]
-    :type trans_vec: list[float]
-    :param rotation_angle: Polar rotation angle (rad)
-    :type rotation_angle: float
-
-    :return: Transformed laser scan data
-    :rtype: LaserScanData
-    """
-    angles: np.ndarray = np.arange(
-        angle_min, angle_max + angle_increment, angle_increment
-    )  # create list of angles
-
-    if len(angles) < len(laser_scan_ranges):
-        raise ValueError(
-            f"Missing laser scan ranges for angles in [{angle_min}, {angle_max}], got length {len(laser_scan_ranges)} of ranges for {len(angles)} angles"
-        )
-
-    angles = angles[: len(laser_scan_ranges)]
-
-    ranges_transformed = np.empty_like(angles)
-    angles_transformed = np.empty_like(angles)
-
-    # Limit ranges by max value (to remove inf values)
-    r_max = max_scan_range
-    ranges: np.ndarray = np.where(
-        laser_scan_ranges != np.inf, np.minimum(laser_scan_ranges, r_max), r_max
-    )
-
-    trans_vec = get_polar_transformation_vector(
-        translation_x=translation[0], translation_y=translation[1]
-    )
-    rotation_angle = 2 * math.atan2(rotation[2], rotation[3])
-
-    ranges_transformed, angles_transformed = get_transform_polar_coordinates(
-        radius=ranges, angle=angles, transf_vec=trans_vec, rotation_angle=rotation_angle
-    )
-
-    # Sort values to be compatible with laserscan format
-    sorted_indices = np.argsort(angles_transformed)
-    if not isinstance(angles_transformed, np.ndarray) or not isinstance(
-        ranges_transformed, np.ndarray
-    ):
-        raise TypeError("Cannot create laser scan data with one value")
-    sorted_angles = angles_transformed[sorted_indices]
-    sorted_ranges = ranges_transformed[sorted_indices]
-
-    laserscan_transformed = LaserScanData(
-        angle_min=min(sorted_angles),
-        angle_max=max(sorted_angles),
-        angle_increment=angle_increment,
-        angles=sorted_angles,
-        range_min=min(sorted_ranges),
-        range_max=max(sorted_ranges),
-        ranges=sorted_ranges,
-    )
-    return laserscan_transformed
