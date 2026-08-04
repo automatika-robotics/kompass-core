@@ -10,7 +10,6 @@ from attrs import define, field, Factory
 
 from kompass_cpp.types import PathInterpolationType, Path as PathCpp
 
-from kompass_core.datatypes.laserscan import LaserScanData
 from kompass_core.datatypes import Bbox2D
 from kompass_core.control import (
     DVZ,
@@ -205,13 +204,14 @@ def run_control(
     robot.state.y = 0.0
     robot.state.yaw = np.pi / 2
 
-    laser_scan = LaserScanData()
-    # laser_scan.angles = np.array([0.0, 0.1])
-    # laser_scan.ranges = np.array([0.4, 0.3])
+    # A default all-max scan: the controller only needs a well-formed
+    # ranges/angles pair here, the path is what is under test
+    angles = np.arange(0.0, 2 * np.pi, 0.01 * np.pi)
+    ranges = np.full(angles.size, 20.0)
 
     while not end_reached and i < 100:
         ctrl_found = controller.loop_step(
-            current_state=robot.state, laser_scan=laser_scan
+            current_state=robot.state, ranges=ranges, angles=angles
         )
         if not ctrl_found or not controller.path:
             end_reached = controller.reached_end()
@@ -462,6 +462,39 @@ def test_dwa(plot: bool = False, figure_name: str = "dwa", figure_tag: str = "dw
     )
 
     assert reached_end is True
+
+
+def test_dwa_accepts_cartesian_points():
+    """DWA must take obstacles as an Nx3 cartesian array.
+
+    Regression test: the point cloud used to be handed over as its raw
+    PointCloud2 byte buffer, which matches no `compute_velocity_commands`
+    overload, so every step failed inside the try/except and only surfaced
+    as a 'Could not find velocity command' log line.
+    """
+    global global_path, my_robot, robot_ctr_limits, control_time_step
+
+    dwa = DWA(
+        robot=my_robot,
+        ctrl_limits=robot_ctr_limits,
+        config=DWAConfig(
+            max_linear_samples=4,
+            max_angular_samples=4,
+            octree_resolution=0.1,
+            control_time_step=control_time_step,
+        ),
+    )
+    dwa.set_path(global_path=global_path)
+
+    # Ring of obstacles well clear of the robot, so a control must be found
+    theta = np.linspace(0.0, 2 * np.pi, 360, endpoint=False)
+    points = np.column_stack([
+        5.0 * np.cos(theta),
+        5.0 * np.sin(theta),
+        np.zeros(theta.size),
+    ]).astype(np.float32)
+
+    assert dwa.loop_step(current_state=my_robot.state, points=points) is True
 
 
 def test_pure_pursuit(

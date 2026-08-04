@@ -4,12 +4,10 @@ import math
 import os
 import random
 from pathlib import Path
-from typing import Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 import pytest
-from kompass_core.datatypes.laserscan import LaserScanData
-from kompass_core.datatypes.pointcloud import PointCloudData
 from kompass_core.datatypes.pose import PoseData
 from kompass_core.datatypes.scan_model import ScanModelConfig
 from kompass_core.mapping import LocalMapper, MapConfig
@@ -89,28 +87,17 @@ def range_option(request):
 
 
 @pytest.fixture
-def laser_scan_data(local_mapper: LocalMapper, range_option: str) -> LaserScanData:
+def laser_scan_data(local_mapper: LocalMapper, range_option: str) -> Dict[str, np.ndarray]:
+    """Scan as the ``ranges``/``angles`` pair ``update_from_laserscan`` takes."""
     data = json.loads(LASERSCAN_JSON.read_text())
 
-    scan = LaserScanData()
-    scan.angle_min = data["angle_min"]
-    scan.angle_max = data["angle_max"]
-    scan.angle_increment = data["angle_increment"]
-    scan.time_increment = data["time_increment"]
-    scan.scan_time = data["scan_time"]
-    scan.range_min = data["range_min"]
-    scan.range_max = data["range_max"]
+    angle_min = data["angle_min"]
+    angle_max = data["angle_max"]
+    angle_increment = data["angle_increment"]
 
-    # Regenerate angles to match the JSON-loaded angle_min/max/increment.
-    # LaserScanData's __attrs_post_init__ runs at default-construction and
-    # seeds angles from the default fields; we have to rebuild it here so
-    # angles.size matches the ranges we populate below.
-    scan.angles = np.arange(
-        scan.angle_min, scan.angle_max, scan.angle_increment,
-    )
-    angles_size = scan.angles.shape[0]
+    angles = np.arange(angle_min, angle_max, angle_increment)
+    angles_size = angles.shape[0]
 
-    scan.intensities = [0.0] * angles_size
     width = local_mapper.grid_width * local_mapper.config.resolution
     height = local_mapper.grid_height * local_mapper.config.resolution
     max_range_quarter = 0.25 * min(width, height)
@@ -122,46 +109,41 @@ def laser_scan_data(local_mapper: LocalMapper, range_option: str) -> LaserScanDa
 
     if range_option == "out_of_grid":
         half_diag = math.sqrt(width ** 2 + height ** 2)
-        scan.ranges = np.array([half_diag] * angles_size)
+        ranges = np.array([half_diag] * angles_size)
     elif range_option == "circle_in_grid":
-        scan.ranges = np.array([max_range_quarter] * angles_size)
+        ranges = np.array([max_range_quarter] * angles_size)
     elif range_option == "circle_at_edge":
-        scan.ranges = np.array([max_range_half] * angles_size)
+        ranges = np.array([max_range_half] * angles_size)
     elif range_option == "random_in_grid":
-        scan.ranges = rng.uniform(
+        ranges = rng.uniform(
             min_range_from_robot, max_range_quarter, size=angles_size,
         )
     elif range_option == "at_45_deg_only":
-        scan.angle_increment = angle_increment_45
-        angles_size = np.arange(
-            scan.angle_min, scan.angle_max, scan.angle_increment,
-        ).shape[0]
-        scan.angles = np.arange(
-            scan.angle_min, scan.angle_max, scan.angle_increment,
-        )
-        scan.ranges = np.array([max_range_quarter] * angles_size)
-        scan.ranges[0] = 0.0
-        scan.ranges[1] = 0.1
+        angles = np.arange(angle_min, angle_max, angle_increment_45)
+        angles_size = angles.shape[0]
+        ranges = np.array([max_range_quarter] * angles_size)
+        ranges[0] = 0.0
+        ranges[1] = 0.1
     elif range_option == "continuous":
         # Clusters of non-zero ranges interspersed with zero-gaps.
-        scan.ranges = np.zeros(angles_size)
+        ranges = np.zeros(angles_size)
         rng_py = random.Random(1)
         i = 0
         while i < angles_size:
             c = rng_py.randint(10, 20)
             r = rng_py.uniform(min_range_from_robot, max_range_half)
             c = c if c + i <= angles_size else angles_size - i
-            scan.ranges[i] = r
+            ranges[i] = r
             i += c
-        assert scan.ranges.size == angles_size
+        assert ranges.size == angles_size
     else:  # random
-        scan.ranges = rng.uniform(
+        ranges = rng.uniform(
             min_range_from_robot,
             local_mapper.scan_model.range_max,
             size=angles_size,
         )
 
-    return scan
+    return {"ranges": ranges, "angles": angles}
 
 
 def _count(grid: np.ndarray, value: int) -> int:
@@ -175,16 +157,16 @@ def _occupancy_counts(grid: np.ndarray) -> Tuple[int, int, int]:
     return occ, empty, unknown
 
 
-def test_update_from_scan(
+def test_update_from_laserscan(
     local_mapper: LocalMapper,
-    laser_scan_data: LaserScanData,
+    laser_scan_data: Dict[str, np.ndarray],
     pose_robot_in_world: PoseData,
     logs_test_dir: str,
     range_option: str,
 ):
     """Drive the laserscan update path and assert the occupancy grid is
     well-formed for each scan-shape scenario."""
-    local_mapper.update_from_scan(pose_robot_in_world, laser_scan_data)
+    local_mapper.update_from_laserscan(pose_robot_in_world, **laser_scan_data)
 
     grid = local_mapper.grid_data.occupancy
     n_occ, n_empty, n_unknown = _occupancy_counts(grid)
@@ -250,17 +232,18 @@ _PC_Z_OFFSET = 8
 
 def _make_synthetic_pointcloud(
     points_xyz: np.ndarray,
-) -> PointCloudData:
+) -> Dict[str, object]:
     """Pack an Nx3 float32 array into a PointCloud2-style byte buffer.
 
-    Each point is stored as 4 consecutive float32 (x, y, z, padding).
+    Each point is stored as 4 consecutive float32 (x, y, z, padding), and the
+    layout is returned as the kwargs ``update_from_pointcloud`` takes.
     """
     assert points_xyz.ndim == 2 and points_xyz.shape[1] == 3
     n = points_xyz.shape[0]
     buffer = np.zeros((n, 4), dtype=np.float32)
     buffer[:, :3] = points_xyz.astype(np.float32)
-    raw = np.frombuffer(buffer.tobytes(), dtype=np.int8)
-    return PointCloudData(
+    raw = np.frombuffer(buffer.tobytes(), dtype=np.uint8)
+    return dict(
         data=raw,
         point_step=_PC_STRIDE,
         row_step=n * _PC_STRIDE,
@@ -274,7 +257,7 @@ def _make_synthetic_pointcloud(
 
 def _origin_pose() -> PoseData:
     # Pose data is used only to grid-shift across frames; a stable pose
-    # exercises update_from_scan without triggering the shift path.
+    # exercises the update path without triggering the shift path.
     p = PoseData()
     p.x = p.y = p.z = 0.0
     p.qw = 1.0
@@ -304,7 +287,7 @@ def test_update_from_pointcloud_synthetic_ring(logs_test_dir: str):
     ])
     cloud = _make_synthetic_pointcloud(ring)
 
-    mapper.update_from_scan(_origin_pose(), cloud)
+    mapper.update_from_pointcloud(_origin_pose(), **cloud)
 
     grid = mapper.grid_data.occupancy
     n_occ, n_empty, n_unknown = _occupancy_counts(grid)
@@ -346,7 +329,7 @@ def test_update_from_pointcloud_z_filter_above_ceiling():
     ])
     cloud = _make_synthetic_pointcloud(cloud_pts)
 
-    mapper.update_from_scan(_origin_pose(), cloud)
+    mapper.update_from_pointcloud(_origin_pose(), **cloud)
 
     grid = mapper.grid_data.occupancy
     n_occ, n_empty, n_unknown = _occupancy_counts(grid)
@@ -377,7 +360,7 @@ def test_update_from_pointcloud_origin_only_points_filtered():
     )
 
     # This must not crash.
-    mapper.update_from_scan(_origin_pose(), cloud)
+    mapper.update_from_pointcloud(_origin_pose(), **cloud)
 
     grid = mapper.grid_data.occupancy
     n_occ, _, _ = _occupancy_counts(grid)
@@ -402,8 +385,8 @@ def test_update_from_pointcloud_livox_recording(logs_test_dir: str):
     pc_json = json.loads(LIVOX_CLOUD_JSON.read_text())
     offset_map = {f["name"]: f["offset"] for f in pc_json["fields"]}
 
-    cloud = PointCloudData(
-        data=np.array(pc_json["data"]).astype(np.int8),
+    cloud = dict(
+        data=np.array(pc_json["data"]).astype(np.uint8),
         point_step=pc_json["point_step"],
         row_step=pc_json["row_step"],
         height=pc_json["height"],
@@ -422,7 +405,7 @@ def test_update_from_pointcloud_livox_recording(logs_test_dir: str):
     )
     mapper = LocalMapper(config=mapper_config, scan_model_config=scan_model)
 
-    mapper.update_from_scan(_origin_pose(), cloud)
+    mapper.update_from_pointcloud(_origin_pose(), **cloud)
 
     grid = mapper.grid_data.occupancy
     n_occ, n_empty, n_unknown = _occupancy_counts(grid)
