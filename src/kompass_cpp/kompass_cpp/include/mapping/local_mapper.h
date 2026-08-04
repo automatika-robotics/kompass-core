@@ -167,7 +167,7 @@ public:
    * @param z_offset    Offset (in bytes) to the z-coordinate within a point.
    * @return            A 2D occupancy grid as an Eigen::MatrixXi.
    */
-  Eigen::MatrixXi &scanToGrid(const std::vector<int8_t> &data, int point_step,
+  Eigen::MatrixXi &scanToGrid(const std::vector<uint8_t> &data, int point_step,
                               int row_step, int height, int width,
                               float x_offset, float y_offset, float z_offset);
   /**
@@ -188,7 +188,7 @@ public:
    *                      - Probabilistic occupancy grid (Eigen::MatrixXf&)
    */
   std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
-  scanToGridBaysian(const std::vector<int8_t> &data, int point_step,
+  scanToGridBaysian(const std::vector<uint8_t> &data, int point_step,
                     int row_step, int height, int width, float x_offset,
                     float y_offset, float z_offset);
 

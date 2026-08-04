@@ -27,7 +27,7 @@ void bindings_mapping_gpu(py::module_ &m) {
            py::arg("ranges"), py::rv_policy::reference_internal)
 
       .def("scan_to_grid",
-           py::overload_cast<const std::vector<int8_t> &, int, int, int, int,
+           py::overload_cast<const std::vector<uint8_t> &, int, int, int, int,
                              float, float, float>(
                &Mapping::LocalMapperGPU::scanToGrid),
            "Convert raw point cloud data to occupancy grid", py::arg("data"),
@@ -59,7 +59,7 @@ void bindings_utils_gpu(py::module_ &m) {
            py::arg("ranges"), py::arg("forward"))
 
       .def("check",
-           py::overload_cast<const std::vector<int8_t> &, int, int, int, int,
+           py::overload_cast<const std::vector<uint8_t> &, int, int, int, int,
                              int, int, int, bool>(
                &CriticalZoneCheckerGPU::check),
            py::arg("data"), py::arg("point_step"), py::arg("row_step"),

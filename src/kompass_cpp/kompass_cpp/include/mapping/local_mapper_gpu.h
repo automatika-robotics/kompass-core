@@ -111,7 +111,7 @@ public:
    * @param z_offset    Offset (in bytes) to the z-coordinate within a point.
    * @return            A 2D occupancy grid as an Eigen::MatrixXi.
    */
-  Eigen::MatrixXi &scanToGrid(const std::vector<int8_t> &data, int point_step,
+  Eigen::MatrixXi &scanToGrid(const std::vector<uint8_t> &data, int point_step,
                               int row_step, int height, int width,
                               float x_offset, float y_offset, float z_offset);
 
@@ -130,7 +130,7 @@ private:
 
   // Pointcloud-only. Grown lazily on first use in `scanToGrid(bytes,...)`
   // because the per-scan point count isn't known at ctor time.
-  int8_t *m_devicePtrRawBytes = nullptr;
+  uint8_t *m_devicePtrRawBytes = nullptr;
   size_t m_rawCapacity = 0;
 
   // Host-side scratch buffer for the laserscan overload's double→float

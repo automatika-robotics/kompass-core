@@ -240,7 +240,7 @@ LocalMapper::scanToGridBaysian(const std::vector<double> &angles,
   return std::tie(gridData, gridDataProb);
 }
 
-Eigen::MatrixXi &LocalMapper::scanToGrid(const std::vector<int8_t> &data,
+Eigen::MatrixXi &LocalMapper::scanToGrid(const std::vector<uint8_t> &data,
                                          int point_step, int row_step,
                                          int height, int width, float x_offset,
                                          float y_offset, float z_offset) {
@@ -251,7 +251,7 @@ Eigen::MatrixXi &LocalMapper::scanToGrid(const std::vector<int8_t> &data,
 }
 
 std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
-LocalMapper::scanToGridBaysian(const std::vector<int8_t> &data, int point_step,
+LocalMapper::scanToGridBaysian(const std::vector<uint8_t> &data, int point_step,
                                int row_step, int height, int width,
                                float x_offset, float y_offset, float z_offset) {
 

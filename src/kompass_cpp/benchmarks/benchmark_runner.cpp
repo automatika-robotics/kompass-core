@@ -90,7 +90,7 @@ generate_heavy_trajectory_samples(double predictionHorizon, double timeStep,
   return samples;
 }
 
-std::vector<int8_t> generate_heavy_pointcloud_bytes(size_t num_points) {
+std::vector<uint8_t> generate_heavy_pointcloud_bytes(size_t num_points) {
     // Create a temporary vector of strict types to ensure alignment
     std::vector<PointXYZ> temp_points(num_points);
 
@@ -102,7 +102,7 @@ std::vector<int8_t> generate_heavy_pointcloud_bytes(size_t num_points) {
     }
 
     // Memcpy into the byte buffer
-    std::vector<int8_t> buffer(num_points * sizeof(PointXYZ));
+    std::vector<uint8_t> buffer(num_points * sizeof(PointXYZ));
     std::memcpy(buffer.data(), temp_points.data(), buffer.size());
 
     return buffer;

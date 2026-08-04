@@ -4,7 +4,7 @@
 
 namespace Kompass {
 
-float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
+float CriticalZoneCheckerGPU::check(const std::vector<uint8_t> &data,
                                     int point_step, int row_step, int height,
                                     int width, int x_offset, int y_offset,
                                     int z_offset, const bool forward) {
@@ -20,7 +20,7 @@ float CriticalZoneCheckerGPU::check(const std::vector<int8_t> &data,
     if (m_rawCapacity < total_bytes) {
       if (m_devicePtrRawBytes)
         sycl::free(m_devicePtrRawBytes, m_q);
-      m_devicePtrRawBytes = sycl::malloc_device<int8_t>(total_bytes, m_q);
+      m_devicePtrRawBytes = sycl::malloc_device<uint8_t>(total_bytes, m_q);
       m_rawCapacity = total_bytes;
     }
     m_q.memcpy(m_devicePtrRawBytes, data.data(), total_bytes);

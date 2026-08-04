@@ -118,7 +118,7 @@ float CriticalZoneChecker::check(const std::vector<double> &ranges,
   return slowdown_factor;
 }
 
-float CriticalZoneChecker::check(const std::vector<int8_t> &data,
+float CriticalZoneChecker::check(const std::vector<uint8_t> &data,
                                  int point_step, int row_step, int height,
                                  int width, int x_offset, int y_offset,
                                  int z_offset, const bool forward) {

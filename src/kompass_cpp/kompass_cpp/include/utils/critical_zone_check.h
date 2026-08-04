@@ -71,7 +71,7 @@ public:
    * @param z_offset    Offset (in bytes) to the z-coordinate within a point.
    * @return            A 2D occupancy grid as an Eigen::MatrixXi.
    */
-  float check(const std::vector<int8_t> &data, int point_step, int row_step,
+  float check(const std::vector<uint8_t> &data, int point_step, int row_step,
               int height, int width, int x_offset, int y_offset,
               int z_offset, const bool forward);
 

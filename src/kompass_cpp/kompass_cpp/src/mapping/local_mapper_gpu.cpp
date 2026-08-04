@@ -57,7 +57,7 @@ namespace {
  *                          caller queries this at ctor time
  */
 inline void submitPointCloudToLaserScanKernel(
-    sycl::queue &q, const int8_t *device_raw_bytes, const size_t total_bytes,
+    sycl::queue &q, const uint8_t *device_raw_bytes, const size_t total_bytes,
     float *device_ranges_out, const int num_bins, const float max_range,
     const int point_step, const int row_step, const int width, const int height,
     const int x_offset, const int y_offset, const int z_offset,
@@ -99,7 +99,7 @@ inline void submitPointCloudToLaserScanKernel(
     const PointFieldType k_type = point_field_type;
     const int k_elem_size = element_size;
 
-    const int8_t *raw_bytes = device_raw_bytes;
+    const uint8_t *raw_bytes = device_raw_bytes;
     float *ranges_ptr = device_ranges_out;
 
     h.parallel_for<class pointcloudToLaserScanKernel>(
@@ -328,7 +328,7 @@ inline void submitScanToGridKernel(
 
 } // namespace
 
-Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<int8_t> &data,
+Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<uint8_t> &data,
                                             int point_step, int row_step,
                                             int height, int width,
                                             float x_offset, float y_offset,
@@ -352,7 +352,7 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<int8_t> &data,
       if (m_devicePtrRawBytes) {
         sycl::free(m_devicePtrRawBytes, m_q);
       }
-      m_devicePtrRawBytes = sycl::malloc_device<int8_t>(total_bytes, m_q);
+      m_devicePtrRawBytes = sycl::malloc_device<uint8_t>(total_bytes, m_q);
       m_rawCapacity = total_bytes;
     }
 

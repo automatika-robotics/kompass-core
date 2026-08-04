@@ -48,7 +48,7 @@ void bindings_mapping(py::module_ &m) {
            py::arg("ranges"), py::rv_policy::reference_internal)
 
       .def("scan_to_grid",
-           py::overload_cast<const std::vector<int8_t> &, int, int, int, int,
+           py::overload_cast<const std::vector<uint8_t> &, int, int, int, int,
                              float, float, float>(
                &Mapping::LocalMapper::scanToGrid),
            "Convert raw point cloud data to occupancy grid", py::arg("data"),
@@ -65,7 +65,7 @@ void bindings_mapping(py::module_ &m) {
            py::rv_policy::reference_internal)
 
       .def("scan_to_grid_baysian",
-           py::overload_cast<const std::vector<int8_t> &, int, int, int, int,
+           py::overload_cast<const std::vector<uint8_t> &, int, int, int, int,
                              float, float, float>(
                &Mapping::LocalMapper::scanToGrid),
            "Convert laser scan data to occupancy grid, with baysian update",
