@@ -102,18 +102,15 @@ public:
   virtual ~LocalMapper() = default;
 
   /**
-   * @brief Transform a grid to be centered in egocentric view of the current
-   * position given its previous position.
+   * @brief Transform the stored previous probability grid
+   * (`previousGridDataProb`) in place, re-centering it on the current
+   * position given its previous position. The next Bayesian update reads
+   * the shifted member directly; unknown cells are filled with the prior.
    *
    * @param current_position_in_previous_pose Current egocentric position for
    * the transformation.
    * @param current_yaw_orientation_in_previous_pose Current egocentric
    * orientation for the transformation.
-   * @param previous_grid_data Previous grid data (pre-transformation).
-   * @param unknown_value Value of unknown occupancy (prior value for grid
-   * cells).
-   *
-   * @return Transformed grid.
    */
   void getPreviousGridInCurrentPose(
       const Eigen::Vector2f &currentPositionInPreviousPose,

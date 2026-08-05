@@ -1,5 +1,6 @@
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
 #include "mapping/local_mapper.h"
@@ -59,7 +60,7 @@ void bindings_mapping(py::module_ &m) {
       .def("scan_to_grid_baysian",
            py::overload_cast<const std::vector<double> &,
                              const std::vector<double> &>(
-               &Mapping::LocalMapper::scanToGrid),
+               &Mapping::LocalMapper::scanToGridBaysian),
            "Convert laser scan data to occupancy grid, with baysian update",
            py::arg("angles"), py::arg("ranges"),
            py::rv_policy::reference_internal)
@@ -67,8 +68,9 @@ void bindings_mapping(py::module_ &m) {
       .def("scan_to_grid_baysian",
            py::overload_cast<const std::vector<uint8_t> &, int, int, int, int,
                              float, float, float>(
-               &Mapping::LocalMapper::scanToGrid),
-           "Convert laser scan data to occupancy grid, with baysian update",
+               &Mapping::LocalMapper::scanToGridBaysian),
+           "Convert raw point cloud data to occupancy grid, with baysian "
+           "update",
            py::arg("data"), py::arg("point_step"), py::arg("row_step"),
            py::arg("height"), py::arg("width"), py::arg("x_offset"),
            py::arg("y_offset"), py::arg("z_offset"),

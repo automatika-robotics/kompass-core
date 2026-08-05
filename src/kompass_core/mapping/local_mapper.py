@@ -237,12 +237,11 @@ class LocalMapper:
         _position_in_previous_pose = pose_current_robot_in_previous_robot.get_position()
         _orientation_in_previous_pose = pose_current_robot_in_previous_robot.get_yaw()
 
-        self.previous_grid_prob_transformed = (
-            self.local_mapper.get_previous_grid_in_current_pose(
-                current_position_in_previous_pose=_position_in_previous_pose[:2],
-                current_orientation_in_previous_pose=_orientation_in_previous_pose,
-                unknown_value=self.scan_model.p_prior,
-            )
+        # Shifts the C++ side previous probability grid in place
+        # (unknown cells fill with p_prior)
+        self.local_mapper.get_previous_grid_in_current_pose(
+            current_position_in_previous_pose=_position_in_previous_pose[:2],
+            current_orientation_in_previous_pose=_orientation_in_previous_pose,
         )
 
     def update_from_laserscan(
