@@ -1129,7 +1129,7 @@ control_types = {
 LinearCtrlLimits = kompass_cpp.control.LinearVelocityControlParams
 
 #: Limits of an angular velocity control: ``max_omega`` [rad/s],
-#: ``max_steer_ang`` [rad], ``max_acc`` and ``max_decel`` [rad/s^2].
+#: ``max_ang`` [rad], ``max_acc`` and ``max_decel`` [rad/s^2].
 AngularCtrlLimits = kompass_cpp.control.AngularVelocityControlParams
 
 
