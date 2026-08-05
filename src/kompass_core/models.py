@@ -654,75 +654,38 @@ footprint_types = [CircularFootprint, RectangleFootprint]
 
 
 class RobotGeometry:
-    """Robot Geometry types and parameters"""
+    """Robot Geometry parameters
 
-    class Type(Enum):
-        """Robot Geometry types"""
+    The shape itself is ``kompass_cpp.types.RobotGeometry``, re-exported here as
+    ``RobotGeometry.Type``. It is defined by the C++ library because that is
+    where the matching FCL primitive is constructed, so the members and the
+    shapes that can actually be realized cannot drift apart.
+    """
 
-        BOX = "BOX"
-        CYLINDER = "CYLINDER"
-        SPHERE = "SPHERE"
-        ELLIPSOID = "ELLIPSOID"
-        CAPSULE = "CAPSULE"
-        CONE = "CONE"
+    Type = kompass_cpp.types.RobotGeometry
 
-        @classmethod
-        def to_kompass_cpp_lib(cls, value) -> kompass_cpp.types.RobotGeometry:
-            """to_kompass_cpp_lib.
+    @classmethod
+    def from_str(cls, value: Union[str, "RobotGeometry.Type"]) -> Type:
+        """
+        Parses a geometry type from its name
 
-            :param value:
-            :rtype: kompass_cpp.types.RobotGeometry
-            """
-            return kompass_cpp.types.RobotGeometry.get(value.value)
+        :param value: Geometry type or its name
+        :type value: str | RobotGeometry.Type
+        :raises ValueError: If the name is not a valid geometry type
 
-        @classmethod
-        def values(cls) -> List[str]:
-            """values.
-
-            :rtype: List[str]
-            """
-            return [member.value for member in cls]
-
-        @classmethod
-        def to_str(cls, enum_value) -> str:
-            """
-            Return string value corresponding to enum value if exists
-
-            :param enum_value: _description_
-            :type enum_value: RobotType | str
-            :raises ValueError: If the enum value is not from this class
-
-            :return: String value
-            :rtype: str
-            """
-            if isinstance(enum_value, cls):
-                return enum_value.value
-            # If the value is already given as a string check if it valid and return it
-            elif isinstance(enum_value, str):
-                if enum_value in cls.values():
-                    return enum_value
-            raise ValueError(f"{enum_value} is not a valid RobotGeometry.Type value")
-
-        @classmethod
-        def from_str(cls, value: str):
-            """
-            Return string value corresponding to enum value if exists
-
-            :param enum_value: _description_
-            :type enum_value: RobotType | str
-            :raises ValueError: If the enum value is not from this class
-
-            :return: String value
-            :rtype: str
-            """
-            if isinstance(value, cls):
-                return value
-            # If the value is already given as a string check if it valid and return it
-            elif isinstance(value, str):
-                for enum_value in cls:
-                    if value == enum_value.value or value == str(enum_value):
-                        return enum_value
-                raise ValueError(f"{value} is not a valid RobotGeometry.Type value")
+        :return: Geometry type
+        :rtype: RobotGeometry.Type
+        """
+        if isinstance(value, cls.Type):
+            return value
+        try:
+            # Tolerate the "Type.CYLINDER" form emitted by older serialization
+            return cls.Type.get(str(value).rsplit(".", 1)[-1])
+        except RuntimeError:
+            raise ValueError(
+                f"'{value}' is not a valid robot geometry. Expected one of "
+                f"{[m.name for m in cls.Type]}"
+            ) from None
 
     @classmethod
     def params_length(cls, geometry_type: Type) -> int:
@@ -738,9 +701,7 @@ class RobotGeometry:
         :return: Number of required parameters
         :rtype: int
         """
-        return kompass_cpp.types.RobotGeometry.params_length(
-            cls.Type.to_kompass_cpp_lib(geometry_type)
-        )
+        return kompass_cpp.types.RobotGeometry.params_length(geometry_type)
 
     @classmethod
     def is_valid_parameters(cls, geometry_type: Type, parameters: np.ndarray) -> bool:
@@ -801,9 +762,7 @@ class RobotGeometry:
         """
         if not cls.is_valid_parameters(geometry_type, parameters):
             raise ValueError("Invalid parameters for the robot geometry")
-        return kompass_cpp.types.RobotGeometry.get_radius(
-            cls.Type.to_kompass_cpp_lib(geometry_type), parameters
-        )
+        return kompass_cpp.types.RobotGeometry.get_radius(geometry_type, parameters)
 
     @classmethod
     def get_height(cls, geometry_type: Type, parameters: np.ndarray) -> float:
@@ -820,9 +779,7 @@ class RobotGeometry:
         """
         if not cls.is_valid_parameters(geometry_type, parameters):
             raise ValueError("Invalid parameters for the robot geometry")
-        return kompass_cpp.types.RobotGeometry.get_height(
-            cls.Type.to_kompass_cpp_lib(geometry_type), parameters
-        )
+        return kompass_cpp.types.RobotGeometry.get_height(geometry_type, parameters)
 
     @classmethod
     def get_length(cls, geometry_type: Type, parameters: np.ndarray) -> Optional[float]:
@@ -1124,88 +1081,56 @@ class OmniDirectionalControl(MotionControl):
         return OmniDirectionalControl(0.0, 0.0, 0.0, **kwargs)
 
 
-class RobotType(Enum):
-    """RobotType."""
+#: Robot motion model. Defined by the C++ library, which implements the control
+#: law for each one, so the members and what can actually be controlled cannot
+#: drift apart.
+RobotType = kompass_cpp.control.ControlType
 
-    ACKERMANN = "ACKERMANN"
-    DIFFERENTIAL_DRIVE = "DIFFERENTIAL_DRIVE"
-    OMNI = "OMNI"
 
-    @classmethod
-    def values(cls) -> List[str]:
-        """values.
+def robot_type_from_str(
+    value: Union[str, RobotType],
+) -> RobotType:
+    """
+    Parses a robot motion model from its name
 
-        :rtype: List[str]
-        """
-        return [member.value for member in cls]
+    :param value: Motion model or its name
+    :type value: str | RobotType
+    :raises ValueError: If the name is not a valid motion model
 
-    @classmethod
-    def to_str(cls, enum_value) -> str:
-        """
-        Return string value corresponding to enum value if exists
-
-        :param enum_value: _description_
-        :type enum_value: RobotType | str
-        :raises ValueError: If the enum value is not from this class
-
-        :return: String value
-        :rtype: str
-        """
-        if isinstance(enum_value, RobotType):
-            return enum_value.value
-        # If the value is already given as a string check if it valid and return it
-        elif isinstance(enum_value, str):
-            if enum_value in cls.values():
-                return enum_value
-        raise ValueError(f"{enum_value} is not a valid RobotType value")
-
-    @classmethod
-    def to_kompass_cpp_lib(cls, value: str) -> kompass_cpp.control.ControlType:
-        """
-        Parse to kompass_cpp control type
-
-        :return: Robot Type
-        :rtype: kompass_cpp.control_types
-        """
-        if value == "ACKERMANN":
-            return kompass_cpp.control.ControlType.ACKERMANN
-        if value == "DIFFERENTIAL_DRIVE":
-            return kompass_cpp.control.ControlType.DIFFERENTIAL_DRIVE
-        return kompass_cpp.control.ControlType.OMNI
+    :return: Motion model
+    :rtype: RobotType
+    """
+    if isinstance(value, RobotType):
+        return value
+    # Tolerate the "RobotType.ACKERMANN" form emitted by older serialization
+    name = str(value).rsplit(".", 1)[-1]
+    for member in RobotType:
+        if member.name == name:
+            return member
+    raise ValueError(
+        f"'{value}' is not a valid robot type. Expected one of "
+        f"{[m.name for m in RobotType]}"
+    )
 
 
 control_types = {
-    "ACKERMANN": AckermannControl,
-    "DIFFERENTIAL_DRIVE": DifferentialDriveControl,
-    "OMNI": OmniDirectionalControl,
+    RobotType.ACKERMANN: AckermannControl,
+    RobotType.DIFFERENTIAL_DRIVE: DifferentialDriveControl,
+    RobotType.OMNI: OmniDirectionalControl,
 }
 
 
-@define(kw_only=True)
-class LinearCtrlLimits(BaseAttrs):
-    """Limitations of a linear control (Velocity, Acceleration and Deceleration)
-    Deceleration is provided separately as many application requires higher deceleration values: emergency stopping for example. However, a default value if provided equal to the acceleration limit
+#: Limits of a linear velocity control: ``max_vel`` [m/s], ``max_acc`` and
+#: ``max_decel`` [m/s^2]. Deceleration is separate from acceleration because
+#: many applications need to stop harder than they accelerate.
+#:
+#: Defined by the C++ library, which enforces the limits in the control loop, so
+#: there is nothing on the Python side that can drift out of step with it.
+LinearCtrlLimits = kompass_cpp.control.LinearVelocityControlParams
 
-    max_vel: Maximum velocity [m/s]
-    max_acc: Maximum acceleration  [m/s^2]
-    max_decel: Maximum deceleration, added separately to allow the robot to have a faster stopping [m/s^2]
-    """
-
-    max_vel: float = field(validator=validators.ge(0.0))  # m/s
-    max_acc: float = field(validator=validators.ge(0.0))  # m/s^2
-    max_decel: float = field(validator=validators.ge(0.0))  # m/s^2
-    min_absolute_val: float = field(default=0.01, validator=validators.ge(0.0))  # m/s
-
-
-@define(kw_only=True)
-class AngularCtrlLimits(BaseAttrs):
-    """Limitations of angular control (Velocity, Angle, Acceleration and Deceleration)"""
-
-    max_vel: float = field(validator=validators.ge(0.0))
-    max_steer: float = field(validator=validators.ge(0.0))
-    max_acc: float = field(validator=validators.ge(0.0))
-    max_decel: float = field(validator=validators.ge(0.0))
-    min_absolute_val: float = field(default=0.01, validator=validators.ge(0.0))  # m/s
+#: Limits of an angular velocity control: ``max_omega`` [rad/s],
+#: ``max_steer_ang`` [rad], ``max_acc`` and ``max_decel`` [rad/s^2].
+AngularCtrlLimits = kompass_cpp.control.AngularVelocityControlParams
 
 
 @define(kw_only=True)
@@ -1217,7 +1142,9 @@ class RobotCtrlLimits(BaseAttrs):
     vx_limits: LinearCtrlLimits = field()
     omega_limits: AngularCtrlLimits = field()
     vy_limits: LinearCtrlLimits = field(
-        default=LinearCtrlLimits(max_vel=0.0, max_acc=0.0, max_decel=0.0)
+        default=Factory(
+            lambda: LinearCtrlLimits(max_vel=0.0, max_acc=0.0, max_decel=0.0)
+        )
     )
 
     def to_kompass_cpp_lib(self) -> kompass_cpp.control.ControlLimitsParams:
@@ -1225,43 +1152,12 @@ class RobotCtrlLimits(BaseAttrs):
         Get the control limits parameters transferred to Kompass_cpp library format
 
         :return: 2D control limits
-        :rtype: kompass_cpp.control.ctr_limits_params
+        :rtype: kompass_cpp.control.ControlLimitsParams
         """
         return kompass_cpp.control.ControlLimitsParams(
-            vel_x_ctr_params=self.linear_to_kompass_cpp_lib(self.vx_limits),
-            vel_y_ctr_params=self.linear_to_kompass_cpp_lib(self.vy_limits),
-            omega_ctr_params=self.angular_to_kompass_cpp_lib(),
-        )
-
-    def linear_to_kompass_cpp_lib(
-        self, linear_limits: LinearCtrlLimits
-    ) -> kompass_cpp.control.LinearVelocityControlParams:
-        """
-        Get linear velocity control limits parameters transferred to Kompass_cpp library format
-
-        :return: Linear forward velocity Vx parameters
-        :rtype: kompass_cpp.control.linear_vel_x_params
-        """
-        return kompass_cpp.control.LinearVelocityControlParams(
-            max_vel=linear_limits.max_vel,
-            max_acc=linear_limits.max_acc,
-            max_decel=linear_limits.max_decel,
-        )
-
-    def angular_to_kompass_cpp_lib(
-        self,
-    ) -> kompass_cpp.control.AngularVelocityControlParams:
-        """
-        Get Omega control limits parameters transferred to Kompass_cpp library format
-
-        :return: Angular velocity Omega parameters
-        :rtype: kompass_cpp.control.angular_vel_params
-        """
-        return kompass_cpp.control.AngularVelocityControlParams(
-            max_omega=self.omega_limits.max_vel,
-            max_ang=self.omega_limits.max_steer,
-            max_acc=self.omega_limits.max_acc,
-            max_decel=self.omega_limits.max_decel,
+            vel_x_ctr_params=self.vx_limits,
+            vel_y_ctr_params=self.vy_limits,
+            omega_ctr_params=self.omega_limits,
         )
 
 
@@ -1271,10 +1167,8 @@ class Robot:
     Robot Class
     """
 
-    robot_type: Union[RobotType, str] = field(
-        converter=lambda value: RobotType.to_str(value)
-    )
-    geometry_type: RobotGeometry.Type = field()
+    robot_type: RobotType = field(converter=robot_type_from_str)
+    geometry_type: RobotGeometry.Type = field(converter=RobotGeometry.from_str)
     geometry_params: np.ndarray = field()
     state: RobotState = field(default=Factory(RobotState))
     control: MotionControl = field(init=False)
