@@ -100,7 +100,7 @@ public:
    * Uses a GPU to Projects 3D point cloud data onto a 2D grid using Bresenham
    * line drawing.
    *
-   * @param data        Flattened point cloud data (int8), typically in XYZ
+   * @param data        Flattened point cloud data (uint8), typically in XYZ
    * format.
    * @param point_step  Number of bytes between each point in the data array.
    * @param row_step    Number of bytes between each row in the data array.

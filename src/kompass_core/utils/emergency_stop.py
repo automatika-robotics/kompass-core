@@ -90,7 +90,7 @@ class EmergencyChecker:
                 )
             except (ImportError, ModuleNotFoundError):
                 Logger(name="EmergencyChecker").error(
-                    "GPU use is enabled but GPU implementation is found -> Using CPU implementation"
+                    "GPU use is enabled but GPU implementation is not found -> Using CPU implementation"
                 )
                 self.__use_gpu = False
 

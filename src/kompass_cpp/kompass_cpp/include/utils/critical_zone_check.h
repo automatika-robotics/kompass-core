@@ -60,7 +60,7 @@ public:
   /**
    * Uses 3D point cloud data to check if robot is in slowdown or critical zone.
    *
-   * @param data        Flattened point cloud data (int8), typically in XYZ
+   * @param data        Flattened point cloud data (uint8), typically in XYZ
    * format.
    * @param point_step  Number of bytes between each point in the data array.
    * @param row_step    Number of bytes between each row in the data array.

@@ -151,7 +151,8 @@ class ControllerTemplate:
 
         Sensor data is taken through the child's own keywords, as its shape
         depends on what the controller consumes: ``ranges``/``angles`` for a
-        laser scan, cartesian ``points``, or an occupancy ``local_map``.
+        laser scan, cartesian ``points``, or the occupied cells of a
+        ``local_map``.
 
         :param initial_control_seq: Reference control sequence normally provided by a pure follower, defaults to None
         :type initial_control_seq: np.ndarray | None, optional

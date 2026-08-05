@@ -165,10 +165,14 @@ class Stanley(FollowerTemplate):
         """
         Implements a loop iteration of the controller
 
-        :param laser_scan_callback: 2D laserscan handler
-        :type laser_scan_callback: LaserScanCallback
-        :param initial_control_seq: Initial (reference) control sequence
-        :type initial_control_seq: np.ndarray
+        Stanley is a pure path tracker: it takes no sensor data and does no
+        collision avoidance.
+
+        :param current_state: Robot current state
+        :type current_state: RobotState
+
+        :return: If the controller found a valid command
+        :rtype: bool
         """
         self._planner.set_current_state(
             current_state.x, current_state.y, current_state.yaw, current_state.speed
