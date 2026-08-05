@@ -530,6 +530,87 @@ def test_pure_pursuit(
     assert reached_end is True
 
 
+def test_pure_pursuit_consumes_sensor_data():
+    """PurePursuit must dispatch on the ``ranges``/``angles``/``points`` kwargs.
+
+    Regression test: the sensor branches used to read ``.ranges``/``.angles``
+    off a LaserScanData object and ``.data`` off a PointCloudData object. Once
+    those classes were dropped, a caller on the new convention matched no
+    branch and fell through to the sensor-less ``execute(dt)`` overload, so
+    collision avoidance was silently disabled while path tracking kept
+    reporting success.
+    """
+    global global_path, my_robot, robot_ctr_limits, control_time_step
+
+    def _make_controller() -> PurePursuit:
+        controller = PurePursuit(
+            robot=my_robot,
+            ctrl_limits=robot_ctr_limits,
+            config=PurePursuitConfig(
+                wheel_base=my_robot.wheelbase, lookahead_gain_forward=1.0
+            ),
+            control_time_step=control_time_step,
+        )
+        controller.set_path(global_path)
+        return controller
+
+    def _step(**sensor_kwargs) -> tuple:
+        """Take one step from a fixed pose and return the command issued."""
+        controller = _make_controller()
+        my_robot.state.x = 0.0
+        my_robot.state.y = 0.0
+        my_robot.state.yaw = np.pi / 2
+        found = controller.loop_step(current_state=my_robot.state, **sensor_kwargs)
+        return found, controller.linear_x_control[0], controller.angular_control[0]
+
+    # Obstacles pressed right up against the robot from every side. There is
+    # no way out, so a controller that sees them must command a full stop.
+    blocking_distance = 0.15
+    angles = np.arange(-np.pi, np.pi, 0.01 * np.pi)
+    blocked_ranges = np.full(angles.size, blocking_distance)
+
+    theta = np.linspace(0.0, 2 * np.pi, 720, endpoint=False)
+    blocking_points = np.column_stack([
+        blocking_distance * np.cos(theta),
+        blocking_distance * np.sin(theta),
+        np.zeros(theta.size),
+    ]).astype(np.float32)
+
+    # Baseline: with no sensor data the controller just tracks the path and
+    # drives off. This is exactly what the broken dispatch silently did with
+    # every one of the sensor kwargs below.
+    _, nominal_vx, nominal_omega = _step()
+    assert nominal_vx != 0.0 or nominal_omega != 0.0, (
+        "sensor-less tracking is expected to move; the obstacle assertions "
+        "below cannot discriminate otherwise"
+    )
+
+    for sensor_kwargs in (
+        {"ranges": blocked_ranges, "angles": angles},
+        {"points": blocking_points},
+        {"local_map": blocking_points},
+    ):
+        found, vx, omega = _step(**sensor_kwargs)
+        # NOTE: loop_step still reports success here -- a full stop is a valid
+        # command -- so the return value alone proves nothing about dispatch.
+        assert found is True
+        assert (vx, omega) == (0.0, 0.0), (
+            f"obstacle avoidance did not engage for {list(sensor_kwargs)}: "
+            f"got vx={vx}, omega={omega}"
+        )
+
+    # A mismatched scan can only be rejected if the laser scan branch is
+    # actually entered -- the unmigrated code returned True here instead.
+    assert (
+        _make_controller().loop_step(
+            current_state=my_robot.state,
+            ranges=blocked_ranges[:-1],
+            angles=angles,
+        )
+        is False
+    )
+
+
 def test_vision_rgb_follower():
     """Run VisionRGBFollower pytest and assert reaching end"""
     global global_path, my_robot, robot_ctr_limits, control_time_step
