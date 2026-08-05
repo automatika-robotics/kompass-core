@@ -93,6 +93,8 @@ class EmergencyChecker:
                     "GPU use is enabled but GPU implementation is not found -> Using CPU implementation"
                 )
                 self.__use_gpu = False
+                # GPU-only ctor param; the CPU checker does not accept it
+                kwargs.pop("cloud_field_type", None)
 
         if not self.__use_gpu:
             from kompass_cpp.utils import CriticalZoneChecker
