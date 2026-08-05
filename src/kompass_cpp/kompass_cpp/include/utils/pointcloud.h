@@ -99,7 +99,8 @@ inline float load_and_cast_val(const uint8_t *ptr, size_t offset,
  * @param point_step   Number of bytes between successive points in a row.
  * @param row_step     Number of bytes between successive rows.
  * @param height       Number of rows in the point cloud.
- * @param width        Number of columns in the point cloud.
+ * @param width        Number of columns in the point cloud (unused: iteration
+ * is driven by row_step; kept for PointCloud2 signature parity).
  * @param x_offset     Byte offset to the x-coordinate in a point.
  * @param y_offset     Byte offset to the y-coordinate in a point.
  * @param z_offset     Byte offset to the z-coordinate in a point.
@@ -111,6 +112,9 @@ inline float load_and_cast_val(const uint8_t *ptr, size_t offset,
  * @param ranges_out   Output vector of minimum distances per bin.
  * @param angles_out   Output vector of bin angles in radians [0, 2π).
  *
+ * @TODO: Coordinates are read as FLOAT32 at the given offsets. Unlike the GPU
+ * kernel, this CPU path does not honor other PointFieldType field encodings.
+ *
  * @throws std::out_of_range If point offsets access memory out of bounds.
  */
 inline void pointCloudToLaserScanFromRaw(
@@ -119,6 +123,7 @@ inline void pointCloudToLaserScanFromRaw(
     const int z_offset, const double max_range, const double min_z,
     const double max_z, const double angle_step,
     std::vector<double> &ranges_out, std::vector<double> &angles_out) {
+  (void)width;
 
   const double two_pi = 2.0 * M_PI;
   const int num_bins = static_cast<int>(std::ceil(two_pi / angle_step));
@@ -207,6 +212,7 @@ inline void pointCloudToLaserScanFromRaw(
     const int height, const int width, const int x_offset, const int y_offset,
     const int z_offset, const double max_range, const double min_z,
     const double max_z, const int num_bins, std::vector<double> &ranges_out) {
+  (void)width;
 
   const double two_pi = 2.0 * M_PI;
 
