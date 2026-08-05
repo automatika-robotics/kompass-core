@@ -25,10 +25,9 @@ cat >> ~/.conan2/profiles/default <<EOF
 ompl/*:shared=True
 EOF
 
-# TODO: This fork should be removed when recipe merged upstream
-# Clone Fork (to get the ompl recipe)
+# Clone conan-center-index (to get the ompl recipe)
 mkdir -p /tmp/conan_recipes
-git clone --depth 1 https://github.com/aleph-ra/conan-center-index.git /tmp/conan_recipes
+git clone --depth 1 https://github.com/conan-io/conan-center-index.git /tmp/conan_recipes
 
 # Clean previous artifacts to ensure a fresh build
 conan remove "ompl/*" -c || true

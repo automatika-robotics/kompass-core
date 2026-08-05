@@ -364,12 +364,11 @@ if is_legacy_system; then
 ompl/*:shared=True
 EOF
 
-    # TODO: This fork should be removed when recipe merged upstream
-    # Clone Fork (to get the ompl recipe)
-    log INFO "Cloning Conan recipes fork..."
+    # Clone conan-center-index (to get the ompl recipe)
+    log INFO "Cloning Conan recipes index..."
     CONAN_RECIPES_DIR="/tmp/conan_recipes"
     rm -rf "$CONAN_RECIPES_DIR"
-    git clone --depth 1 https://github.com/aleph-ra/conan-center-index.git "$CONAN_RECIPES_DIR"
+    git clone --depth 1 https://github.com/conan-io/conan-center-index.git "$CONAN_RECIPES_DIR"
 
     # Clean previous artifacts to ensure a fresh build
     log INFO "Cleaning previous Conan artifacts..."
