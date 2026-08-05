@@ -25,14 +25,14 @@ _PC_STRIDE = 16
 
 
 def _ring_cloud(n: int = 200, radius: float = 0.5, z: float = 0.1) -> np.ndarray:
-    """Build a PointCloud2-style int8 byte buffer holding `n` points
+    """Build a PointCloud2-style byte buffer holding `n` points
     evenly spaced on a circle of `radius` at height `z`."""
     theta = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
     buf = np.zeros((n, 4), dtype=np.float32)
     buf[:, 0] = radius * np.cos(theta)
     buf[:, 1] = radius * np.sin(theta)
     buf[:, 2] = z
-    return np.frombuffer(buf.tobytes(), dtype=np.int8)
+    return np.frombuffer(buf.tobytes(), dtype=np.uint8)
 
 
 def _occupancy_counts(grid: np.ndarray):
@@ -122,7 +122,7 @@ def test_gpu_binding_laserscan_scan_to_grid_basic():
 
 @pytestmark_gpu
 def test_gpu_binding_pointcloud_scan_to_grid_basic():
-    """The pointcloud overload should accept raw int8 bytes + offsets and
+    """The pointcloud overload should accept raw bytes + offsets and
     produce a valid occupancy grid with no CPU-side laserscan intermediate."""
     grid_height = 40
     grid_width = 40
@@ -227,7 +227,7 @@ def test_gpu_binding_pointcloud_empty_cloud_does_not_crash():
         range_max=5.0,
     )
 
-    empty = np.zeros(0, dtype=np.int8)
+    empty = np.zeros(0, dtype=np.uint8)
 
     # width=0 signals zero points. The pointcloud overload short-circuits
     # on this and returns an all-UNEXPLORED grid; it must NOT stamp EMPTY

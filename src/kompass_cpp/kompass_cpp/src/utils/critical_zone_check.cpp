@@ -22,22 +22,10 @@ CriticalZoneChecker::CriticalZoneChecker(
   min_height_ = min_height;
   max_height_ = max_height;
   range_max_ = range_max;
-  // Construct  a geometry object based on the robot shape
-  if (robot_shape_type == CollisionChecker::ShapeType::CYLINDER) {
-    robotHeight_ = robot_dimensions.at(1);
-    robotRadius_ = robot_dimensions.at(0);
-  } else if (robot_shape_type == CollisionChecker::ShapeType::BOX) {
-    robotHeight_ = robot_dimensions.at(2);
-    robotRadius_ = std::sqrt(pow(robot_dimensions.at(0), 2) +
-                             pow(robot_dimensions.at(1), 2)) /
-                   2;
-
-  } else if (robot_shape_type == CollisionChecker::ShapeType::SPHERE) {
-    robotHeight_ = robot_dimensions.at(0);
-    robotRadius_ = robot_dimensions.at(0);
-  } else {
-    throw std::invalid_argument("Invalid robot geometry type");
-  }
+  // Size the robot through the shared derivation so the critical zone and the
+  // collision checker cannot disagree about the same robot
+  robotRadius_ = CollisionChecker::radiusOf(robot_shape_type, robot_dimensions);
+  robotHeight_ = CollisionChecker::heightOf(robot_shape_type, robot_dimensions);
 
   // Init the sensor position w.r.t body
   sensor_tf_body_ =
@@ -118,7 +106,7 @@ float CriticalZoneChecker::check(const std::vector<double> &ranges,
   return slowdown_factor;
 }
 
-float CriticalZoneChecker::check(const std::vector<int8_t> &data,
+float CriticalZoneChecker::check(const std::vector<uint8_t> &data,
                                  int point_step, int row_step, int height,
                                  int width, int x_offset, int y_offset,
                                  int z_offset, const bool forward) {

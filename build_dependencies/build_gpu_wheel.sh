@@ -147,10 +147,9 @@ if [ ! -d "$CONAN_BUILD_DIR" ]; then
 ompl/*:shared=True
 EOF
 
-    # Clone OMPL recipe fork
-    # TODO: Remove fork when recipe merged upstream
+    # Clone conan-center-index (to get the ompl recipe)
     mkdir -p /tmp/conan_recipes
-    git clone --depth 1 https://github.com/aleph-ra/conan-center-index.git /tmp/conan_recipes
+    git clone --depth 1 https://github.com/conan-io/conan-center-index.git /tmp/conan_recipes
 
     # Build FCL and OMPL
     conan remove "ompl/*" -c || true

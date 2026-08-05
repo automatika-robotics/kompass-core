@@ -2,8 +2,6 @@ import logging
 from typing import Optional, Union, List
 import numpy as np
 from attrs import Factory, define, field
-from ..datatypes.laserscan import LaserScanData
-from ..datatypes.pointcloud import PointCloudData
 from ..utils.common import base_validators
 
 import kompass_cpp
@@ -169,7 +167,7 @@ class DWA(FollowerTemplate):
     robot_ctr_limits = RobotCtrlLimits(
         vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
         omega_limits=AngularCtrlLimits(
-            max_vel=2.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
+            max_omega=2.0, max_acc=3.0, max_decel=3.0, max_ang=np.pi
         ),
     )
 
@@ -228,19 +226,21 @@ class DWA(FollowerTemplate):
 
         self._planner = kompass_cpp.control.DWA(
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
-            control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
-            time_step=config.control_time_step,
-            prediction_horizon=config.prediction_horizon * config.control_time_step,
-            control_horizon=config.control_horizon * config.control_time_step,
-            max_linear_samples=config.max_linear_samples,
-            max_angular_samples=config.max_angular_samples,
-            robot_shape_type=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
+            control_type=robot.robot_type,
+            time_step=self._config.control_time_step,
+            prediction_horizon=self._config.prediction_horizon
+            * self._config.control_time_step,
+            control_horizon=self._config.control_horizon
+            * self._config.control_time_step,
+            max_linear_samples=self._config.max_linear_samples,
+            max_angular_samples=self._config.max_angular_samples,
+            robot_shape_type=robot.geometry_type,
             robot_dimensions=robot.geometry_params,
-            sensor_position_robot=config.proximity_sensor_position_to_robot,
-            sensor_rotation_robot=config.proximity_sensor_rotation_to_robot,
-            octree_resolution=config.octree_resolution,
-            cost_weights=config.costs_weights.to_kompass_cpp(),
-            max_num_threads=config.max_num_threads,
+            sensor_position_robot=self._config.proximity_sensor_position_to_robot,
+            sensor_rotation_robot=self._config.proximity_sensor_rotation_to_robot,
+            octree_resolution=self._config.octree_resolution,
+            cost_weights=self._config.costs_weights.to_kompass_cpp(),
+            max_num_threads=self._config.max_num_threads,
         )
 
         # Init the following result
@@ -256,8 +256,9 @@ class DWA(FollowerTemplate):
         self,
         *,
         current_state: RobotState,
-        laser_scan: Optional[LaserScanData] = None,
-        point_cloud: Optional[PointCloudData] = None,
+        ranges: Optional[np.ndarray] = None,
+        angles: Optional[np.ndarray] = None,
+        points: Optional[np.ndarray] = None,
         local_map: Optional[np.ndarray] = None,
         local_map_resolution: Optional[float] = None,
         debug: bool = False,
@@ -266,10 +267,20 @@ class DWA(FollowerTemplate):
         """
         One iteration of the DWA planner
 
+        Takes obstacles from exactly one source, in order of precedence:
+        ``local_map``, then a laser scan (``ranges`` with ``angles``), then a
+        cartesian point cloud (``points``).
+
         :param current_state: Current robot state (position and velocity)
         :type current_state: RobotState
-        :param laser_scan: Current laser scan value
-        :type laser_scan: LaserScanData
+        :param ranges: Measured range along each angle of a laser scan (m)
+        :type ranges: Optional[np.ndarray]
+        :param angles: Angle of each range measurement (rad)
+        :type angles: Optional[np.ndarray]
+        :param points: Cartesian obstacle points as an Nx3 array (m)
+        :type points: Optional[np.ndarray]
+        :param local_map: Occupied cells around the robot as an Nx3 array (m)
+        :type local_map: Optional[np.ndarray]
 
         :return: If planner found a valid solution
         :rtype: bool
@@ -297,20 +308,18 @@ class DWA(FollowerTemplate):
 
         if local_map is not None:
             sensor_data = local_map
-        elif laser_scan:
-            if len(laser_scan.angles) != len(laser_scan.ranges):
+        elif ranges is not None and angles is not None:
+            if len(angles) != len(ranges):
                 logging.error(
                     "Received incompatible LaserScan data -> Cannot compute control"
                 )
                 return False
-            sensor_data = kompass_cpp.types.LaserScan(
-                ranges=laser_scan.ranges, angles=laser_scan.angles
-            )
-        elif point_cloud:
-            sensor_data = point_cloud.data
+            sensor_data = kompass_cpp.types.LaserScan(ranges=ranges, angles=angles)
+        elif points is not None:
+            sensor_data = points
         else:
             logging.error(
-                "Cannot compute control without sensor data. Provide 'laser_scan' or 'point_cloud' input"
+                "Cannot compute control without sensor data. Provide 'ranges' and 'angles', 'points' or 'local_map' input"
             )
             return False
 

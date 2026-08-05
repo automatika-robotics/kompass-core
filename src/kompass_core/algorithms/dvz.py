@@ -495,7 +495,7 @@ class DeformableVirtualZone:
             # If the zone is not deformed apply the reference control
             angular_ctr = ref_control_angular
 
-        return min(angular_ctr, self.ctrl_limits.omega_limits.max_vel)
+        return min(angular_ctr, self.ctrl_limits.omega_limits.max_omega)
 
     def plt_robot_zone(
         self, robot_state: RobotState, fig_ax: Any = None, display_now: bool = False

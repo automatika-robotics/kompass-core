@@ -22,17 +22,40 @@ namespace Kompass {
  */
 class CollisionChecker {
 public:
-  enum class ShapeType { CYLINDER, BOX, SPHERE };
+  enum class ShapeType { CYLINDER, BOX, SPHERE, ELLIPSOID, CAPSULE, CONE };
 
   struct Body {
     ShapeType shapeType = ShapeType::BOX;
     std::vector<float>
-        dimensions; // For cylinder: dimensions[0]=radius,
-                    // dimensions[1]=height. For box: dimensions[0]=x,
-                    // dimensions[1]=y, dimensions[2]=z.
+        dimensions; // Ordered as the matching FCL primitive takes them:
+                    // BOX/ELLIPSOID: [x, y, z] extents / semi-axes.
+                    // CYLINDER/CAPSULE/CONE: [radius, length along z].
+                    // SPHERE: [radius].
     Eigen::Isometry3f tf = Eigen::Isometry3f::Identity();
     ; // Transformation matrix of the body
   };
+
+  /**
+   * @brief Radius of the smallest circle in the xy-plane containing the robot
+   *
+   * Single source for this derivation: the collision checker, the critical
+   * zone checker and the vision followers all size the robot through here, so
+   * they cannot drift apart.
+   *
+   * @param shape_type    Type of the robot shape geometry
+   * @param dimensions    Corresponding geometry dimensions
+   */
+  static float radiusOf(const ShapeType shape_type,
+                         const std::vector<float> &dimensions);
+
+  /**
+   * @brief Total extent of the robot along the z-axis
+   *
+   * @param shape_type    Type of the robot shape geometry
+   * @param dimensions    Corresponding geometry dimensions
+   */
+  static float heightOf(const ShapeType shape_type,
+                         const std::vector<float> &dimensions);
 
   /**
    * @brief Construct a new Collision Checker object

@@ -216,7 +216,7 @@ BOOST_AUTO_TEST_CASE(test_mapper_pointcloud_circle) {
   // Build a deterministic cloud: 200 points on a 0.5 m circle at z=0.1.
   // With a 21x21 grid at 0.1 m / cell, the grid covers 2.1 m × 2.1 m so the
   // circle sits comfortably inside.
-  std::vector<int8_t> cloud;
+  std::vector<uint8_t> cloud;
   constexpr int N = 200;
   for (int i = 0; i < N; ++i) {
     float theta = 2.0f * static_cast<float>(M_PI) * i / N;

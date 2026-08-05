@@ -1,10 +1,8 @@
-from typing import Optional, Union
+from typing import Optional
 from attrs import define, field, validators
 import math
 import numpy as np
 from ..datatypes.pose import PoseData
-from ..datatypes.laserscan import LaserScanData
-from ..datatypes.pointcloud import PointCloudData
 
 from kompass_cpp.mapping import (
     OCCUPANCY_TYPE,
@@ -106,7 +104,8 @@ class MapConfig(BaseAttrs):
 
 class LocalMapper:
     """
-    LocalMapper class produces a grid map around the current robot position using LaserScanData
+    LocalMapper class produces a grid map around the current robot position using
+    laser scan or point cloud data
 
     Supported layers:
     - Occupancy
@@ -246,64 +245,126 @@ class LocalMapper:
             )
         )
 
-    def update_from_scan(
+    def update_from_laserscan(
         self,
         robot_pose: PoseData,
-        scan: Union[LaserScanData, PointCloudData],
+        *,
+        ranges: np.ndarray,
+        angles: np.ndarray,
     ):
         """
-        Update the local map using new LaserScan data
+        Update the local map using new 2D laser scan data
 
         :param robot_pose: Current robot position
         :type robot_pose: PoseData
-        :param scan: Scan data, laserscan or pointcloud
-        :type scan: LaserScanData or PointCloudData
+        :param ranges: Measured range along each angle (m)
+        :type ranges: np.ndarray
+        :param angles: Angle of each range measurement (rad)
+        :type angles: np.ndarray
         """
-        # Get transformation between the previous robot state (pose and grid) w.r.t the current state.
-
         if not self.processed:
-            self.is_pointcloud = isinstance(scan, PointCloudData)
-            if self.is_pointcloud:
-                # NOTE: `angle_step` is the canonical knob on the Python side; the
-                # bin count is derived from it with a ceil so every angle in
-                # [0, 2π) lands in a valid bin. The C++ ctor then enforces
-                # the inverse relation `angle_step = 2π / scan_size` so the
-                # conversion kernel (which bins by `scan_size`) and the
-                # ray-cast kernel (which reads `initializedAngles[i] =
-                # i * angle_step`) can't drift apart.
-                self._initialize_mapper(
-                    math.ceil(2 * np.pi / self.scan_model.angle_step)
-                )
-            else:
-                self._initialize_mapper(scan.ranges.size)  # type: ignore
+            self.is_pointcloud = False
+            self._initialize_mapper(ranges.size)
 
-        # Calculate new grid pose
+        self._move_grid_to(robot_pose)
+
+        # filter out negative range and points outside grid limit
+        filtered_ranges = np.minimum(self.config.filter_limit, np.maximum(0.0, ranges))
+
+        self._update_grid(angles=angles, ranges=filtered_ranges)
+
+    def update_from_pointcloud(
+        self,
+        robot_pose: PoseData,
+        *,
+        data: np.ndarray,
+        point_step: int,
+        row_step: int,
+        height: int,
+        width: int,
+        x_offset: int,
+        y_offset: int,
+        z_offset: int,
+        **_,
+    ):
+        """
+        Update the local map using new point cloud data
+
+        The parameters mirror the sensor_msgs/PointCloud2 layout: the raw buffer
+        is handed to the conversion kernel as-is rather than decoded in Python.
+        Any further fields a caller's cloud container carries are ignored, so a
+        whole container can be splatted in.
+
+        :param robot_pose: Current robot position
+        :type robot_pose: PoseData
+        :param data: Raw point buffer as a flat byte array
+        :type data: np.ndarray
+        :param point_step: Length of a single point in bytes
+        :type point_step: int
+        :param row_step: Length of a single row in bytes
+        :type row_step: int
+        :param height: Number of rows (1 for unorganized clouds)
+        :type height: int
+        :param width: Number of points per row
+        :type width: int
+        :param x_offset: Byte offset of the 'x' field within a point
+        :type x_offset: int
+        :param y_offset: Byte offset of the 'y' field within a point
+        :type y_offset: int
+        :param z_offset: Byte offset of the 'z' field within a point
+        :type z_offset: int
+        """
+        if not self.processed:
+            self.is_pointcloud = True
+            # NOTE: `angle_step` is the canonical knob on the Python side; the
+            # bin count is derived from it with a ceil so every angle in
+            # [0, 2π) lands in a valid bin. The C++ ctor then enforces
+            # the inverse relation `angle_step = 2π / scan_size` so the
+            # conversion kernel (which bins by `scan_size`) and the
+            # ray-cast kernel (which reads `initializedAngles[i] =
+            # i * angle_step`) can't drift apart.
+            self._initialize_mapper(math.ceil(2 * np.pi / self.scan_model.angle_step))
+
+        self._move_grid_to(robot_pose)
+
+        self._update_grid(
+            data=data,
+            point_step=point_step,
+            row_step=row_step,
+            height=height,
+            width=width,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            z_offset=z_offset,
+        )
+
+    def _move_grid_to(self, robot_pose: PoseData) -> None:
+        """Re-center the grid around a new robot pose
+
+        :param robot_pose: Current robot position
+        :type robot_pose: PoseData
+        """
         self._pose_robot_in_world = robot_pose
         self.lower_right_corner_pose = transform_point_from_local_to_global(
             self._local_lower_right_corner_point, robot_pose
         )
 
+        # Get transformation between the previous robot state (pose and grid)
+        # w.r.t the current state.
+        if self.config.baysian_update and self.processed:
+            self._calculate_grid_shift(robot_pose)
+
+    def _update_grid(self, **scan) -> None:
+        """Run one scan through the mapper and store the resulting layers
+
+        :param scan: Sensor fields forwarded as-is to the matching kompass_cpp
+            overload: ``angles``/``ranges`` for a laser scan, or the raw buffer
+            and its layout for a point cloud
+        """
         if self.config.baysian_update:
-            if self.processed:
-                self._calculate_grid_shift(robot_pose)
-            if self.is_pointcloud:
-                scan_occupancy, scan_occupancy_prob = (
-                    self.local_mapper.scan_to_grid_baysian(
-                        **scan.asdict(),
-                    )
-                )
-            else:
-                # filter out negative range and points outside grid limit
-                filtered_ranges = np.minimum(
-                    self.config.filter_limit,
-                    np.maximum(0.0, scan.ranges),  # type: ignore
-                )
-                scan_occupancy, scan_occupancy_prob = (
-                    self.local_mapper.scan_to_grid_baysian(
-                        angles=scan.angles,  # type: ignore
-                        ranges=filtered_ranges,
-                    )
-                )
+            scan_occupancy, scan_occupancy_prob = self.local_mapper.scan_to_grid_baysian(
+                **scan
+            )
 
             # Update grid
             self.grid_data.occupancy = np.copy(scan_occupancy)
@@ -319,23 +380,8 @@ class LocalMapper:
             ] = OCCUPANCY_TYPE.EMPTY.value
 
         else:
-            if self.is_pointcloud:
-                scan_occupancy = self.local_mapper.scan_to_grid(
-                    **scan.asdict(),
-                )
-            else:
-                # filter out negative range and points outside grid limit
-                filtered_ranges = np.minimum(
-                    self.config.filter_limit,
-                    np.maximum(0.0, scan.ranges),  # type: ignore
-                )
-                scan_occupancy = self.local_mapper.scan_to_grid(
-                    angles=scan.angles,  # type:ignore
-                    ranges=filtered_ranges,
-                )
-
             # Update grid
-            self.grid_data.occupancy = np.copy(scan_occupancy)
+            self.grid_data.occupancy = np.copy(self.local_mapper.scan_to_grid(**scan))
 
         # flag to enable fetching the mapping data
         self.processed = True

@@ -156,7 +156,7 @@ public:
   /**
    * Projects 3D point cloud data onto a 2D grid using Bresenham line drawing.
    *
-   * @param data        Flattened point cloud data (int8), typically in XYZ
+   * @param data        Flattened point cloud data (uint8), typically in XYZ
    * format.
    * @param point_step  Number of bytes between each point in the data array.
    * @param row_step    Number of bytes between each row in the data array.
@@ -167,14 +167,14 @@ public:
    * @param z_offset    Offset (in bytes) to the z-coordinate within a point.
    * @return            A 2D occupancy grid as an Eigen::MatrixXi.
    */
-  Eigen::MatrixXi &scanToGrid(const std::vector<int8_t> &data, int point_step,
+  Eigen::MatrixXi &scanToGrid(const std::vector<uint8_t> &data, int point_step,
                               int row_step, int height, int width,
                               float x_offset, float y_offset, float z_offset);
   /**
    * Projects 3D point cloud data onto a 2D grid using Bresenham line drawing,
    * with Bayesian updates to build a probabilistic occupancy grid.
    *
-   * @param data        Flattened point cloud data (int8), typically in XYZ
+   * @param data        Flattened point cloud data (uint8), typically in XYZ
    * format.
    * @param point_step  Number of bytes between each point in the data array.
    * @param row_step    Number of bytes between each row in the data array.
@@ -188,7 +188,7 @@ public:
    *                      - Probabilistic occupancy grid (Eigen::MatrixXf&)
    */
   std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
-  scanToGridBaysian(const std::vector<int8_t> &data, int point_step,
+  scanToGridBaysian(const std::vector<uint8_t> &data, int point_step,
                     int row_step, int height, int width, float x_offset,
                     float y_offset, float z_offset);
 

@@ -44,7 +44,7 @@ void bindings_control(py::module_ &m) {
       .def(py::init<double, double, double, double>(),
            py::arg("max_ang") = M_PI, py::arg("max_omega") = 0.0,
            py::arg("max_acc") = 0.0, py::arg("max_decel") = 0.0)
-      .def_rw("max_steer_ang", &Control::AngularVelocityControlParams::maxAngle)
+      .def_rw("max_ang", &Control::AngularVelocityControlParams::maxAngle)
       .def_rw("max_omega", &Control::AngularVelocityControlParams::maxOmega)
       .def_rw("max_acc",
               &Control::AngularVelocityControlParams::maxAcceleration)

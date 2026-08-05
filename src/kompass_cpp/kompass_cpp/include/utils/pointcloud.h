@@ -46,18 +46,18 @@ enum class PointFieldType : int {
 };
 
 // Helper: Loads bytes safely handling potential misalignment
-inline float load_and_cast_val(const int8_t *ptr, size_t offset,
+inline float load_and_cast_val(const uint8_t *ptr, size_t offset,
                                PointFieldType type) {
-  const int8_t *addr = ptr + offset;
+  const uint8_t *addr = ptr + offset;
 
   // Generic lambda to load unaligned data safely
   auto load_safe = [&](auto dummy_type) {
     using T = decltype(dummy_type);
     T val;
     // Copy byte-by-byte (compiler optimizes this to a register load)
-    // use int8_t* to match the source pointer type
+    // use uint8_t* to match the source pointer type
     for (size_t i = 0; i < sizeof(T); ++i) {
-      reinterpret_cast<int8_t *>(&val)[i] = addr[i];
+      reinterpret_cast<uint8_t *>(&val)[i] = addr[i];
     }
     return static_cast<float>(val);
   };
@@ -65,10 +65,10 @@ inline float load_and_cast_val(const int8_t *ptr, size_t offset,
   switch (type) {
   case PointFieldType::INT8:
     // INT8 is always aligned (1 byte)
-    return static_cast<float>(*addr);
+    return static_cast<float>(*reinterpret_cast<const int8_t *>(addr));
   case PointFieldType::UINT8:
     // UINT8 is always aligned (1 byte)
-    return static_cast<float>(*reinterpret_cast<const uint8_t *>(addr));
+    return static_cast<float>(*addr);
   case PointFieldType::INT16:
     return load_safe(int16_t{});
   case PointFieldType::UINT16:
@@ -114,7 +114,7 @@ inline float load_and_cast_val(const int8_t *ptr, size_t offset,
  * @throws std::out_of_range If point offsets access memory out of bounds.
  */
 inline void pointCloudToLaserScanFromRaw(
-    const std::vector<int8_t> &data, const int point_step, const int row_step,
+    const std::vector<uint8_t> &data, const int point_step, const int row_step,
     const int height, const int width, const int x_offset, const int y_offset,
     const int z_offset, const double max_range, const double min_z,
     const double max_z, const double angle_step,
@@ -203,7 +203,7 @@ inline void pointCloudToLaserScanFromRaw(
  * @throws std::out_of_range If point offsets access memory out of bounds.
  */
 inline void pointCloudToLaserScanFromRaw(
-    const std::vector<int8_t> &data, const int point_step, const int row_step,
+    const std::vector<uint8_t> &data, const int point_step, const int row_step,
     const int height, const int width, const int x_offset, const int y_offset,
     const int z_offset, const double max_range, const double min_z,
     const double max_z, const int num_bins, std::vector<double> &ranges_out) {

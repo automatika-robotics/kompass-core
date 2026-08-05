@@ -22,12 +22,12 @@ using json = nlohmann::json;
  *
  * @param radius
  * @param num_points
- * @return std::vector<int8_t>
+ * @return std::vector<uint8_t>
  */
-std::vector<int8_t> generateSpherePointcloud(float radius, int num_points) {
+std::vector<uint8_t> generateSpherePointcloud(float radius, int num_points) {
 
   // Generate points on the sphere and pack them into a binary format
-  std::vector<int8_t> data;
+  std::vector<uint8_t> data;
   for (int i = 0; i < num_points; ++i) {
     float theta = acos(1 - 2.0f * i / (num_points - 1));
     float phi = sqrt(num_points * sin(theta)) * (2 * M_PI);
@@ -36,12 +36,12 @@ std::vector<int8_t> generateSpherePointcloud(float radius, int num_points) {
     float z = radius * cos(theta);
 
     // Pack the points into a binary format
-    data.insert(data.end(), reinterpret_cast<const int8_t *>(&x),
-                reinterpret_cast<const int8_t *>(&x) + sizeof(float));
-    data.insert(data.end(), reinterpret_cast<const int8_t *>(&y),
-                reinterpret_cast<const int8_t *>(&y) + sizeof(float));
-    data.insert(data.end(), reinterpret_cast<const int8_t *>(&z),
-                reinterpret_cast<const int8_t *>(&z) + sizeof(float));
+    data.insert(data.end(), reinterpret_cast<const uint8_t *>(&x),
+                reinterpret_cast<const uint8_t *>(&x) + sizeof(float));
+    data.insert(data.end(), reinterpret_cast<const uint8_t *>(&y),
+                reinterpret_cast<const uint8_t *>(&y) + sizeof(float));
+    data.insert(data.end(), reinterpret_cast<const uint8_t *>(&z),
+                reinterpret_cast<const uint8_t *>(&z) + sizeof(float));
   }
   return data;
 }
@@ -53,16 +53,16 @@ std::vector<int8_t> generateSpherePointcloud(float radius, int num_points) {
  *
  * @param size
  * @param num_points
- * @return std::vector<int8_t>
+ * @return std::vector<uint8_t>
  */
-std::vector<int8_t> generateCubePointCloud(float size, int num_points) {
+std::vector<uint8_t> generateCubePointCloud(float size, int num_points) {
 
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_real_distribution<float> dist(-size / 2.0, size / 2.0);
   std::uniform_real_distribution<float> face_choice(0.0, 1.0);
 
-  std::vector<int8_t> data;
+  std::vector<uint8_t> data;
   for (int i = 0; i < num_points; ++i) {
     // Randomly choose which face of the cube the point lies on
     float face = face_choice(gen);
@@ -87,12 +87,12 @@ std::vector<int8_t> generateCubePointCloud(float size, int num_points) {
     }
 
     // Pack the points into a binary format
-    data.insert(data.end(), reinterpret_cast<const int8_t *>(&x),
-                reinterpret_cast<const int8_t *>(&x) + sizeof(float));
-    data.insert(data.end(), reinterpret_cast<const int8_t *>(&y),
-                reinterpret_cast<const int8_t *>(&y) + sizeof(float));
-    data.insert(data.end(), reinterpret_cast<const int8_t *>(&z),
-                reinterpret_cast<const int8_t *>(&z) + sizeof(float));
+    data.insert(data.end(), reinterpret_cast<const uint8_t *>(&x),
+                reinterpret_cast<const uint8_t *>(&x) + sizeof(float));
+    data.insert(data.end(), reinterpret_cast<const uint8_t *>(&y),
+                reinterpret_cast<const uint8_t *>(&y) + sizeof(float));
+    data.insert(data.end(), reinterpret_cast<const uint8_t *>(&z),
+                reinterpret_cast<const uint8_t *>(&z) + sizeof(float));
   }
   return data;
 }
@@ -109,7 +109,7 @@ std::vector<int8_t> generateCubePointCloud(float size, int num_points) {
  * @param z_offset
  * @param height
  */
-void run_test(const std::vector<int8_t> &data, int width,
+void run_test(const std::vector<uint8_t> &data, int width,
               std::string shape_name, int point_step = 12, int x_offset = 0,
               int y_offset = 4, int z_offset = 8, int height = 1) {
   // Laserscan data
@@ -160,7 +160,7 @@ BOOST_AUTO_TEST_CASE(test_pointcloud_conversion_sphere) {
   float radius = 1.0f;
 
   // Sphere Points
-  std::vector<int8_t> data = generateSpherePointcloud(radius, num_points);
+  std::vector<uint8_t> data = generateSpherePointcloud(radius, num_points);
 
   run_test(data, num_points, "sphere");
 }
@@ -174,7 +174,7 @@ BOOST_AUTO_TEST_CASE(test_pointcloud_conversion_cube) {
   float size = 3.0f;
 
   // Sphere Points
-  std::vector<int8_t> data = generateCubePointCloud(size, num_points);
+  std::vector<uint8_t> data = generateCubePointCloud(size, num_points);
 
   run_test(data, num_points, "cube");
 }

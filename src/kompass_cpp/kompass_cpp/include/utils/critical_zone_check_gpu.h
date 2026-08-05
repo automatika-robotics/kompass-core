@@ -164,7 +164,7 @@ public:
    * @brief Process Raw 3D PointCloud Data
    * Only valid if initialized with InputType::POINTCLOUD
    */
-  float check(const std::vector<int8_t> &data, int point_step, int row_step,
+  float check(const std::vector<uint8_t> &data, int point_step, int row_step,
               int height, int width, int x_offset, int y_offset, int z_offset,
               const bool forward);
 
@@ -185,7 +185,7 @@ private:
 
   // -- PointCloud Specific --
   size_t max_wg_size_ = 0;
-  int8_t *m_devicePtrRawBytes = nullptr;
+  uint8_t *m_devicePtrRawBytes = nullptr;
   size_t m_rawCapacity = 0;
   PointFieldType m_pointFieldType; // intialized in init
   int m_elementSize;               // initialized in init

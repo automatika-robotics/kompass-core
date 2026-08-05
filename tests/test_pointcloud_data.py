@@ -3,7 +3,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from kompass_core.datatypes import PointCloudData
 from kompass_cpp.utils import pointcloud_to_laserscan_from_raw
 
 
@@ -42,7 +41,7 @@ def plot_ranges_angles(angles: list, ranges: list, output_image_path: str):
     plt.close(fig)
 
 
-def plot_pointcloud_from_json(file_path: str, output_image_path: str) -> PointCloudData:
+def plot_pointcloud_from_json(file_path: str, output_image_path: str) -> None:
     """3D scatter render of a recorded pointcloud. Silently skipped if
     plotly is missing. Used during manual debugging; CI tests build clouds
     inline so they don't hit plotly."""
@@ -58,14 +57,6 @@ def plot_pointcloud_from_json(file_path: str, output_image_path: str) -> PointCl
     with open(file_path, "r") as f:
         pc_json = json.load(f)
 
-    pc = PointCloudData(
-        point_step=pc_json["point_step"],
-        row_step=pc_json["row_step"],
-        data=np.array(pc_json["data"]).astype(np.int8),
-        height=pc_json["height"],
-        width=pc_json["width"],
-    )
-
     data = pc_json["data"]
     point_step = pc_json["point_step"]
     fields = pc_json["fields"]
@@ -73,10 +64,10 @@ def plot_pointcloud_from_json(file_path: str, output_image_path: str) -> PointCl
     height = pc_json["height"]
 
     offset_map = {f["name"]: f["offset"] for f in fields}
-    pc.x_offset = offset_map.get("x")
-    pc.y_offset = offset_map.get("y")
-    pc.z_offset = offset_map.get("z")
-    if pc.x_offset is None or pc.y_offset is None or pc.z_offset is None:
+    x_offset = offset_map.get("x")
+    y_offset = offset_map.get("y")
+    z_offset = offset_map.get("z")
+    if x_offset is None or y_offset is None or z_offset is None:
         raise ValueError("JSON missing x, y, or z fields")
 
     buffer = np.array(data, dtype=np.uint8)
@@ -86,13 +77,13 @@ def plot_pointcloud_from_json(file_path: str, output_image_path: str) -> PointCl
     for i in range(num_points):
         base = i * point_step
         x = np.frombuffer(
-            buffer[base + pc.x_offset : pc.x_offset + base + 4], dtype=np.float32,
+            buffer[base + x_offset : x_offset + base + 4], dtype=np.float32,
         )[0]
         y = np.frombuffer(
-            buffer[base + pc.y_offset : pc.y_offset + base + 4], dtype=np.float32,
+            buffer[base + y_offset : y_offset + base + 4], dtype=np.float32,
         )[0]
         z = np.frombuffer(
-            buffer[base + pc.z_offset : pc.z_offset + base + 4], dtype=np.float32,
+            buffer[base + z_offset : z_offset + base + 4], dtype=np.float32,
         )[0]
         points.append((x, y, z))
 
@@ -143,7 +134,7 @@ def _make_cloud_bytes(points_xyz: np.ndarray) -> bytes:
     n = points_xyz.shape[0]
     buf = np.zeros((n, 4), dtype=np.float32)
     buf[:, :3] = points_xyz.astype(np.float32)
-    return np.frombuffer(buf.tobytes(), dtype=np.int8)
+    return np.frombuffer(buf.tobytes(), dtype=np.uint8)
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +262,7 @@ def test_conversion_livox_recording_produces_nontrivial_output():
     the call doesn't silently return all-max_range)."""
     pc_json = json.loads(LIVOX_CLOUD_JSON.read_text())
     offset_map = {f["name"]: f["offset"] for f in pc_json["fields"]}
-    data = np.array(pc_json["data"]).astype(np.int8)
+    data = np.array(pc_json["data"]).astype(np.uint8)
 
     max_range = 20.0
     ranges, angles = pointcloud_to_laserscan_from_raw(

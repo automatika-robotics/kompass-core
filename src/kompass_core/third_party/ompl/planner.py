@@ -106,9 +106,7 @@ class OMPLGeometric:
             self.configure(config_file)
 
         self._cpp_planner: Optional[OMPL2DGeometricPlanner] = OMPL2DGeometricPlanner(
-            robot_shape=RobotGeometry.Type.to_kompass_cpp_lib(
-                self._robot.geometry_type
-            ),
+            robot_shape=self._robot.geometry_type,
             robot_dimensions=self._robot.geometry_params,
             ompl_setup=self._ompl_setup,
             map_resolution=self._config.map_resolution,

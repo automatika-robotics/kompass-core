@@ -297,7 +297,7 @@ class VisionRGBDFollower(ControllerTemplate):
     ctrl_limits = RobotCtrlLimits(
         vx_limits=LinearCtrlLimits(max_vel=1.5, max_acc=3.0, max_decel=3.0),
         omega_limits=AngularCtrlLimits(
-            max_vel=2.5, max_acc=2.5, max_decel=2.5, max_steer=np.pi / 2
+            max_omega=2.5, max_acc=2.5, max_decel=2.5, max_ang=np.pi / 2
         ),
     )
 
@@ -383,9 +383,9 @@ class VisionRGBDFollower(ControllerTemplate):
             self._config.control_time_step = control_time_step
 
         self._planner = RGBDFollowerCpp(
-            control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
+            control_type=robot.robot_type,
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
-            robot_shape_type=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
+            robot_shape_type=robot.geometry_type,
             robot_dimensions=robot.geometry_params,
             vision_sensor_position_wrt_body=self._config.camera_position_to_robot,
             vision_sensor_rotation_wrt_body=self._config.camera_rotation_to_robot,

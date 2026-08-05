@@ -66,7 +66,7 @@ void bindings_utils(py::module_ &m) {
            py::arg("ranges"), py::arg("forward"))
 
       .def("check",
-           py::overload_cast<const std::vector<int8_t> &, int, int, int, int,
+           py::overload_cast<const std::vector<uint8_t> &, int, int, int, int,
                              int, int, int, bool>(&CriticalZoneChecker::check),
            py::arg("data"), py::arg("point_step"), py::arg("row_step"),
            py::arg("height"), py::arg("width"), py::arg("x_offset"),
@@ -75,7 +75,7 @@ void bindings_utils(py::module_ &m) {
   // Overload using angle_step (Returns: tuple(ranges, angles))
   m_utils.def(
       "pointcloud_to_laserscan_from_raw",
-      [](const std::vector<int8_t> &data, int point_step, int row_step,
+      [](const std::vector<uint8_t> &data, int point_step, int row_step,
          int height, int width, int x_offset, int y_offset, int z_offset,
          double max_range, double min_z, double max_z, double angle_step) {
         std::vector<double> ranges_out;
@@ -100,7 +100,7 @@ void bindings_utils(py::module_ &m) {
   // Overload using num_bins (Returns: list(ranges))
   m_utils.def(
       "pointcloud_to_laserscan_from_raw",
-      [](const std::vector<int8_t> &data, int point_step, int row_step,
+      [](const std::vector<uint8_t> &data, int point_step, int row_step,
          int height, int width, int x_offset, int y_offset, int z_offset,
          double max_range, double min_z, double max_z, int num_bins) {
         std::vector<double> ranges_out;
