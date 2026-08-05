@@ -7,6 +7,11 @@
 #include <fcl/broadphase/default_broadphase_callbacks.h>
 #include <fcl/common/types.h>
 #include <fcl/geometry/octree/octree.h>
+#include <fcl/geometry/shape/box.h>
+#include <fcl/geometry/shape/capsule.h>
+#include <fcl/geometry/shape/cone.h>
+#include <fcl/geometry/shape/cylinder.h>
+#include <fcl/geometry/shape/ellipsoid.h>
 #include <fcl/geometry/shape/sphere.h>
 #include <fcl/narrowphase/collision_object.h>
 #include <memory>
@@ -14,6 +19,46 @@
 #include <vector>
 
 namespace Kompass {
+
+float CollisionChecker::radiusOf(const ShapeType shape_type,
+                                  const std::vector<float> &dimensions) {
+  switch (shape_type) {
+  case ShapeType::CYLINDER:
+  case ShapeType::SPHERE:
+  case ShapeType::CAPSULE:
+  case ShapeType::CONE:
+    // Radius is the first parameter
+    return dimensions.at(0);
+  case ShapeType::BOX:
+  case ShapeType::ELLIPSOID:
+    // Half the diagonal of the footprint spanned by the x and y extents
+    return std::sqrt(std::pow(dimensions.at(0), 2) +
+                     std::pow(dimensions.at(1), 2)) /
+           2;
+  }
+  throw std::invalid_argument("Invalid robot geometry type");
+}
+
+float CollisionChecker::heightOf(const ShapeType shape_type,
+                                  const std::vector<float> &dimensions) {
+  switch (shape_type) {
+  case ShapeType::CYLINDER:
+  case ShapeType::CONE:
+    // Length along z is the second parameter
+    return dimensions.at(1);
+  case ShapeType::CAPSULE:
+    // Cylindrical section plus the two hemispherical caps
+    return dimensions.at(1) + 2 * dimensions.at(0);
+  case ShapeType::SPHERE:
+    // Diameter
+    return 2 * dimensions.at(0);
+  case ShapeType::BOX:
+  case ShapeType::ELLIPSOID:
+    // z extent is the third parameter
+    return dimensions.at(2);
+  }
+  throw std::invalid_argument("Invalid robot geometry type");
+}
 
 CollisionChecker::CollisionChecker(
     const ShapeType robot_shape_type,
@@ -34,28 +79,37 @@ CollisionChecker::CollisionChecker(
 
   body->dimensions = robot_dimensions;
 
-  // Construct  a geometry object based on the robot shape
-  if (body->shapeType == ShapeType::CYLINDER) {
+  // Construct a geometry object based on the robot shape
+  switch (body->shapeType) {
+  case ShapeType::CYLINDER:
     bodyGeometry_ = std::make_shared<fcl::Cylinderf>(body->dimensions.at(0),
                                                      body->dimensions.at(1));
-
-    robotHeight_ = body->dimensions.at(1);
-    robotRadius_ = body->dimensions.at(0);
-  } else if (body->shapeType == ShapeType::BOX) {
+    break;
+  case ShapeType::BOX:
     bodyGeometry_ = std::make_shared<fcl::Boxf>(
         body->dimensions.at(0), body->dimensions.at(1), body->dimensions.at(2));
-    robotHeight_ = body->dimensions.at(2);
-    robotRadius_ = std::sqrt(pow(body->dimensions.at(0), 2) +
-                             pow(body->dimensions.at(1), 2)) /
-                   2;
-  } else if (body->shapeType == ShapeType::SPHERE) {
+    break;
+  case ShapeType::SPHERE:
     bodyGeometry_ = std::make_shared<fcl::Spheref>(body->dimensions.at(0));
-    robotRadius_ = body->dimensions.at(0);
-    robotHeight_ = 2 * body->dimensions.at(0);
-    ;
-  } else {
+    break;
+  case ShapeType::ELLIPSOID:
+    bodyGeometry_ = std::make_shared<fcl::Ellipsoidf>(
+        body->dimensions.at(0), body->dimensions.at(1), body->dimensions.at(2));
+    break;
+  case ShapeType::CAPSULE:
+    bodyGeometry_ = std::make_shared<fcl::Capsulef>(body->dimensions.at(0),
+                                                    body->dimensions.at(1));
+    break;
+  case ShapeType::CONE:
+    bodyGeometry_ = std::make_shared<fcl::Conef>(body->dimensions.at(0),
+                                                 body->dimensions.at(1));
+    break;
+  default:
     throw std::invalid_argument("Invalid robot geometry type");
   }
+
+  robotRadius_ = radiusOf(body->shapeType, body->dimensions);
+  robotHeight_ = heightOf(body->shapeType, body->dimensions);
 
   // Set the body collision object pointer
   bodyObjPtr_ = std::make_shared<fcl::CollisionObjectf>(bodyGeometry_);

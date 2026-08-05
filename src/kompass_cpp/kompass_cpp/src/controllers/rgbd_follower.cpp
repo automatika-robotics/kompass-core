@@ -45,22 +45,9 @@ RGBDFollower::RGBDFollower(const ControlType &robotCtrlType,
 double
 RGBDFollower::getRobotRadius(const CollisionChecker::ShapeType robot_shape_type,
                              const std::vector<float> &robot_dimensions) {
-  double robot_radius;
-  // Construct  a geometry object based on the robot shape
-  if (robot_shape_type == CollisionChecker::ShapeType::CYLINDER) {
-    robot_radius = robot_dimensions.at(0);
-  } else if (robot_shape_type == CollisionChecker::ShapeType::BOX) {
-    // NOTE: We are using the circumradius here for being conservative with
-    // collisions
-    robot_radius = std::sqrt(pow(robot_dimensions.at(0), 2) +
-                             pow(robot_dimensions.at(1), 2)) /
-                   2;
-  } else if (robot_shape_type == CollisionChecker::ShapeType::SPHERE) {
-    robot_radius = robot_dimensions.at(0);
-  } else {
-    throw std::invalid_argument("Invalid robot geometry type");
-  }
-  return robot_radius;
+  // NOTE: this is the circumradius for shapes with a non-circular footprint,
+  // so the follower stays conservative with collisions
+  return CollisionChecker::radiusOf(robot_shape_type, robot_dimensions);
 }
 
 void RGBDFollower::setCameraIntrinsics(const float focal_length_x,
