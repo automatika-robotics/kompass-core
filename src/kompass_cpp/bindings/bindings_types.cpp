@@ -135,20 +135,58 @@ void bindings_types(py::module_ &m) {
       .def_ro("ranges", &Control::LaserScan::ranges)
       .def_ro("angles", &Control::LaserScan::angles);
 
-  // For collisions detection
+  // For collisions detection. The members mirror the FCL primitives the
+  // collision checker can construct.
   py::enum_<CollisionChecker::ShapeType>(m_types, "RobotGeometry")
       .value("CYLINDER", CollisionChecker::ShapeType::CYLINDER)
       .value("BOX", CollisionChecker::ShapeType::BOX)
       .value("SPHERE", CollisionChecker::ShapeType::SPHERE)
-      .def_static("get", [](const std::string &key) {
-        if (key == "CYLINDER")
-          return CollisionChecker::ShapeType::CYLINDER;
-        if (key == "BOX")
-          return CollisionChecker::ShapeType::BOX;
-        if (key == "SPHERE")
-          return CollisionChecker::ShapeType::SPHERE;
-        throw std::runtime_error("Invalid key");
-      });
+      .value("ELLIPSOID", CollisionChecker::ShapeType::ELLIPSOID)
+      .value("CAPSULE", CollisionChecker::ShapeType::CAPSULE)
+      .value("CONE", CollisionChecker::ShapeType::CONE)
+      .def_static("get",
+                  [](const std::string &key) {
+                    if (key == "CYLINDER")
+                      return CollisionChecker::ShapeType::CYLINDER;
+                    if (key == "BOX")
+                      return CollisionChecker::ShapeType::BOX;
+                    if (key == "SPHERE")
+                      return CollisionChecker::ShapeType::SPHERE;
+                    if (key == "ELLIPSOID")
+                      return CollisionChecker::ShapeType::ELLIPSOID;
+                    if (key == "CAPSULE")
+                      return CollisionChecker::ShapeType::CAPSULE;
+                    if (key == "CONE")
+                      return CollisionChecker::ShapeType::CONE;
+                    throw std::runtime_error("Invalid key");
+                  })
+      // Exposed so Python sizes the robot through the same derivation the
+      // collision and critical zone checkers use
+      .def_static("get_radius", &CollisionChecker::radiusOf,
+                  py::arg("shape_type"), py::arg("dimensions"),
+                  "Radius of the smallest circle in the xy-plane containing "
+                  "the robot")
+      .def_static("get_height", &CollisionChecker::heightOf,
+                  py::arg("shape_type"), py::arg("dimensions"),
+                  "Total extent of the robot along the z-axis")
+      .def_static(
+          "params_length",
+          [](const CollisionChecker::ShapeType shape_type) {
+            switch (shape_type) {
+            case CollisionChecker::ShapeType::SPHERE:
+              return 1;
+            case CollisionChecker::ShapeType::CYLINDER:
+            case CollisionChecker::ShapeType::CAPSULE:
+            case CollisionChecker::ShapeType::CONE:
+              return 2;
+            case CollisionChecker::ShapeType::BOX:
+            case CollisionChecker::ShapeType::ELLIPSOID:
+              return 3;
+            }
+            throw std::runtime_error("Invalid robot geometry type");
+          },
+          py::arg("shape_type"),
+          "Number of parameters the geometry requires");
 
   // For pointcloud data type
   py::enum_<PointFieldType>(m_types, "PointFieldType")

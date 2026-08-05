@@ -724,15 +724,23 @@ class RobotGeometry:
                         return enum_value
                 raise ValueError(f"{value} is not a valid RobotGeometry.Type value")
 
-    class ParamsLength(Enum):
-        """Robot Geometry parameters length for each type"""
+    @classmethod
+    def params_length(cls, geometry_type: Type) -> int:
+        """
+        Gets the number of parameters a given geometry type requires
 
-        BOX = 3  # (x, y, z) Axis-aligned box with given side lengths
-        CYLINDER = 2  # (rad, lz) Cylinder with given radius and height along z-axis
-        SPHERE = 1  # (rad) Sphere with given radius
-        ELLIPSOID = 3  # (x, y, z) Axis-aligned ellipsoid with given radius
-        CAPSULE = 2  # (rad, lz) Capsule with given radius and height along z-axis
-        CONE = 2  # (rad, lz) Cone with given radius and height along z-axis
+        Taken from the C++ library, which constructs the matching FCL
+        primitive, so the count cannot disagree with what the shape takes.
+
+        :param geometry_type: Robot Geometry Type
+        :type geometry_type: Type
+
+        :return: Number of required parameters
+        :rtype: int
+        """
+        return kompass_cpp.types.RobotGeometry.params_length(
+            cls.Type.to_kompass_cpp_lib(geometry_type)
+        )
 
     @classmethod
     def is_valid_parameters(cls, geometry_type: Type, parameters: np.ndarray) -> bool:
@@ -747,8 +755,7 @@ class RobotGeometry:
         :return: If parameters are valid
         :rtype: bool
         """
-        required_length: int = cls.ParamsLength[geometry_type.value].value
-        return len(parameters) == required_length and all(
+        return len(parameters) == cls.params_length(geometry_type) and all(
             param > 0 for param in parameters
         )
 
@@ -794,16 +801,9 @@ class RobotGeometry:
         """
         if not cls.is_valid_parameters(geometry_type, parameters):
             raise ValueError("Invalid parameters for the robot geometry")
-        if geometry_type in [
-            cls.Type.CONE,
-            cls.Type.CYLINDER,
-            cls.Type.SPHERE,
-            cls.Type.CAPSULE,
-        ]:
-            # First parameter is the radius -> equivalent to wheelbase
-            return parameters[0]
-        else:
-            return np.sqrt(parameters[1] + parameters[0]) / 2
+        return kompass_cpp.types.RobotGeometry.get_radius(
+            cls.Type.to_kompass_cpp_lib(geometry_type), parameters
+        )
 
     @classmethod
     def get_height(cls, geometry_type: Type, parameters: np.ndarray) -> float:
@@ -820,20 +820,9 @@ class RobotGeometry:
         """
         if not cls.is_valid_parameters(geometry_type, parameters):
             raise ValueError("Invalid parameters for the robot geometry")
-        if geometry_type in [
-            cls.Type.CONE,
-            cls.Type.CYLINDER,
-            cls.Type.CAPSULE,
-            cls.Type.ELLIPSOID,
-        ]:
-            # Last parameter is the height
-            return parameters[-1]
-        elif geometry_type == cls.Type.SPHERE:
-            # Return sphere height
-            return parameters[0] * 2.0
-        else:
-            # return BOX height
-            return parameters[0]
+        return kompass_cpp.types.RobotGeometry.get_height(
+            cls.Type.to_kompass_cpp_lib(geometry_type), parameters
+        )
 
     @classmethod
     def get_length(cls, geometry_type: Type, parameters: np.ndarray) -> Optional[float]:
@@ -1301,7 +1290,7 @@ class Robot:
             self.geometry_type, self.geometry_params
         ):
             raise ValueError(
-                f"Robot geometry parameters '{self.geometry_params}' are incompatible with given robot geometry {self.geometry_type}. Requires '{RobotGeometry.ParamsLength[self.geometry_type.value].value}' strictly positive parameters"
+                f"Robot geometry parameters '{self.geometry_params}' are incompatible with given robot geometry {self.geometry_type}. Requires '{RobotGeometry.params_length(self.geometry_type)}' strictly positive parameters"
             )
         # Set inital zero control
         self.control = control_types[self.robot_type].init_zero(
