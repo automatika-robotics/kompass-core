@@ -166,7 +166,7 @@ class DVZ(FollowerTemplate):
         :param initial_control_seq: Initial (reference) control sequence
         :type initial_control_seq: np.ndarray
         """
-        if initial_control_seq:
+        if initial_control_seq is not None:
             # Get path tracking reference commands
             _ref_linear_x_cmd = initial_control_seq[0, 0]
             # _ref_linear_y_cmd = initial_control_seq[0, 1] TODO update dvz to take omni motion
