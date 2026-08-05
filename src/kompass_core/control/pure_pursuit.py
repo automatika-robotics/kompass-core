@@ -154,11 +154,37 @@ class PurePursuit(FollowerTemplate):
     def planner(self) -> kompass_cpp.control.Follower:
         return self._planner
 
-    def loop_step(self, *, current_state: RobotState, **kwargs) -> bool:
+    def loop_step(
+        self,
+        *,
+        current_state: RobotState,
+        ranges: Optional[np.ndarray] = None,
+        angles: Optional[np.ndarray] = None,
+        points: Optional[np.ndarray] = None,
+        local_map: Optional[np.ndarray] = None,
+        **_,
+    ) -> bool:
         """
         Implements a loop iteration of the controller
 
+        Takes obstacles from exactly one source, in order of precedence:
+        ``local_map``, then a laser scan (``ranges`` with ``angles``), then a
+        cartesian point cloud (``points``). With none of them the controller
+        tracks the path without collision avoidance.
+
         :param current_state: Robot current state
+        :type current_state: RobotState
+        :param ranges: Measured range along each angle of a laser scan (m)
+        :type ranges: Optional[np.ndarray]
+        :param angles: Angle of each range measurement (rad)
+        :type angles: Optional[np.ndarray]
+        :param points: Cartesian obstacle points as an Nx3 array (m)
+        :type points: Optional[np.ndarray]
+        :param local_map: Occupied cells around the robot as an Nx3 array (m)
+        :type local_map: Optional[np.ndarray]
+
+        :return: If the controller found a valid command
+        :rtype: bool
         """
         self._planner.set_current_state(
             current_state.x, current_state.y, current_state.yaw, current_state.speed
@@ -172,23 +198,23 @@ class PurePursuit(FollowerTemplate):
 
         # Execute controller
         # Check for sensor data to determine which execute overload to call
-        if "local_map" in kwargs and kwargs["local_map"] is not None:
-            # Execute with PointCloud
-            self._result = self._planner.execute(
-                self._control_time_step, kwargs["local_map"]
-            )
-        elif "laser_scan" in kwargs and kwargs["laser_scan"] is not None:
+        if local_map is not None:
+            # Execute with the occupied cells as a point cloud
+            self._result = self._planner.execute(self._control_time_step, local_map)
+        elif ranges is not None and angles is not None:
+            if len(angles) != len(ranges):
+                logging.error(
+                    "Received incompatible LaserScan data -> Cannot compute control"
+                )
+                return False
             # Execute with LaserScan
-            sensor_data = kompass_cpp.types.LaserScan(
-                ranges=kwargs["laser_scan"].ranges, angles=kwargs["laser_scan"].angles
-            )
+            sensor_data = kompass_cpp.types.LaserScan(ranges=ranges, angles=angles)
             self._result = self._planner.execute(self._control_time_step, sensor_data)
-        elif "point_cloud" in kwargs and kwargs["point_cloud"] is not None:
+        elif points is not None:
             # Execute with PointCloud
-            sensor_data = kwargs["point_cloud"].data
-            self._result = self._planner.execute(self._control_time_step, sensor_data)
+            self._result = self._planner.execute(self._control_time_step, points)
         else:
-            # Execute Nominal (State Update + Control)
+            # Execute Nominal (State Update + Control) -> no collision avoidance
             self._result = self._planner.execute(self._control_time_step)
 
         return self._result.status in [
