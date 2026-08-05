@@ -21,7 +21,7 @@
 namespace Kompass {
 
 float CollisionChecker::radiusOf(const ShapeType shape_type,
-                                  const std::vector<float> &dimensions) {
+                                 const std::vector<float> &dimensions) {
   switch (shape_type) {
   case ShapeType::CYLINDER:
   case ShapeType::SPHERE:
@@ -40,7 +40,7 @@ float CollisionChecker::radiusOf(const ShapeType shape_type,
 }
 
 float CollisionChecker::heightOf(const ShapeType shape_type,
-                                  const std::vector<float> &dimensions) {
+                                 const std::vector<float> &dimensions) {
   switch (shape_type) {
   case ShapeType::CYLINDER:
   case ShapeType::CONE:
@@ -245,7 +245,8 @@ bool CollisionChecker::checkCollisions() {
   //   }
   //   else{
   //     LOG_INFO("NO collision with box at: {", trans[0], ", ", trans[1], ",",
-  //               trans[2], "}. Robot at: {", transRobot[0], ", ", transRobot[1],
+  //               trans[2], "}. Robot at: {", transRobot[0], ", ",
+  //               transRobot[1],
   //               ", ", transRobot[2], "}");
   //   }
   // }
@@ -266,8 +267,6 @@ float CollisionChecker::getMinDistance() {
 
   return std::max<float>(0.0, distanceData.result.min_distance);
 }
-
-
 
 bool CollisionChecker::checkCollisions(const std::vector<double> &ranges,
                                        const std::vector<double> &angles,
