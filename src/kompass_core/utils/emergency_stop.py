@@ -38,7 +38,7 @@ class EmergencyChecker:
             if sensor_rotation_robot is not None
             else np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
         )
-        self.__robot_shape = RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type)
+        self.__robot_shape = robot.geometry_type
         self.__robot_dimensions = robot.geometry_params
         self.__robot_height = robot.height
         self.__use_gpu = use_gpu

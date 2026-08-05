@@ -146,12 +146,12 @@ class Stanley(FollowerTemplate):
 
         # Set the control limits
         self._planner.set_linear_ctr_limits(
-            ctrl_limits.linear_to_kompass_cpp_lib(ctrl_limits.vx_limits),
-            ctrl_limits.linear_to_kompass_cpp_lib(ctrl_limits.vy_limits),
+            ctrl_limits.vx_limits,
+            ctrl_limits.vy_limits,
         )
-        self._planner.set_angular_ctr_limits(ctrl_limits.angular_to_kompass_cpp_lib())
+        self._planner.set_angular_ctr_limits(ctrl_limits.omega_limits)
 
-        self.__max_angular = ctrl_limits.omega_limits.max_vel
+        self.__max_angular = ctrl_limits.omega_limits.max_omega
 
         # Init the following result
         self._result = kompass_cpp.control.FollowingResult()
@@ -204,7 +204,7 @@ class Stanley(FollowerTemplate):
             return [self._planner.get_vx_cmd()] if not self.reached_end() else [0.0]
 
         elif (
-            self._robot.robot_type != RobotType.ACKERMANN.value
+            self._robot.robot_type != RobotType.ACKERMANN
             and abs(self._planner.get_omega_cmd()) > self._config.min_angular_vel
         ):
             if (
@@ -229,7 +229,7 @@ class Stanley(FollowerTemplate):
             return [self._planner.get_vy_cmd()] if not self.reached_end() else [0.0]
 
         elif (
-            self._robot.robot_type != RobotType.ACKERMANN.value
+            self._robot.robot_type != RobotType.ACKERMANN
             and abs(self._planner.get_omega_cmd()) > self._config.min_angular_vel
         ):
             if (
@@ -254,7 +254,7 @@ class Stanley(FollowerTemplate):
             return [self._planner.get_omega_cmd()] if not self.reached_end() else [0.0]
 
         if (
-            self._robot.robot_type != RobotType.ACKERMANN.value
+            self._robot.robot_type != RobotType.ACKERMANN
             and abs(self._planner.get_omega_cmd()) > self._config.min_angular_vel
         ):
             if (

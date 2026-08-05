@@ -124,7 +124,7 @@ class VisionRGBFollower(ControllerTemplate):
     ctrl_limits = RobotCtrlLimits(
         vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=2.0, max_decel=4.0),
         omega_limits=AngularCtrlLimits(
-            max_vel=2.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
+            max_omega=2.0, max_acc=3.0, max_decel=3.0, max_ang=np.pi
         )
     )
 
@@ -193,7 +193,7 @@ class VisionRGBFollower(ControllerTemplate):
         if config_file:
             self._config.from_file(config_file, config_root_name, get_common=False)
         self.__controller = RGBFollower(
-            control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
+            control_type=robot.robot_type,
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
             config=self._config.to_kompass_cpp(),
         )

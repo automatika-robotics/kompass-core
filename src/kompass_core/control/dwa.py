@@ -167,7 +167,7 @@ class DWA(FollowerTemplate):
     robot_ctr_limits = RobotCtrlLimits(
         vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
         omega_limits=AngularCtrlLimits(
-            max_vel=2.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
+            max_omega=2.0, max_acc=3.0, max_decel=3.0, max_ang=np.pi
         ),
     )
 
@@ -226,7 +226,7 @@ class DWA(FollowerTemplate):
 
         self._planner = kompass_cpp.control.DWA(
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
-            control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
+            control_type=robot.robot_type,
             time_step=self._config.control_time_step,
             prediction_horizon=self._config.prediction_horizon
             * self._config.control_time_step,
@@ -234,7 +234,7 @@ class DWA(FollowerTemplate):
             * self._config.control_time_step,
             max_linear_samples=self._config.max_linear_samples,
             max_angular_samples=self._config.max_angular_samples,
-            robot_shape_type=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
+            robot_shape_type=robot.geometry_type,
             robot_dimensions=robot.geometry_params,
             sensor_position_robot=self._config.proximity_sensor_position_to_robot,
             sensor_rotation_robot=self._config.proximity_sensor_rotation_to_robot,

@@ -136,9 +136,9 @@ class PurePursuit(FollowerTemplate):
         self._control_time_step = control_time_step
 
         self._planner = kompass_cpp.control.PurePursuit(
-            control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
+            control_type=robot.robot_type,
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
-            robot_shape_type=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
+            robot_shape_type=robot.geometry_type,
             robot_dimensions=robot.geometry_params.tolist(),
             sensor_position_robot=config.proximity_sensor_position_to_robot,
             sensor_rotation_robot=config.proximity_sensor_rotation_to_robot,
