@@ -679,7 +679,7 @@ def run_before_and_after_tests():
     robot_ctr_limits = RobotCtrlLimits(
         vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
         omega_limits=AngularCtrlLimits(
-            max_vel=4.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
+            max_omega=4.0, max_acc=3.0, max_decel=3.0, max_ang=np.pi
         ),
     )
 
@@ -705,7 +705,7 @@ def main():
     robot_ctr_limits = RobotCtrlLimits(
         vx_limits=LinearCtrlLimits(max_vel=1.0, max_acc=5.0, max_decel=10.0),
         omega_limits=AngularCtrlLimits(
-            max_vel=4.0, max_acc=3.0, max_decel=3.0, max_steer=np.pi
+            max_omega=4.0, max_acc=3.0, max_decel=3.0, max_ang=np.pi
         ),
     )
 
