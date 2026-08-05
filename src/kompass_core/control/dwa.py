@@ -227,18 +227,20 @@ class DWA(FollowerTemplate):
         self._planner = kompass_cpp.control.DWA(
             control_limits=ctrl_limits.to_kompass_cpp_lib(),
             control_type=RobotType.to_kompass_cpp_lib(robot.robot_type),
-            time_step=config.control_time_step,
-            prediction_horizon=config.prediction_horizon * config.control_time_step,
-            control_horizon=config.control_horizon * config.control_time_step,
-            max_linear_samples=config.max_linear_samples,
-            max_angular_samples=config.max_angular_samples,
+            time_step=self._config.control_time_step,
+            prediction_horizon=self._config.prediction_horizon
+            * self._config.control_time_step,
+            control_horizon=self._config.control_horizon
+            * self._config.control_time_step,
+            max_linear_samples=self._config.max_linear_samples,
+            max_angular_samples=self._config.max_angular_samples,
             robot_shape_type=RobotGeometry.Type.to_kompass_cpp_lib(robot.geometry_type),
             robot_dimensions=robot.geometry_params,
-            sensor_position_robot=config.proximity_sensor_position_to_robot,
-            sensor_rotation_robot=config.proximity_sensor_rotation_to_robot,
-            octree_resolution=config.octree_resolution,
-            cost_weights=config.costs_weights.to_kompass_cpp(),
-            max_num_threads=config.max_num_threads,
+            sensor_position_robot=self._config.proximity_sensor_position_to_robot,
+            sensor_rotation_robot=self._config.proximity_sensor_rotation_to_robot,
+            octree_resolution=self._config.octree_resolution,
+            cost_weights=self._config.costs_weights.to_kompass_cpp(),
+            max_num_threads=self._config.max_num_threads,
         )
 
         # Init the following result
@@ -277,7 +279,7 @@ class DWA(FollowerTemplate):
         :type angles: Optional[np.ndarray]
         :param points: Cartesian obstacle points as an Nx3 array (m)
         :type points: Optional[np.ndarray]
-        :param local_map: Occupancy grid around the robot
+        :param local_map: Occupied cells around the robot as an Nx3 array (m)
         :type local_map: Optional[np.ndarray]
 
         :return: If planner found a valid solution
