@@ -66,7 +66,7 @@ def _make_follower(case: dict) -> VisionRGBDFollower:
     ctrl_limits = RobotCtrlLimits(
         vx_limits=LinearCtrlLimits(max_vel=1.5, max_acc=3.0, max_decel=3.0),
         omega_limits=AngularCtrlLimits(
-            max_vel=2.5, max_acc=2.5, max_decel=2.5, max_steer=np.pi / 2
+            max_omega=2.5, max_acc=2.5, max_decel=2.5, max_ang=np.pi / 2
         ),
     )
     config = VisionRGBDFollowerConfig(
