@@ -114,7 +114,7 @@ float CriticalZoneChecker::check(ByteSpan data, int point_step, int row_step,
   pointCloudToLaserScanFromRaw(
       data, point_step, row_step, height, width, x_offset, y_offset, z_offset,
       range_max_, min_height_, max_height_,
-      static_cast<int>(sin_angles_.size()), ranges_scratch_);
-  return check(Eigen::Ref<const Eigen::VectorXf>(ranges_scratch_), forward);
+      static_cast<int>(sin_angles_.size()), ranges_staging_);
+  return check(Eigen::Ref<const Eigen::VectorXf>(ranges_staging_), forward);
 }
 } // namespace Kompass
