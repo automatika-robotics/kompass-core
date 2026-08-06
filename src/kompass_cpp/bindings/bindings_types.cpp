@@ -1,5 +1,4 @@
-#include <nanobind/eigen/dense.h>
-#include <nanobind/nanobind.h>
+#include "bindings.h"
 #include <nanobind/operators.h>
 #include <nanobind/stl/array.h>
 #include <nanobind/stl/string.h>
@@ -14,7 +13,6 @@
 #include "utils/critical_zone_check.h"
 #include "utils/pointcloud.h"
 
-namespace py = nanobind;
 using namespace Kompass;
 
 std::string printControlCmd(const Control::Velocity2D &velocity_command) {

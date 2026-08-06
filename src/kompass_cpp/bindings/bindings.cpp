@@ -1,21 +1,10 @@
-#include <Eigen/Dense>
-#include <nanobind/nanobind.h>
+#include "bindings.h"
 #include <nanobind/operators.h>
 #include <nanobind/stl/string.h>
 #include <variant>
 
 #include "utils/gpu_check.h"
 #include "utils/logger.h"
-
-namespace py = nanobind;
-
-void bindings_types(py::module_ &);
-void bindings_config(py::module_ &);
-void bindings_control(py::module_ &);
-void bindings_mapping(py::module_ &);
-void bindings_utils(py::module_ &);
-void bindings_planning(py::module_ &);
-void bindings_vision(py::module_ &);
 
 using namespace Kompass;
 

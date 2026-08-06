@@ -1,16 +1,11 @@
-#include <nanobind/eigen/dense.h>
-#include <nanobind/nanobind.h>
+#include "bindings.h"
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
 #include "mapping/local_mapper.h"
 
-namespace py = nanobind;
 using namespace Kompass;
 
-#if GPU
-void bindings_mapping_gpu(py::module_ &);
-#endif
 
 // Mapping bindings submodule
 void bindings_mapping(py::module_ &m) {
@@ -42,39 +37,51 @@ void bindings_mapping(py::module_ &m) {
            py::arg("max_points_per_line"), py::arg("max_num_threads") = 1)
 
       .def("scan_to_grid",
-           py::overload_cast<const std::vector<double> &,
-                             const std::vector<double> &>(
+           py::overload_cast<Eigen::Ref<const Eigen::VectorXf>,
+                             Eigen::Ref<const Eigen::VectorXf>>(
                &Mapping::LocalMapper::scanToGrid),
            "Convert laser scan data to occupancy grid", py::arg("angles"),
            py::arg("ranges"), py::rv_policy::reference_internal)
 
-      .def("scan_to_grid",
-           py::overload_cast<const std::vector<uint8_t> &, int, int, int, int,
-                             float, float, float>(
-               &Mapping::LocalMapper::scanToGrid),
-           "Convert raw point cloud data to occupancy grid", py::arg("data"),
-           py::arg("point_step"), py::arg("row_step"), py::arg("height"),
-           py::arg("width"), py::arg("x_offset"), py::arg("y_offset"),
-           py::arg("z_offset"), py::rv_policy::reference_internal)
+      .def(
+          "scan_to_grid",
+          [](Mapping::LocalMapper &self, ByteArray data, int point_step,
+             int row_step, int height, int width, int x_offset, int y_offset,
+             int z_offset) -> Eigen::MatrixXi & {
+            py::gil_scoped_release release;
+            return self.scanToGrid(toSpan(data), point_step, row_step, height,
+                                   width, x_offset, y_offset, z_offset);
+          },
+          "Convert raw point cloud data to occupancy grid (zero-copy input)",
+          py::arg("data"), py::arg("point_step"), py::arg("row_step"),
+          py::arg("height"), py::arg("width"), py::arg("x_offset"),
+          py::arg("y_offset"), py::arg("z_offset"),
+          py::rv_policy::reference_internal)
 
       .def("scan_to_grid_baysian",
-           py::overload_cast<const std::vector<double> &,
-                             const std::vector<double> &>(
+           py::overload_cast<Eigen::Ref<const Eigen::VectorXf>,
+                             Eigen::Ref<const Eigen::VectorXf>>(
                &Mapping::LocalMapper::scanToGridBaysian),
            "Convert laser scan data to occupancy grid, with baysian update",
            py::arg("angles"), py::arg("ranges"),
            py::rv_policy::reference_internal)
 
-      .def("scan_to_grid_baysian",
-           py::overload_cast<const std::vector<uint8_t> &, int, int, int, int,
-                             float, float, float>(
-               &Mapping::LocalMapper::scanToGridBaysian),
-           "Convert raw point cloud data to occupancy grid, with baysian "
-           "update",
-           py::arg("data"), py::arg("point_step"), py::arg("row_step"),
-           py::arg("height"), py::arg("width"), py::arg("x_offset"),
-           py::arg("y_offset"), py::arg("z_offset"),
-           py::rv_policy::reference_internal)
+      .def(
+          "scan_to_grid_baysian",
+          [](Mapping::LocalMapper &self, ByteArray data, int point_step,
+             int row_step, int height, int width, int x_offset, int y_offset,
+             int z_offset) {
+            py::gil_scoped_release release;
+            return self.scanToGridBaysian(toSpan(data), point_step, row_step,
+                                          height, width, x_offset, y_offset,
+                                          z_offset);
+          },
+          "Convert raw point cloud data to occupancy grid, with baysian "
+          "update (zero-copy input)",
+          py::arg("data"), py::arg("point_step"), py::arg("row_step"),
+          py::arg("height"), py::arg("width"), py::arg("x_offset"),
+          py::arg("y_offset"), py::arg("z_offset"),
+          py::rv_policy::reference_internal)
 
       .def("get_previous_grid_in_current_pose",
            &Mapping::LocalMapper::getPreviousGridInCurrentPose,

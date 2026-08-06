@@ -1,10 +1,7 @@
-#include <nanobind/eigen/dense.h>
-#include <nanobind/nanobind.h>
+#include "bindings.h"
 #include <nanobind/stl/string.h>
 
 #include "datatypes/parameter.h"
-
-namespace py = nanobind;
 
 // Method to set parameter values based on dict instance
 void set_parameters_from_dict(Parameters &params,

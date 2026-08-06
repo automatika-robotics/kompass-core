@@ -1,5 +1,4 @@
-#include <nanobind/eigen/dense.h>
-#include <nanobind/nanobind.h>
+#include "bindings.h"
 #include <nanobind/stl/function.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/tuple.h>
@@ -15,7 +14,6 @@
 #include "datatypes/control.h"
 #include "datatypes/trajectory.h"
 
-namespace py = nanobind;
 using namespace Kompass;
 
 // Control bindings submodule

@@ -1,10 +1,7 @@
 #include "planning/ompl.h"
-#include <nanobind/eigen/dense.h>
-#include <nanobind/nanobind.h>
+#include "bindings.h"
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/vector.h>
-
-namespace py = nanobind;
 using namespace Kompass;
 
 // Utils submodule

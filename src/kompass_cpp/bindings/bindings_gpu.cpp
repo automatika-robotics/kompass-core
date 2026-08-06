@@ -1,11 +1,9 @@
+#include "bindings.h"
 #include "mapping/local_mapper_gpu.h"
 #include "utils/critical_zone_check_gpu.h"
 #include "utils/pointcloud.h"
-#include <nanobind/eigen/dense.h>
-#include <nanobind/nanobind.h>
 #include <nanobind/stl/vector.h>
 
-namespace py = nanobind;
 using namespace Kompass;
 
 // Mapping bindings submodule
@@ -20,20 +18,26 @@ void bindings_mapping_gpu(py::module_ &m) {
            py::arg("range_max"), py::arg("max_points_per_line") = 32)
 
       .def("scan_to_grid",
-           py::overload_cast<const std::vector<double> &,
-                             const std::vector<double> &>(
+           py::overload_cast<Eigen::Ref<const Eigen::VectorXf>,
+                             Eigen::Ref<const Eigen::VectorXf>>(
                &Mapping::LocalMapperGPU::scanToGrid),
            "Convert laser scan data to occupancy grid", py::arg("angles"),
            py::arg("ranges"), py::rv_policy::reference_internal)
 
-      .def("scan_to_grid",
-           py::overload_cast<const std::vector<uint8_t> &, int, int, int, int,
-                             float, float, float>(
-               &Mapping::LocalMapperGPU::scanToGrid),
-           "Convert raw point cloud data to occupancy grid", py::arg("data"),
-           py::arg("point_step"), py::arg("row_step"), py::arg("height"),
-           py::arg("width"), py::arg("x_offset"), py::arg("y_offset"),
-           py::arg("z_offset"), py::rv_policy::reference_internal);
+      .def(
+          "scan_to_grid",
+          [](Mapping::LocalMapperGPU &self, ByteArray data, int point_step,
+             int row_step, int height, int width, int x_offset, int y_offset,
+             int z_offset) -> Eigen::MatrixXi & {
+            py::gil_scoped_release release;
+            return self.scanToGrid(toSpan(data), point_step, row_step, height,
+                                   width, x_offset, y_offset, z_offset);
+          },
+          "Convert raw point cloud data to occupancy grid (zero-copy input)",
+          py::arg("data"), py::arg("point_step"), py::arg("row_step"),
+          py::arg("height"), py::arg("width"), py::arg("x_offset"),
+          py::arg("y_offset"), py::arg("z_offset"),
+          py::rv_policy::reference_internal);
 }
 
 // Utils bindings submodule
@@ -54,15 +58,20 @@ void bindings_utils_gpu(py::module_ &m) {
            py::arg("cloud_field_type") = PointFieldType::FLOAT32)
 
       .def("check",
-           py::overload_cast<const std::vector<double> &, bool>(
+           py::overload_cast<Eigen::Ref<const Eigen::VectorXf>, const bool>(
                &CriticalZoneCheckerGPU::check),
            py::arg("ranges"), py::arg("forward"))
 
-      .def("check",
-           py::overload_cast<const std::vector<uint8_t> &, int, int, int, int,
-                             int, int, int, bool>(
-               &CriticalZoneCheckerGPU::check),
-           py::arg("data"), py::arg("point_step"), py::arg("row_step"),
-           py::arg("height"), py::arg("width"), py::arg("x_offset"),
-           py::arg("y_offset"), py::arg("z_offset"), py::arg("forward"));
+      .def(
+          "check",
+          [](CriticalZoneCheckerGPU &self, ByteArray data, int point_step,
+             int row_step, int height, int width, int x_offset, int y_offset,
+             int z_offset, bool forward) {
+            py::gil_scoped_release release;
+            return self.check(toSpan(data), point_step, row_step, height,
+                              width, x_offset, y_offset, z_offset, forward);
+          },
+          py::arg("data"), py::arg("point_step"), py::arg("row_step"),
+          py::arg("height"), py::arg("width"), py::arg("x_offset"),
+          py::arg("y_offset"), py::arg("z_offset"), py::arg("forward"));
 }
