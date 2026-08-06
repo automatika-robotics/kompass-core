@@ -179,7 +179,7 @@ public:
     maxObstaclesDist = max_sensor_range / max_obstacle_cost_range_multiple;
     Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
 
-    for (size_t i = 0; i < scan.ranges.size(); i++) {
+    for (Eigen::Index i = 0; i < scan.ranges.size(); i++) {
       // Convert polar to Cartesian (assuming scan data in the XY plane)
       double point_x = scan.ranges[i] * std::cos(scan.angles[i]);
       double point_y = scan.ranges[i] * std::sin(scan.angles[i]);

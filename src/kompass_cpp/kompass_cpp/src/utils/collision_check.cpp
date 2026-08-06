@@ -268,10 +268,11 @@ float CollisionChecker::getMinDistance() {
   return std::max<float>(0.0, distanceData.result.min_distance);
 }
 
-bool CollisionChecker::checkCollisions(const std::vector<double> &ranges,
-                                       const std::vector<double> &angles,
+bool CollisionChecker::checkCollisions(Eigen::Ref<const Eigen::VectorXf> ranges,
+                                       Eigen::Ref<const Eigen::VectorXf> angles,
                                        double height) {
-  updateSensorData(Control::LaserScan(ranges, angles));
+  updateSensorData(
+      Control::LaserScan(Eigen::VectorXf(ranges), Eigen::VectorXf(angles)));
   return checkCollisions();
 }
 

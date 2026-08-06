@@ -126,7 +126,7 @@ public:
       // Sensor frame height correction
       float height_in_sensor = -sensor_tf_body_.translation().z() / 2.0;
 
-      for (size_t i = 0; i < data.angles.size(); ++i) {
+      for (Eigen::Index i = 0; i < data.angles.size(); ++i) {
         double angle = data.angles[i];
         double r = data.ranges[i];
 
@@ -187,8 +187,9 @@ public:
    * @return true
    * @return false
    */
-  bool checkCollisions(const std::vector<double> &ranges,
-                       const std::vector<double> &angles, double height = 0.1);
+  bool checkCollisions(Eigen::Ref<const Eigen::VectorXf> ranges,
+                       Eigen::Ref<const Eigen::VectorXf> angles,
+                       double height = 0.1);
 
   float getRadius() const;
 
