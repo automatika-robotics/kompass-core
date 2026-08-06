@@ -749,3 +749,80 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def test_laserscan_type_exposes_numpy_views():
+    """LaserScan accepts float32 (zero-copy) and float64 (converted) input
+    and exposes ranges/angles as float32 numpy views (was: Python lists)."""
+    from kompass_cpp.types import LaserScan as LaserScanCpp
+
+    ranges = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+    angles = np.array([0.0, 0.1, 0.2], dtype=np.float32)
+
+    scan = LaserScanCpp(ranges=ranges, angles=angles)
+    assert isinstance(scan.ranges, np.ndarray)
+    assert scan.ranges.dtype == np.float32
+    assert np.allclose(scan.ranges, ranges)
+    assert np.allclose(scan.angles, angles)
+
+    scan64 = LaserScanCpp(
+        ranges=ranges.astype(np.float64), angles=angles.astype(np.float64)
+    )
+    assert np.allclose(np.asarray(scan64.ranges), ranges)
+
+
+def test_dwa_dtype_equivalence():
+    """float32 and float64 sensor inputs must yield identical commands for
+    every input kind (the wrappers coerce both onto the same float32 path)."""
+    global global_path, my_robot, robot_ctr_limits, control_time_step
+
+    def make_dwa():
+        dwa = DWA(
+            robot=my_robot,
+            ctrl_limits=robot_ctr_limits,
+            config=DWAConfig(
+                max_linear_samples=4,
+                max_angular_samples=4,
+                octree_resolution=0.1,
+                control_time_step=control_time_step,
+            ),
+        )
+        dwa.set_path(global_path=global_path)
+        return dwa
+
+    my_robot.state.x = 0.0
+    my_robot.state.y = 0.0
+    my_robot.state.yaw = np.pi / 2
+
+    angles64 = np.arange(0.0, 2 * np.pi, 0.01 * np.pi)
+    ranges64 = np.full(angles64.size, 20.0)
+    theta = np.linspace(0.0, 2 * np.pi, 360, endpoint=False)
+    points64 = np.column_stack([
+        5.0 * np.cos(theta),
+        5.0 * np.sin(theta),
+        np.zeros(theta.size),
+    ])
+
+    cases = (
+        (
+            {"ranges": ranges64, "angles": angles64},
+            {
+                "ranges": ranges64.astype(np.float32),
+                "angles": angles64.astype(np.float32),
+            },
+        ),
+        ({"points": points64}, {"points": points64.astype(np.float32)}),
+        ({"local_map": points64}, {"local_map": points64.astype(np.float32)}),
+    )
+    for kwargs64, kwargs32 in cases:
+        dwa64 = make_dwa()
+        assert dwa64.loop_step(current_state=my_robot.state, **kwargs64)
+        cmd64 = (dwa64.linear_x_control[0], dwa64.angular_control[0])
+
+        dwa32 = make_dwa()
+        assert dwa32.loop_step(current_state=my_robot.state, **kwargs32)
+        cmd32 = (dwa32.linear_x_control[0], dwa32.angular_control[0])
+
+        assert cmd64 == pytest.approx(cmd32, abs=1e-4), (
+            f"dtype divergence for {list(kwargs64)}: {cmd64} vs {cmd32}"
+        )

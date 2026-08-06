@@ -1,10 +1,15 @@
 """CPU/GPU parity test for the cost evaluator.
 
 Drives two builds of the C++ cost_evaluator_test (FORCE_CPU_BUILD=ON in
-build_cpu/ and default GPU in build/), runs each with COST_PARITY_JSON
-pointing at a tmp path, then compares the resulting JSON dumps test by
-test. Any step that fails before both dumps exist causes pytest.skip; only
-genuine numerical drift triggers a failure.
+build/parity_cpu/ and default GPU in build/parity_gpu/ — dedicated Release
+dirs so a developer's own build/ caches are never reused), runs each with
+COST_PARITY_JSON pointing at a tmp path, then compares the resulting JSON
+dumps test by test. Any step that fails before both dumps exist causes
+pytest.skip; only genuine numerical drift triggers a failure.
+
+NOTE: the GPU flavor needs a SYCL-capable compiler — run with e.g.
+``CXX=clang++-17 pytest -m parity`` (AdaptiveCpp with gcc silently builds a
+flavor whose kernels abort at runtime).
 
 Since cost_evaluator.cpp (#ifndef GPU) and cost_evaluator_gpu.cpp (#ifdef
 GPU) are compiled mutually exclusively, a single test binary can only ever
@@ -24,8 +29,8 @@ import pytest
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-CPU_BUILD_DIR = REPO_ROOT / "build_cpu"
-GPU_BUILD_DIR = REPO_ROOT / "build"
+CPU_BUILD_DIR = REPO_ROOT / "build" / "parity_cpu"
+GPU_BUILD_DIR = REPO_ROOT / "build" / "parity_gpu"
 TEST_BIN_REL = pathlib.Path("src/kompass_cpp/tests/cost_evaluator_test")
 
 # Relative tolerance applied per-cost. Tightenable once we're confident.
@@ -59,7 +64,8 @@ def _configure_and_build(build_dir: pathlib.Path, force_cpu: bool) -> Optional[s
     backend = "CPU" if force_cpu else "GPU"
     if not cache.exists():
         _say(f"Configuring {backend} build in {build_dir}")
-        configure = ["cmake", "-S", str(REPO_ROOT), "-B", str(build_dir)]
+        configure = ["cmake", "-S", str(REPO_ROOT), "-B", str(build_dir),
+                     "-DCMAKE_BUILD_TYPE=Release"]
         if force_cpu:
             configure.append("-DFORCE_CPU_BUILD=ON")
         result = _run_streaming(configure)
