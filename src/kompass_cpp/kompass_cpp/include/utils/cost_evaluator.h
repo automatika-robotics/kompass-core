@@ -73,8 +73,9 @@ public:
   /**
    * @brief Construct a new CostEvaluator with a sensor-to-body transform.
    *
-   * Obstacle points passed to setPointScan are interpreted in the sensor
-   * frame and transformed into the body frame using this pose.
+   * The pose is used by setLaserScan to lift sensor-frame scan points into
+   * the world frame. Point clouds passed to setPointScan are already in the
+   * world frame and do not use it.
    *
    * @param costsWeights              See primary constructor.
    * @param sensor_position_body      Sensor position expressed in the body
