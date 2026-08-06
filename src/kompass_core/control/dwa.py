@@ -306,17 +306,22 @@ class DWA(FollowerTemplate):
             vx=current_state.vx, vy=current_state.vy, omega=current_state.omega
         )
 
+        # float32 C-contiguous is the zero-copy fast path at the binding
+        # (no-op for ROS-native data)
         if local_map is not None:
-            sensor_data = local_map
+            sensor_data = np.ascontiguousarray(local_map, dtype=np.float32)
         elif ranges is not None and angles is not None:
             if len(angles) != len(ranges):
                 logging.error(
                     "Received incompatible LaserScan data -> Cannot compute control"
                 )
                 return False
-            sensor_data = kompass_cpp.types.LaserScan(ranges=ranges, angles=angles)
+            sensor_data = kompass_cpp.types.LaserScan(
+                ranges=np.asarray(ranges, dtype=np.float32),
+                angles=np.asarray(angles, dtype=np.float32),
+            )
         elif points is not None:
-            sensor_data = points
+            sensor_data = np.ascontiguousarray(points, dtype=np.float32)
         else:
             logging.error(
                 "Cannot compute control without sensor data. Provide 'ranges' and 'angles', 'points' or 'local_map' input"
