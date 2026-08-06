@@ -203,3 +203,38 @@ def test_emergency_stop_pointcloud_accepts_bytes(use_gpu):
     assert checker.run_on_pointcloud(**cloud, forward=True) == checker.run_on_pointcloud(
         **as_bytes, forward=True
     )
+
+
+@pytest.mark.parametrize("use_gpu", [False, True])
+def test_emergency_stop_pointcloud_ignores_nan_points(use_gpu):
+    """NaN padding points must not affect the safety verdict (and must not
+    corrupt memory — the conversion used to produce UB bin indices)."""
+    robot = Robot(
+        robot_type=RobotType.ACKERMANN,
+        geometry_type=RobotGeometry.Type.CYLINDER,
+        geometry_params=np.array([0.1, 0.4]),
+    )
+    checker = EmergencyChecker(
+        robot=robot,
+        emergency_distance=0.5,
+        slowdown_distance=1.0,
+        emergency_angle=90.0,
+        sensor_position_robot=np.array([0.0, 0.0, 0.0], dtype=np.float32),
+        sensor_rotation_robot=np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32),
+        use_gpu=use_gpu,
+    )
+
+    theta = np.linspace(0.0, 2 * np.pi, 360, endpoint=False)
+    ring = np.column_stack([
+        10.0 * np.cos(theta),
+        10.0 * np.sin(theta),
+        np.zeros(theta.size),
+    ])
+    ring_with_nan = np.vstack([ring, np.full((50, 3), np.nan)])
+
+    clean = _make_pointcloud(ring)
+    padded = _make_pointcloud(ring_with_nan)
+
+    assert checker.run_on_pointcloud(**clean, forward=True) == checker.run_on_pointcloud(
+        **padded, forward=True
+    )

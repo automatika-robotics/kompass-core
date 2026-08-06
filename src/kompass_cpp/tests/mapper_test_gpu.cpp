@@ -154,7 +154,7 @@ Control::LaserScan generateLaserScan(double angle_increment,
     LOG_ERROR("Invalid shape specified. Use 'circle', 'right_corner', or "
               "'random_points'.");
   }
-  return {ranges, angles};
+  return {toVecF(ranges), toVecF(angles)};
 }
 
 // Runs one circle scan through the shared mapper, prints the resulting grid,
@@ -168,16 +168,16 @@ void run_circle_scan(double radius) {
   LOG_INFO("Testing with circle points at distance: ", radius,
            " and grid of width: ", cfg.actual_size);
 
-  std::vector<double> filtered_ranges(circle_scan.ranges.size());
-  for (size_t i = 0; i < circle_scan.ranges.size(); ++i) {
-    filtered_ranges[i] = std::min(cfg.limit, circle_scan.ranges[i]);
+  Eigen::VectorXf filtered_ranges(circle_scan.ranges.size());
+  for (Eigen::Index i = 0; i < circle_scan.ranges.size(); ++i) {
+    filtered_ranges[i] = std::min(static_cast<float>(cfg.limit), circle_scan.ranges[i]);
   }
 
   Eigen::MatrixXi *gridData = nullptr;
   {
     Timer timer;
     gridData =
-        &cfg.gpu_local_mapper.scanToGrid(toVecF(circle_scan.angles), toVecF(filtered_ranges));
+        &cfg.gpu_local_mapper.scanToGrid(circle_scan.angles, filtered_ranges);
   }
 
   const int n_occ = countPointsInGrid(

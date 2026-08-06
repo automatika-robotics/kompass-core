@@ -139,6 +139,10 @@ inline void submitPointCloudToLaserScanKernel(
           const float y =
               load_and_cast_val(raw_bytes, byte_offset + y_off, k_type);
 
+          // Reject non-finite points (NaN padding in organized clouds)
+          if (!sycl::isfinite(x) || !sycl::isfinite(y) || !sycl::isfinite(z))
+            return;
+
           // Filter origin (±ε).
           const float r2 = x * x + y * y;
           if (r2 < 1e-6f)
@@ -150,8 +154,7 @@ inline void submitPointCloudToLaserScanKernel(
           if (angle < 0.0f)
             angle += static_cast<float>(2.0 * M_PI);
           int bin = static_cast<int>(angle * k_inv_two_pi_times_bins);
-          if (bin >= k_num_bins)
-            bin = k_num_bins - 1;
+          bin = sycl::clamp(bin, 0, k_num_bins - 1);
 
           const float dist = sycl::sqrt(r2);
           sycl::atomic_ref<float, sycl::memory_order::relaxed,

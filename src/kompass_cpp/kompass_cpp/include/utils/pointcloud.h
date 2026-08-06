@@ -158,6 +158,11 @@ inline void pointCloudToLaserScanFromRaw(
       std::memcpy(&y, &data[point_start + y_offset], sizeof(float));
       std::memcpy(&z, &data[point_start + z_offset], sizeof(float));
 
+      // Reject non-finite points (NaN padding in organized clouds)
+      if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+        continue;
+      }
+
       // filter (0,0,0) early with epsilon for checking float equality to 0.0f
       float range_sq = x * x + y * y;
       if (range_sq < 1e-6) {
@@ -175,7 +180,7 @@ inline void pointCloudToLaserScanFromRaw(
       }
 
       int bin = static_cast<int>(angle / angle_step);
-      bin = std::min(bin, num_bins - 1); // Clamp just in case
+      bin = std::clamp(bin, 0, num_bins - 1); // Clamp just in case
 
       float distance = static_cast<float>(std::sqrt(range_sq));
       if (distance < ranges_out[bin]) {
@@ -242,6 +247,11 @@ inline void pointCloudToLaserScanFromRaw(
       std::memcpy(&y, &data[point_start + y_offset], sizeof(float));
       std::memcpy(&z, &data[point_start + z_offset], sizeof(float));
 
+      // Reject non-finite points (NaN padding in organized clouds)
+      if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+        continue;
+      }
+
       // filter (0,0,0) early with epsilon for checking float equality to 0.0f
       float range_sq = x * x + y * y;
       if (range_sq < 1e-6) {
@@ -259,7 +269,7 @@ inline void pointCloudToLaserScanFromRaw(
       }
 
       int bin = static_cast<int>((angle / two_pi) * num_bins);
-      bin = std::min(bin, num_bins - 1); // Clamp just in case
+      bin = std::clamp(bin, 0, num_bins - 1); // Clamp just in case
 
       float distance = static_cast<float>(std::sqrt(range_sq));
       if (distance < ranges_out[bin]) {

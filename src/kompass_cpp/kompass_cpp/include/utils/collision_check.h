@@ -46,7 +46,7 @@ public:
    * @param dimensions    Corresponding geometry dimensions
    */
   static float radiusOf(const ShapeType shape_type,
-                         const std::vector<float> &dimensions);
+                        const std::vector<float> &dimensions);
 
   /**
    * @brief Total extent of the robot along the z-axis
@@ -55,7 +55,7 @@ public:
    * @param dimensions    Corresponding geometry dimensions
    */
   static float heightOf(const ShapeType shape_type,
-                         const std::vector<float> &dimensions);
+                        const std::vector<float> &dimensions);
 
   /**
    * @brief Construct a new Collision Checker object
@@ -104,7 +104,8 @@ public:
   /**
    * @brief Generic method to update sensor input.
    * * Supports:
-   * 1. Point Clouds and Local Maps: std::vector<Path::Point> or std::vector<Eigen::Vector3f>
+   * 1. Point Clouds and Local Maps: std::vector<Path::Point> or
+   * std::vector<Eigen::Vector3f>
    * 2. Laser Scans: Kompass::LaserScan struct
    * * @tparam T Input data type
    * @param data The sensor data
@@ -112,8 +113,7 @@ public:
    * (default true). Ignored for LaserScan (always assumes sensor frame).
    */
   template <typename T>
-  void updateSensorData(const T &data,
-                        const bool global_frame = true){
+  void updateSensorData(const T &data, const bool global_frame = true) {
     // Clear old data
     octTree_->clear();
     octomapCloud_.clear();
@@ -131,6 +131,7 @@ public:
         double r = data.ranges[i];
 
         // Basic validity check for inf/nan often found in scans
+        // octomap key computation is undefined for non-finite coordinates
         if (std::isfinite(r)) {
           float x = r * std::cos(angle);
           float y = r * std::sin(angle);
@@ -147,9 +148,12 @@ public:
         sensor_tf_world_ = body->tf * sensor_tf_body_;
       }
 
-      // Insert Points
+      // Insert Points (skipping NaN/inf padding), same as above
       for (const auto &point : data) {
-        octomapCloud_.push_back(point.x(), point.y(), point.z());
+        if (std::isfinite(point.x()) && std::isfinite(point.y()) &&
+            std::isfinite(point.z())) {
+          octomapCloud_.push_back(point.x(), point.y(), point.z());
+        }
       }
     }
 
@@ -172,7 +176,6 @@ public:
    * @return false
    */
   bool checkCollisions();
-
 
   bool checkCollisions(const Path::State current_state);
 
@@ -241,7 +244,5 @@ private:
    */
   std::vector<fcl::CollisionObjectf *>
   generateBoxesFromOctomap(fcl::OcTreef &tree);
-
-
 };
 } // namespace Kompass

@@ -461,3 +461,92 @@ def test_cpu_binding_pointcloud_accepts_bytes():
     assert np.array_equal(grid_u8, grid_bytes)
     n_occ, _, _ = _occupancy_counts(grid_u8)
     assert n_occ > 0
+
+
+def _nan_padded(cloud_u8: np.ndarray, n_pad: int = 50) -> np.ndarray:
+    """Append `n_pad` NaN-coordinate points (organized-cloud padding) to a
+    PointCloud2-style buffer."""
+    pad = np.full((n_pad, 4), np.nan, dtype=np.float32)
+    return np.concatenate([cloud_u8, np.frombuffer(pad.tobytes(), dtype=np.uint8)])
+
+
+def test_cpu_binding_pointcloud_nan_points_are_ignored():
+    """Regression test: NaN padding points (RGBD organized clouds) used to
+    slip past every filter and corrupt the bin index (UB int cast ->
+    out-of-bounds write). They must be skipped, leaving the grid identical
+    to the same cloud without padding."""
+    def make_mapper():
+        return LocalMapperCpp(
+            grid_height=40,
+            grid_width=40,
+            resolution=0.05,
+            laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
+            laserscan_orientation=0.0,
+            is_pointcloud=True,
+            scan_size=360,
+            angle_step=float(2.0 * np.pi / 360),
+            max_height=1.5,
+            min_height=-0.5,
+            range_max=5.0,
+        )
+
+    clean = _ring_cloud(n=200, radius=0.5, z=0.1)
+    padded = _nan_padded(clean)
+
+    def kwargs(buf):
+        n = buf.size // _PC_STRIDE
+        return dict(
+            data=buf,
+            point_step=_PC_STRIDE,
+            row_step=n * _PC_STRIDE,
+            height=1,
+            width=n,
+            x_offset=0,
+            y_offset=4,
+            z_offset=8,
+        )
+
+    grid_clean = np.array(make_mapper().scan_to_grid(**kwargs(clean)))
+    grid_padded = np.array(make_mapper().scan_to_grid(**kwargs(padded)))
+
+    assert np.array_equal(grid_clean, grid_padded)
+
+
+@pytestmark_gpu
+def test_gpu_binding_pointcloud_nan_points_are_ignored():
+    """Same regression as the CPU test, for the GPU conversion kernel."""
+    def make_mapper():
+        return LocalMapperGPU(
+            grid_height=40,
+            grid_width=40,
+            resolution=0.05,
+            laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
+            laserscan_orientation=0.0,
+            is_pointcloud=True,
+            scan_size=360,
+            angle_step=float(2.0 * np.pi / 360),
+            max_height=1.5,
+            min_height=-0.5,
+            range_max=5.0,
+        )
+
+    clean = _ring_cloud(n=200, radius=0.5, z=0.1)
+    padded = _nan_padded(clean)
+
+    def kwargs(buf):
+        n = buf.size // _PC_STRIDE
+        return dict(
+            data=buf,
+            point_step=_PC_STRIDE,
+            row_step=n * _PC_STRIDE,
+            height=1,
+            width=n,
+            x_offset=0,
+            y_offset=4,
+            z_offset=8,
+        )
+
+    grid_clean = np.array(make_mapper().scan_to_grid(**kwargs(clean)))
+    grid_padded = np.array(make_mapper().scan_to_grid(**kwargs(padded)))
+
+    assert np.array_equal(grid_clean, grid_padded)
