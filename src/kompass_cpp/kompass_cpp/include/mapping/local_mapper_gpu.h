@@ -33,8 +33,10 @@ public:
     // Buffers needed on both laserscan and pointcloud paths
     m_devicePtrRanges = sycl::malloc_device<float>(scanSize, m_q);
     // NOTE: Angles stay double on device. The ray-cast kernel feeds them to
-    // sin/cos, and on CPU only host backend float trig measurably loses to
-    // double trig (glibc). Revisit on GPU (fp64 penalty should flip this the other way)
+    // sin/cos, and on CPU only backend float trig measurably loses to
+    // double trig (glibc). The kernel already narrows the angle to float before
+    // trig, so double costs only the wider H->D copy and per-thread load and
+    // the fp64 throughput penalty is negligible
     m_devicePtrAngles = sycl::malloc_device<double>(scanSize, m_q);
     m_anglesWide.resize(scanSize);
     m_devicePtrGrid = sycl::malloc_device<int>(m_gridHeight * m_gridWidth, m_q);
@@ -111,8 +113,8 @@ public:
    * @return            A 2D occupancy grid as an Eigen::MatrixXi.
    */
   Eigen::MatrixXi &scanToGrid(ByteSpan data, int point_step, int row_step,
-                              int height, int width, int x_offset,
-                              int y_offset, int z_offset);
+                              int height, int width, int x_offset, int y_offset,
+                              int z_offset);
 
 private:
   // Per-cell distance from laserscan origin. Precomputed at construction;
