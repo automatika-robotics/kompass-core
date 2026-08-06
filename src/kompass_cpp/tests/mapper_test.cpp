@@ -149,7 +149,7 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
 
     Timer timer;
     auto [mat1, mat2] =
-        local_mapper.scanToGridBaysian(circle_scan.angles, filtered_ranges);
+        local_mapper.scanToGridBaysian(toVecF(circle_scan.angles), toVecF(filtered_ranges));
     gridData = &mat1;
     gridDataProb = &mat2;
   }
@@ -178,7 +178,7 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   {
     Timer timer;
     auto [mat1, mat2] =
-        local_mapper.scanToGridBaysian(circle_scan.angles, filtered_ranges);
+        local_mapper.scanToGridBaysian(toVecF(circle_scan.angles), toVecF(filtered_ranges));
     gridData = &mat1;
     gridDataProb = &mat2;
   }
@@ -205,7 +205,7 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   }
   {
     Timer timer;
-    local_mapper.scanToGridBaysian(circle_scan.angles, filtered_ranges);
+    local_mapper.scanToGridBaysian(toVecF(circle_scan.angles), toVecF(filtered_ranges));
   }
   occ_points = countPointsInGrid(
       *gridData, static_cast<int>(Mapping::OccupancyType::OCCUPIED));

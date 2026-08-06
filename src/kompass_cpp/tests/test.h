@@ -5,6 +5,13 @@
 #include <cmath>
 #include "utils/angles.h"
 #include <cstring> // For memcpy
+#include <Eigen/Dense>
+
+// Narrows test data (built as double vectors) into the float32 vectors the
+// library primaries take
+inline Eigen::VectorXf toVecF(const std::vector<double> &v) {
+  return Eigen::Map<const Eigen::VectorXd>(v.data(), v.size()).cast<float>();
+}
 
 #ifndef _COLORS_
 #define _COLORS_

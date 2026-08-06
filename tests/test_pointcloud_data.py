@@ -167,6 +167,9 @@ def test_conversion_synthetic_ring_populates_bins():
         max_z=1.0,
         angle_step=angle_step,
     )
+    # Zero-copy binding returns float32 numpy arrays (was: Python lists)
+    assert isinstance(ranges, np.ndarray) and ranges.dtype == np.float32
+    assert isinstance(angles, np.ndarray) and angles.dtype == np.float32
     ranges = np.asarray(ranges)
     angles = np.asarray(angles)
 

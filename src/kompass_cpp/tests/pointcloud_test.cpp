@@ -113,7 +113,7 @@ void run_test(const std::vector<uint8_t> &data, int width,
               std::string shape_name, int point_step = 12, int x_offset = 0,
               int y_offset = 4, int z_offset = 8, int height = 1) {
   // Laserscan data
-  std::vector<double> ranges, angles;
+  Eigen::VectorXf ranges, angles;
   double max_range = 10.0;
   double angle_step = 0.05;
   double min_z = 1.6, max_z = 1.8;
@@ -138,7 +138,9 @@ void run_test(const std::vector<uint8_t> &data, int width,
                                x_offset, y_offset, z_offset, max_range, min_z,
                                max_z, angle_step, ranges, angles);
 
-  saveScanToJson(ranges, angles, scan_out_filename + ".json");
+  saveScanToJson(std::vector<double>(ranges.begin(), ranges.end()),
+                 std::vector<double>(angles.begin(), angles.end()),
+                 scan_out_filename + ".json");
 
   std::string command =
       "python3 " + file_location + "/pointcloud_scan_plt.py --laserscan \"" +

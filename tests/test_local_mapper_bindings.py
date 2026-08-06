@@ -150,9 +150,9 @@ def test_gpu_binding_pointcloud_scan_to_grid_basic():
         row_step=num_points * _PC_STRIDE,
         height=1,
         width=num_points,
-        x_offset=0.0,
-        y_offset=4.0,
-        z_offset=8.0,
+        x_offset=0,
+        y_offset=4,
+        z_offset=8,
     )
     grid_np = np.asarray(grid)
 
@@ -196,9 +196,9 @@ def test_gpu_binding_pointcloud_z_filter_above_ceiling():
         row_step=num_points * _PC_STRIDE,
         height=1,
         width=num_points,
-        x_offset=0.0,
-        y_offset=4.0,
-        z_offset=8.0,
+        x_offset=0,
+        y_offset=4,
+        z_offset=8,
     )
     grid_np = np.asarray(grid)
 
@@ -238,9 +238,9 @@ def test_gpu_binding_pointcloud_empty_cloud_does_not_crash():
         row_step=0,
         height=0,
         width=0,
-        x_offset=0.0,
-        y_offset=4.0,
-        z_offset=8.0,
+        x_offset=0,
+        y_offset=4,
+        z_offset=8,
     )
     grid_np = np.asarray(grid)
 
@@ -386,3 +386,78 @@ def test_cpu_binding_laserscan_scan_to_grid_baysian_returns_tuple():
     # Probabilities must be a valid distribution over cells
     assert float(probability.min()) >= 0.0
     assert float(probability.max()) <= 1.0
+
+
+def test_cpu_binding_laserscan_dtypes_and_noncontiguous_agree():
+    """float32 (zero-copy), float64 (convert-copy), and a non-contiguous
+    slice must all be accepted and produce identical grids."""
+    n = 180
+    mapper = LocalMapperCpp(
+        grid_height=40,
+        grid_width=40,
+        resolution=0.05,
+        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
+        laserscan_orientation=0.0,
+        is_pointcloud=False,
+        scan_size=n,
+        angle_step=float(2.0 * np.pi / n),
+        max_height=2.0,
+        min_height=0.0,
+        range_max=10.0,
+    )
+
+    angles64 = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
+    ranges64 = np.full(n, 0.5, dtype=np.float64)
+    angles32 = angles64.astype(np.float32)
+    ranges32 = ranges64.astype(np.float32)
+    # Non-contiguous views with the same values
+    angles_nc = np.repeat(angles64, 2)[::2]
+    ranges_nc = np.repeat(ranges64, 2)[::2]
+    assert not angles_nc.flags["C_CONTIGUOUS"]
+
+    grid32 = np.array(mapper.scan_to_grid(angles=angles32, ranges=ranges32))
+    grid64 = np.array(mapper.scan_to_grid(angles=angles64, ranges=ranges64))
+    grid_nc = np.array(mapper.scan_to_grid(angles=angles_nc, ranges=ranges_nc))
+
+    assert np.array_equal(grid32, grid64)
+    assert np.array_equal(grid32, grid_nc)
+
+
+def test_cpu_binding_pointcloud_accepts_bytes():
+    """A raw Python `bytes` buffer (e.g. sensor_msgs/PointCloud2.data) must
+    be accepted zero-copy and produce the same grid as the uint8 array."""
+    grid_height = 40
+    grid_width = 40
+    n_rays = 360
+    mapper = LocalMapperCpp(
+        grid_height=grid_height,
+        grid_width=grid_width,
+        resolution=0.05,
+        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
+        laserscan_orientation=0.0,
+        is_pointcloud=True,
+        scan_size=n_rays,
+        angle_step=float(2.0 * np.pi / n_rays),
+        max_height=1.5,
+        min_height=-0.5,
+        range_max=5.0,
+    )
+
+    cloud_u8 = _ring_cloud(n=200, radius=0.5, z=0.1)
+    num_points = cloud_u8.size // _PC_STRIDE
+    kwargs = dict(
+        point_step=_PC_STRIDE,
+        row_step=num_points * _PC_STRIDE,
+        height=1,
+        width=num_points,
+        x_offset=0,
+        y_offset=4,
+        z_offset=8,
+    )
+
+    grid_u8 = np.array(mapper.scan_to_grid(data=cloud_u8, **kwargs))
+    grid_bytes = np.array(mapper.scan_to_grid(data=cloud_u8.tobytes(), **kwargs))
+
+    assert np.array_equal(grid_u8, grid_bytes)
+    n_occ, _, _ = _occupancy_counts(grid_u8)
+    assert n_occ > 0

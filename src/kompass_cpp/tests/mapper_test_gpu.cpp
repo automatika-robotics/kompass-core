@@ -177,7 +177,7 @@ void run_circle_scan(double radius) {
   {
     Timer timer;
     gridData =
-        &cfg.gpu_local_mapper.scanToGrid(circle_scan.angles, filtered_ranges);
+        &cfg.gpu_local_mapper.scanToGrid(toVecF(circle_scan.angles), toVecF(filtered_ranges));
   }
 
   const int n_occ = countPointsInGrid(
@@ -241,9 +241,9 @@ BOOST_AUTO_TEST_CASE(test_mapper_pointcloud_circle) {
     Timer t;
     grid = &cfg.mapper.scanToGrid(
         cloud, point_step, row_step, height, width,
-        /*x_offset*/ static_cast<float>(offsetof(PointXYZ, x)),
-        /*y_offset*/ static_cast<float>(offsetof(PointXYZ, y)),
-        /*z_offset*/ static_cast<float>(offsetof(PointXYZ, z)));
+        /*x_offset*/ static_cast<int>(offsetof(PointXYZ, x)),
+        /*y_offset*/ static_cast<int>(offsetof(PointXYZ, y)),
+        /*z_offset*/ static_cast<int>(offsetof(PointXYZ, z)));
   }
 
   const int n_occ = countPointsInGrid(
