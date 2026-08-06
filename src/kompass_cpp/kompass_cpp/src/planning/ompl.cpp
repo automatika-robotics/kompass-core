@@ -24,7 +24,12 @@ void OMPL2DGeometricPlanner::setupProblem(
     double goal_y, double goal_yaw,
     const std::vector<Eigen::Vector3f> &map_3d) {
   setup_->clear();
-  collision_checker_->updateSensorData(map_3d);
+  // The planning map is already in the world frame, and this checker is built
+  // with an identity sensor mount, so an identity capture pose makes the
+  // sensor frame coincide with the world frame. Passing it explicitly also
+  // keeps the map off whatever pose the previous solve's validity checks left
+  // behind in the checker.
+  collision_checker_->updateSensorData(map_3d, Path::State());
   ompl::base::ScopedState<ompl::base::SE2StateSpace> start(
       setup_->getStateSpace());
   ompl::base::ScopedState<ompl::base::SE2StateSpace> goal(

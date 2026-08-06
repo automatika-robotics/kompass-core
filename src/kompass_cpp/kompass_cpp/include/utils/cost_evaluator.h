@@ -177,16 +177,16 @@ public:
     obstaclePointsX.clear();
     obstaclePointsY.clear();
     maxObstaclesDist = max_sensor_range / max_obstacle_cost_range_multiple;
-    Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
+    const Eigen::Isometry3f sensor_tf_world =
+        sensorTfWorld(current_state, sensor_tf_body_);
 
     for (Eigen::Index i = 0; i < scan.ranges.size(); i++) {
       // Convert polar to Cartesian (assuming scan data in the XY plane)
       double point_x = scan.ranges[i] * std::cos(scan.angles[i]);
       double point_y = scan.ranges[i] * std::sin(scan.angles[i]);
 
-      Eigen::Vector3f pose_trans =
-          transformPosition(Eigen::Vector3f(point_x, point_y, 0.0),
-                            sensor_tf_body_ * body_tf_world_);
+      Eigen::Vector3f pose_trans = transformPosition(
+          Eigen::Vector3f(point_x, point_y, 0.0), sensor_tf_world);
       obstaclePointsX.emplace_back(pose_trans[0]);
       obstaclePointsY.emplace_back(pose_trans[1]);
     }
@@ -195,30 +195,29 @@ public:
   /**
    * @brief Load obstacle points from a Cartesian point cloud.
    *
-   * Point cloud is assumed to be in the sensor frame; points are transformed
-   * into the body frame using the sensor-to-body pose and the current robot
-   * pose.
+   * The cloud -- a raw point cloud or local-map cells alike -- is already in
+   * the WORLD frame, the same frame the trajectory samples live in, so the
+   * points are stored as-is. No sensor or robot pose is applied; doing so
+   * would displace every obstacle by the robot's world pose and silently
+   * zero the obstacle cost. `current_state` is accepted only to keep the
+   * signature uniform with the LaserScan overload.
    *
-   * @param cloud                             Point cloud in the sensor frame.
-   * @param current_state                     Current robot pose (world).
+   * @param cloud                             Point cloud in the world frame.
+   * @param current_state                     Unused; see above.
    * @param max_sensor_range                  Sensor's max valid range [m].
    * @param max_obstacle_cost_range_multiple  See the LaserScan overload.
    */
   void setPointScan(const std::vector<Path::Point> &cloud,
-                    const Path::State &current_state,
+                    [[maybe_unused]] const Path::State &current_state,
                     const float max_sensor_range,
                     const float max_obstacle_cost_range_multiple = 3.0) {
     obstaclePointsX.clear();
     obstaclePointsY.clear();
     maxObstaclesDist = max_sensor_range / max_obstacle_cost_range_multiple;
-    Eigen::Isometry3f body_tf_world_ = getTransformation(current_state);
 
     for (auto &point : cloud) {
-      Eigen::Vector3f pose_trans =
-          transformPosition(Eigen::Vector3f(point.x(), point.y(), point.z()),
-                            sensor_tf_body_ * body_tf_world_);
-      obstaclePointsX.emplace_back(pose_trans[0]);
-      obstaclePointsY.emplace_back(pose_trans[1]);
+      obstaclePointsX.emplace_back(point.x());
+      obstaclePointsY.emplace_back(point.y());
     }
   };
 

@@ -297,9 +297,9 @@ TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
                                         const Path::State &current_pose,
                                         const Control::LaserScan &scan) {
   collChecker->updateState(current_pose);
-  // Update the laserscan values at the current location -> no need to update
-  // it as scan is not changing (during the simulation)
-  collChecker->updateSensorData(scan);
+  // Pin the scan to the pose it was captured at -> the obstacles stay put
+  // in the world while the rollout below rolls the robot forward through them
+  collChecker->updateSensorData(scan, current_pose);
   return getNewTrajectories(current_vel, current_pose);
 }
 
@@ -308,8 +308,8 @@ TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
                                         const Path::State &current_pose,
                                         const std::vector<Path::Point> &cloud) {
   collChecker->updateState(current_pose);
-  // Update the PointCloud values
-  collChecker->updateSensorData(cloud);
+  // Pin the cloud to the pose it was captured at (see the LaserScan overload)
+  collChecker->updateSensorData(cloud, current_pose);
   return getNewTrajectories(current_vel, current_pose);
 }
 
@@ -378,11 +378,14 @@ void TrajectorySampler::updateState(const Path::State &current_state) {
 template <>
 bool TrajectorySampler::checkStatesFeasibility<LaserScan>(
     const std::vector<Path::State> &states, const LaserScan &scan) {
-  // collChecker->updateState(states[0]);
-  collChecker->updateSensorData(scan);
+  if (states.empty()) {
+    return false;
+  }
+  // states[0] is where the robot was when the scan was taken; the rest are
+  // future poses tested against those same obstacles.
+  collChecker->updateSensorData(scan, states[0]);
   for (auto state : states) {
     collChecker->updateState(state);
-    // Update the PointCloud values
     if (collChecker->checkCollisions()) {
       return true;
     }
@@ -394,11 +397,13 @@ template <>
 bool TrajectorySampler::checkStatesFeasibility<std::vector<Path::Point>>(
     const std::vector<Path::State> &states,
     const std::vector<Path::Point> &cloud) {
-  // collChecker->updateState(states[0]);
-  collChecker->updateSensorData(cloud);
+  if (states.empty()) {
+    return false;
+  }
+  // states[0] is the capture pose (see the LaserScan specialization)
+  collChecker->updateSensorData(cloud, states[0]);
   for (auto state : states) {
     collChecker->updateState(state);
-    // Update the PointCloud values
     if (collChecker->checkCollisions()) {
       return true;
     }
