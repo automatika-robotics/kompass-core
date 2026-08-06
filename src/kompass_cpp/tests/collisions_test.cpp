@@ -68,10 +68,14 @@ BOOST_AUTO_TEST_CASE(test_FCL) {
     LOG_INFO("Testing collision between: \nRobot at {x: ", robotState.x,
              ", y: ", robotState.y, "}\n", "and Pointcloud");
 
+    // Point clouds are taken in the WORLD frame: this obstacle sits just
+    // inside the robot box centred at (3, 5), no transform applied.
     std::vector<Path::Point> cloud;
     cloud.push_back(Path::Point(3.1, 5.1, -0.5));
 
-    collChecker.updateSensorData(cloud, true);
+    // Place the body explicitly rather than inheriting Block 2's pose
+    collChecker.updateState(robotState);
+    collChecker.updateSensorData(cloud, robotState);
     bool res = collChecker.checkCollisions();
     BOOST_TEST(res, "Collision Result: " << res);
   }
