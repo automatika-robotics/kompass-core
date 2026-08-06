@@ -267,10 +267,15 @@ class LocalMapper:
 
         self._move_grid_to(robot_pose)
 
-        # filter out negative range and points outside grid limit
-        filtered_ranges = np.minimum(self.config.filter_limit, np.maximum(0.0, ranges))
+        # filter out negative range and points outside grid limit; float32 is
+        # the zero-copy fast path at the binding
+        filtered_ranges = np.clip(
+            np.asarray(ranges, dtype=np.float32), 0.0, self.config.filter_limit
+        )
 
-        self._update_grid(angles=angles, ranges=filtered_ranges)
+        self._update_grid(
+            angles=np.asarray(angles, dtype=np.float32), ranges=filtered_ranges
+        )
 
     def update_from_pointcloud(
         self,
