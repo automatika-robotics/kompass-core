@@ -30,3 +30,8 @@ using ByteArray =
 inline Kompass::ByteSpan toSpan(const ByteArray &a) {
   return Kompass::ByteSpan(a.data(), a.size());
 }
+
+// Nx3 cartesian points (row-major so a numpy (N, 3) float32 array maps
+// zero-copy); float64 or non-contiguous input converts with one copy
+using RowMatrixX3f =
+    Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor>;
