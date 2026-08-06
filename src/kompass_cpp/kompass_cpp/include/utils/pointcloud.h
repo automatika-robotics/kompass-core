@@ -1,5 +1,6 @@
 #pragma once
 
+#include "datatypes/span.h"
 #include "mapping/local_mapper.h"
 #include "utils/logger.h"
 #include <Eigen/Dense>
@@ -118,23 +119,26 @@ inline float load_and_cast_val(const uint8_t *ptr, size_t offset,
  * @throws std::out_of_range If point offsets access memory out of bounds.
  */
 inline void pointCloudToLaserScanFromRaw(
-    const std::vector<uint8_t> &data, const int point_step, const int row_step,
-    const int height, const int width, const int x_offset, const int y_offset,
+    Kompass::ByteSpan data, const int point_step, const int row_step, const int height,
+    const int width, const int x_offset, const int y_offset,
     const int z_offset, const double max_range, const double min_z,
-    const double max_z, const double angle_step,
-    std::vector<double> &ranges_out, std::vector<double> &angles_out) {
+    const double max_z, const double angle_step, Eigen::VectorXf &ranges_out,
+    Eigen::VectorXf &angles_out) {
   (void)width;
 
   const double two_pi = 2.0 * M_PI;
   const int num_bins = static_cast<int>(std::ceil(two_pi / angle_step));
 
-  // Prefill angles and ranges
-  angles_out.resize(num_bins);
-  ranges_out.resize(num_bins);
-  for (int i = 0; i < num_bins; ++i) {
-    angles_out[i] = i * angle_step;
-    ranges_out[i] = max_range;
+  // Prefill angles only when the bin count changed (angles are a pure
+  // function of angle_step, so steady-state calls skip the refill)
+  if (angles_out.size() != num_bins) {
+    angles_out.resize(num_bins);
+    for (int i = 0; i < num_bins; ++i) {
+      angles_out[i] = static_cast<float>(i * angle_step);
+    }
   }
+  ranges_out.resize(num_bins);
+  ranges_out.setConstant(static_cast<float>(max_range));
 
   // Iterate over raw points
   for (int row = 0; row < height; ++row) {
@@ -173,7 +177,7 @@ inline void pointCloudToLaserScanFromRaw(
       int bin = static_cast<int>(angle / angle_step);
       bin = std::min(bin, num_bins - 1); // Clamp just in case
 
-      double distance = std::sqrt(range_sq);
+      float distance = static_cast<float>(std::sqrt(range_sq));
       if (distance < ranges_out[bin]) {
         ranges_out[bin] = distance;
       }
@@ -208,16 +212,17 @@ inline void pointCloudToLaserScanFromRaw(
  * @throws std::out_of_range If point offsets access memory out of bounds.
  */
 inline void pointCloudToLaserScanFromRaw(
-    const std::vector<uint8_t> &data, const int point_step, const int row_step,
-    const int height, const int width, const int x_offset, const int y_offset,
+    Kompass::ByteSpan data, const int point_step, const int row_step, const int height,
+    const int width, const int x_offset, const int y_offset,
     const int z_offset, const double max_range, const double min_z,
-    const double max_z, const int num_bins, std::vector<double> &ranges_out) {
+    const double max_z, const int num_bins, Eigen::VectorXf &ranges_out) {
   (void)width;
 
   const double two_pi = 2.0 * M_PI;
 
   // reinitialize ranges
-  ranges_out.assign(num_bins, max_range);
+  ranges_out.resize(num_bins);
+  ranges_out.setConstant(static_cast<float>(max_range));
 
   // Iterate over raw points
   for (int row = 0; row < height; ++row) {
@@ -256,7 +261,7 @@ inline void pointCloudToLaserScanFromRaw(
       int bin = static_cast<int>((angle / two_pi) * num_bins);
       bin = std::min(bin, num_bins - 1); // Clamp just in case
 
-      double distance = std::sqrt(range_sq);
+      float distance = static_cast<float>(std::sqrt(range_sq));
       if (distance < ranges_out[bin]) {
         ranges_out[bin] = distance;
       }
