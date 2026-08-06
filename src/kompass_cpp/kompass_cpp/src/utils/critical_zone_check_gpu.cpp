@@ -4,10 +4,10 @@
 
 namespace Kompass {
 
-float CriticalZoneCheckerGPU::check(const std::vector<uint8_t> &data,
-                                    int point_step, int row_step, int height,
-                                    int width, int x_offset, int y_offset,
-                                    int z_offset, const bool forward) {
+float CriticalZoneCheckerGPU::check(ByteSpan data, int point_step,
+                                    int row_step, int height, int width,
+                                    int x_offset, int y_offset, int z_offset,
+                                    const bool forward) {
   // Handle Empty Cloud
   if (data.empty() || width * height == 0) {
     return 1.0f; // No points -> Safe
@@ -196,13 +196,11 @@ float CriticalZoneCheckerGPU::check(const std::vector<uint8_t> &data,
   return *m_result;
 }
 
-float CriticalZoneCheckerGPU::check(const std::vector<double> &ranges,
+float CriticalZoneCheckerGPU::check(Eigen::Ref<const Eigen::VectorXf> ranges,
                                     const bool forward) {
   try {
-    // Host-side conversion (Double -> Float)
-    std::transform(ranges.begin(), ranges.end(), m_hostFloatBuffer.begin(),
-                   [](double d) { return static_cast<float>(d); });
-    m_q.memcpy(m_devicePtrRanges, m_hostFloatBuffer.data(),
+    // Input is float32. Straight H→D copy
+    m_q.memcpy(m_devicePtrRanges, ranges.data(),
                sizeof(float) * m_scanSize);
 
     // command scope

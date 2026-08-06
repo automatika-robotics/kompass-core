@@ -72,7 +72,7 @@ void CriticalZoneChecker::preset(const std::vector<double> &angles) {
   }
 }
 
-float CriticalZoneChecker::check(const std::vector<double> &ranges,
+float CriticalZoneChecker::check(Eigen::Ref<const Eigen::VectorXf> ranges,
                                  const bool forward) {
   std::vector<size_t> *indicies;
   float x, y, converted_range;
@@ -106,15 +106,15 @@ float CriticalZoneChecker::check(const std::vector<double> &ranges,
   return slowdown_factor;
 }
 
-float CriticalZoneChecker::check(const std::vector<uint8_t> &data,
-                                 int point_step, int row_step, int height,
-                                 int width, int x_offset, int y_offset,
-                                 int z_offset, const bool forward) {
-
-  std::vector<double> ranges;
+float CriticalZoneChecker::check(ByteSpan data, int point_step, int row_step,
+                                 int height, int width, int x_offset,
+                                 int y_offset, int z_offset,
+                                 const bool forward) {
+  // Convert into the member scratch: no per-call allocation
   pointCloudToLaserScanFromRaw(
       data, point_step, row_step, height, width, x_offset, y_offset, z_offset,
-      range_max_, min_height_, max_height_, sin_angles_.size(), ranges);
-  return check(ranges, forward);
+      range_max_, min_height_, max_height_,
+      static_cast<int>(sin_angles_.size()), ranges_scratch_);
+  return check(Eigen::Ref<const Eigen::VectorXf>(ranges_scratch_), forward);
 }
 } // namespace Kompass

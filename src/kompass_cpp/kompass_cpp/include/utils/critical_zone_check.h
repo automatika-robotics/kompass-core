@@ -1,7 +1,9 @@
 #pragma once
 
+#include "datatypes/span.h"
 #include "utils/collision_check.h"
 #include <Eigen/Core>
+#include <Eigen/Dense>
 
 namespace Kompass {
 /**
@@ -55,7 +57,7 @@ public:
    * @return    Slowdown factor (0.0 - 1.0) if in the slowdown zone, 0.0 if in
    * the critical zone (stop), 1.0 otherwise
    */
-  float check(const std::vector<double> &ranges, const bool forward);
+  float check(Eigen::Ref<const Eigen::VectorXf> ranges, const bool forward);
 
   /**
    * Uses 3D point cloud data to check if robot is in slowdown or critical zone.
@@ -71,9 +73,9 @@ public:
    * @param z_offset    Offset (in bytes) to the z-coordinate within a point.
    * @return            A 2D occupancy grid as an Eigen::MatrixXi.
    */
-  float check(const std::vector<uint8_t> &data, int point_step, int row_step,
-              int height, int width, int x_offset, int y_offset,
-              int z_offset, const bool forward);
+  float check(ByteSpan data, int point_step, int row_step, int height,
+              int width, int x_offset, int y_offset, int z_offset,
+              const bool forward);
 
 protected:
   InputType input_type_;
@@ -84,6 +86,9 @@ protected:
   std::vector<float> cos_angles_;
   std::vector<size_t> indicies_forward_, indicies_backward_;
   float critical_distance_, slowdown_distance_;
+  // Reused output buffer for the pointcloud → laserscan conversion
+  // avoids a per-frame allocation
+  Eigen::VectorXf ranges_staging_;
 
   Eigen::Isometry3f sensor_tf_body_ =
       Eigen::Isometry3f::Identity(); // Sensor transformation with
