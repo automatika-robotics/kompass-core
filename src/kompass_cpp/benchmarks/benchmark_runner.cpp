@@ -109,14 +109,15 @@ std::vector<uint8_t> generate_heavy_pointcloud_bytes(size_t num_points) {
 }
 
 // Generates varied laserscan data for Mapping
-void generate_mapping_scan(size_t num_points, std::vector<double> &ranges,
-                           std::vector<double> &angles) {
+void generate_mapping_scan(size_t num_points, Eigen::VectorXf &ranges,
+                           Eigen::VectorXf &angles) {
   ranges.resize(num_points);
   angles.resize(num_points);
   double angle_step = (2.0 * M_PI) / num_points;
   for (size_t i = 0; i < num_points; ++i) {
-    angles[i] = -M_PI + (i * angle_step);
-    ranges[i] = 5.0 + 2.0 * std::sin(angles[i] * 20.0);
+    double angle = -M_PI + (i * angle_step);
+    angles[i] = static_cast<float>(angle);
+    ranges[i] = static_cast<float>(5.0 + 2.0 * std::sin(angle * 20.0));
   }
 }
 
@@ -191,7 +192,7 @@ int main(int argc, char *argv[]) {
     int height = 400;
     int width = 400;
     float res = 0.05f;
-    std::vector<double> ranges, angles;
+    Eigen::VectorXf ranges, angles;
     generate_mapping_scan(3600, ranges, angles);
 
 #ifdef GPU
@@ -324,7 +325,10 @@ int main(int argc, char *argv[]) {
     // Slowdown Limit = 0.51 + 0.6 = 1.11
     // Target Distance = 0.96m (Safe middle ground)
 
-    std::vector<double> ranges, angles;
+    // Angles stay double: they feed the checker ctor. Ranges are float32:
+    // they feed the per-frame check() primary
+    std::vector<double> angles;
+    Eigen::VectorXf ranges;
     size_t num_scan_points = 3600;
     ranges.resize(num_scan_points);
     angles.resize(num_scan_points);
@@ -349,9 +353,9 @@ int main(int argc, char *argv[]) {
       // Quadratic formula: r = (-b + sqrt(b^2 - 4ac)) / 2a.  (a=1)
       double discriminant = b * b - 4.0 * c;
       if (discriminant >= 0) {
-        ranges[i] = (-b + std::sqrt(discriminant)) / 2.0;
+        ranges[i] = static_cast<float>((-b + std::sqrt(discriminant)) / 2.0);
       } else {
-        ranges[i] = 10.0; // Fallback (should not happen with these params)
+        ranges[i] = 10.0f; // Fallback (should not happen with these params)
       }
     }
 
