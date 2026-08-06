@@ -158,8 +158,10 @@ class EmergencyChecker:
         further fields a caller's cloud container carries are ignored, so a
         whole container can be splatted in.
 
-        :param data: Raw point buffer as a flat byte array
-        :type data: np.ndarray
+        :param data: Raw point buffer as a flat byte sequence; a uint8
+            numpy array or ``bytes`` (e.g. PointCloud2 ``data``) both cross
+            zero-copy
+        :type data: Union[np.ndarray, bytes]
         :param point_step: Length of a single point in bytes
         :type point_step: int
         :param row_step: Length of a single row in bytes
