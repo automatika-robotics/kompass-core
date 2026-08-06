@@ -246,17 +246,24 @@ class FollowerTemplate:
         :param global_path: Global reference path
         :type global_path: Path
         """
-        parsed_points = []
         # If the path contains less than 2 points -> set None path / clear old
         if len(global_path.poses) < 2:
             self.planner.clear_current_path()
             return
 
-        for point in global_path.poses:
-            parsed_point = np.array([point.pose.position.x, point.pose.position.y, 0.0])
-            parsed_points.append(parsed_point)
-
-        self.planner.set_current_path(kompass_cpp.types.Path(points=parsed_points))
+        x_points = np.array(
+            [point.pose.position.x for point in global_path.poses], dtype=np.float32
+        )
+        y_points = np.array(
+            [point.pose.position.y for point in global_path.poses], dtype=np.float32
+        )
+        self.planner.set_current_path(
+            kompass_cpp.types.Path(
+                x_points=x_points,
+                y_points=y_points,
+                z_points=np.zeros(x_points.size, dtype=np.float32),
+            )
+        )
         self._got_path = True
 
     @property
