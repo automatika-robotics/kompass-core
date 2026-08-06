@@ -131,7 +131,11 @@ class EmergencyChecker:
             self._init_checker(scan_angles=angles)
             self.__initialized = True
 
-        return self._critical_zone_checker.check(ranges=ranges, forward=forward)
+        # float32 is the zero-copy fast path at the binding (ROS scans are
+        # already float32, making the coercion a no-op there)
+        return self._critical_zone_checker.check(
+            ranges=np.asarray(ranges, dtype=np.float32), forward=forward
+        )
 
     def run_on_pointcloud(
         self,
