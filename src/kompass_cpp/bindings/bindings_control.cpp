@@ -192,7 +192,8 @@ void bindings_control(py::module_ &m) {
             return self.execute<Control::LaserScan>(dt, scan);
           },
           "Execute Pure Pursuit with LaserScan obstacle avoidance",
-          py::arg("delta_time"), py::arg("laser_scan"))
+          py::arg("delta_time"), py::arg("laser_scan"),
+          py::call_guard<py::gil_scoped_release>())
       .def(
           "execute",
           [](Control::PurePursuit &self, const double dt,
@@ -202,6 +203,8 @@ void bindings_control(py::module_ &m) {
             for (Eigen::Index i = 0; i < cloud.rows(); ++i) {
               points.emplace_back(cloud(i, 0), cloud(i, 1), cloud(i, 2));
             }
+            // Solve without the GIL (conversion above still holds it)
+            py::gil_scoped_release release;
             return self.execute<std::vector<Path::Point>>(dt, points);
           },
           "Execute Pure Pursuit with PointCloud obstacle avoidance",
@@ -247,7 +250,8 @@ void bindings_control(py::module_ &m) {
            py::overload_cast<const Control::Velocity2D &,
                              const Control::LaserScan &>(
                &Control::DWA::computeVelocityCommandsSet<Control::LaserScan>),
-           py::rv_policy::reference_internal)
+           py::rv_policy::reference_internal,
+           py::call_guard<py::gil_scoped_release>())
       .def(
           "compute_velocity_commands",
           [](Control::DWA &self, const Control::Velocity2D &vel,
@@ -258,6 +262,8 @@ void bindings_control(py::module_ &m) {
             for (Eigen::Index i = 0; i < cloud.rows(); ++i) {
               points.emplace_back(cloud(i, 0), cloud(i, 1), cloud(i, 2));
             }
+            // Solve without the GIL (conversion above still holds it)
+            py::gil_scoped_release release;
             return self.computeVelocityCommandsSet<std::vector<Path::Point>>(
                 vel, points);
           },
