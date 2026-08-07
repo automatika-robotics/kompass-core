@@ -119,6 +119,19 @@ inline float load_and_cast_val(const uint8_t *ptr, size_t offset,
  * @TODO: Coordinates are read as FLOAT32 at the given offsets. Unlike the GPU
  * kernel, this CPU path does not honor other PointFieldType field encodings.
  *
+ * @TODO: The z gate is applied on the sensor's own z axis, so it can only
+ * express a height band for a mount whose rotation preserves that axis --
+ * i.e. yaw-only, which covers the usual case exactly. Under roll or pitch the
+ * point's x/y leak into its body-frame height by an amount that grows with
+ * range (15 deg of pitch skews z by ~0.78 m at 3 m), so no constant
+ * (min_z, max_z) pair describes the intended band and callers cannot correct
+ * for it on their side. Fixing it means gating on body-frame z: take the
+ * third row of the sensor-to-body transform plus its z offset, and test
+ * r0*x + r1*y + r2*z + tz against the band. The GPU kernel needs the same
+ * change -- it already uploads rows 0 and 1 of that transform, so only row 2
+ * and moving the filter after the dot product are missing. Deferred to a
+ * later release: it changes the meaning of min_z/max_z for every caller.
+ *
  * @throws std::out_of_range If point offsets access memory out of bounds.
  */
 inline void pointCloudToLaserScanFromRaw(
