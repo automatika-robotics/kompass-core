@@ -45,8 +45,13 @@ namespace {
  *                          disable-sentinel for the lower bound: callers
  *                          that want a one-sided filter must pass a
  *                          suitably negative value (e.g. -FLT_MAX).
- * @param max_z             Maximum acceptable Z. Negative disables the
- *                          upper bound (matches CPU behaviour).
+ * @param max_z             Maximum acceptable Z (inclusive). Applied as
+ *                          given, matching the CPU
+ *                          `pointCloudToLaserScanFromRaw`: the sign of the
+ *                          bound carries no meaning of its own, so a
+ *                          negative value is a real upper edge and not a
+ *                          request to disable the gate. Callers wanting no
+ *                          upper bound pass +FLT_MAX / infinity.
  * @param point_field_type  Dtype of the X/Y/Z fields (dispatches
  *                          load_and_cast_val).
  * @param element_size      sizeof(field) in bytes. Used for the
@@ -91,7 +96,6 @@ inline void submitPointCloudToLaserScanKernel(
     const int z_off = z_offset;
     const float f_min_z = min_z;
     const float f_max_z = max_z;
-    const bool max_z_enabled = (max_z >= 0.0f);
     const int k_num_bins = num_bins;
     const float k_inv_two_pi_times_bins =
         static_cast<float>(k_num_bins) / static_cast<float>(2.0 * M_PI);
@@ -126,12 +130,12 @@ inline void submitPointCloudToLaserScanKernel(
             return;
           }
 
-          // Early Z-filter.
+          // Early Z-filter. Both bounds are applied as given, matching the
+          // CPU path: a negative max_z is a real upper edge, not a
+          // disable-sentinel.
           const float z =
               load_and_cast_val(raw_bytes, byte_offset + z_off, k_type);
-          if (z < f_min_z)
-            return;
-          if (max_z_enabled && z > f_max_z)
+          if (z < f_min_z || z > f_max_z)
             return;
 
           const float x =
