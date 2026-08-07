@@ -120,8 +120,10 @@ class BaseAttrs:
                     f"Trying to set with incompatible type. Attribute {key} expecting '{type(attribute_to_set)}' got '{type(value)}'"
                 )
         elif isinstance(value, List) and attribute_type is np.ndarray:
-            # Turn list into numpy array
-            value = np.array(value)
+            # Turn list into numpy array, keeping the dtype the attribute
+            # already carries.
+            dtype = getattr(attribute_to_set, "dtype", None)
+            value = np.array(value, dtype=dtype) if dtype else np.array(value)
 
         else:
             # If not a Union type -> check using isinstance
