@@ -142,8 +142,7 @@ void bindings_control(py::module_ &m) {
       .def(py::init<Control::Stanley::StanleyParameters>(),
            "Init Stanley follower with custom config")
       .def("compute_velocity_commands",
-           &Control::Stanley::computeVelocityCommand,
-           py::rv_policy::reference_internal)
+           &Control::Stanley::computeVelocityCommand)
       .def("execute", &Control::Stanley::execute)
       .def("set_robot_wheelbase", &Control::Stanley::setWheelBase);
 
@@ -250,7 +249,6 @@ void bindings_control(py::module_ &m) {
            py::overload_cast<const Control::Velocity2D &,
                              const Control::LaserScan &>(
                &Control::DWA::computeVelocityCommandsSet<Control::LaserScan>),
-           py::rv_policy::reference_internal,
            py::call_guard<py::gil_scoped_release>())
       .def(
           "compute_velocity_commands",
@@ -266,8 +264,7 @@ void bindings_control(py::module_ &m) {
             py::gil_scoped_release release;
             return self.computeVelocityCommandsSet<std::vector<Path::Point>>(
                 vel, points);
-          },
-          py::rv_policy::reference_internal)
+          })
       .def("add_custom_cost",
            &Control::DWA::addCustomCost) // Custom cost function for DWA planner
                                          // of type (f(Trajectory2D, Path::Path)
