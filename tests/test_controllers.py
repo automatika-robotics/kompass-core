@@ -826,3 +826,110 @@ def test_dwa_dtype_equivalence():
         assert cmd64 == pytest.approx(cmd32, abs=1e-4), (
             f"dtype divergence for {list(kwargs64)}: {cmd64} vs {cmd32}"
         )
+
+
+def test_dwa_custom_cost():
+    """Custom Python cost functions on the DWA planner.
+
+    Covers three contracts in one setup:
+
+    1. A cost registered after construction is invoked at all — regression
+       for the GPU evaluator's temp-costs buffer, which was only allocated
+       at construction time when custom costs already existed, so a cost
+       added from Python dereferenced a null device pointer on first solve.
+    2. The values flow into the search: a constant cost must shift the
+       winning trajectory's reported cost by exactly weight * constant
+       (compared against an identically configured planner without it).
+    3. The solve releases the GIL: another Python thread must make progress
+       during a single long native solve call — with the GIL held no other
+       thread can run during a native call, so the tick delta would be 0.
+    """
+    global global_path, my_robot, robot_ctr_limits, control_time_step
+    import threading
+    import time
+    from kompass_cpp.types import Velocity2D
+
+    def _make_dwa() -> DWA:
+        cost_weights = TrajectoryCostsWeights(
+            reference_path_distance_weight=3.0,
+            goal_distance_weight=1.0,
+            smoothness_weight=0.0,
+            jerk_weight=0.0,
+            obstacles_distance_weight=0.0,
+        )
+        config = DWAConfig(
+            max_linear_samples=4,
+            max_angular_samples=4,
+            octree_resolution=0.1,
+            costs_weights=cost_weights,
+            prediction_horizon=10,
+            control_horizon=2,
+            control_time_step=control_time_step,
+            max_num_threads=1,
+        )
+        dwa = DWA(robot=my_robot, ctrl_limits=robot_ctr_limits, config=config)
+        dwa.set_path(global_path)
+        return dwa
+
+    plain = _make_dwa()
+    with_cost = _make_dwa()
+
+    calls = {"n": 0}
+    CONSTANT = 7.5
+    WEIGHT = 2.0
+
+    def constant_cost(trajectory, reference_path) -> float:
+        calls["n"] += 1
+        return CONSTANT
+
+    with_cost._planner.add_custom_cost(WEIGHT, constant_cost)
+
+    my_robot.state.x = -0.51731912
+    my_robot.state.y = 0.0
+    my_robot.state.yaw = np.pi / 2
+
+    n = 360
+    angles = np.linspace(0.0, 2 * np.pi, n, endpoint=False, dtype=np.float32)
+    ranges = np.full(n, 10.0, dtype=np.float32)
+
+    # 1. + 2. — same state, same scan, only the custom cost differs
+    assert plain.loop_step(
+        current_state=my_robot.state, ranges=ranges, angles=angles
+    ), "baseline planner found no command"
+    assert with_cost.loop_step(
+        current_state=my_robot.state, ranges=ranges, angles=angles
+    ), "planner with custom cost found no command"
+    assert calls["n"] > 0, "custom Python cost was never invoked"
+    assert with_cost._result.cost == pytest.approx(
+        plain._result.cost + WEIGHT * CONSTANT, rel=1e-4
+    ), "custom cost value did not flow into the trajectory costs"
+
+    # 3. — one long native solve (100k-point cloud), ticker thread must run
+    # during it. Counter deltas are read immediately around the single call,
+    # so with a held GIL the delta is 0.
+    rng = np.random.default_rng(11)
+    cloud = np.ascontiguousarray(
+        rng.uniform(-5.0, 5.0, (100_000, 3)).astype(np.float32)
+    )
+    vel = Velocity2D(vx=0.0, vy=0.0, omega=0.0)
+
+    ticks = {"n": 0, "stop": False}
+
+    def _ticker():
+        while not ticks["stop"]:
+            ticks["n"] += 1
+            time.sleep(0)
+
+    ticker = threading.Thread(target=_ticker)
+    ticker.start()
+    try:
+        before = ticks["n"]
+        plain._planner.compute_velocity_commands(vel, cloud)
+        delta = ticks["n"] - before
+    finally:
+        ticks["stop"] = True
+        ticker.join()
+
+    assert delta > 0, (
+        "no other Python thread ran during the solve -> the GIL was held"
+    )
