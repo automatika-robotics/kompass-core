@@ -107,8 +107,11 @@ inline float load_and_cast_val(const uint8_t *ptr, size_t offset,
  * @param z_offset     Byte offset to the z-coordinate in a point.
  * @param max_range    Initial value and upper clipping range for distances.
  * @param min_z        Minimum acceptable Z value (inclusive).
- * @param max_z        Maximum acceptable Z value (inclusive). If negative,
- * disabled.
+ * @param max_z        Maximum acceptable Z value (inclusive). Pass
+ * `std::numeric_limits<double>::infinity()` for no upper bound. Note a
+ * negative bound is a legitimate one, not a request to disable the gate: z is
+ * a signed sensor-frame coordinate, so a sensor mounted above the volume of
+ * interest gives a band that lies entirely below it.
  * @param angle_step   Angular resolution (in radians) of each bin.
  * @param ranges_out   Output vector of minimum distances per bin.
  * @param angles_out   Output vector of bin angles in radians [0, 2π).
@@ -169,8 +172,9 @@ inline void pointCloudToLaserScanFromRaw(
         continue;
       }
 
-      // Z filtering
-      if (z < min_z || (max_z >= 0.0 && z > max_z)) {
+      // Z filtering. Applied as given, matching the GPU kernel: the sign of
+      // the bound carries no meaning of its own
+      if (z < min_z || z > max_z) {
         continue;
       }
 
@@ -209,8 +213,11 @@ inline void pointCloudToLaserScanFromRaw(
  * @param z_offset     Byte offset to the z-coordinate in a point.
  * @param max_range    Initial value and upper clipping range for distances.
  * @param min_z        Minimum acceptable Z value (inclusive).
- * @param max_z        Maximum acceptable Z value (inclusive). If negative,
- * disabled.
+ * @param max_z        Maximum acceptable Z value (inclusive). Pass
+ * `std::numeric_limits<double>::infinity()` for no upper bound. Note a
+ * negative bound is a legitimate one, not a request to disable the gate: z is
+ * a signed sensor-frame coordinate, so a sensor mounted above the volume of
+ * interest gives a band that lies entirely below it.
  * @param num_bins     Number of rays in the laserscan.
  * @param ranges_out   Output vector of minimum distances per bin.
  *
@@ -258,8 +265,9 @@ inline void pointCloudToLaserScanFromRaw(
         continue;
       }
 
-      // Z filtering
-      if (z < min_z || (max_z >= 0.0 && z > max_z)) {
+      // Z filtering. Applied as given, matching the GPU kernel: the sign of
+      // the bound carries no meaning of its own
+      if (z < min_z || z > max_z) {
         continue;
       }
 
