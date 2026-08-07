@@ -252,6 +252,56 @@ def test_conversion_z_filter_rejects_above_ceiling():
     )
 
 
+def test_conversion_z_band_entirely_below_the_sensor_is_honoured():
+    """A wholly negative band is a real band, not a request to disable the
+    gate.
+
+    A sensor mounted above the volume it guards -- a mast lidar over a shorter
+    robot -- yields a band like [-1.2, -0.2] in its own frame. Reading the sign
+    of max_z as "no ceiling" would let everything overhead through, which on
+    the safety-stop path means braking for door frames.
+    """
+    n = 40
+    theta = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
+    # Ceiling returns, above the band's upper edge of -0.2
+    overhead = np.column_stack([np.cos(theta), np.sin(theta), np.full(n, 0.5)])
+    # Returns inside the band, at the robot's midpoint
+    in_band = np.column_stack([np.cos(theta), np.sin(theta), np.full(n, -0.7)])
+
+    max_range = 10.0
+    kwargs = dict(
+        point_step=_PC_STRIDE,
+        height=1,
+        x_offset=0,
+        y_offset=4,
+        z_offset=8,
+        max_range=max_range,
+        min_z=-1.2,
+        max_z=-0.2,
+        angle_step=0.1,
+    )
+
+    ranges, _ = pointcloud_to_laserscan_from_raw(
+        data=_make_cloud_bytes(overhead),
+        row_step=n * _PC_STRIDE,
+        width=n,
+        **kwargs,
+    )
+    assert np.all(np.asarray(ranges) == max_range), (
+        "points above the band's upper edge leaked through a negative max_z"
+    )
+
+    ranges, _ = pointcloud_to_laserscan_from_raw(
+        data=_make_cloud_bytes(in_band),
+        row_step=n * _PC_STRIDE,
+        width=n,
+        **kwargs,
+    )
+    assert np.any(np.asarray(ranges) < max_range), (
+        "points inside the band were dropped"
+    )
+
+
 @pytest.mark.skipif(
     not LIVOX_CLOUD_JSON.exists() or LIVOX_CLOUD_JSON.stat().st_size < 1_000_000,
     reason=(
