@@ -144,9 +144,12 @@ inline void pointCloudToLaserScanFromRaw(
   const double two_pi = 2.0 * M_PI;
   const int num_bins = static_cast<int>(std::ceil(two_pi / angle_step));
 
-  // Prefill angles only when the bin count changed (angles are a pure
-  // function of angle_step, so steady-state calls skip the refill)
-  if (angles_out.size() != num_bins) {
+  // Prefill angles only when the caller's buffer doesn't already hold them.
+  // Verify both the size and the contents i.e. bin 1 holds exactly
+  // static_cast<float>(angle_step) when the buffer was filled by this
+  // function with the same step
+  if (angles_out.size() != num_bins ||
+      (num_bins > 1 && angles_out[1] != static_cast<float>(angle_step))) {
     angles_out.resize(num_bins);
     for (int i = 0; i < num_bins; ++i) {
       angles_out[i] = static_cast<float>(i * angle_step);
