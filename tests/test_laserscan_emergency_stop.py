@@ -234,3 +234,20 @@ def test_emergency_stop_pointcloud_ignores_nan_points(use_gpu):
 
 if __name__ == "__main__":
     test_emergency_stop(laser_scan_data_fixed(), True)
+
+
+@pytest.mark.parametrize("use_gpu", [False, True])
+def test_emergency_stop_pointcloud_rejects_negative_offsets(use_gpu):
+    """Malformed metadata (negative field offsets) must raise, never read
+    out of bounds and never come back as an 'all clear' verdict. The ROS
+    layer maps this error to an emergency stop."""
+    checker = _make_checker(use_gpu)
+
+    ring = np.column_stack([
+        np.ones(8), np.zeros(8), np.zeros(8)
+    ]).astype(np.float32)
+    cloud = _make_pointcloud(ring)
+    cloud["y_offset"] = -4
+
+    with pytest.raises(ValueError, match="non-negative"):
+        checker.check(**cloud, forward=True)

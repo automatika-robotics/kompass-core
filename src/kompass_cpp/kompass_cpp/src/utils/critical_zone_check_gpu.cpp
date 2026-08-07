@@ -1,5 +1,6 @@
 #include "utils/critical_zone_check_gpu.h"
 #include "utils/logger.h"
+#include <stdexcept>
 #include <sycl/sycl.hpp>
 
 namespace Kompass {
@@ -11,6 +12,14 @@ float CriticalZoneCheckerGPU::check(ByteSpan data, int point_step,
   // Handle Empty Cloud
   if (data.empty() || width * height == 0) {
     return 1.0f; // No points -> Safe
+  }
+
+
+  // Fail loudly for a negative off-set (corrupted metadata)
+  if (x_offset < 0 || y_offset < 0 || z_offset < 0) {
+    throw std::invalid_argument(
+        "Point field offsets (x/y/z) must be non-negative: malformed point "
+        "cloud metadata");
   }
 
   try {

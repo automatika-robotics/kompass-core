@@ -2,6 +2,7 @@
 #include "utils/logger.h"
 #include "utils/pointcloud.h"
 #include <cmath>
+#include <stdexcept>
 #include <sycl/sycl.hpp>
 
 namespace Kompass {
@@ -68,6 +69,13 @@ inline void submitPointCloudToLaserScanKernel(
     const int x_offset, const int y_offset, const int z_offset,
     const float min_z, const float max_z, const PointFieldType point_field_type,
     const int element_size, const size_t wg_size) {
+
+  // Fail loudly for a negative off-set (corrupted metadata)
+  if (x_offset < 0 || y_offset < 0 || z_offset < 0) {
+    throw std::invalid_argument(
+        "Point field offsets (x/y/z) must be non-negative: malformed point "
+        "cloud metadata");
+  }
 
   // if data is missing; return
   if (device_raw_bytes == nullptr || device_ranges_out == nullptr ||

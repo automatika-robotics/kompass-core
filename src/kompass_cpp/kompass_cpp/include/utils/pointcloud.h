@@ -12,6 +12,7 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -141,6 +142,12 @@ inline void pointCloudToLaserScanFromRaw(
     const int z_offset, const double max_range, const double min_z,
     const double max_z, const double angle_step, Eigen::VectorXf &ranges_out,
     Eigen::VectorXf &angles_out) {
+  // Fail loudly for a negative off-set (corrupted metadata)
+  if (x_offset < 0 || y_offset < 0 || z_offset < 0) {
+    throw std::invalid_argument(
+        "Point field offsets (x/y/z) must be non-negative: malformed point "
+        "cloud metadata");
+  }
   const double two_pi = 2.0 * M_PI;
   const int num_bins = static_cast<int>(std::ceil(two_pi / angle_step));
 
@@ -248,6 +255,12 @@ inline void pointCloudToLaserScanFromRaw(
     const int width, const int x_offset, const int y_offset,
     const int z_offset, const double max_range, const double min_z,
     const double max_z, const int num_bins, Eigen::VectorXf &ranges_out) {
+  // Fail loudly for a negative off-set (corrupted metadata)
+  if (x_offset < 0 || y_offset < 0 || z_offset < 0) {
+    throw std::invalid_argument(
+        "Point field offsets (x/y/z) must be non-negative: malformed point "
+        "cloud metadata");
+  }
   const double two_pi = 2.0 * M_PI;
 
   // reinitialize ranges

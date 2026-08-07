@@ -402,3 +402,32 @@ def test_conversion_row_padding_is_not_decoded_as_points():
     bin_row1 = int(np.pi / angle_step)
     assert ranges[bin_row0] < max_range, "row 0 points were dropped"
     assert ranges[bin_row1] < max_range, "row 1 points were dropped"
+
+
+def test_conversion_rejects_negative_offsets():
+    """Negative field offsets are malformed metadata and must raise.
+
+    They used to slip the per-point bounds check (which takes the max of the
+    three offsets) and wrap the unsigned index math into an out-of-bounds
+    read. Both overloads carry the guard.
+    """
+    n = 8
+    ring = np.column_stack([
+        np.ones(n), np.zeros(n), np.zeros(n)
+    ]).astype(np.float32)
+    kwargs = dict(
+        data=_make_cloud_bytes(ring),
+        point_step=_PC_STRIDE,
+        row_step=n * _PC_STRIDE,
+        height=1,
+        width=n,
+        y_offset=4,
+        z_offset=8,
+        max_range=10.0,
+        min_z=-1.0,
+        max_z=1.0,
+    )
+    with pytest.raises(ValueError, match="non-negative"):
+        pointcloud_to_laserscan_from_raw(x_offset=-4, angle_step=0.1, **kwargs)
+    with pytest.raises(ValueError, match="non-negative"):
+        pointcloud_to_laserscan_from_raw(x_offset=-4, num_bins=64, **kwargs)

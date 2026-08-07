@@ -550,3 +550,36 @@ def test_gpu_binding_pointcloud_nan_points_are_ignored():
     grid_padded = np.array(make_mapper().scan_to_grid(**kwargs(padded)))
 
     assert np.array_equal(grid_clean, grid_padded)
+
+
+@pytestmark_gpu
+def test_gpu_binding_pointcloud_rejects_negative_offsets():
+    """Negative field offsets must raise instead of wrapping the kernel's
+    unsigned index math into an out-of-bounds device read."""
+    n_rays = 360
+    mapper = LocalMapperGPU(
+        grid_height=40,
+        grid_width=40,
+        resolution=0.05,
+        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
+        laserscan_orientation=0.0,
+        is_pointcloud=True,
+        scan_size=n_rays,
+        angle_step=float(2.0 * np.pi / n_rays),
+        max_height=1.5,
+        min_height=-0.5,
+        range_max=5.0,
+    )
+    cloud_bytes = _ring_cloud(n=16, radius=0.5, z=0.1)
+    num_points = cloud_bytes.size // _PC_STRIDE
+    with pytest.raises(ValueError, match="non-negative"):
+        mapper.scan_to_grid(
+            data=cloud_bytes,
+            point_step=_PC_STRIDE,
+            row_step=num_points * _PC_STRIDE,
+            height=1,
+            width=num_points,
+            x_offset=-4,
+            y_offset=4,
+            z_offset=8,
+        )
