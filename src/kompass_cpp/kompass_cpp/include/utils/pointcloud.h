@@ -100,8 +100,9 @@ inline float load_and_cast_val(const uint8_t *ptr, size_t offset,
  * @param point_step   Number of bytes between successive points in a row.
  * @param row_step     Number of bytes between successive rows.
  * @param height       Number of rows in the point cloud.
- * @param width        Number of columns in the point cloud (unused: iteration
- * is driven by row_step; kept for PointCloud2 signature parity).
+ * @param width        Number of points per row. Bounds the per-row walk, so
+ * trailing row padding (row_step > width * point_step) is not decoded as
+ * points.
  * @param x_offset     Byte offset to the x-coordinate in a point.
  * @param y_offset     Byte offset to the y-coordinate in a point.
  * @param z_offset     Byte offset to the z-coordinate in a point.
@@ -140,8 +141,6 @@ inline void pointCloudToLaserScanFromRaw(
     const int z_offset, const double max_range, const double min_z,
     const double max_z, const double angle_step, Eigen::VectorXf &ranges_out,
     Eigen::VectorXf &angles_out) {
-  (void)width;
-
   const double two_pi = 2.0 * M_PI;
   const int num_bins = static_cast<int>(std::ceil(two_pi / angle_step));
 
@@ -156,9 +155,12 @@ inline void pointCloudToLaserScanFromRaw(
   ranges_out.resize(num_bins);
   ranges_out.setConstant(static_cast<float>(max_range));
 
-  // Iterate over raw points
+  // Iterate over raw points. The inner walk is bounded by the row's payload
+  // (width points). Organized clouds may pad rows, and padding bytes must not
+  // be decoded as points (same as GPU kernel)
+  const int row_bytes = width * point_step;
   for (int row = 0; row < height; ++row) {
-    for (int col = 0; col < row_step; col += point_step) {
+    for (int col = 0; col < row_bytes; col += point_step) {
       std::size_t point_start = row * row_step + col;
 
       std::size_t max_offset = point_start +
@@ -220,7 +222,9 @@ inline void pointCloudToLaserScanFromRaw(
  * @param point_step   Number of bytes between successive points in a row.
  * @param row_step     Number of bytes between successive rows.
  * @param height       Number of rows in the point cloud.
- * @param width        Number of columns in the point cloud.
+ * @param width        Number of points per row. Bounds the per-row walk, so
+ * trailing row padding (row_step > width * point_step) is not decoded as
+ * points.
  * @param x_offset     Byte offset to the x-coordinate in a point.
  * @param y_offset     Byte offset to the y-coordinate in a point.
  * @param z_offset     Byte offset to the z-coordinate in a point.
@@ -241,17 +245,18 @@ inline void pointCloudToLaserScanFromRaw(
     const int width, const int x_offset, const int y_offset,
     const int z_offset, const double max_range, const double min_z,
     const double max_z, const int num_bins, Eigen::VectorXf &ranges_out) {
-  (void)width;
-
   const double two_pi = 2.0 * M_PI;
 
   // reinitialize ranges
   ranges_out.resize(num_bins);
   ranges_out.setConstant(static_cast<float>(max_range));
 
-  // Iterate over raw points
+  // Iterate over raw points. The inner walk is bounded by the row's payload
+  // (width points). Organized clouds may pad rows, and padding bytes must not
+  // be decoded as points (same as GPU kernel)
+  const int row_bytes = width * point_step;
   for (int row = 0; row < height; ++row) {
-    for (int col = 0; col < row_step; col += point_step) {
+    for (int col = 0; col < row_bytes; col += point_step) {
       std::size_t point_start = row * row_step + col;
 
       std::size_t max_offset = point_start +

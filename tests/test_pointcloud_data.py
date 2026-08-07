@@ -344,3 +344,61 @@ def test_conversion_livox_recording_produces_nontrivial_output():
         f"livox frame at z∈[1.6, 1.8] m should populate >10 bins, got "
         f"{populated}"
     )
+
+
+def test_conversion_row_padding_is_not_decoded_as_points():
+    """Trailing row padding in an organized cloud must never become points.
+
+    The walk over a row is bounded by ``width`` points, not ``row_step``
+    (mirroring the GPU kernel): padded rows occur in real organized clouds,
+    and padding bytes are arbitrary — here they are deliberately crafted to
+    decode as a finite, in-band obstacle at 1 m straight ahead, which the
+    old row_step-driven loop would have turned into a phantom obstacle.
+    """
+    max_range = 10.0
+    angle_step = 0.1
+    width, height = 3, 2
+
+    # Real points: row 0 at bearing pi/2, row 1 at bearing pi, both at 5 m
+    row0 = np.array([[0.0, 5.0, 0.0]] * width, dtype=np.float32)
+    row1 = np.array([[-5.0, 0.0, 0.0]] * width, dtype=np.float32)
+
+    # Padding: one extra point-slot per row, decoding as (1, 0, 0) — finite,
+    # non-zero, inside the z band. Must be skipped, not read as a point.
+    phantom = np.array([[1.0, 0.0, 0.0, 0.0]], dtype=np.float32).tobytes()
+
+    def _row(points: np.ndarray) -> bytes:
+        buf = np.zeros((width, 4), dtype=np.float32)
+        buf[:, :3] = points
+        return buf.tobytes() + phantom
+
+    data = _row(row0) + _row(row1)
+    row_step = width * _PC_STRIDE + len(phantom)
+    assert len(data) == height * row_step
+
+    ranges, _ = pointcloud_to_laserscan_from_raw(
+        data=np.frombuffer(data, dtype=np.uint8),
+        point_step=_PC_STRIDE,
+        row_step=row_step,
+        height=height,
+        width=width,
+        x_offset=0,
+        y_offset=4,
+        z_offset=8,
+        max_range=max_range,
+        min_z=-1.0,
+        max_z=1.0,
+        angle_step=angle_step,
+    )
+    ranges = np.asarray(ranges)
+
+    phantom_bin = 0  # bearing 0 -> first bin
+    assert ranges[phantom_bin] == max_range, (
+        "row padding bytes were decoded as a phantom obstacle"
+    )
+
+    # Real points from BOTH rows must still land (row addressing intact)
+    bin_row0 = int((np.pi / 2) / angle_step)
+    bin_row1 = int(np.pi / angle_step)
+    assert ranges[bin_row0] < max_range, "row 0 points were dropped"
+    assert ranges[bin_row1] < max_range, "row 1 points were dropped"
