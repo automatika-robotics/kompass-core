@@ -1,7 +1,6 @@
+#include "bindings.h"
 #include "utils/critical_zone_check.h"
 #include "utils/pointcloud.h"
-#include <nanobind/eigen/dense.h>
-#include <nanobind/nanobind.h>
 #include <nanobind/stl/array.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/pair.h>
@@ -9,7 +8,6 @@
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 
-namespace py = nanobind;
 using namespace Kompass;
 
 py::ndarray<py::numpy, float, py::shape<-1, 3>, py::c_contig>
@@ -27,21 +25,18 @@ read_pcd_py(const std::string &filename) {
   float *raw_ptr = reinterpret_cast<float *>(points.data());
 
   // Capsule takes ownership of the vector
-  auto capsule = py ::capsule(
+  auto capsule = py::capsule(
       new std::vector<std::array<float, 3>>(std::move(points)),
       [](void *p) noexcept {
         delete reinterpret_cast<std::vector<std::array<float, 3>> *>(p);
       });
 
-  py ::ndarray<py ::numpy, float, py ::shape<-1, 3>, py::c_contig> arr(
+  py::ndarray<py::numpy, float, py::shape<-1, 3>, py::c_contig> arr(
       raw_ptr, {n, 3}, capsule);
 
   return arr;
 }
 
-#if GPU
-void bindings_utils_gpu(py::module_ &);
-#endif
 
 // Utils submodule
 void bindings_utils(py::module_ &m) {
@@ -61,34 +56,40 @@ void bindings_utils(py::module_ &m) {
            py::arg("range_max"))
 
       .def("check",
-           py::overload_cast<const std::vector<double> &, bool>(
+           py::overload_cast<Eigen::Ref<const Eigen::VectorXf>, const bool>(
                &CriticalZoneChecker::check),
            py::arg("ranges"), py::arg("forward"))
 
-      .def("check",
-           py::overload_cast<const std::vector<uint8_t> &, int, int, int, int,
-                             int, int, int, bool>(&CriticalZoneChecker::check),
-           py::arg("data"), py::arg("point_step"), py::arg("row_step"),
-           py::arg("height"), py::arg("width"), py::arg("x_offset"),
-           py::arg("y_offset"), py::arg("z_offset"), py::arg("forward"));
+      .def(
+          "check",
+          [](CriticalZoneChecker &self, ByteArray data, int point_step,
+             int row_step, int height, int width, int x_offset, int y_offset,
+             int z_offset, bool forward) {
+            py::gil_scoped_release release;
+            return self.check(toSpan(data), point_step, row_step, height,
+                              width, x_offset, y_offset, z_offset, forward);
+          },
+          py::arg("data"), py::arg("point_step"), py::arg("row_step"),
+          py::arg("height"), py::arg("width"), py::arg("x_offset"),
+          py::arg("y_offset"), py::arg("z_offset"), py::arg("forward"));
 
-  // Overload using angle_step (Returns: tuple(ranges, angles))
+  // Overload using angle_step (Returns: tuple(ranges, angles) as float32
+  // numpy arrays)
   m_utils.def(
       "pointcloud_to_laserscan_from_raw",
-      [](const std::vector<uint8_t> &data, int point_step, int row_step,
-         int height, int width, int x_offset, int y_offset, int z_offset,
-         double max_range, double min_z, double max_z, double angle_step) {
-        std::vector<double> ranges_out;
-        std::vector<double> angles_out;
-
-        // Call the overload function that takes angle_step
-        pointCloudToLaserScanFromRaw(data, point_step, row_step, height, width,
-                                     x_offset, y_offset, z_offset, max_range,
-                                     min_z, max_z, angle_step, ranges_out,
-                                     angles_out);
-
-        // Return both vectors to Python
-        return std::make_tuple(ranges_out, angles_out);
+      [](ByteArray data, int point_step, int row_step, int height, int width,
+         int x_offset, int y_offset, int z_offset, double max_range,
+         double min_z, double max_z, double angle_step) {
+        Eigen::VectorXf ranges_out;
+        Eigen::VectorXf angles_out;
+        {
+          py::gil_scoped_release release;
+          pointCloudToLaserScanFromRaw(toSpan(data), point_step, row_step,
+                                       height, width, x_offset, y_offset,
+                                       z_offset, max_range, min_z, max_z,
+                                       angle_step, ranges_out, angles_out);
+        }
+        return std::make_tuple(std::move(ranges_out), std::move(angles_out));
       },
       py::arg("data"), py::arg("point_step"), py::arg("row_step"),
       py::arg("height"), py::arg("width"), py::arg("x_offset"),
@@ -97,20 +98,20 @@ void bindings_utils(py::module_ &m) {
       "Converts raw PointCloud2 to ranges and angles using a specific angular "
       "step.");
 
-  // Overload using num_bins (Returns: list(ranges))
+  // Overload using num_bins (Returns: ranges as a float32 numpy array)
   m_utils.def(
       "pointcloud_to_laserscan_from_raw",
-      [](const std::vector<uint8_t> &data, int point_step, int row_step,
-         int height, int width, int x_offset, int y_offset, int z_offset,
-         double max_range, double min_z, double max_z, int num_bins) {
-        std::vector<double> ranges_out;
-
-        // Call the overload that takes num_bins
-        pointCloudToLaserScanFromRaw(data, point_step, row_step, height, width,
-                                     x_offset, y_offset, z_offset, max_range,
-                                     min_z, max_z, num_bins, ranges_out);
-
-        // Return ranges to Python
+      [](ByteArray data, int point_step, int row_step, int height, int width,
+         int x_offset, int y_offset, int z_offset, double max_range,
+         double min_z, double max_z, int num_bins) {
+        Eigen::VectorXf ranges_out;
+        {
+          py::gil_scoped_release release;
+          pointCloudToLaserScanFromRaw(toSpan(data), point_step, row_step,
+                                       height, width, x_offset, y_offset,
+                                       z_offset, max_range, min_z, max_z,
+                                       num_bins, ranges_out);
+        }
         return ranges_out;
       },
       py::arg("data"), py::arg("point_step"), py::arg("row_step"),

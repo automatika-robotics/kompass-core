@@ -271,15 +271,30 @@ class DWA(FollowerTemplate):
         ``local_map``, then a laser scan (``ranges`` with ``angles``), then a
         cartesian point cloud (``points``).
 
+        Frame contract, set by the input type:
+
+        - A laser scan (``ranges`` with ``angles``) is in the **sensor
+          frame**. The planner applies the sensor-to-robot mount pose and the
+          robot's world pose itself.
+        - ``points`` and ``local_map`` are Cartesian obstacle points in 3D
+          space, already in the **world frame** -- the same frame the
+          trajectory samples and the reference path live in. They are handed
+          to the planner untouched, so any sensor-to-world transform must
+          already have been applied upstream (in the ROS callbacks that
+          decode the point cloud or the occupancy grid).
+
         :param current_state: Current robot state (position and velocity)
         :type current_state: RobotState
-        :param ranges: Measured range along each angle of a laser scan (m)
+        :param ranges: Measured range along each angle of a laser scan (m),
+            in the sensor frame
         :type ranges: Optional[np.ndarray]
+        :param points: Cartesian obstacle points as an Nx3 array (m), in the
+            world frame
+        :type points: Optional[np.ndarray]
         :param angles: Angle of each range measurement (rad)
         :type angles: Optional[np.ndarray]
-        :param points: Cartesian obstacle points as an Nx3 array (m)
-        :type points: Optional[np.ndarray]
-        :param local_map: Occupied cells around the robot as an Nx3 array (m)
+        :param local_map: Occupied cells as an Nx3 array (m), in the world
+            frame
         :type local_map: Optional[np.ndarray]
 
         :return: If planner found a valid solution
@@ -306,17 +321,22 @@ class DWA(FollowerTemplate):
             vx=current_state.vx, vy=current_state.vy, omega=current_state.omega
         )
 
+        # float32 C-contiguous is the zero-copy fast path at the binding
+        # (no-op for ROS-native data)
         if local_map is not None:
-            sensor_data = local_map
+            sensor_data = np.ascontiguousarray(local_map, dtype=np.float32)
         elif ranges is not None and angles is not None:
             if len(angles) != len(ranges):
                 logging.error(
                     "Received incompatible LaserScan data -> Cannot compute control"
                 )
                 return False
-            sensor_data = kompass_cpp.types.LaserScan(ranges=ranges, angles=angles)
+            sensor_data = kompass_cpp.types.LaserScan(
+                ranges=np.asarray(ranges, dtype=np.float32),
+                angles=np.asarray(angles, dtype=np.float32),
+            )
         elif points is not None:
-            sensor_data = points
+            sensor_data = np.ascontiguousarray(points, dtype=np.float32)
         else:
             logging.error(
                 "Cannot compute control without sensor data. Provide 'ranges' and 'angles', 'points' or 'local_map' input"

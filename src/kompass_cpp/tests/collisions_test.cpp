@@ -26,8 +26,8 @@ BOOST_AUTO_TEST_CASE(test_FCL) {
   {
     Timer time;
     Path::State robotState(0.0, 0.0, 0.0, 0.0);
-    std::vector<double> scan_angles{0.0, 0.1, 0.2};
-    std::vector<double> scan_ranges{1.0, 1.0, 1.0};
+    Eigen::VectorXf scan_angles = toVecF({0.0, 0.1, 0.2});
+    Eigen::VectorXf scan_ranges = toVecF({1.0, 1.0, 1.0});
 
     LOG_INFO("Running test with robot at ", robotState.x, ", ", robotState.y);
     LOG_INFO("Scan Ranges ", scan_ranges[0], ", ", scan_ranges[1], ", ",
@@ -47,8 +47,8 @@ BOOST_AUTO_TEST_CASE(test_FCL) {
     // Reuse angles from previous scope or define new ones if needed.
     // Since scan_angles was local to Block 1, we redefine them here for
     // clarity/isolation.
-    std::vector<double> scan_angles{0.0, 0.1, 0.2};
-    std::vector<double> scan_ranges{0.25, 0.5, 0.5};
+    Eigen::VectorXf scan_angles = toVecF({0.0, 0.1, 0.2});
+    Eigen::VectorXf scan_ranges = toVecF({0.25, 0.5, 0.5});
 
     LOG_INFO("Running test with robot at ", robotState.x, ", ", robotState.y);
     LOG_INFO("Scan Ranges ", scan_ranges[0], ", ", scan_ranges[1], ", ",
@@ -68,10 +68,14 @@ BOOST_AUTO_TEST_CASE(test_FCL) {
     LOG_INFO("Testing collision between: \nRobot at {x: ", robotState.x,
              ", y: ", robotState.y, "}\n", "and Pointcloud");
 
+    // Point clouds are taken in the WORLD frame: this obstacle sits just
+    // inside the robot box centred at (3, 5), no transform applied.
     std::vector<Path::Point> cloud;
     cloud.push_back(Path::Point(3.1, 5.1, -0.5));
 
-    collChecker.updateSensorData(cloud, true);
+    // Place the body explicitly rather than inheriting Block 2's pose
+    collChecker.updateState(robotState);
+    collChecker.updateSensorData(cloud, robotState);
     bool res = collChecker.checkCollisions();
     BOOST_TEST(res, "Collision Result: " << res);
   }

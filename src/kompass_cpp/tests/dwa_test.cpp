@@ -66,7 +66,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   Control::Velocity2D robotControl;
 
   // Robot laserscan value (empty)
-  Control::LaserScan robotScan({0.4, 0.3}, {10, 10.1});
+  Control::LaserScan robotScan(toVecF({0.4, 0.3}), toVecF({10, 10.1}));
 
   LOG_INFO("Setting up DWA planner");
 

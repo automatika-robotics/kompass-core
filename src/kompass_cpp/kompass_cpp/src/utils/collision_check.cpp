@@ -184,6 +184,7 @@ void CollisionChecker::updateState(const Path::State current_state) {
   body->tf = getTransformation(
       rotation, Eigen::Vector3f(current_state.x, current_state.y, 0.0));
 
+  current_state_ = current_state;
   bodyObjPtr_->setTransform(body->tf);
   bodyObjPtr_->computeAABB();
 }
@@ -196,6 +197,7 @@ void CollisionChecker::updateState(const double x, const double y,
 
   body->tf = getTransformation(rotation, Eigen::Vector3f(x, y, 0.0));
 
+  current_state_ = Path::State(x, y, yaw, 0.0);
   bodyObjPtr_->setTransform(body->tf);
   bodyObjPtr_->computeAABB();
 }
@@ -268,10 +270,12 @@ float CollisionChecker::getMinDistance() {
   return std::max<float>(0.0, distanceData.result.min_distance);
 }
 
-bool CollisionChecker::checkCollisions(const std::vector<double> &ranges,
-                                       const std::vector<double> &angles,
+bool CollisionChecker::checkCollisions(Eigen::Ref<const Eigen::VectorXf> ranges,
+                                       Eigen::Ref<const Eigen::VectorXf> angles,
                                        double height) {
-  updateSensorData(Control::LaserScan(ranges, angles));
+  updateSensorData(
+      Control::LaserScan(Eigen::VectorXf(ranges), Eigen::VectorXf(angles)),
+      current_state_);
   return checkCollisions();
 }
 

@@ -122,7 +122,7 @@ BOOST_AUTO_TEST_CASE(test_laserscan_behind_moving_forward) {
   setLaserscanAtAngle(0.1, 0.2, scan.ranges, scan.angles);
   setLaserscanAtAngle(-0.1, 0.2, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ true);
+  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
   BOOST_TEST(result == 1.0,
              "Angles behind, moving forward -> expected 1.0, got " << result);
 }
@@ -131,7 +131,7 @@ BOOST_AUTO_TEST_CASE(test_laserscan_front_far_moving_forward) {
   Timer time;
   auto scan = fresh_laserscan();
 
-  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ true);
+  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
   BOOST_TEST(result == 1.0,
              "Angles in front, far, moving forward -> expected 1.0, got "
                  << result);
@@ -144,7 +144,7 @@ BOOST_AUTO_TEST_CASE(test_laserscan_front_close_moving_forward) {
   setLaserscanAtAngle(M_PI + 0.1, 0.2, scan.ranges, scan.angles);
   setLaserscanAtAngle(M_PI - 0.1, 0.2, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ true);
+  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
   BOOST_TEST(result == 0.0,
              "Angles in front, close, moving forward -> expected 0.0, got "
                  << result);
@@ -157,7 +157,7 @@ BOOST_AUTO_TEST_CASE(test_laserscan_front_close_moving_backward) {
   setLaserscanAtAngle(M_PI + 0.1, 0.2, scan.ranges, scan.angles);
   setLaserscanAtAngle(M_PI - 0.1, 0.2, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ false);
+  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ false);
   BOOST_TEST(result == 1.0,
              "Angles in front, close, moving backward -> expected 1.0, got "
                  << result);
@@ -170,7 +170,7 @@ BOOST_AUTO_TEST_CASE(test_laserscan_back_close_moving_backward) {
   setLaserscanAtAngle(0.1, 0.2, scan.ranges, scan.angles);
   setLaserscanAtAngle(-0.1, 0.2, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ false);
+  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ false);
   BOOST_TEST(result == 0.0,
              "Angles behind, close, moving backward -> expected 0.0, got "
                  << result);
@@ -181,7 +181,7 @@ BOOST_AUTO_TEST_CASE(test_laserscan_back_slowdown_moving_backward) {
   auto scan = fresh_laserscan();
   setLaserscanAtAngle(0.0, 1.3, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ false);
+  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ false);
   BOOST_TEST((result > 0.0 && result < 1.0),
              "Angle behind in slowdown zone, moving backward -> expected in "
              "(0, 1), got " << result);
@@ -192,7 +192,7 @@ BOOST_AUTO_TEST_CASE(test_laserscan_back_slowdown_moving_forward) {
   auto scan = fresh_laserscan();
   setLaserscanAtAngle(0.0, 1.3, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ true);
+  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
   BOOST_TEST(result == 1.0,
              "Angle behind in slowdown zone, moving forward -> expected 1.0, "
              "got " << result);
@@ -203,7 +203,7 @@ BOOST_AUTO_TEST_CASE(test_laserscan_front_slowdown_moving_forward) {
   auto scan = fresh_laserscan();
   setLaserscanAtAngle(M_PI, 0.7, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(scan.ranges, /*forward*/ true);
+  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
   BOOST_TEST((result > 0.0 && result < 1.0),
              "Angle in front in slowdown zone, moving forward -> expected in "
              "(0, 1), got " << result);

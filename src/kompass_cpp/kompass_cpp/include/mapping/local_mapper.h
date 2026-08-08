@@ -1,6 +1,10 @@
 #pragma once
 
+#include "datatypes/span.h"
+#include "utils/threadpool.h"
 #include <Eigen/Dense>
+#include <memory>
+#include <mutex>
 
 namespace Kompass {
 namespace Mapping {
@@ -32,8 +36,12 @@ public:
     gridData = Eigen::MatrixXi(gridHeight, gridWidth);
     gridDataProb = Eigen::MatrixXf(gridHeight, gridWidth);
     previousGridDataProb = Eigen::MatrixXf(gridHeight, gridWidth);
+    m_transformScratch = Eigen::MatrixXf(gridHeight, gridWidth);
     // initialize previous grid data
     previousGridDataProb.fill(m_pPrior);
+    if (m_maxNumThreads > 1) {
+      m_pool = std::make_unique<ThreadPool>(m_maxNumThreads);
+    }
 
     // initialize ranges and angles if working with pointcloud
     if (isPointCloud) {
@@ -50,7 +58,7 @@ public:
       initializedAngles.resize(scanSize);
       initializedRanges.resize(scanSize);
       for (int i = 0; i < scanSize; ++i) {
-        initializedAngles[i] = i * derived_step;
+        initializedAngles[i] = static_cast<float>(i * derived_step);
       }
     }
   }
@@ -79,8 +87,12 @@ public:
     gridData = Eigen::MatrixXi(gridHeight, gridWidth);
     gridDataProb = Eigen::MatrixXf(gridHeight, gridWidth);
     previousGridDataProb = Eigen::MatrixXf(gridHeight, gridWidth);
+    m_transformScratch = Eigen::MatrixXf(gridHeight, gridWidth);
     // initialize previous grid data
     previousGridDataProb.fill(m_pPrior);
+    if (m_maxNumThreads > 1) {
+      m_pool = std::make_unique<ThreadPool>(m_maxNumThreads);
+    }
     // initialize ranges and angles if working with pointcloud
     if (isPointCloud) {
       // NOTE: See the non-Bayesian ctor above for the rationale: the
@@ -92,7 +104,7 @@ public:
       initializedAngles.resize(scanSize);
       initializedRanges.resize(scanSize);
       for (int i = 0; i < scanSize; ++i) {
-        initializedAngles[i] = i * derived_step;
+        initializedAngles[i] = static_cast<float>(i * derived_step);
         initializedRanges[i] = rangeMax;
       }
     }
@@ -102,18 +114,15 @@ public:
   virtual ~LocalMapper() = default;
 
   /**
-   * @brief Transform a grid to be centered in egocentric view of the current
-   * position given its previous position.
+   * @brief Transform the stored previous probability grid
+   * (`previousGridDataProb`) in place, re-centering it on the current
+   * position given its previous position. The next Bayesian update reads
+   * the shifted member directly; unknown cells are filled with the prior.
    *
    * @param current_position_in_previous_pose Current egocentric position for
    * the transformation.
    * @param current_yaw_orientation_in_previous_pose Current egocentric
    * orientation for the transformation.
-   * @param previous_grid_data Previous grid data (pre-transformation).
-   * @param unknown_value Value of unknown occupancy (prior value for grid
-   * cells).
-   *
-   * @return Transformed grid.
    */
   void getPreviousGridInCurrentPose(
       const Eigen::Vector2f &currentPositionInPreviousPose,
@@ -137,8 +146,8 @@ public:
    * @param ranges         LaserScan ranges in meters
    * @returns gridData      Current grid data
    */
-  Eigen::MatrixXi &scanToGrid(const std::vector<double> &angles,
-                              const std::vector<double> &ranges);
+  Eigen::MatrixXi &scanToGrid(Eigen::Ref<const Eigen::VectorXf> angles,
+                              Eigen::Ref<const Eigen::VectorXf> ranges);
 
   /**
    * Processes Laserscan data (angles and ranges) to project on a 2D grid
@@ -150,8 +159,8 @@ public:
    * @returns gridDataProb Current probabilistic grid data
    */
   std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
-  scanToGridBaysian(const std::vector<double> &angles,
-                    const std::vector<double> &ranges);
+  scanToGridBaysian(Eigen::Ref<const Eigen::VectorXf> angles,
+                    Eigen::Ref<const Eigen::VectorXf> ranges);
 
   /**
    * Projects 3D point cloud data onto a 2D grid using Bresenham line drawing.
@@ -167,9 +176,9 @@ public:
    * @param z_offset    Offset (in bytes) to the z-coordinate within a point.
    * @return            A 2D occupancy grid as an Eigen::MatrixXi.
    */
-  Eigen::MatrixXi &scanToGrid(const std::vector<uint8_t> &data, int point_step,
-                              int row_step, int height, int width,
-                              float x_offset, float y_offset, float z_offset);
+  Eigen::MatrixXi &scanToGrid(ByteSpan data, int point_step, int row_step,
+                              int height, int width, int x_offset,
+                              int y_offset, int z_offset);
   /**
    * Projects 3D point cloud data onto a 2D grid using Bresenham line drawing,
    * with Bayesian updates to build a probabilistic occupancy grid.
@@ -188,9 +197,8 @@ public:
    *                      - Probabilistic occupancy grid (Eigen::MatrixXf&)
    */
   std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
-  scanToGridBaysian(const std::vector<uint8_t> &data, int point_step,
-                    int row_step, int height, int width, float x_offset,
-                    float y_offset, float z_offset);
+  scanToGridBaysian(ByteSpan data, int point_step, int row_step, int height,
+                    int width, int x_offset, int y_offset, int z_offset);
 
 protected:
   // Transforms a point from grid coordinate (i,j) to the local coordinates
@@ -261,11 +269,18 @@ protected:
   Eigen::MatrixXi gridData;
   Eigen::MatrixXf gridDataProb;
   Eigen::MatrixXf previousGridDataProb;
-  std::vector<double> initializedRanges; // only initialized for pointcloud data
-  std::vector<double> initializedAngles; // only initialized for pointcloud data
+  Eigen::VectorXf initializedRanges; // only initialized for pointcloud data
+  Eigen::VectorXf initializedAngles; // only initialized for pointcloud data
+
+  // Serializes grid writes across worker threads (one lock per ray)
+  std::mutex m_gridMutex;
 
 private:
   const int m_maxNumThreads;
+  // Reusable worker pool, created when maxNumThreads > 1
+  std::unique_ptr<ThreadPool> m_pool;
+  // Scratch for the in-place grid transformation
+  Eigen::MatrixXf m_transformScratch;
 };
 
 } // namespace Mapping

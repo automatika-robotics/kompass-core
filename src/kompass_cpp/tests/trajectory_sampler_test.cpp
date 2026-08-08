@@ -67,7 +67,8 @@ void testTrajSampler() {
   Path::State robotState(0.0, 0.0, 0.0, 0.0);
 
   // Robot laserscan value (empty)
-  Control::LaserScan robotScan({20.0, 10.0, 10.0}, {0, 0.1, 0.2});
+  Control::LaserScan robotScan(toVecF({20.0, 10.0, 10.0}),
+                               toVecF({0, 0.1, 0.2}));
 
   std::array<Control::ControlType, 3> robot_types = {
       Control::ControlType::ACKERMANN, Control::ControlType::DIFFERENTIAL_DRIVE,

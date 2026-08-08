@@ -75,7 +75,6 @@ public:
       }
 
       m_devicePtrRanges = sycl::malloc_device<float>(m_scanSize, m_q);
-      m_hostFloatBuffer.resize(m_scanSize); // Resize conversion buffer
 
       // Load pre-computed Sin/Cos for fast transform
       m_cos = sycl::malloc_device<float>(cos_angles_.size(), m_q);
@@ -158,14 +157,14 @@ public:
    * @brief Process 2D LaserScan Data
    * Only valid if initialized with InputType::LASERSCAN
    */
-  float check(const std::vector<double> &ranges, const bool forward);
+  float check(Eigen::Ref<const Eigen::VectorXf> ranges, const bool forward);
 
   /**
    * @brief Process Raw 3D PointCloud Data
    * Only valid if initialized with InputType::POINTCLOUD
    */
-  float check(const std::vector<uint8_t> &data, int point_step, int row_step,
-              int height, int width, int x_offset, int y_offset, int z_offset,
+  float check(ByteSpan data, int point_step, int row_step, int height,
+              int width, int x_offset, int y_offset, int z_offset,
               const bool forward);
 
 private:
@@ -177,7 +176,6 @@ private:
 
   // -- LaserScan Specific --
   float *m_devicePtrRanges = nullptr;
-  std::vector<float> m_hostFloatBuffer; // host buffer for type conversion
   size_t *m_devicePtrForward = nullptr;
   size_t *m_devicePtrBackward = nullptr;
   float *m_cos = nullptr;

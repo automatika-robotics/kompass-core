@@ -4,7 +4,6 @@
 #include "utils/logger.h"
 #include <Eigen/Dense>
 #include <sycl/sycl.hpp>
-#include <vector>
 
 namespace Kompass {
 namespace Mapping {
@@ -32,16 +31,17 @@ public:
     m_max_wg_size = dev.get_info<sycl::info::device::max_work_group_size>();
 
     // Buffers needed on both laserscan and pointcloud paths
-    // Ranges is `float` (not double)
     m_devicePtrRanges = sycl::malloc_device<float>(scanSize, m_q);
+    // NOTE: Angles stay double on device. The ray-cast kernel feeds them to
+    // sin/cos, and on CPU only backend float trig measurably loses to
+    // double trig (glibc). The kernel already narrows the angle to float before
+    // trig, so double costs only the wider H->D copy and per-thread load and
+    // the fp64 throughput penalty is negligible
     m_devicePtrAngles = sycl::malloc_device<double>(scanSize, m_q);
+    m_anglesWide.resize(scanSize);
     m_devicePtrGrid = sycl::malloc_device<int>(m_gridHeight * m_gridWidth, m_q);
     m_devicePtrDistances =
         sycl::malloc_shared<float>(m_gridHeight * m_gridWidth, m_q);
-
-    // Host-side staging buffer for the laserscan overload's
-    // double→float narrowing. Sized once here.
-    m_hostFloatRanges.resize(scanSize);
 
     // Precompute per-cell distance from the laserscan origin.
     // Used by the ray-cast kernel to gate super-cover line fills.
@@ -59,7 +59,8 @@ public:
       // `2π / scan_size` bin width the conversion kernel assumes; upload
       // them once here and skip the per-call H→D copy. The laserscan
       // path uploads angles per call instead.
-      m_q.memcpy(m_devicePtrAngles, initializedAngles.data(),
+      m_anglesWide = initializedAngles.cast<double>();
+      m_q.memcpy(m_devicePtrAngles, m_anglesWide.data(),
                  sizeof(double) * scanSize);
       m_q.wait();
     }
@@ -93,8 +94,8 @@ public:
    * @param ranges         LaserScan ranges in meters
    * @param gridData      Current grid data
    */
-  Eigen::MatrixXi &scanToGrid(const std::vector<double> &angles,
-                              const std::vector<double> &ranges);
+  Eigen::MatrixXi &scanToGrid(Eigen::Ref<const Eigen::VectorXf> angles,
+                              Eigen::Ref<const Eigen::VectorXf> ranges);
 
   /**
    * Uses a GPU to Projects 3D point cloud data onto a 2D grid using Bresenham
@@ -111,9 +112,9 @@ public:
    * @param z_offset    Offset (in bytes) to the z-coordinate within a point.
    * @return            A 2D occupancy grid as an Eigen::MatrixXi.
    */
-  Eigen::MatrixXi &scanToGrid(const std::vector<uint8_t> &data, int point_step,
-                              int row_step, int height, int width,
-                              float x_offset, float y_offset, float z_offset);
+  Eigen::MatrixXi &scanToGrid(ByteSpan data, int point_step, int row_step,
+                              int height, int width, int x_offset, int y_offset,
+                              int z_offset);
 
 private:
   // Per-cell distance from laserscan origin. Precomputed at construction;
@@ -133,9 +134,8 @@ private:
   uint8_t *m_devicePtrRawBytes = nullptr;
   size_t m_rawCapacity = 0;
 
-  // Host-side scratch buffer for the laserscan overload's double→float
-  // narrowing
-  std::vector<float> m_hostFloatRanges;
+  // Host-side widening staging buffer for the double device-angles
+  Eigen::VectorXd m_anglesWide;
 
   // Device-reported max work-group size. Used as the pointcloud conversion
   // kernel's block dim.

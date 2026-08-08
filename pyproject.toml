@@ -1,6 +1,12 @@
 [build-system]
-# pinned nanobind for python3.8 support
-requires = ["scikit-build-core>=0.8", "nanobind>=1.8,<2.9.2", "packaging>=22.0"]
+# nanobind <2.9.2 pinned for python3.8 support;
+# nanobind >=2.11 for CPython 3.14 support
+requires = [
+    "scikit-build-core>=0.8",
+    "nanobind>=1.8,<2.9.2; python_version < '3.14'",
+    "nanobind>=2.11; python_version >= '3.14'",
+    "packaging>=22.0",
+]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -16,7 +22,8 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13"]
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14"]
 license = { text = "MIT" }
 
 keywords = ["robotics", "gpgpu", "navigation", "control", "planning", "mapping"]
@@ -28,7 +35,7 @@ dependencies = [
     "pyyaml",
 ]
 
-requires-python = ">=3.8.4,<3.14"
+requires-python = ">=3.8.4,<3.15"
 
 [project.optional-dependencies]
 dev = ["pip-tools", "pytest", "pre-commit", "opencv-python", "matplotlib"]
@@ -115,7 +122,8 @@ push = true
 
 [tool.cibuildwheel]
 build-verbosity = 1
-skip = ["pp*", "*musllinux*"]
+# cp31?t-*: skip free-threaded CPython builds
+skip = ["pp*", "*musllinux*", "cp31?t-*"]
 test-requires = ["pytest", "opencv-python"]
 test-command = "cd {package}/tests && pytest"
 manylinux-x86_64-image = "manylinux_2_28"

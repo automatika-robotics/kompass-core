@@ -44,7 +44,7 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
     setLaserscanAtAngle(0.1, 0.2, scan_ranges, scan_angles);
     setLaserscanAtAngle(-0.1, 0.2, scan_ranges, scan_angles);
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
+    float result = zoneChecker.check(toVecF(scan_ranges), forward_motion);
     BOOST_TEST(result == 1.0,
                "Angles are behind and robot is moving forward -> "
                "Critical zone result should be 1.0, returned "
@@ -60,7 +60,7 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
     bool forward_motion = true;
     initLaserscan(360, 10.0, scan_ranges, scan_angles); // Reset scan
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
+    float result = zoneChecker.check(toVecF(scan_ranges), forward_motion);
     BOOST_TEST(result == 1.0,
                "Angles are in front and far and robot is moving forward "
                "-> Critical zone result should be 1.0, returned "
@@ -78,7 +78,7 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
     setLaserscanAtAngle(M_PI + 0.1, 0.2, scan_ranges, scan_angles);
     setLaserscanAtAngle(M_PI - 0.1, 0.2, scan_ranges, scan_angles);
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
+    float result = zoneChecker.check(toVecF(scan_ranges), forward_motion);
     BOOST_TEST(result == 0.0,
                "Angles are in front and close and robot is moving "
                "forward -> Critical zone result should be 0.0, returned "
@@ -96,7 +96,7 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
     bool forward_motion = false;
     // Note: Ranges are still set from Test 3
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
+    float result = zoneChecker.check(toVecF(scan_ranges), forward_motion);
     BOOST_TEST(result == 1.0,
                "Angles are in front and close and robot is moving "
                "backwards-> Critical zone result should be 1.0, returned "
@@ -115,7 +115,7 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
     setLaserscanAtAngle(0.1, 0.2, scan_ranges, scan_angles);
     setLaserscanAtAngle(-0.1, 0.2, scan_ranges, scan_angles);
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
+    float result = zoneChecker.check(toVecF(scan_ranges), forward_motion);
     BOOST_TEST(result == 0.0,
                "Angles are in back and close and robot is moving "
                "backwards -> Critical zone result should be 0.0, returned "
@@ -133,7 +133,7 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
     initLaserscan(360, 10.0, scan_ranges, scan_angles);
     setLaserscanAtAngle(0.0, 1.3, scan_ranges, scan_angles);
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
+    float result = zoneChecker.check(toVecF(scan_ranges), forward_motion);
     BOOST_TEST(
         (result > 0.0 and result < 1.0),
         "Angles are in back and in the slowdown zone and robot is moving "
@@ -153,7 +153,7 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
     bool forward_motion = true;
     // Ranges are still set from Test 6
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
+    float result = zoneChecker.check(toVecF(scan_ranges), forward_motion);
     BOOST_TEST(
         result == 1.0,
         "Angles are in back and in the slowdown zone and robot is moving "
@@ -173,7 +173,7 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
     bool forward_motion = true;
     setLaserscanAtAngle(M_PI, 0.7, scan_ranges, scan_angles);
 
-    float result = zoneChecker.check(scan_ranges, forward_motion);
+    float result = zoneChecker.check(toVecF(scan_ranges), forward_motion);
     BOOST_TEST(
         (result > 0.0 and result < 1.0),
         "Angles are in front and in the slowdown zone and robot is moving "

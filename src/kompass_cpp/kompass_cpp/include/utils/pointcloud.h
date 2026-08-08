@@ -1,5 +1,6 @@
 #pragma once
 
+#include "datatypes/span.h"
 #include "mapping/local_mapper.h"
 #include "utils/logger.h"
 #include <Eigen/Dense>
@@ -11,6 +12,7 @@
 #include <fstream>
 #include <iostream>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -99,41 +101,76 @@ inline float load_and_cast_val(const uint8_t *ptr, size_t offset,
  * @param point_step   Number of bytes between successive points in a row.
  * @param row_step     Number of bytes between successive rows.
  * @param height       Number of rows in the point cloud.
- * @param width        Number of columns in the point cloud.
+ * @param width        Number of points per row. Bounds the per-row walk, so
+ * trailing row padding (row_step > width * point_step) is not decoded as
+ * points.
  * @param x_offset     Byte offset to the x-coordinate in a point.
  * @param y_offset     Byte offset to the y-coordinate in a point.
  * @param z_offset     Byte offset to the z-coordinate in a point.
  * @param max_range    Initial value and upper clipping range for distances.
  * @param min_z        Minimum acceptable Z value (inclusive).
- * @param max_z        Maximum acceptable Z value (inclusive). If negative,
- * disabled.
+ * @param max_z        Maximum acceptable Z value (inclusive). Pass
+ * `std::numeric_limits<double>::infinity()` for no upper bound. Note a
+ * negative bound is a legitimate one, not a request to disable the gate: z is
+ * a signed sensor-frame coordinate, so a sensor mounted above the volume of
+ * interest gives a band that lies entirely below it.
  * @param angle_step   Angular resolution (in radians) of each bin.
  * @param ranges_out   Output vector of minimum distances per bin.
  * @param angles_out   Output vector of bin angles in radians [0, 2π).
  *
+ * @TODO: Coordinates are read as FLOAT32 at the given offsets. Unlike the GPU
+ * kernel, this CPU path does not honor other PointFieldType field encodings.
+ *
+ * @TODO: The z gate is applied on the sensor's own z axis, so it can only
+ * express a height band for a mount whose rotation preserves that axis --
+ * i.e. yaw-only, which covers the usual case exactly. Under roll or pitch the
+ * point's x/y leak into its body-frame height by an amount that grows with
+ * range (15 deg of pitch skews z by ~0.78 m at 3 m), so no constant
+ * (min_z, max_z) pair describes the intended band and callers cannot correct
+ * for it on their side. Fixing it means gating on body-frame z: take the
+ * third row of the sensor-to-body transform plus its z offset, and test
+ * r0*x + r1*y + r2*z + tz against the band. The GPU kernel needs the same
+ * change -- it already uploads rows 0 and 1 of that transform, so only row 2
+ * and moving the filter after the dot product are missing. Deferred to a
+ * later release: it changes the meaning of min_z/max_z for every caller.
+ *
  * @throws std::out_of_range If point offsets access memory out of bounds.
  */
 inline void pointCloudToLaserScanFromRaw(
-    const std::vector<uint8_t> &data, const int point_step, const int row_step,
-    const int height, const int width, const int x_offset, const int y_offset,
+    Kompass::ByteSpan data, const int point_step, const int row_step, const int height,
+    const int width, const int x_offset, const int y_offset,
     const int z_offset, const double max_range, const double min_z,
-    const double max_z, const double angle_step,
-    std::vector<double> &ranges_out, std::vector<double> &angles_out) {
-
+    const double max_z, const double angle_step, Eigen::VectorXf &ranges_out,
+    Eigen::VectorXf &angles_out) {
+  // Fail loudly for a negative off-set (corrupted metadata)
+  if (x_offset < 0 || y_offset < 0 || z_offset < 0) {
+    throw std::invalid_argument(
+        "Point field offsets (x/y/z) must be non-negative: malformed point "
+        "cloud metadata");
+  }
   const double two_pi = 2.0 * M_PI;
   const int num_bins = static_cast<int>(std::ceil(two_pi / angle_step));
 
-  // Prefill angles and ranges
-  angles_out.resize(num_bins);
-  ranges_out.resize(num_bins);
-  for (int i = 0; i < num_bins; ++i) {
-    angles_out[i] = i * angle_step;
-    ranges_out[i] = max_range;
+  // Prefill angles only when the caller's buffer doesn't already hold them.
+  // Verify both the size and the contents i.e. bin 1 holds exactly
+  // static_cast<float>(angle_step) when the buffer was filled by this
+  // function with the same step
+  if (angles_out.size() != num_bins ||
+      (num_bins > 1 && angles_out[1] != static_cast<float>(angle_step))) {
+    angles_out.resize(num_bins);
+    for (int i = 0; i < num_bins; ++i) {
+      angles_out[i] = static_cast<float>(i * angle_step);
+    }
   }
+  ranges_out.resize(num_bins);
+  ranges_out.setConstant(static_cast<float>(max_range));
 
-  // Iterate over raw points
+  // Iterate over raw points. The inner walk is bounded by the row's payload
+  // (width points). Organized clouds may pad rows, and padding bytes must not
+  // be decoded as points (same as GPU kernel)
+  const int row_bytes = width * point_step;
   for (int row = 0; row < height; ++row) {
-    for (int col = 0; col < row_step; col += point_step) {
+    for (int col = 0; col < row_bytes; col += point_step) {
       std::size_t point_start = row * row_step + col;
 
       std::size_t max_offset = point_start +
@@ -149,14 +186,20 @@ inline void pointCloudToLaserScanFromRaw(
       std::memcpy(&y, &data[point_start + y_offset], sizeof(float));
       std::memcpy(&z, &data[point_start + z_offset], sizeof(float));
 
+      // Reject non-finite points (NaN padding in organized clouds)
+      if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+        continue;
+      }
+
       // filter (0,0,0) early with epsilon for checking float equality to 0.0f
       float range_sq = x * x + y * y;
       if (range_sq < 1e-6) {
         continue;
       }
 
-      // Z filtering
-      if (z < min_z || (max_z >= 0.0 && z > max_z)) {
+      // Z filtering. Applied as given, matching the GPU kernel: the sign of
+      // the bound carries no meaning of its own
+      if (z < min_z || z > max_z) {
         continue;
       }
 
@@ -166,9 +209,9 @@ inline void pointCloudToLaserScanFromRaw(
       }
 
       int bin = static_cast<int>(angle / angle_step);
-      bin = std::min(bin, num_bins - 1); // Clamp just in case
+      bin = std::clamp(bin, 0, num_bins - 1); // Clamp just in case
 
-      double distance = std::sqrt(range_sq);
+      float distance = static_cast<float>(std::sqrt(range_sq));
       if (distance < ranges_out[bin]) {
         ranges_out[bin] = distance;
       }
@@ -189,33 +232,47 @@ inline void pointCloudToLaserScanFromRaw(
  * @param point_step   Number of bytes between successive points in a row.
  * @param row_step     Number of bytes between successive rows.
  * @param height       Number of rows in the point cloud.
- * @param width        Number of columns in the point cloud.
+ * @param width        Number of points per row. Bounds the per-row walk, so
+ * trailing row padding (row_step > width * point_step) is not decoded as
+ * points.
  * @param x_offset     Byte offset to the x-coordinate in a point.
  * @param y_offset     Byte offset to the y-coordinate in a point.
  * @param z_offset     Byte offset to the z-coordinate in a point.
  * @param max_range    Initial value and upper clipping range for distances.
  * @param min_z        Minimum acceptable Z value (inclusive).
- * @param max_z        Maximum acceptable Z value (inclusive). If negative,
- * disabled.
+ * @param max_z        Maximum acceptable Z value (inclusive). Pass
+ * `std::numeric_limits<double>::infinity()` for no upper bound. Note a
+ * negative bound is a legitimate one, not a request to disable the gate: z is
+ * a signed sensor-frame coordinate, so a sensor mounted above the volume of
+ * interest gives a band that lies entirely below it.
  * @param num_bins     Number of rays in the laserscan.
  * @param ranges_out   Output vector of minimum distances per bin.
  *
  * @throws std::out_of_range If point offsets access memory out of bounds.
  */
 inline void pointCloudToLaserScanFromRaw(
-    const std::vector<uint8_t> &data, const int point_step, const int row_step,
-    const int height, const int width, const int x_offset, const int y_offset,
+    Kompass::ByteSpan data, const int point_step, const int row_step, const int height,
+    const int width, const int x_offset, const int y_offset,
     const int z_offset, const double max_range, const double min_z,
-    const double max_z, const int num_bins, std::vector<double> &ranges_out) {
-
+    const double max_z, const int num_bins, Eigen::VectorXf &ranges_out) {
+  // Fail loudly for a negative off-set (corrupted metadata)
+  if (x_offset < 0 || y_offset < 0 || z_offset < 0) {
+    throw std::invalid_argument(
+        "Point field offsets (x/y/z) must be non-negative: malformed point "
+        "cloud metadata");
+  }
   const double two_pi = 2.0 * M_PI;
 
   // reinitialize ranges
-  ranges_out.assign(num_bins, max_range);
+  ranges_out.resize(num_bins);
+  ranges_out.setConstant(static_cast<float>(max_range));
 
-  // Iterate over raw points
+  // Iterate over raw points. The inner walk is bounded by the row's payload
+  // (width points). Organized clouds may pad rows, and padding bytes must not
+  // be decoded as points (same as GPU kernel)
+  const int row_bytes = width * point_step;
   for (int row = 0; row < height; ++row) {
-    for (int col = 0; col < row_step; col += point_step) {
+    for (int col = 0; col < row_bytes; col += point_step) {
       std::size_t point_start = row * row_step + col;
 
       std::size_t max_offset = point_start +
@@ -231,14 +288,20 @@ inline void pointCloudToLaserScanFromRaw(
       std::memcpy(&y, &data[point_start + y_offset], sizeof(float));
       std::memcpy(&z, &data[point_start + z_offset], sizeof(float));
 
+      // Reject non-finite points (NaN padding in organized clouds)
+      if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+        continue;
+      }
+
       // filter (0,0,0) early with epsilon for checking float equality to 0.0f
       float range_sq = x * x + y * y;
       if (range_sq < 1e-6) {
         continue;
       }
 
-      // Z filtering
-      if (z < min_z || (max_z >= 0.0 && z > max_z)) {
+      // Z filtering. Applied as given, matching the GPU kernel: the sign of
+      // the bound carries no meaning of its own
+      if (z < min_z || z > max_z) {
         continue;
       }
 
@@ -248,9 +311,9 @@ inline void pointCloudToLaserScanFromRaw(
       }
 
       int bin = static_cast<int>((angle / two_pi) * num_bins);
-      bin = std::min(bin, num_bins - 1); // Clamp just in case
+      bin = std::clamp(bin, 0, num_bins - 1); // Clamp just in case
 
-      double distance = std::sqrt(range_sq);
+      float distance = static_cast<float>(std::sqrt(range_sq));
       if (distance < ranges_out[bin]) {
         ranges_out[bin] = distance;
       }

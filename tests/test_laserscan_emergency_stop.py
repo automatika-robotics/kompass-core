@@ -1,9 +1,9 @@
 import os
 import json
+from typing import Dict, Optional
+
 import numpy as np
 import pytest
-from typing import Dict
-from kompass_core.utils.emergency_stop import EmergencyChecker
 from kompass_core.models import Robot, RobotType, RobotGeometry
 
 
@@ -18,9 +18,7 @@ def laser_scan_data_fixed() -> Dict[str, np.ndarray]:
     json_file_path = os.path.join(dir_name, "resources/mapping/laserscan_data.json")
     data = json.load(open(json_file_path))
 
-    angles = np.arange(
-        data["angle_min"], data["angle_max"], data["angle_increment"]
-    )
+    angles = np.arange(data["angle_min"], data["angle_max"], data["angle_increment"])
     ranges = np.array(data["ranges"])[: angles.size]
 
     return {"ranges": ranges, "angles": angles}
@@ -31,6 +29,77 @@ def laser_scan_data() -> Dict[str, np.ndarray]:
     return laser_scan_data_fixed()
 
 
+# Angular bin resolution for the pointcloud-configured checker (rad); the
+# conversion kernel bins cloud points into a virtual scan at this step
+_POINTCLOUD_ANGLE_STEP = 0.01
+
+
+def _make_checker(
+    use_gpu: bool,
+    scan_angles: Optional[np.ndarray] = None,
+    sensor_position: Optional[np.ndarray] = None,
+    sensor_rotation: Optional[np.ndarray] = None,
+):
+    """Build the raw kompass_cpp critical zone checker.
+
+    Constructed the same way Kompass' drive manager does it in production —
+    the raw class is the only supported entry point. A laser scan checker
+    takes the real scan angles; a pointcloud checker (``scan_angles=None``)
+    bins the cloud into a virtual scan instead.
+
+    :param use_gpu: Use the GPU implementation; the test is skipped when the
+        build does not include it
+    :type use_gpu: bool
+    :param scan_angles: Angles of the laser scan, or None for a point cloud
+    :type scan_angles: Optional[np.ndarray]
+    :param sensor_position: Sensor position in the body frame [x, y, z] (m)
+    :type sensor_position: Optional[np.ndarray]
+    :param sensor_rotation: Sensor rotation in the body frame (quaternion)
+    :type sensor_rotation: Optional[np.ndarray]
+    """
+    from kompass_cpp.types import SensorInputType
+
+    if use_gpu:
+        try:
+            from kompass_cpp.utils import CriticalZoneCheckerGPU as Checker
+        except ImportError:
+            pytest.skip("Build has no GPU implementation")
+    else:
+        from kompass_cpp.utils import CriticalZoneChecker as Checker
+
+    robot_radius = 0.1
+    robot = Robot(
+        robot_type=RobotType.ACKERMANN,
+        geometry_type=RobotGeometry.Type.CYLINDER,
+        geometry_params=np.array([robot_radius, 0.4]),
+    )
+
+    if scan_angles is not None:
+        input_type = SensorInputType.LASERSCAN
+    else:
+        input_type = SensorInputType.POINTCLOUD
+        scan_angles = np.arange(0.0, 2 * np.pi, _POINTCLOUD_ANGLE_STEP)
+
+    return Checker(
+        robot_shape=robot.geometry_type,
+        robot_dimensions=robot.geometry_params,
+        sensor_position_body=sensor_position
+        if sensor_position is not None
+        else np.array([0.0, 0.0, 0.0], dtype=np.float32),
+        sensor_rotation_body=sensor_rotation
+        if sensor_rotation is not None
+        else np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32),
+        critical_angle=90.0,
+        critical_distance=0.5,
+        slowdown_distance=1.0,
+        min_height=-robot.height,
+        max_height=robot.height,
+        range_max=20.0,
+        input_type=input_type,
+        scan_angles=scan_angles,
+    )
+
+
 @pytest.mark.parametrize("use_gpu", [False, True])
 def test_emergency_stop(laser_scan_data: Dict[str, np.ndarray], use_gpu):
     """Test emergency stop
@@ -39,45 +108,26 @@ def test_emergency_stop(laser_scan_data: Dict[str, np.ndarray], use_gpu):
     :type laser_scan_data: Dict[str, np.ndarray]
     """
     robot_radius = 0.1
-    robot = Robot(
-        robot_type=RobotType.ACKERMANN,
-        geometry_type=RobotGeometry.Type.CYLINDER,
-        geometry_params=np.array([robot_radius, 0.4]),
-    )
     emergency_distance = 0.5
-    slowdown_distance = 1.0
-    emergency_angle = 90.0
 
     large_range = 10.0
     emergency_value = robot_radius + emergency_distance / 2
 
-    emergency_stop = EmergencyChecker(
-        robot=robot,
-        emergency_distance=emergency_distance,
-        slowdown_distance=slowdown_distance,
-        emergency_angle=emergency_angle,
-        sensor_position_robot=np.array([0.0, 0.0, 0.173], dtype=np.float32),
-        sensor_rotation_robot=np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32),
-        use_gpu=use_gpu,
-    )
     angles = laser_scan_data["angles"]
+    checker = _make_checker(
+        use_gpu,
+        scan_angles=angles,
+        sensor_position=np.array([0.0, 0.0, 0.173], dtype=np.float32),
+        sensor_rotation=np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32),
+    )
     ranges = np.array([large_range] * angles.size)
 
-    assert (
-        emergency_stop.run_on_laserscan(ranges=ranges, angles=angles, forward=True)
-        == 1.0
-    )
+    assert checker.check(ranges=ranges, forward=True) == 1.0
 
     # Add an obstacle in the critical zone in front of the robot
     ranges[0] = emergency_value
-    assert (
-        emergency_stop.run_on_laserscan(ranges=ranges, angles=angles, forward=True)
-        == 0.0
-    )
-    assert (
-        emergency_stop.run_on_laserscan(ranges=ranges, angles=angles, forward=False)
-        == 1.0
-    )
+    assert checker.check(ranges=ranges, forward=True) == 0.0
+    assert checker.check(ranges=ranges, forward=False) == 1.0
 
 
 # Matches the PointCloud2 layout the mapper tests use: 16 bytes per point,
@@ -90,7 +140,7 @@ def _make_pointcloud(points_xyz: np.ndarray) -> Dict[str, object]:
 
     :param points_xyz: Points in the sensor frame (m)
     :type points_xyz: np.ndarray
-    :return: The layout kwargs ``run_on_pointcloud`` takes
+    :return: The layout kwargs ``check`` takes for a cloud
     :rtype: Dict[str, object]
     """
     n = points_xyz.shape[0]
@@ -117,25 +167,10 @@ def test_emergency_stop_on_pointcloud(use_gpu):
     from that point is allowed again.
     """
     robot_radius = 0.1
-    robot = Robot(
-        robot_type=RobotType.ACKERMANN,
-        geometry_type=RobotGeometry.Type.CYLINDER,
-        geometry_params=np.array([robot_radius, 0.4]),
-    )
     emergency_distance = 0.5
-    slowdown_distance = 1.0
-    emergency_angle = 90.0
 
-    emergency_stop = EmergencyChecker(
-        robot=robot,
-        emergency_distance=emergency_distance,
-        slowdown_distance=slowdown_distance,
-        emergency_angle=emergency_angle,
-        # Sensor at the robot origin, so cloud points are already body frame
-        sensor_position_robot=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        sensor_rotation_robot=np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32),
-        use_gpu=use_gpu,
-    )
+    # Sensor at the robot origin, so cloud points are already body frame
+    checker = _make_checker(use_gpu)
 
     # A ring of points well outside the slowdown zone
     theta = np.linspace(0.0, 2 * np.pi, 360, endpoint=False)
@@ -145,28 +180,74 @@ def test_emergency_stop_on_pointcloud(use_gpu):
         np.zeros(theta.size),
     ])
 
-    assert (
-        emergency_stop.run_on_pointcloud(**_make_pointcloud(far_ring), forward=True)
-        == 1.0
-    )
+    assert checker.check(**_make_pointcloud(far_ring), forward=True) == 1.0
 
     # Add an obstacle in the critical zone straight ahead (+x)
     emergency_value = robot_radius + emergency_distance / 2
     with_obstacle = np.vstack([far_ring, [emergency_value, 0.0, 0.0]])
 
-    assert (
-        emergency_stop.run_on_pointcloud(
-            **_make_pointcloud(with_obstacle), forward=True
-        )
-        == 0.0
+    assert checker.check(**_make_pointcloud(with_obstacle), forward=True) == 0.0
+    assert checker.check(**_make_pointcloud(with_obstacle), forward=False) == 1.0
+
+
+@pytest.mark.parametrize("use_gpu", [False, True])
+def test_emergency_stop_pointcloud_accepts_bytes(use_gpu):
+    """Raw `bytes` input (the natural type of PointCloud2.data) must work
+    and agree with the uint8-array result."""
+    checker = _make_checker(use_gpu)
+
+    theta = np.linspace(0.0, 2 * np.pi, 360, endpoint=False)
+    ring = np.column_stack([
+        10.0 * np.cos(theta),
+        10.0 * np.sin(theta),
+        np.zeros(theta.size),
+    ])
+    cloud = _make_pointcloud(ring)
+    as_bytes = dict(cloud, data=np.asarray(cloud["data"]).tobytes())
+
+    assert checker.check(**cloud, forward=True) == checker.check(
+        **as_bytes, forward=True
     )
-    assert (
-        emergency_stop.run_on_pointcloud(
-            **_make_pointcloud(with_obstacle), forward=False
-        )
-        == 1.0
+
+
+@pytest.mark.parametrize("use_gpu", [False, True])
+def test_emergency_stop_pointcloud_ignores_nan_points(use_gpu):
+    """NaN padding points must not affect the safety verdict (and must not
+    corrupt memory — the conversion used to produce UB bin indices)."""
+    checker = _make_checker(use_gpu)
+
+    theta = np.linspace(0.0, 2 * np.pi, 360, endpoint=False)
+    ring = np.column_stack([
+        10.0 * np.cos(theta),
+        10.0 * np.sin(theta),
+        np.zeros(theta.size),
+    ])
+    ring_with_nan = np.vstack([ring, np.full((50, 3), np.nan)])
+
+    clean = _make_pointcloud(ring)
+    padded = _make_pointcloud(ring_with_nan)
+
+    assert checker.check(**clean, forward=True) == checker.check(
+        **padded, forward=True
     )
 
 
 if __name__ == "__main__":
     test_emergency_stop(laser_scan_data_fixed(), True)
+
+
+@pytest.mark.parametrize("use_gpu", [False, True])
+def test_emergency_stop_pointcloud_rejects_negative_offsets(use_gpu):
+    """Malformed metadata (negative field offsets) must raise, never read
+    out of bounds and never come back as an 'all clear' verdict. The ROS
+    layer maps this error to an emergency stop."""
+    checker = _make_checker(use_gpu)
+
+    ring = np.column_stack([
+        np.ones(8), np.zeros(8), np.zeros(8)
+    ]).astype(np.float32)
+    cloud = _make_pointcloud(ring)
+    cloud["y_offset"] = -4
+
+    with pytest.raises(ValueError, match="non-negative"):
+        checker.check(**cloud, forward=True)

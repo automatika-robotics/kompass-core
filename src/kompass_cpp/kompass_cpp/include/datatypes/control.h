@@ -2,7 +2,6 @@
 
 #include <Eigen/Dense>
 #include <cmath>
-#include <vector>
 
 // Namespace for Control Types
 namespace Kompass {
@@ -236,14 +235,17 @@ struct ControlLimitsParams {
 
 /**
  * @brief Struct for LaserScan data
+ * @NOTE: This struct is used for semantic differentiation in templated functions
+ * between polar (laserscan) data and cartesian (pointcloud, local mapper) data
+ * Anything thats not laserscan would be assumed to be an array of (x,y,z)
  *
  */
 struct LaserScan {
-  std::vector<double> ranges;
-  std::vector<double> angles;
+  Eigen::VectorXf ranges;
+  Eigen::VectorXf angles;
 
-  LaserScan(std::vector<double> ranges, std::vector<double> angles)
-      : ranges(ranges), angles(angles) {}
+  LaserScan(Eigen::VectorXf ranges, Eigen::VectorXf angles)
+      : ranges(std::move(ranges)), angles(std::move(angles)) {}
 };
 
 } // namespace Control

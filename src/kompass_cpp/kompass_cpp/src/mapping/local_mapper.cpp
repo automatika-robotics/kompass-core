@@ -11,9 +11,6 @@
 namespace Kompass {
 namespace Mapping {
 
-// Mutex for grid update
-static std::mutex s_gridMutex;
-
 void LocalMapper::getPreviousGridInCurrentPose(
     const Eigen::Vector2f &currentPositionInPreviousPose,
     double currentOrientationInPreviousPose) {
@@ -37,15 +34,17 @@ void LocalMapper::getPreviousGridInCurrentPose(
           (currentCenter(0) * cosTheta + currentCenter(1) * sinTheta),
       0, 0, 1;
 
-  // Initialize the result matrix with unknownValue
-  Eigen::MatrixXf transformedGrid(m_gridHeight, m_gridWidth);
+  // Reuse the ctor-allocated scratch as the result matrix (prior-filled)
+  Eigen::MatrixXf &transformedGrid = m_transformScratch;
   transformedGrid.fill(m_pPrior);
+
+  // The transformation is loop-invariant
+  const Eigen::Matrix3f inverseTransform = transformationMatrix.inverse();
 
   for (int y = 0; y < m_gridHeight; ++y) {
     for (int x = 0; x < m_gridWidth; ++x) {
-      // Compute the inverse transformation
       Eigen::Vector3f srcPoint(x, y, 1.0);
-      Eigen::Vector3f dstPoint = transformationMatrix.inverse() * srcPoint;
+      Eigen::Vector3f dstPoint = inverseTransform * srcPoint;
 
       // Bilinear interpolation coordinates
       double srcX = dstPoint(0);
@@ -74,7 +73,7 @@ void LocalMapper::getPreviousGridInCurrentPose(
     }
   }
 
-  previousGridDataProb = transformedGrid;
+  previousGridDataProb.swap(m_transformScratch);
 }
 
 void LocalMapper::fillGridAroundPoint(Eigen::Ref<Eigen::MatrixXi> gridData,
@@ -132,27 +131,29 @@ void LocalMapper::updateGrid_(const float angle, const float range) {
       m_laserscanPosition(1) + (range * sin(m_laserscanOrientation + angle));
 
   Eigen::Vector2i toPoint = localToGrid(Eigen::Vector2f(x, y));
-  std::vector<Eigen::Vector2i> points;
+  // Reused across rays on the same worker thread: one heap allocation per
+  // thread
+  static thread_local std::vector<Eigen::Vector2i> points;
+  points.clear();
   points.reserve(m_maxPointsPerLine);
 
   bresenhamEnhanced(m_startPoint, toPoint, points);
 
+  // One lock per ray. The writes below are cheap cell stores, so holding
+  // the lock across the line beats a lock per cell
+  std::lock_guard<std::mutex> lock(m_gridMutex);
   for (auto &pt : points) {
 
     if (pt(0) >= 0 && pt(0) < m_gridHeight && pt(1) >= 0 &&
         pt(1) < m_gridWidth) {
 
-      // grid update
-      {
-        std::lock_guard<std::mutex> lock(s_gridMutex);
-        if (pt(0) == toPoint(0) && pt(1) == toPoint(1)) {
-          // fill grid for obstacles
-          fillGridAroundPoint(gridData, pt, 0,
-                              static_cast<int>(OccupancyType::OCCUPIED));
-        } else {
-          gridData(pt(0), pt(1)) = std::max(
-              gridData(pt(0), pt(1)), static_cast<int>(OccupancyType::EMPTY));
-        }
+      if (pt(0) == toPoint(0) && pt(1) == toPoint(1)) {
+        // fill grid for obstacles
+        fillGridAroundPoint(gridData, pt, 0,
+                            static_cast<int>(OccupancyType::OCCUPIED));
+      } else {
+        gridData(pt(0), pt(1)) = std::max(
+            gridData(pt(0), pt(1)), static_cast<int>(OccupancyType::EMPTY));
       }
     }
   }
@@ -166,53 +167,66 @@ void LocalMapper::updateGridBaysian_(const float angle, const float range) {
       m_laserscanPosition(1) + (range * sin(m_laserscanOrientation + angle));
 
   Eigen::Vector2i toPoint = localToGrid(Eigen::Vector2f(x, y));
-  std::vector<Eigen::Vector2i> points;
+  // Reused across rays on the same worker thread
+  static thread_local std::vector<Eigen::Vector2i> points;
+  static thread_local std::vector<float> newValues;
+  points.clear();
   points.reserve(m_maxPointsPerLine);
 
   bresenhamEnhanced(m_startPoint, toPoint, points);
 
-  for (auto &pt : points) {
+  // Do probability math outside the lock
+  newValues.resize(points.size());
+  for (size_t i = 0; i < points.size(); ++i) {
+    const auto &pt = points[i];
+    if (pt(0) >= 0 && pt(0) < m_gridHeight && pt(1) >= 0 &&
+        pt(1) < m_gridWidth) {
+      float distance = (pt - m_startPoint).norm();
+      newValues[i] = updateGridCellProbability(
+          distance, range, previousGridDataProb(pt(0), pt(1)));
+    }
+  }
 
+  // One lock per ray for all grid writes
+  std::lock_guard<std::mutex> lock(m_gridMutex);
+  for (size_t i = 0; i < points.size(); ++i) {
+    const auto &pt = points[i];
     if (pt(0) >= 0 && pt(0) < m_gridHeight && pt(1) >= 0 &&
         pt(1) < m_gridWidth) {
 
-      // calculation for baysian update
-      float distance = (pt - m_startPoint).norm();
-
-      float newValue = updateGridCellProbability(
-          distance, range, previousGridDataProb(pt(0), pt(1)));
-
-      // grid updates
-      {
-        std::lock_guard<std::mutex> lock(s_gridMutex);
-        // non-bayesian update
-        if (pt(0) == toPoint(0) && pt(1) == toPoint(1)) {
-          // fill grid for obstacles
-          fillGridAroundPoint(gridData, pt, 0,
-                              static_cast<int>(OccupancyType::OCCUPIED));
-        } else {
-          gridData(pt(0), pt(1)) = std::max(
-              gridData(pt(0), pt(1)), static_cast<int>(OccupancyType::EMPTY));
-        }
-        // bayesian update
-        gridDataProb(pt(0), pt(1)) = newValue;
+      // non-bayesian update
+      if (pt(0) == toPoint(0) && pt(1) == toPoint(1)) {
+        // fill grid for obstacles
+        fillGridAroundPoint(gridData, pt, 0,
+                            static_cast<int>(OccupancyType::OCCUPIED));
+      } else {
+        gridData(pt(0), pt(1)) = std::max(
+            gridData(pt(0), pt(1)), static_cast<int>(OccupancyType::EMPTY));
       }
+      // bayesian update
+      gridDataProb(pt(0), pt(1)) = newValues[i];
     }
   }
 }
 
-Eigen::MatrixXi &LocalMapper::scanToGrid(const std::vector<double> &angles,
-                                         const std::vector<double> &ranges) {
+Eigen::MatrixXi &
+LocalMapper::scanToGrid(Eigen::Ref<const Eigen::VectorXf> angles,
+                        Eigen::Ref<const Eigen::VectorXf> ranges) {
 
   gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
-  // angles and ranges are handled as floats implicitly
-  if (m_maxNumThreads > 1) {
-    ThreadPool pool(m_maxNumThreads);
-    for (std::vector<int>::size_type i = 0; i < angles.size(); ++i) {
-      pool.enqueue(&LocalMapper::updateGrid_, this, angles[i], ranges[i]);
+  if (m_pool) {
+    static thread_local std::vector<std::future<void>> futures;
+    futures.clear();
+    futures.reserve(angles.size());
+    for (Eigen::Index i = 0; i < angles.size(); ++i) {
+      futures.emplace_back(m_pool->enqueue(&LocalMapper::updateGrid_, this,
+                                           angles[i], ranges[i]));
+    }
+    for (auto &f : futures) {
+      f.wait();
     }
   } else {
-    for (std::vector<int>::size_type i = 0; i < angles.size(); ++i) {
+    for (Eigen::Index i = 0; i < angles.size(); ++i) {
       updateGrid_(angles[i], ranges[i]);
     }
   }
@@ -220,30 +234,34 @@ Eigen::MatrixXi &LocalMapper::scanToGrid(const std::vector<double> &angles,
 }
 
 std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
-LocalMapper::scanToGridBaysian(const std::vector<double> &angles,
-                               const std::vector<double> &ranges) {
+LocalMapper::scanToGridBaysian(Eigen::Ref<const Eigen::VectorXf> angles,
+                               Eigen::Ref<const Eigen::VectorXf> ranges) {
 
   gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
   gridDataProb.fill(m_pPrior);
-  // angles and ranges are handled as floats implicitly
-  if (m_maxNumThreads > 1) {
-    ThreadPool pool(m_maxNumThreads);
-    for (std::vector<int>::size_type i = 0; i < angles.size(); ++i) {
-      pool.enqueue(&LocalMapper::updateGridBaysian_, this, angles[i],
-                   ranges[i]);
+  if (m_pool) {
+    static thread_local std::vector<std::future<void>> futures;
+    futures.clear();
+    futures.reserve(angles.size());
+    for (Eigen::Index i = 0; i < angles.size(); ++i) {
+      futures.emplace_back(m_pool->enqueue(&LocalMapper::updateGridBaysian_,
+                                           this, angles[i], ranges[i]));
+    }
+    for (auto &f : futures) {
+      f.wait();
     }
   } else {
-    for (std::vector<int>::size_type i = 0; i < angles.size(); ++i) {
+    for (Eigen::Index i = 0; i < angles.size(); ++i) {
       updateGridBaysian_(angles[i], ranges[i]);
     }
   }
   return std::tie(gridData, gridDataProb);
 }
 
-Eigen::MatrixXi &LocalMapper::scanToGrid(const std::vector<uint8_t> &data,
-                                         int point_step, int row_step,
-                                         int height, int width, float x_offset,
-                                         float y_offset, float z_offset) {
+Eigen::MatrixXi &LocalMapper::scanToGrid(ByteSpan data, int point_step,
+                                         int row_step, int height, int width,
+                                         int x_offset, int y_offset,
+                                         int z_offset) {
   pointCloudToLaserScanFromRaw(
       data, point_step, row_step, height, width, x_offset, y_offset, z_offset,
       m_rangeMax, m_minHeight, m_maxHeight, m_scanSize, initializedRanges);
@@ -251,16 +269,15 @@ Eigen::MatrixXi &LocalMapper::scanToGrid(const std::vector<uint8_t> &data,
 }
 
 std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
-LocalMapper::scanToGridBaysian(const std::vector<uint8_t> &data, int point_step,
-                               int row_step, int height, int width,
-                               float x_offset, float y_offset, float z_offset) {
-
-  std::vector<double> angles;
-  std::vector<double> ranges;
+LocalMapper::scanToGridBaysian(ByteSpan data, int point_step, int row_step,
+                               int height, int width, int x_offset,
+                               int y_offset, int z_offset) {
+  // Bin by scan_size through the member buffers, exactly like the
+  // non-Bayesian path
   pointCloudToLaserScanFromRaw(
       data, point_step, row_step, height, width, x_offset, y_offset, z_offset,
-      m_rangeMax, m_minHeight, m_maxHeight, m_angleStep, ranges, angles);
-  return scanToGridBaysian(angles, ranges);
+      m_rangeMax, m_minHeight, m_maxHeight, m_scanSize, initializedRanges);
+  return scanToGridBaysian(initializedAngles, initializedRanges);
 }
 } // namespace Mapping
 } // namespace Kompass

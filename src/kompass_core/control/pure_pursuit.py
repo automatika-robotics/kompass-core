@@ -198,9 +198,14 @@ class PurePursuit(FollowerTemplate):
 
         # Execute controller
         # Check for sensor data to determine which execute overload to call
+        # float32 C-contiguous is the zero-copy fast path at the binding
+        # (no-op for ROS-native data)
         if local_map is not None:
             # Execute with the occupied cells as a point cloud
-            self._result = self._planner.execute(self._control_time_step, local_map)
+            self._result = self._planner.execute(
+                self._control_time_step,
+                np.ascontiguousarray(local_map, dtype=np.float32),
+            )
         elif ranges is not None and angles is not None:
             if len(angles) != len(ranges):
                 logging.error(
@@ -208,11 +213,17 @@ class PurePursuit(FollowerTemplate):
                 )
                 return False
             # Execute with LaserScan
-            sensor_data = kompass_cpp.types.LaserScan(ranges=ranges, angles=angles)
+            sensor_data = kompass_cpp.types.LaserScan(
+                ranges=np.asarray(ranges, dtype=np.float32),
+                angles=np.asarray(angles, dtype=np.float32),
+            )
             self._result = self._planner.execute(self._control_time_step, sensor_data)
         elif points is not None:
             # Execute with PointCloud
-            self._result = self._planner.execute(self._control_time_step, points)
+            self._result = self._planner.execute(
+                self._control_time_step,
+                np.ascontiguousarray(points, dtype=np.float32),
+            )
         else:
             # Execute Nominal (State Update + Control) -> no collision avoidance
             self._result = self._planner.execute(self._control_time_step)

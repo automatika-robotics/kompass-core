@@ -73,6 +73,14 @@ class DeformableVirtualZoneParams(BaseAttrs):
         default=1.0, validator=base_validators.in_range(min_value=1e-2, max_value=1e2)
     )
 
+    proximity_sensor_position_to_robot: np.ndarray = field(
+        default=np.array([0.0, 0.0, 0.0], dtype=np.float32)
+    )
+
+    proximity_sensor_rotation_to_robot: np.ndarray = field(
+        default=np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+    )
+
 
 class DeformableVirtualZone:
     """DeformableVirtualZone."""
@@ -96,6 +104,8 @@ class DeformableVirtualZone:
         self.config = config
         self.ctrl_limits = ctrl_limits
 
+        self._cache_sensor_mount_pose()
+
         # control regularization
         self._set_control_regularization()
 
@@ -104,6 +114,31 @@ class DeformableVirtualZone:
 
         # Init zone constant size parameters
         self._init_constant_zone_parameters()
+
+    def _cache_sensor_mount_pose(self) -> None:
+        """Read the sensor mount pose off the config into the scan hot path.
+
+        The zone is an ellipse centred on the robot, so a scan taken from an
+        offset sensor has to be re-expressed about the body origin before its
+        radii can be compared against the zone. Re-read whenever the config
+        changes, since the values are cached per scan.
+        """
+        position = np.asarray(
+            self.config.proximity_sensor_position_to_robot, dtype=float
+        )
+        rotation = np.asarray(
+            self.config.proximity_sensor_rotation_to_robot, dtype=float
+        )
+        self._sensor_x: float = float(position[0])
+        self._sensor_y: float = float(position[1])
+        # Planar mount: only the yaw of the mount rotation affects a 2D scan
+        self._sensor_yaw: float = float(2 * np.arctan2(rotation[2], rotation[3]))
+        self._sensor_at_body_origin: bool = (
+            self._sensor_x == 0.0
+            and self._sensor_y == 0.0
+            and abs(np.sin(self._sensor_yaw)) < 1e-9
+            and np.cos(self._sensor_yaw) > 0.0
+        )
 
     def _init_constant_zone_parameters(self) -> None:
         """
@@ -125,6 +160,7 @@ class DeformableVirtualZone:
         :type path_to_file: str
         """
         self.config.from_file(path_to_file, nested_root_name="DVZ")
+        self._cache_sensor_mount_pose()
         self._set_control_regularization()
 
     def _set_control_regularization(self) -> None:
@@ -169,13 +205,51 @@ class DeformableVirtualZone:
         """
         Set scan values
 
-        :param scan_values: Values
+        The scan is taken in the **sensor frame** and re-expressed about the
+        robot body origin using the mount pose from the config, since that is
+        where the zone is centred. With the sensor at the body origin the scan
+        is stored as it arrived.
+
+        :param scan_values: Measured range along each angle (m), sensor frame
         :type scan_values: np.ndarray
-        :param scan_angles: Angle ranges
+        :param scan_angles: Angle of each range measurement (rad), sensor frame
         :type scan_angles: np.ndarray
         """
-        self.scan_values = scan_values
-        self.scan_angles = scan_angles
+        if self._sensor_at_body_origin:
+            self.scan_values = scan_values
+            self.scan_angles = scan_angles
+            return
+
+        self.scan_values, self.scan_angles = self._scan_in_body_frame(
+            scan_values, scan_angles
+        )
+
+    def _scan_in_body_frame(
+        self, scan_values: np.ndarray, scan_angles: np.ndarray
+    ) -> tuple:
+        """Re-express a polar scan about the robot body origin.
+
+        Goes through cartesian rather than transforming the polar values
+        directly: moving the origin changes each point's bearing as well as its
+        range, and the two have to stay consistent with each other. The
+        resulting angles are unevenly spaced, which the deformation loop
+        tolerates since it walks (angle, range) pairs independently.
+
+        :param scan_values: Measured range along each angle (m), sensor frame
+        :type scan_values: np.ndarray
+        :param scan_angles: Angle of each range measurement (rad), sensor frame
+        :type scan_angles: np.ndarray
+
+        :return: Ranges and angles about the body origin
+        :rtype: tuple
+        """
+        ranges = np.asarray(scan_values, dtype=float)
+        angles = np.asarray(scan_angles, dtype=float) + self._sensor_yaw
+
+        x = ranges * np.cos(angles) + self._sensor_x
+        y = ranges * np.sin(angles) + self._sensor_y
+
+        return np.hypot(x, y), np.arctan2(y, x)
 
     def _get_undeformed_radius(self, alpha: float) -> float:
         """

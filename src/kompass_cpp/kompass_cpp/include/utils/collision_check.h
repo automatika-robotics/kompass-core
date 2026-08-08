@@ -12,6 +12,7 @@
 #include <octomap/octomap.h>
 
 #include "datatypes/path.h"
+#include "utils/transformation.h"
 
 namespace Kompass {
 /**
@@ -46,7 +47,7 @@ public:
    * @param dimensions    Corresponding geometry dimensions
    */
   static float radiusOf(const ShapeType shape_type,
-                         const std::vector<float> &dimensions);
+                        const std::vector<float> &dimensions);
 
   /**
    * @brief Total extent of the robot along the z-axis
@@ -55,7 +56,7 @@ public:
    * @param dimensions    Corresponding geometry dimensions
    */
   static float heightOf(const ShapeType shape_type,
-                         const std::vector<float> &dimensions);
+                        const std::vector<float> &dimensions);
 
   /**
    * @brief Construct a new Collision Checker object
@@ -103,34 +104,55 @@ public:
 
   /**
    * @brief Generic method to update sensor input.
-   * * Supports:
-   * 1. Point Clouds and Local Maps: std::vector<Path::Point> or std::vector<Eigen::Vector3f>
+   *
+   * Supports:
+   * 1. Point Clouds and Local Maps: std::vector<Path::Point> or
+   * std::vector<Eigen::Vector3f>
    * 2. Laser Scans: Kompass::LaserScan struct
-   * * @tparam T Input data type
-   * @param data The sensor data
-   * @param global_frame If true, points are assumed to be in world frame
-   * (default true). Ignored for LaserScan (always assumes sensor frame).
+   *
+   * FRAME CONTRACT -- decided by the input type, no flag:
+   *
+   * - LaserScan is in the SENSOR frame. Ranges are converted to Cartesian
+   *   sensor coordinates and the octree is lifted into the world via
+   *   `sensor_tf_world`, built from the mount pose and `robot_state_world`.
+   * - Point clouds (raw clouds and local-map cells alike) are already in the
+   *   WORLD frame; callers convert upstream. The octree is placed at
+   *   identity and `robot_state_world` is not used.
+   *
+   * For the sensor-frame case the robot pose is taken as an argument rather
+   * than read from the last `updateState` call: the octree's world placement
+   * is fixed at the moment the data lands, so binding it to the pose the
+   * data was captured at makes the result independent of call ordering.
+   * Rolling the robot forward with `updateState` afterwards (as the
+   * trajectory rollout does) correctly leaves the obstacles where they were
+   * observed.
+   *
+   * @tparam T Input data type
+   * @param data              The sensor data. Sensor frame for LaserScan,
+   *                          world frame for point clouds.
+   * @param robot_state_world Robot pose, in the world frame, at the time the
+   *                          data was captured. Used for LaserScan only.
    */
   template <typename T>
-  void updateSensorData(const T &data,
-                        const bool global_frame = true){
+  void updateSensorData(const T &data, const Path::State &robot_state_world) {
     // Clear old data
     octTree_->clear();
     octomapCloud_.clear();
 
-    // -- CASE 1: LaserScan Input --
+    // -- CASE 1: LaserScan Input (sensor frame) --
     if constexpr (std::is_same_v<T, Control::LaserScan>) {
-      // Update TF: LaserScan is always local, so calculate World TF
-      sensor_tf_world_ = body->tf * sensor_tf_body_;
+      // Pin the octree to the world using the pose the scan was captured at
+      sensor_tf_world_ = sensorTfWorld(robot_state_world, sensor_tf_body_);
 
       // Sensor frame height correction
       float height_in_sensor = -sensor_tf_body_.translation().z() / 2.0;
 
-      for (size_t i = 0; i < data.angles.size(); ++i) {
+      for (Eigen::Index i = 0; i < data.angles.size(); ++i) {
         double angle = data.angles[i];
         double r = data.ranges[i];
 
         // Basic validity check for inf/nan often found in scans
+        // octomap key computation is undefined for non-finite coordinates
         if (std::isfinite(r)) {
           float x = r * std::cos(angle);
           float y = r * std::sin(angle);
@@ -138,18 +160,17 @@ public:
         }
       }
     }
-    // -- CASE 2: PointCloud Input (Vector of Points) --
+    // -- CASE 2: PointCloud Input (Vector of Points, world frame) --
     else {
-      // Handle Frame Transforms
-      if (global_frame) {
-        sensor_tf_world_ = Eigen::Isometry3f::Identity();
-      } else {
-        sensor_tf_world_ = body->tf * sensor_tf_body_;
-      }
+      // Already world coordinates -> the octree needs no further placement
+      sensor_tf_world_ = Eigen::Isometry3f::Identity();
 
-      // Insert Points
+      // Insert Points (skipping NaN/inf padding), same as above
       for (const auto &point : data) {
-        octomapCloud_.push_back(point.x(), point.y(), point.z());
+        if (std::isfinite(point.x()) && std::isfinite(point.y()) &&
+            std::isfinite(point.z())) {
+          octomapCloud_.push_back(point.x(), point.y(), point.z());
+        }
       }
     }
 
@@ -173,7 +194,6 @@ public:
    */
   bool checkCollisions();
 
-
   bool checkCollisions(const Path::State current_state);
 
   /**
@@ -187,8 +207,9 @@ public:
    * @return true
    * @return false
    */
-  bool checkCollisions(const std::vector<double> &ranges,
-                       const std::vector<double> &angles, double height = 0.1);
+  bool checkCollisions(Eigen::Ref<const Eigen::VectorXf> ranges,
+                       Eigen::Ref<const Eigen::VectorXf> angles,
+                       double height = 0.1);
 
   float getRadius() const;
 
@@ -200,6 +221,11 @@ protected:
   Eigen::Isometry3f sensor_tf_body_ =
       Eigen::Isometry3f::Identity(); // Sensor transformation with
                                      // respect to the robot
+
+  // Last pose passed to updateState. Kept so the self-contained
+  // checkCollisions(ranges, angles) overload can place its scan in the world
+  // without the caller threading the pose through a second time.
+  Path::State current_state_;
 
 private:
   // Collision Manager
@@ -240,7 +266,5 @@ private:
    */
   std::vector<fcl::CollisionObjectf *>
   generateBoxesFromOctomap(fcl::OcTreef &tree);
-
-
 };
 } // namespace Kompass

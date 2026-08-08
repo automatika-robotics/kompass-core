@@ -2,13 +2,11 @@
 #include "datatypes/tracking.h"
 #include "vision/depth_detector.h"
 
-#include <nanobind/eigen/dense.h>
-#include <nanobind/nanobind.h>
+#include "bindings.h"
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/vector.h>
 
-namespace py = nanobind;
 using namespace Kompass;
 
 void bindings_vision(py::module_ &m) {

@@ -154,7 +154,7 @@ Control::LaserScan generateLaserScan(double angle_increment,
     LOG_ERROR("Invalid shape specified. Use 'circle', 'right_corner', or "
               "'random_points'.");
   }
-  return {ranges, angles};
+  return {toVecF(ranges), toVecF(angles)};
 }
 
 // Runs one circle scan through the shared mapper, prints the resulting grid,
@@ -168,9 +168,9 @@ void run_circle_scan(double radius) {
   LOG_INFO("Testing with circle points at distance: ", radius,
            " and grid of width: ", cfg.actual_size);
 
-  std::vector<double> filtered_ranges(circle_scan.ranges.size());
-  for (size_t i = 0; i < circle_scan.ranges.size(); ++i) {
-    filtered_ranges[i] = std::min(cfg.limit, circle_scan.ranges[i]);
+  Eigen::VectorXf filtered_ranges(circle_scan.ranges.size());
+  for (Eigen::Index i = 0; i < circle_scan.ranges.size(); ++i) {
+    filtered_ranges[i] = std::min(static_cast<float>(cfg.limit), circle_scan.ranges[i]);
   }
 
   Eigen::MatrixXi *gridData = nullptr;
@@ -241,9 +241,9 @@ BOOST_AUTO_TEST_CASE(test_mapper_pointcloud_circle) {
     Timer t;
     grid = &cfg.mapper.scanToGrid(
         cloud, point_step, row_step, height, width,
-        /*x_offset*/ static_cast<float>(offsetof(PointXYZ, x)),
-        /*y_offset*/ static_cast<float>(offsetof(PointXYZ, y)),
-        /*z_offset*/ static_cast<float>(offsetof(PointXYZ, z)));
+        /*x_offset*/ static_cast<int>(offsetof(PointXYZ, x)),
+        /*y_offset*/ static_cast<int>(offsetof(PointXYZ, y)),
+        /*z_offset*/ static_cast<int>(offsetof(PointXYZ, z)));
   }
 
   const int n_occ = countPointsInGrid(
@@ -264,4 +264,68 @@ BOOST_AUTO_TEST_CASE(test_mapper_pointcloud_circle) {
              "expected some OCCUPIED cells from the pointcloud circle");
   BOOST_TEST(n_empty > 0,
              "expected some EMPTY cells along the rays from origin");
+}
+
+// A height band that lies entirely below the sensor, i.e. max_z < 0. The sign
+// of the bound carries no meaning of its own: a negative upper edge is a real
+// edge, not a request to disable the gate. The CPU
+// pointCloudToLaserScanFromRaw treats it that way, so the GPU kernel must too
+// -- otherwise the same (min_height, max_height) config yields different
+// occupancy grids on the two backends. Guards the band that a sensor mounted
+// above the volume of interest produces.
+BOOST_AUTO_TEST_CASE(test_mapper_pointcloud_negative_max_z_band) {
+  const int grid_height = 21, grid_width = 21;
+  const float grid_res = 0.1f, rangeMax = 5.0f;
+  const int scan_size = 360;
+  const float angleStep = static_cast<float>(2.0 * M_PI / 360.0);
+  const float minHeight = -1.2f, maxHeight = -0.2f;
+
+  Mapping::LocalMapperGPU mapper(grid_height, grid_width, grid_res,
+                                 {0.0f, 0.0f, 0.0f}, 0.0f,
+                                 /*isPointCloud*/ true, scan_size, angleStep,
+                                 maxHeight, minHeight, rangeMax);
+
+  constexpr int N = 200;
+  const int point_step = static_cast<int>(sizeof(PointXYZ));
+
+  // Ring at z = +0.5, above the band's upper edge of -0.2 -> every point must
+  // be rejected, so nothing may come back OCCUPIED.
+  std::vector<uint8_t> above;
+  for (int i = 0; i < N; ++i) {
+    float theta = 2.0f * static_cast<float>(M_PI) * i / N;
+    addPointToCloud(above, 0.5f * std::cos(theta), 0.5f * std::sin(theta),
+                    0.5f);
+  }
+  const int above_width = static_cast<int>(above.size() / point_step);
+  Eigen::MatrixXi &grid_above = mapper.scanToGrid(
+      above, point_step, above_width * point_step, /*height*/ 1, above_width,
+      static_cast<int>(offsetof(PointXYZ, x)),
+      static_cast<int>(offsetof(PointXYZ, y)),
+      static_cast<int>(offsetof(PointXYZ, z)));
+  const int n_occ_above = countPointsInGrid(
+      grid_above, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  BOOST_TEST(n_occ_above == 0,
+             "points above the band's upper edge leaked through a negative "
+             "max_z (got "
+                 << n_occ_above << " OCCUPIED cells)");
+
+  // Same ring at z = -0.7, inside [-1.2, -0.2] -> must still map normally, so
+  // the assertion above is proving the gate applies and not that the whole
+  // path is inert.
+  std::vector<uint8_t> in_band;
+  for (int i = 0; i < N; ++i) {
+    float theta = 2.0f * static_cast<float>(M_PI) * i / N;
+    addPointToCloud(in_band, 0.5f * std::cos(theta), 0.5f * std::sin(theta),
+                    -0.7f);
+  }
+  const int band_width = static_cast<int>(in_band.size() / point_step);
+  Eigen::MatrixXi &grid_band = mapper.scanToGrid(
+      in_band, point_step, band_width * point_step, /*height*/ 1, band_width,
+      static_cast<int>(offsetof(PointXYZ, x)),
+      static_cast<int>(offsetof(PointXYZ, y)),
+      static_cast<int>(offsetof(PointXYZ, z)));
+  const int n_occ_band = countPointsInGrid(
+      grid_band, static_cast<int>(Mapping::OccupancyType::OCCUPIED));
+  BOOST_TEST(n_occ_band > 0,
+             "expected OCCUPIED cells from a ring inside the negative band");
 }

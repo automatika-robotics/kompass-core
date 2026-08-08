@@ -36,7 +36,7 @@ struct GridMapConfig {
 
   double limit;
   int maxPointsPerLine;
-  std::vector<double> filtered_ranges;
+  Eigen::VectorXf filtered_ranges;
 
   Mapping::LocalMapper local_mapper;
 
@@ -126,7 +126,7 @@ Control::LaserScan generateLaserScan(double angle_increment,
     LOG_ERROR("Invalid shape specified. Use 'circle', 'right_corner', or "
               "'random_points'.");
   }
-  return {ranges, angles};
+  return {toVecF(ranges), toVecF(angles)};
 }
 
 BOOST_FIXTURE_TEST_SUITE(s, GridMapConfig)
@@ -142,8 +142,8 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   LOG_INFO("Testing with circle points at distance: ", radius,
            "and grid of width: ", actual_size);
   filtered_ranges.resize(circle_scan.ranges.size());
-  for (size_t i = 0; i < circle_scan.ranges.size(); ++i) {
-    filtered_ranges[i] = std::min(limit, circle_scan.ranges[i]);
+  for (Eigen::Index i = 0; i < circle_scan.ranges.size(); ++i) {
+    filtered_ranges[i] = std::min(static_cast<float>(limit), circle_scan.ranges[i]);
   }
   {
 
@@ -172,8 +172,8 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   LOG_INFO("Testing with circle points at distance: ", radius,
            "and grid of width: ", actual_size);
   filtered_ranges.resize(circle_scan.ranges.size());
-  for (size_t i = 0; i < circle_scan.ranges.size(); ++i) {
-    filtered_ranges[i] = std::min(limit, circle_scan.ranges[i]);
+  for (Eigen::Index i = 0; i < circle_scan.ranges.size(); ++i) {
+    filtered_ranges[i] = std::min(static_cast<float>(limit), circle_scan.ranges[i]);
   }
   {
     Timer timer;
@@ -200,8 +200,8 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   LOG_INFO("Testing with circle points at distance: ", radius,
            "and grid of width: ", actual_size);
   filtered_ranges.resize(circle_scan.ranges.size());
-  for (size_t i = 0; i < circle_scan.ranges.size(); ++i) {
-    filtered_ranges[i] = std::min(limit, circle_scan.ranges[i]);
+  for (Eigen::Index i = 0; i < circle_scan.ranges.size(); ++i) {
+    filtered_ranges[i] = std::min(static_cast<float>(limit), circle_scan.ranges[i]);
   }
   {
     Timer timer;

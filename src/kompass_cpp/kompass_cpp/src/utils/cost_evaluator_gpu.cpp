@@ -342,6 +342,11 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
 
     // calculate costs on the CPU
     if (customTrajCostsPtrs_.size() > 0) {
+      // Custom costs can be registered after construction (add_custom_cost
+      // from Python), -> allocate on first use
+      if (!m_devicePtrTempCosts) {
+        m_devicePtrTempCosts = sycl::malloc_shared<float>(numTrajectories_, m_q);
+      }
       size_t idx = 0;
       for (const auto traj : *trajs) {
         m_devicePtrTempCosts[idx] = 0.0;

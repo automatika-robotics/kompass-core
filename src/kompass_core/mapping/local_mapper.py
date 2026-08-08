@@ -237,12 +237,11 @@ class LocalMapper:
         _position_in_previous_pose = pose_current_robot_in_previous_robot.get_position()
         _orientation_in_previous_pose = pose_current_robot_in_previous_robot.get_yaw()
 
-        self.previous_grid_prob_transformed = (
-            self.local_mapper.get_previous_grid_in_current_pose(
-                current_position_in_previous_pose=_position_in_previous_pose[:2],
-                current_orientation_in_previous_pose=_orientation_in_previous_pose,
-                unknown_value=self.scan_model.p_prior,
-            )
+        # Shifts the C++ side previous probability grid in place
+        # (unknown cells fill with p_prior)
+        self.local_mapper.get_previous_grid_in_current_pose(
+            current_position_in_previous_pose=_position_in_previous_pose[:2],
+            current_orientation_in_previous_pose=_orientation_in_previous_pose,
         )
 
     def update_from_laserscan(
@@ -268,10 +267,15 @@ class LocalMapper:
 
         self._move_grid_to(robot_pose)
 
-        # filter out negative range and points outside grid limit
-        filtered_ranges = np.minimum(self.config.filter_limit, np.maximum(0.0, ranges))
+        # filter out negative range and points outside grid limit; float32 is
+        # the zero-copy fast path at the binding
+        filtered_ranges = np.clip(
+            np.asarray(ranges, dtype=np.float32), 0.0, self.config.filter_limit
+        )
 
-        self._update_grid(angles=angles, ranges=filtered_ranges)
+        self._update_grid(
+            angles=np.asarray(angles, dtype=np.float32), ranges=filtered_ranges
+        )
 
     def update_from_pointcloud(
         self,
@@ -297,8 +301,10 @@ class LocalMapper:
 
         :param robot_pose: Current robot position
         :type robot_pose: PoseData
-        :param data: Raw point buffer as a flat byte array
-        :type data: np.ndarray
+        :param data: Raw point buffer as a flat byte sequence; a uint8
+            numpy array or ``bytes`` (e.g. PointCloud2 ``data``) both cross
+            zero-copy
+        :type data: Union[np.ndarray, bytes]
         :param point_step: Length of a single point in bytes
         :type point_step: int
         :param row_step: Length of a single row in bytes
@@ -366,22 +372,28 @@ class LocalMapper:
                 **scan
             )
 
-            # Update grid
-            self.grid_data.occupancy = np.copy(scan_occupancy)
+            # Update grids in place, copy into preallocated storage
+            np.copyto(self.grid_data.occupancy, scan_occupancy)
 
-            self.grid_data.occupancy_prob[
-                scan_occupancy_prob > self.scan_model.p_prior
-            ] = OCCUPANCY_TYPE.OCCUPIED.value
-            self.grid_data.occupancy_prob[
-                scan_occupancy_prob == self.scan_model.p_prior
-            ] = OCCUPANCY_TYPE.UNEXPLORED.value
-            self.grid_data.occupancy_prob[
-                scan_occupancy_prob < self.scan_model.p_prior
-            ] = OCCUPANCY_TYPE.EMPTY.value
+            # Classify probabilities into occupancy codes
+            # (== p_prior is the default)
+            np.copyto(
+                self.grid_data.occupancy_prob,
+                np.select(
+                    [
+                        scan_occupancy_prob > self.scan_model.p_prior,
+                        scan_occupancy_prob < self.scan_model.p_prior,
+                    ],
+                    [OCCUPANCY_TYPE.OCCUPIED.value, OCCUPANCY_TYPE.EMPTY.value],
+                    default=OCCUPANCY_TYPE.UNEXPLORED.value,
+                ),
+            )
 
         else:
-            # Update grid
-            self.grid_data.occupancy = np.copy(self.local_mapper.scan_to_grid(**scan))
+            # Update grid in place
+            np.copyto(
+                self.grid_data.occupancy, self.local_mapper.scan_to_grid(**scan)
+            )
 
         # flag to enable fetching the mapping data
         self.processed = True

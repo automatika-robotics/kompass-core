@@ -142,9 +142,10 @@ private:
    */
   Velocity2D findSafeCommand(const Velocity2D &nominal, double dt);
 
-  // Helper: Update collision checker with sensor data
+  // Helper: Update collision checker with sensor data (taken in the sensor
+  // frame, pinned to the pose the robot is at now)
   template <typename T> void updateCollisionCheckerData(const T &data) {
-    collision_checker_->updateSensorData(data);
+    collision_checker_->updateSensorData(data, this->currentState);
   }
 
 };

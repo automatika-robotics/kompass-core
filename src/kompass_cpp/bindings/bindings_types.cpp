@@ -1,5 +1,4 @@
-#include <nanobind/eigen/dense.h>
-#include <nanobind/nanobind.h>
+#include "bindings.h"
 #include <nanobind/operators.h>
 #include <nanobind/stl/array.h>
 #include <nanobind/stl/string.h>
@@ -14,7 +13,6 @@
 #include "utils/critical_zone_check.h"
 #include "utils/pointcloud.h"
 
-namespace py = nanobind;
 using namespace Kompass;
 
 std::string printControlCmd(const Control::Velocity2D &velocity_command) {
@@ -52,6 +50,9 @@ void bindings_types(py::module_ &m) {
   py::class_<Path::Path>(m_types, "Path")
       .def(py::init<const std::vector<Path::Point> &>(),
            py::arg("points") = std::vector<Path::Point>())
+      .def(py::init<const Eigen::VectorXf &, const Eigen::VectorXf &,
+                    const Eigen::VectorXf &>(),
+           py::arg("x_points"), py::arg("y_points"), py::arg("z_points"))
       .def("reached_end", &Path::Path::endReached)
       .def("get_total_length", &Path::Path::totalPathLength)
       .def("size", &Path::Path::getSize)
@@ -130,10 +131,26 @@ void bindings_types(py::module_ &m) {
       .def_ro("path", &Control::Trajectory2D::path);
 
   py::class_<Control::LaserScan>(m_types, "LaserScan")
-      .def(py::init<std::vector<double>, std::vector<double>>(),
-           py::arg("ranges"), py::arg("angles"))
-      .def_ro("ranges", &Control::LaserScan::ranges)
-      .def_ro("angles", &Control::LaserScan::angles);
+      .def(
+          "__init__",
+          [](Control::LaserScan *self, Eigen::Ref<const Eigen::VectorXf> ranges,
+             Eigen::Ref<const Eigen::VectorXf> angles) {
+            new (self) Control::LaserScan(Eigen::VectorXf(ranges),
+                                          Eigen::VectorXf(angles));
+          },
+          py::arg("ranges"), py::arg("angles"))
+      .def_prop_ro(
+          "ranges",
+          [](const Control::LaserScan &s) -> Eigen::Ref<const Eigen::VectorXf> {
+            return s.ranges;
+          },
+          py::rv_policy::reference_internal)
+      .def_prop_ro(
+          "angles",
+          [](const Control::LaserScan &s) -> Eigen::Ref<const Eigen::VectorXf> {
+            return s.angles;
+          },
+          py::rv_policy::reference_internal);
 
   // For collisions detection. The members mirror the FCL primitives the
   // collision checker can construct.

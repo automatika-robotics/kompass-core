@@ -2,6 +2,7 @@
 #include "utils/logger.h"
 #include "utils/pointcloud.h"
 #include <cmath>
+#include <stdexcept>
 #include <sycl/sycl.hpp>
 
 namespace Kompass {
@@ -45,8 +46,13 @@ namespace {
  *                          disable-sentinel for the lower bound: callers
  *                          that want a one-sided filter must pass a
  *                          suitably negative value (e.g. -FLT_MAX).
- * @param max_z             Maximum acceptable Z. Negative disables the
- *                          upper bound (matches CPU behaviour).
+ * @param max_z             Maximum acceptable Z (inclusive). Applied as
+ *                          given, matching the CPU
+ *                          `pointCloudToLaserScanFromRaw`: the sign of the
+ *                          bound carries no meaning of its own, so a
+ *                          negative value is a real upper edge and not a
+ *                          request to disable the gate. Callers wanting no
+ *                          upper bound pass +FLT_MAX / infinity.
  * @param point_field_type  Dtype of the X/Y/Z fields (dispatches
  *                          load_and_cast_val).
  * @param element_size      sizeof(field) in bytes. Used for the
@@ -63,6 +69,13 @@ inline void submitPointCloudToLaserScanKernel(
     const int x_offset, const int y_offset, const int z_offset,
     const float min_z, const float max_z, const PointFieldType point_field_type,
     const int element_size, const size_t wg_size) {
+
+  // Fail loudly for a negative off-set (corrupted metadata)
+  if (x_offset < 0 || y_offset < 0 || z_offset < 0) {
+    throw std::invalid_argument(
+        "Point field offsets (x/y/z) must be non-negative: malformed point "
+        "cloud metadata");
+  }
 
   // if data is missing; return
   if (device_raw_bytes == nullptr || device_ranges_out == nullptr ||
@@ -91,7 +104,6 @@ inline void submitPointCloudToLaserScanKernel(
     const int z_off = z_offset;
     const float f_min_z = min_z;
     const float f_max_z = max_z;
-    const bool max_z_enabled = (max_z >= 0.0f);
     const int k_num_bins = num_bins;
     const float k_inv_two_pi_times_bins =
         static_cast<float>(k_num_bins) / static_cast<float>(2.0 * M_PI);
@@ -126,18 +138,22 @@ inline void submitPointCloudToLaserScanKernel(
             return;
           }
 
-          // Early Z-filter.
+          // Early Z-filter. Both bounds are applied as given, matching the
+          // CPU path: a negative max_z is a real upper edge, not a
+          // disable-sentinel.
           const float z =
               load_and_cast_val(raw_bytes, byte_offset + z_off, k_type);
-          if (z < f_min_z)
-            return;
-          if (max_z_enabled && z > f_max_z)
+          if (z < f_min_z || z > f_max_z)
             return;
 
           const float x =
               load_and_cast_val(raw_bytes, byte_offset + x_off, k_type);
           const float y =
               load_and_cast_val(raw_bytes, byte_offset + y_off, k_type);
+
+          // Reject non-finite points (NaN padding in organized clouds)
+          if (!sycl::isfinite(x) || !sycl::isfinite(y) || !sycl::isfinite(z))
+            return;
 
           // Filter origin (±ε).
           const float r2 = x * x + y * y;
@@ -150,8 +166,7 @@ inline void submitPointCloudToLaserScanKernel(
           if (angle < 0.0f)
             angle += static_cast<float>(2.0 * M_PI);
           int bin = static_cast<int>(angle * k_inv_two_pi_times_bins);
-          if (bin >= k_num_bins)
-            bin = k_num_bins - 1;
+          bin = sycl::clamp(bin, 0, k_num_bins - 1);
 
           const float dist = sycl::sqrt(r2);
           sycl::atomic_ref<float, sycl::memory_order::relaxed,
@@ -241,7 +256,6 @@ inline void submitScanToGridKernel(
           const size_t group_id = item.get_group().get_group_id();
           const size_t local_id = item.get_local_id();
 
-          // Ranges is float (double casted down on host)
           float range = devRanges[group_id];
           double angle = devAngles[group_id];
 
@@ -263,10 +277,10 @@ inline void submitScanToGridKernel(
           }
           item.barrier(sycl::access::fence_space::local_space);
 
-          // NOTE: Zero-range / coincident-endpoint rays produce deltas == (0, 0),
-          // Bail early for every thread in the group, there's nothing to rasterise.
-          // The pointcloud path already filters origin so it can't trigger this,
-          // but a laserscan caller can still pass this.
+          // NOTE: Zero-range / coincident-endpoint rays produce deltas == (0,
+          // 0), Bail early for every thread in the group, there's nothing to
+          // rasterise. The pointcloud path already filters origin so it can't
+          // trigger this, but a laserscan caller can still pass this.
           if (deltas[0] == 0 && deltas[1] == 0) {
             return;
           }
@@ -328,11 +342,10 @@ inline void submitScanToGridKernel(
 
 } // namespace
 
-Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<uint8_t> &data,
-                                            int point_step, int row_step,
-                                            int height, int width,
-                                            float x_offset, float y_offset,
-                                            float z_offset) {
+Eigen::MatrixXi &LocalMapperGPU::scanToGrid(ByteSpan data, int point_step,
+                                            int row_step, int height, int width,
+                                            int x_offset, int y_offset,
+                                            int z_offset) {
   try {
     // Reset output grid to UNEXPLORED before any kernel runs.
     m_q.fill(m_devicePtrGrid, static_cast<int>(OccupancyType::UNEXPLORED),
@@ -364,8 +377,7 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<uint8_t> &data,
     submitPointCloudToLaserScanKernel(
         m_q, m_devicePtrRawBytes, total_bytes, m_devicePtrRanges, m_scanSize,
         static_cast<float>(m_rangeMax), point_step, row_step, width, height,
-        static_cast<int>(x_offset), static_cast<int>(y_offset),
-        static_cast<int>(z_offset), static_cast<float>(m_minHeight),
+        x_offset, y_offset, z_offset, static_cast<float>(m_minHeight),
         static_cast<float>(m_maxHeight), PointFieldType::FLOAT32,
         /*element_size*/ 4, m_max_wg_size);
 
@@ -391,8 +403,9 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<uint8_t> &data,
   return gridData;
 }
 
-Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
-                                            const std::vector<double> &ranges) {
+Eigen::MatrixXi &
+LocalMapperGPU::scanToGrid(Eigen::Ref<const Eigen::VectorXf> angles,
+                           Eigen::Ref<const Eigen::VectorXf> ranges) {
 
   try {
     m_q.fill(m_devicePtrGrid, static_cast<int>(OccupancyType::UNEXPLORED),
@@ -412,15 +425,13 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(const std::vector<double> &angles,
       return gridData;
     }
 
-    m_q.memcpy(m_devicePtrAngles, angles.data(), sizeof(double) * m_scanSize);
-
-    // Ranges arrive as double but the device buffer is float
-    // (to keep atomic fetch_min on the pointcloud path cheap)
-    for (int i = 0; i < m_scanSize; ++i) {
-      m_hostFloatRanges[i] = static_cast<float>(ranges[i]);
-    }
-    m_q.memcpy(m_devicePtrRanges, m_hostFloatRanges.data(),
-               sizeof(float) * m_scanSize);
+    // Ranges go straight H→D (float32 in, float32 device buffer). Angles
+    // widen through the staging member buffer. The device buffer is double (see
+    // the ctor note on host-backend trig performance)
+    m_anglesWide = angles.cast<double>();
+    m_q.memcpy(m_devicePtrAngles, m_anglesWide.data(),
+               sizeof(double) * m_scanSize);
+    m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(float) * m_scanSize);
 
     submitScanToGridKernel(m_q, m_devicePtrGrid, m_devicePtrDistances,
                            m_devicePtrAngles, m_devicePtrRanges, m_gridHeight,

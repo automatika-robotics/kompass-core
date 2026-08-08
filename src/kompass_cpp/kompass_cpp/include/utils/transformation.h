@@ -6,6 +6,24 @@
 
 namespace Kompass {
 
+// FRAME NAMING CONVENTION
+// -----------------------
+// An isometry named `X_tf_Y` is "X expressed in the Y frame": it maps a point
+// given in X's frame into Y coordinates. So `sensor_tf_body` takes a
+// sensor-frame point to body coordinates, and `body_tf_world` takes a
+// body-frame point to world coordinates.
+//
+// Products therefore compose RIGHT TO LEFT -- the rightmost factor is applied
+// to the point first:
+//
+//     sensor_tf_world = body_tf_world * sensor_tf_body
+//
+// Note this is the opposite of the `A_tf_B * B_tf_C == A_tf_C` chaining rule
+// used when `A_tf_B` means "maps B into A". Under the convention here the
+// adjacent labels in `sensor_tf_body * body_tf_world` look like they chain,
+// but that product maps nothing meaningful. Prefer `sensorTfWorld()` below
+// over open-coding the multiplication.
+
 // Helper function to convert Euler angles to rotation matrix
 inline Eigen::Matrix3f eulerToRotationMatrix(float roll, float pitch,
                                              float yaw) {
@@ -39,6 +57,25 @@ inline Eigen::Isometry3f getTransformation(const Path::State state_in_frame) {
                                           float(state_in_frame.y), 0.0};
   return getTransformation(rotation_src_goal, translation_src_to_goal);
 }
+
+/**
+ * @brief Transform taking a sensor-frame point to world coordinates.
+ *
+ * Composes the sensor mount pose with the robot's world pose in the correct
+ * order (see the frame naming convention at the top of this header). Every
+ * consumer that lifts sensor data into the world frame should go through
+ * here rather than writing the product by hand.
+ *
+ * @param robot_state_world  Robot pose in the world frame.
+ * @param sensor_tf_body     Sensor pose expressed in the body frame.
+ * @return Eigen::Isometry3f `sensor_tf_world`.
+ */
+inline Eigen::Isometry3f
+sensorTfWorld(const Path::State &robot_state_world,
+              const Eigen::Isometry3f &sensor_tf_body) {
+  return getTransformation(robot_state_world) * sensor_tf_body;
+}
+
 /**
  * @brief Transform a position given translation vector and rotation quat or
  * matrix

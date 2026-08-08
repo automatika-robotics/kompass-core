@@ -1,5 +1,4 @@
-#include <nanobind/eigen/dense.h>
-#include <nanobind/nanobind.h>
+#include "bindings.h"
 #include <nanobind/stl/function.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/tuple.h>
@@ -15,7 +14,6 @@
 #include "datatypes/control.h"
 #include "datatypes/trajectory.h"
 
-namespace py = nanobind;
 using namespace Kompass;
 
 // Control bindings submodule
@@ -144,8 +142,7 @@ void bindings_control(py::module_ &m) {
       .def(py::init<Control::Stanley::StanleyParameters>(),
            "Init Stanley follower with custom config")
       .def("compute_velocity_commands",
-           &Control::Stanley::computeVelocityCommand,
-           py::rv_policy::reference_internal)
+           &Control::Stanley::computeVelocityCommand)
       .def("execute", &Control::Stanley::execute)
       .def("set_robot_wheelbase", &Control::Stanley::setWheelBase);
 
@@ -178,17 +175,15 @@ void bindings_control(py::module_ &m) {
            py::arg("octree_res") = 0.1,
            py::arg("config") = Control::PurePursuit::PurePursuitConfig())
       .def("execute",
-           (Control::Controller::Result(Control::PurePursuit::*)(
-               const Path::State, const double)) &
-               Control::PurePursuit::execute,
+           (Control::Controller::Result (Control::PurePursuit::*)(
+               const Path::State, const double))&Control::PurePursuit::execute,
            "Execute Pure Pursuit control step with state update",
            py::arg("current_position"), py::arg("delta_time"))
-      .def(
-          "execute",
-          (Control::Controller::Result(Control::PurePursuit::*)(const double)) &
-              Control::PurePursuit::execute,
-          "Execute Pure Pursuit control step (uses internal state)",
-          py::arg("delta_time"))
+      .def("execute",
+           (Control::Controller::Result (Control::PurePursuit::*)(
+               const double))&Control::PurePursuit::execute,
+           "Execute Pure Pursuit control step (uses internal state)",
+           py::arg("delta_time"))
       .def(
           "execute",
           [](Control::PurePursuit &self, const double dt,
@@ -196,12 +191,20 @@ void bindings_control(py::module_ &m) {
             return self.execute<Control::LaserScan>(dt, scan);
           },
           "Execute Pure Pursuit with LaserScan obstacle avoidance",
-          py::arg("delta_time"), py::arg("laser_scan"))
+          py::arg("delta_time"), py::arg("laser_scan"),
+          py::call_guard<py::gil_scoped_release>())
       .def(
           "execute",
           [](Control::PurePursuit &self, const double dt,
-             const std::vector<Path::Point> &cloud) {
-            return self.execute<std::vector<Path::Point>>(dt, cloud);
+             Eigen::Ref<const RowMatrixX3f> cloud) {
+            std::vector<Path::Point> points;
+            points.reserve(cloud.rows());
+            for (Eigen::Index i = 0; i < cloud.rows(); ++i) {
+              points.emplace_back(cloud(i, 0), cloud(i, 1), cloud(i, 2));
+            }
+            // Solve without the GIL (conversion above still holds it)
+            py::gil_scoped_release release;
+            return self.execute<std::vector<Path::Point>>(dt, points);
           },
           "Execute Pure Pursuit with PointCloud obstacle avoidance",
           py::arg("delta_time"), py::arg("point_cloud"));
@@ -246,24 +249,40 @@ void bindings_control(py::module_ &m) {
            py::overload_cast<const Control::Velocity2D &,
                              const Control::LaserScan &>(
                &Control::DWA::computeVelocityCommandsSet<Control::LaserScan>),
-           py::rv_policy::reference_internal)
-      .def("compute_velocity_commands",
-           py::overload_cast<const Control::Velocity2D &,
-                             const std::vector<Path::Point> &>(
-               &Control::DWA::computeVelocityCommandsSet<
-                   std::vector<Path::Point>>),
-           py::rv_policy::reference_internal)
+           py::call_guard<py::gil_scoped_release>())
+      .def(
+          "compute_velocity_commands",
+          [](Control::DWA &self, const Control::Velocity2D &vel,
+             Eigen::Ref<const RowMatrixX3f> cloud)
+              -> Control::TrajSearchResult {
+            std::vector<Path::Point> points;
+            points.reserve(cloud.rows());
+            for (Eigen::Index i = 0; i < cloud.rows(); ++i) {
+              points.emplace_back(cloud(i, 0), cloud(i, 1), cloud(i, 2));
+            }
+            // Solve without the GIL (conversion above still holds it)
+            py::gil_scoped_release release;
+            return self.computeVelocityCommandsSet<std::vector<Path::Point>>(
+                vel, points);
+          })
       .def("add_custom_cost",
            &Control::DWA::addCustomCost) // Custom cost function for DWA planner
                                          // of type (f(Trajectory2D, Path::Path)
                                          // -> double)
       .def("get_debugging_samples", &Control::DWA::getDebuggingSamples)
       .def("debug_velocity_search",
-           // Overload for std::vector<Path::Point>
-           py::overload_cast<const Control::Velocity2D &,
-                             const std::vector<Path::Point> &, const bool &>(
-               &Control::DWA::debugVelocitySearch<std::vector<Path::Point>>),
-           py::call_guard<py::gil_scoped_release>())
+           // Overload for Nx3 cartesian points
+           [](Control::DWA &self, const Control::Velocity2D &vel,
+              Eigen::Ref<const RowMatrixX3f> cloud, const bool drop) {
+             std::vector<Path::Point> points;
+             points.reserve(cloud.rows());
+             for (Eigen::Index i = 0; i < cloud.rows(); ++i) {
+               points.emplace_back(cloud(i, 0), cloud(i, 1), cloud(i, 2));
+             }
+             py::gil_scoped_release release;
+             return self.debugVelocitySearch<std::vector<Path::Point>>(
+                 vel, points, drop);
+           })
       .def("debug_velocity_search",
            // Overload for LaserScan
            py::overload_cast<const Control::Velocity2D &,
@@ -295,7 +314,8 @@ void bindings_control(py::module_ &m) {
                                                       "RGBDFollowerParameters")
       .def(py::init<>());
 
-  py::class_<Control::RGBDFollower, Control::Follower>(m_control, "RGBDFollower")
+  py::class_<Control::RGBDFollower, Control::Follower>(m_control,
+                                                       "RGBDFollower")
       .def(py::init<const Control::ControlType &,
                     const Control::ControlLimitsParams &,
                     const CollisionChecker::ShapeType &,

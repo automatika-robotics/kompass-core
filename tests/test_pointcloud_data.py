@@ -167,6 +167,9 @@ def test_conversion_synthetic_ring_populates_bins():
         max_z=1.0,
         angle_step=angle_step,
     )
+    # Zero-copy binding returns float32 numpy arrays (was: Python lists)
+    assert isinstance(ranges, np.ndarray) and ranges.dtype == np.float32
+    assert isinstance(angles, np.ndarray) and angles.dtype == np.float32
     ranges = np.asarray(ranges)
     angles = np.asarray(angles)
 
@@ -249,6 +252,56 @@ def test_conversion_z_filter_rejects_above_ceiling():
     )
 
 
+def test_conversion_z_band_entirely_below_the_sensor_is_honoured():
+    """A wholly negative band is a real band, not a request to disable the
+    gate.
+
+    A sensor mounted above the volume it guards -- a mast lidar over a shorter
+    robot -- yields a band like [-1.2, -0.2] in its own frame. Reading the sign
+    of max_z as "no ceiling" would let everything overhead through, which on
+    the safety-stop path means braking for door frames.
+    """
+    n = 40
+    theta = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
+    # Ceiling returns, above the band's upper edge of -0.2
+    overhead = np.column_stack([np.cos(theta), np.sin(theta), np.full(n, 0.5)])
+    # Returns inside the band, at the robot's midpoint
+    in_band = np.column_stack([np.cos(theta), np.sin(theta), np.full(n, -0.7)])
+
+    max_range = 10.0
+    kwargs = dict(
+        point_step=_PC_STRIDE,
+        height=1,
+        x_offset=0,
+        y_offset=4,
+        z_offset=8,
+        max_range=max_range,
+        min_z=-1.2,
+        max_z=-0.2,
+        angle_step=0.1,
+    )
+
+    ranges, _ = pointcloud_to_laserscan_from_raw(
+        data=_make_cloud_bytes(overhead),
+        row_step=n * _PC_STRIDE,
+        width=n,
+        **kwargs,
+    )
+    assert np.all(np.asarray(ranges) == max_range), (
+        "points above the band's upper edge leaked through a negative max_z"
+    )
+
+    ranges, _ = pointcloud_to_laserscan_from_raw(
+        data=_make_cloud_bytes(in_band),
+        row_step=n * _PC_STRIDE,
+        width=n,
+        **kwargs,
+    )
+    assert np.any(np.asarray(ranges) < max_range), (
+        "points inside the band were dropped"
+    )
+
+
 @pytest.mark.skipif(
     not LIVOX_CLOUD_JSON.exists() or LIVOX_CLOUD_JSON.stat().st_size < 1_000_000,
     reason=(
@@ -291,3 +344,90 @@ def test_conversion_livox_recording_produces_nontrivial_output():
         f"livox frame at z∈[1.6, 1.8] m should populate >10 bins, got "
         f"{populated}"
     )
+
+
+def test_conversion_row_padding_is_not_decoded_as_points():
+    """Trailing row padding in an organized cloud must never become points.
+
+    The walk over a row is bounded by ``width`` points, not ``row_step``
+    (mirroring the GPU kernel): padded rows occur in real organized clouds,
+    and padding bytes are arbitrary — here they are deliberately crafted to
+    decode as a finite, in-band obstacle at 1 m straight ahead, which the
+    old row_step-driven loop would have turned into a phantom obstacle.
+    """
+    max_range = 10.0
+    angle_step = 0.1
+    width, height = 3, 2
+
+    # Real points: row 0 at bearing pi/2, row 1 at bearing pi, both at 5 m
+    row0 = np.array([[0.0, 5.0, 0.0]] * width, dtype=np.float32)
+    row1 = np.array([[-5.0, 0.0, 0.0]] * width, dtype=np.float32)
+
+    # Padding: one extra point-slot per row, decoding as (1, 0, 0) — finite,
+    # non-zero, inside the z band. Must be skipped, not read as a point.
+    phantom = np.array([[1.0, 0.0, 0.0, 0.0]], dtype=np.float32).tobytes()
+
+    def _row(points: np.ndarray) -> bytes:
+        buf = np.zeros((width, 4), dtype=np.float32)
+        buf[:, :3] = points
+        return buf.tobytes() + phantom
+
+    data = _row(row0) + _row(row1)
+    row_step = width * _PC_STRIDE + len(phantom)
+    assert len(data) == height * row_step
+
+    ranges, _ = pointcloud_to_laserscan_from_raw(
+        data=np.frombuffer(data, dtype=np.uint8),
+        point_step=_PC_STRIDE,
+        row_step=row_step,
+        height=height,
+        width=width,
+        x_offset=0,
+        y_offset=4,
+        z_offset=8,
+        max_range=max_range,
+        min_z=-1.0,
+        max_z=1.0,
+        angle_step=angle_step,
+    )
+    ranges = np.asarray(ranges)
+
+    phantom_bin = 0  # bearing 0 -> first bin
+    assert ranges[phantom_bin] == max_range, (
+        "row padding bytes were decoded as a phantom obstacle"
+    )
+
+    # Real points from BOTH rows must still land (row addressing intact)
+    bin_row0 = int((np.pi / 2) / angle_step)
+    bin_row1 = int(np.pi / angle_step)
+    assert ranges[bin_row0] < max_range, "row 0 points were dropped"
+    assert ranges[bin_row1] < max_range, "row 1 points were dropped"
+
+
+def test_conversion_rejects_negative_offsets():
+    """Negative field offsets are malformed metadata and must raise.
+
+    They used to slip the per-point bounds check (which takes the max of the
+    three offsets) and wrap the unsigned index math into an out-of-bounds
+    read. Both overloads carry the guard.
+    """
+    n = 8
+    ring = np.column_stack([
+        np.ones(n), np.zeros(n), np.zeros(n)
+    ]).astype(np.float32)
+    kwargs = dict(
+        data=_make_cloud_bytes(ring),
+        point_step=_PC_STRIDE,
+        row_step=n * _PC_STRIDE,
+        height=1,
+        width=n,
+        y_offset=4,
+        z_offset=8,
+        max_range=10.0,
+        min_z=-1.0,
+        max_z=1.0,
+    )
+    with pytest.raises(ValueError, match="non-negative"):
+        pointcloud_to_laserscan_from_raw(x_offset=-4, angle_step=0.1, **kwargs)
+    with pytest.raises(ValueError, match="non-negative"):
+        pointcloud_to_laserscan_from_raw(x_offset=-4, num_bins=64, **kwargs)
