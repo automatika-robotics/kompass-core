@@ -1,0 +1,92 @@
+#pragma once
+
+#include "datatypes/span.h"
+#include "utils/transformation.h"
+#include <Eigen/Dense>
+#include <cmath>
+
+// Point field encoding of a PointCloud2-style byte buffer. Values match the
+// sensor_msgs/PointField datatype codes.
+enum class PointFieldType : int {
+  INT8 = 1,
+  UINT8 = 2,
+  INT16 = 3,
+  UINT16 = 4,
+  INT32 = 5,
+  UINT32 = 6,
+  FLOAT32 = 7,
+  FLOAT64 = 8
+};
+
+// Size in bytes of one element of the given field type
+inline int elementSizeOf(const PointFieldType type) {
+  switch (type) {
+  case PointFieldType::INT8:
+  case PointFieldType::UINT8:
+    return 1;
+  case PointFieldType::INT16:
+  case PointFieldType::UINT16:
+    return 2;
+  case PointFieldType::INT32:
+  case PointFieldType::UINT32:
+  case PointFieldType::FLOAT32:
+    return 4;
+  case PointFieldType::FLOAT64:
+    return 8;
+  default:
+    return 4;
+  }
+}
+
+namespace Kompass {
+
+/**
+ * Per-sensor mount configuration, shared by the local mapper and the critical
+ * zone checker. Covers pointcloud sensors.
+ */
+struct SensorConfig {
+  /// Mount translation in the body frame
+  Eigen::Vector3f position{0.0f, 0.0f, 0.0f};
+  /// Mount rotation in the body frame, quaternion coefficients (x, y, z, w)
+  Eigen::Vector4f rotation{0.0f, 0.0f, 0.0f, 1.0f};
+  /// Encoding of the x/y/z fields in this sensor's byte buffer
+  PointFieldType cloud_field_type{PointFieldType::FLOAT32};
+
+  /// sensor -> body isometry built from position/rotation
+  Eigen::Isometry3f tfBody() const {
+    return getTransformation(rotation, position);
+  }
+
+  /// Convenience for planar (yaw-only) mounts
+  static SensorConfig
+  fromYaw(const Eigen::Vector3f &position, const float yaw,
+          const PointFieldType field_type = PointFieldType::FLOAT32) {
+    SensorConfig config;
+    config.position = position;
+    config.rotation = {0.0f, 0.0f, std::sin(yaw / 2.0f), std::cos(yaw / 2.0f)};
+    config.cloud_field_type = field_type;
+    return config;
+  }
+};
+
+/**
+ * Non-owning view of one PointCloud2-style byte buffer plus its layout
+ * metadata. Zero-copy `data` refers to caller-owned memory that must stay
+ * alive for the duration of the call it is passed to. In batched calls,
+ * clouds pair with sensors positionally. clouds[i] belongs to sensors[i].
+ */
+struct PointCloudView {
+  ByteSpan data{};
+  int point_step{0};
+  int row_step{0};
+  int height{0};
+  int width{0};
+  int x_offset{-1};
+  int y_offset{-1};
+  int z_offset{-1};
+
+  /// An empty view means this sensor contributed no data this tick
+  bool empty() const { return data.empty() || width * height == 0; }
+};
+
+} // namespace Kompass
