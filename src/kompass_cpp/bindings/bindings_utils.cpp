@@ -79,15 +79,17 @@ void bindings_utils(py::module_ &m) {
       "pointcloud_to_laserscan_from_raw",
       [](ByteArray data, int point_step, int row_step, int height, int width,
          int x_offset, int y_offset, int z_offset, double max_range,
-         double min_z, double max_z, double angle_step) {
+         double min_z, double max_z, double angle_step,
+         const Eigen::Vector3f &position, const Eigen::Vector4f &rotation) {
         Eigen::VectorXf ranges_out;
         Eigen::VectorXf angles_out;
         {
           py::gil_scoped_release release;
-          pointCloudToLaserScanFromRaw(toSpan(data), point_step, row_step,
-                                       height, width, x_offset, y_offset,
-                                       z_offset, max_range, min_z, max_z,
-                                       angle_step, ranges_out, angles_out);
+          pointCloudToLaserScanFromRaw(
+              PointCloudView{toSpan(data), point_step, row_step, height, width,
+                             x_offset, y_offset, z_offset},
+              getTransformation(rotation, position), max_range, min_z, max_z,
+              angle_step, ranges_out, angles_out);
         }
         return std::make_tuple(std::move(ranges_out), std::move(angles_out));
       },
@@ -95,22 +97,29 @@ void bindings_utils(py::module_ &m) {
       py::arg("height"), py::arg("width"), py::arg("x_offset"),
       py::arg("y_offset"), py::arg("z_offset"), py::arg("max_range"),
       py::arg("min_z"), py::arg("max_z"), py::arg("angle_step"),
+      py::arg("position") = Eigen::Vector3f(0.0f, 0.0f, 0.0f),
+      py::arg("rotation") = Eigen::Vector4f(0.0f, 0.0f, 0.0f, 1.0f),
       "Converts raw PointCloud2 to ranges and angles using a specific angular "
-      "step.");
+      "step. An optional sensor mount pose (position + quaternion x,y,z,w) "
+      "rotates points into body orientation and gates min_z/max_z on the "
+      "body-frame height; the default identity mount reproduces the plain "
+      "sensor-frame conversion.");
 
   // Overload using num_bins (Returns: ranges as a float32 numpy array)
   m_utils.def(
       "pointcloud_to_laserscan_from_raw",
       [](ByteArray data, int point_step, int row_step, int height, int width,
          int x_offset, int y_offset, int z_offset, double max_range,
-         double min_z, double max_z, int num_bins) {
+         double min_z, double max_z, int num_bins,
+         const Eigen::Vector3f &position, const Eigen::Vector4f &rotation) {
         Eigen::VectorXf ranges_out;
         {
           py::gil_scoped_release release;
-          pointCloudToLaserScanFromRaw(toSpan(data), point_step, row_step,
-                                       height, width, x_offset, y_offset,
-                                       z_offset, max_range, min_z, max_z,
-                                       num_bins, ranges_out);
+          pointCloudToLaserScanFromRaw(
+              PointCloudView{toSpan(data), point_step, row_step, height, width,
+                             x_offset, y_offset, z_offset},
+              getTransformation(rotation, position), max_range, min_z, max_z,
+              num_bins, ranges_out);
         }
         return ranges_out;
       },
@@ -118,7 +127,13 @@ void bindings_utils(py::module_ &m) {
       py::arg("height"), py::arg("width"), py::arg("x_offset"),
       py::arg("y_offset"), py::arg("z_offset"), py::arg("max_range"),
       py::arg("min_z"), py::arg("max_z"), py::arg("num_bins"),
-      "Converts raw PointCloud2 to ranges only, using a fixed number of bins.");
+      py::arg("position") = Eigen::Vector3f(0.0f, 0.0f, 0.0f),
+      py::arg("rotation") = Eigen::Vector4f(0.0f, 0.0f, 0.0f, 1.0f),
+      "Converts raw PointCloud2 to ranges only, using a fixed number of bins. "
+      "An optional sensor mount pose (position + quaternion x,y,z,w) rotates "
+      "points into body orientation and gates min_z/max_z on the body-frame "
+      "height; the default identity mount reproduces the plain sensor-frame "
+      "conversion.");
 
   m_utils.def(
       "read_pcd", &read_pcd_py, py::arg("filename"),
