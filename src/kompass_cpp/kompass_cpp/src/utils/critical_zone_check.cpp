@@ -110,10 +110,13 @@ float CriticalZoneChecker::check(ByteSpan data, int point_step, int row_step,
                                  int height, int width, int x_offset,
                                  int y_offset, int z_offset,
                                  const bool forward) {
-  // Convert into the member scratch: no per-call allocation
+  // Convert into the member scratch: no per-call allocation. Use identity mount
+  // here. This path creates laserscan bins in the sensor frame and `check`
+  // function applies mount pose per beam afterwards.
   pointCloudToLaserScanFromRaw(
-      data, point_step, row_step, height, width, x_offset, y_offset, z_offset,
-      range_max_, min_height_, max_height_,
+      PointCloudView{data, point_step, row_step, height, width, x_offset,
+                     y_offset, z_offset},
+      Eigen::Isometry3f::Identity(), range_max_, min_height_, max_height_,
       static_cast<int>(sin_angles_.size()), ranges_staging_);
   return check(Eigen::Ref<const Eigen::VectorXf>(ranges_staging_), forward);
 }
