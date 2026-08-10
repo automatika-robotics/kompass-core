@@ -103,27 +103,7 @@ public:
       m_devicePtrRawBytes = nullptr;
       max_wg_size_ = dev.get_info<sycl::info::device::max_work_group_size>();
       // set element size based on point field type
-      switch (m_pointFieldType) {
-      case PointFieldType::INT8:
-      case PointFieldType::UINT8:
-        m_elementSize = 1;
-        break;
-      case PointFieldType::INT16:
-      case PointFieldType::UINT16:
-        m_elementSize = 2;
-        break;
-      case PointFieldType::INT32:
-      case PointFieldType::UINT32:
-      case PointFieldType::FLOAT32:
-        m_elementSize = 4;
-        break;
-      case PointFieldType::FLOAT64:
-        m_elementSize = 8;
-        break;
-      default:
-        m_elementSize = 4;
-        break;
-      }
+      m_elementSize = elementSizeOf(m_pointFieldType);
     }
   }
 
