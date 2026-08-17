@@ -1,6 +1,5 @@
 #include "mapping/local_mapper_gpu.h"
 #include "utils/logger.h"
-#include "utils/pointcloud.h"
 #include <cmath>
 #include <stdexcept>
 #include <sycl/sycl.hpp>
@@ -8,6 +7,7 @@
 namespace Kompass {
 namespace Mapping {
 
+// Mark the kernel submitters below private to this file
 namespace {
 
 /**
@@ -111,6 +111,8 @@ inline void submitPointCloudToLaserScanKernel(
     const int k_num_bins = num_bins;
     const float k_inv_two_pi_times_bins =
         static_cast<float>(k_num_bins) / static_cast<float>(2.0 * M_PI);
+    // Points at/beyond max_range can never win a bin, calculate its sqr
+    const float k_max_range_sq = max_range * max_range;
     const size_t k_total_bytes = total_bytes;
     const PointFieldType k_type = point_field_type;
     const int k_elem_size = element_size;
@@ -183,6 +185,9 @@ inline void submitPointCloudToLaserScanKernel(
           // sensor)
           const float r2 = xr * xr + yr * yr;
           if (r2 < 1e-6f)
+            return;
+          // Beyond max_range -> can never win the per-bin min
+          if (r2 >= k_max_range_sq)
             return;
 
           // Angle + bin: normalize [0, 2π), bin = clamped

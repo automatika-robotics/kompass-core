@@ -36,48 +36,6 @@ inline from_chars_result from_chars(const char *first, const char *last,
 } // namespace std
 #endif
 
-// Helper: Loads bytes safely handling potential misalignment
-inline float load_and_cast_val(const uint8_t *ptr, size_t offset,
-                               PointFieldType type) {
-  const uint8_t *addr = ptr + offset;
-
-  // Generic lambda to load unaligned data safely
-  auto load_safe = [&](auto dummy_type) {
-    using T = decltype(dummy_type);
-    T val;
-    // Copy byte-by-byte (compiler optimizes this to a register load)
-    // use uint8_t* to match the source pointer type
-    for (size_t i = 0; i < sizeof(T); ++i) {
-      reinterpret_cast<uint8_t *>(&val)[i] = addr[i];
-    }
-    return static_cast<float>(val);
-  };
-
-  switch (type) {
-  case PointFieldType::INT8:
-    // INT8 is always aligned (1 byte)
-    return static_cast<float>(*reinterpret_cast<const int8_t *>(addr));
-  case PointFieldType::UINT8:
-    // UINT8 is always aligned (1 byte)
-    return static_cast<float>(*addr);
-  case PointFieldType::INT16:
-    return load_safe(int16_t{});
-  case PointFieldType::UINT16:
-    return load_safe(uint16_t{});
-  case PointFieldType::INT32:
-    return load_safe(int32_t{});
-  case PointFieldType::UINT32:
-    return load_safe(uint32_t{});
-  case PointFieldType::FLOAT32:
-    return load_safe(float{});
-  case PointFieldType::FLOAT64:
-    return load_safe(double{});
-
-  default:
-    return 0.0f;
-  }
-}
-
 /**
  * @brief Converts raw PointCloud2-style byte data to a 2D LaserScan-like
  * pseudo-scan around the sensor origin, expressed in BODY orientation.
@@ -133,6 +91,10 @@ pointCloudToLaserScanFromRaw(const Kompass::PointCloudView &cloud,
   const float r20 = rot(2, 0), r21 = rot(2, 1), r22 = rot(2, 2);
   const float t_z = sensor_tf_body.translation().z();
 
+  // Points at/beyond max_range can never win a bin, calculate its sqr
+  const float max_range_sq =
+      static_cast<float>(max_range) * static_cast<float>(max_range);
+
   // Iterate over raw points. The inner walk is bounded by the row's payload
   // (width points). Organized clouds may pad rows, and padding bytes must not
   // be decoded as points (same as GPU kernel)
@@ -179,6 +141,10 @@ pointCloudToLaserScanFromRaw(const Kompass::PointCloudView &cloud,
       // No planar extent -> no bin (point straight above/below the sensor)
       const float range_sq = xr * xr + yr * yr;
       if (range_sq < 1e-6f) {
+        continue;
+      }
+      // Beyond max_range -> can never win the per-bin min
+      if (range_sq >= max_range_sq) {
         continue;
       }
 
