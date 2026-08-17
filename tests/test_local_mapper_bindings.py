@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from kompass_cpp.mapping import OCCUPANCY_TYPE
+from kompass_cpp.types import SensorConfig
 
 
 # LocalMapperGPU is only exported when the build has SYCL. Import guarded
@@ -61,11 +62,9 @@ def test_gpu_binding_signature_laserscan_ctor():
         grid_height=40,
         grid_width=40,
         resolution=0.05,
-        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        laserscan_orientation=0.0,
+        sensor_configs=[SensorConfig()],
         is_pointcloud=False,
         scan_size=360,
-        angle_step=0.01,
         max_height=2.0,
         min_height=0.0,
         range_max=10.0,
@@ -85,11 +84,9 @@ def test_gpu_binding_laserscan_scan_to_grid_basic():
         grid_height=grid_height,
         grid_width=grid_width,
         resolution=0.05,
-        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        laserscan_orientation=0.0,
+        sensor_configs=[SensorConfig()],
         is_pointcloud=False,
         scan_size=n,
-        angle_step=float(2.0 * np.pi / n),
         max_height=2.0,
         min_height=0.0,
         range_max=10.0,
@@ -131,11 +128,9 @@ def test_gpu_binding_pointcloud_scan_to_grid_basic():
         grid_height=grid_height,
         grid_width=grid_width,
         resolution=0.05,
-        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        laserscan_orientation=0.0,
+        sensor_configs=[SensorConfig()],
         is_pointcloud=True,
         scan_size=n_rays,
-        angle_step=float(2.0 * np.pi / n_rays),
         max_height=1.5,
         min_height=-0.5,
         range_max=5.0,
@@ -176,11 +171,9 @@ def test_gpu_binding_pointcloud_z_filter_above_ceiling():
         grid_height=grid_height,
         grid_width=grid_width,
         resolution=0.05,
-        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        laserscan_orientation=0.0,
+        sensor_configs=[SensorConfig()],
         is_pointcloud=True,
         scan_size=n_rays,
-        angle_step=float(2.0 * np.pi / n_rays),
         max_height=1.0,
         min_height=0.0,
         range_max=5.0,
@@ -217,11 +210,9 @@ def test_gpu_binding_pointcloud_empty_cloud_does_not_crash():
         grid_height=grid_height,
         grid_width=grid_width,
         resolution=0.1,
-        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        laserscan_orientation=0.0,
+        sensor_configs=[SensorConfig()],
         is_pointcloud=True,
         scan_size=n_rays,
-        angle_step=float(2.0 * np.pi / n_rays),
         max_height=1.0,
         min_height=0.0,
         range_max=5.0,
@@ -273,11 +264,9 @@ def test_cpu_binding_laserscan_scan_to_grid_basic():
         grid_height=grid_height,
         grid_width=grid_width,
         resolution=0.05,
-        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        laserscan_orientation=0.0,
+        sensor_configs=[SensorConfig()],
         is_pointcloud=False,
         scan_size=n,
-        angle_step=float(2.0 * np.pi / n),
         max_height=2.0,
         min_height=0.0,
         range_max=10.0,
@@ -308,11 +297,9 @@ def test_cpu_binding_pointcloud_scan_to_grid_basic():
         grid_height=grid_height,
         grid_width=grid_width,
         resolution=0.05,
-        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        laserscan_orientation=0.0,
+        sensor_configs=[SensorConfig()],
         is_pointcloud=True,
         scan_size=n_rays,
-        angle_step=float(2.0 * np.pi / n_rays),
         max_height=1.5,
         min_height=-0.5,
         range_max=5.0,
@@ -341,8 +328,8 @@ def test_cpu_binding_pointcloud_scan_to_grid_basic():
     assert n_occ > 0, "ring obstacles must mark occupied cells"
 
 
-def test_cpu_binding_laserscan_scan_to_grid_baysian_returns_tuple():
-    """Regression test: the laserscan `scan_to_grid_baysian` binding used to
+def test_cpu_binding_laserscan_scan_to_grid_bayesian_returns_tuple():
+    """Regression test: the laserscan `scan_to_grid_bayesian` binding used to
     point at plain `scanToGrid` (same argument list, wrong overload_cast
     target), so it returned a single matrix instead of the
     (occupancy, probability) tuple the Python wrapper unpacks."""
@@ -353,8 +340,7 @@ def test_cpu_binding_laserscan_scan_to_grid_baysian_returns_tuple():
         grid_height=grid_height,
         grid_width=grid_width,
         resolution=0.05,
-        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        laserscan_orientation=0.0,
+        sensor_configs=[SensorConfig()],
         is_pointcloud=False,
         scan_size=n,
         p_prior=0.6,
@@ -363,7 +349,6 @@ def test_cpu_binding_laserscan_scan_to_grid_baysian_returns_tuple():
         range_sure=0.1,
         range_max=10.0,
         wall_size=0.1,
-        angle_step=float(2.0 * np.pi / n),
         max_height=2.0,
         min_height=0.0,
         max_points_per_line=32,
@@ -372,7 +357,7 @@ def test_cpu_binding_laserscan_scan_to_grid_baysian_returns_tuple():
     angles = np.linspace(0.0, 2.0 * np.pi, n, endpoint=False)
     ranges = np.full(n, 0.5, dtype=np.float64)
 
-    result = mapper.scan_to_grid_baysian(angles=angles, ranges=ranges)
+    result = mapper.scan_to_grid_bayesian(angles=angles, ranges=ranges)
 
     assert isinstance(result, tuple) and len(result) == 2
     occupancy, probability = result
@@ -396,11 +381,9 @@ def test_cpu_binding_laserscan_dtypes_and_noncontiguous_agree():
         grid_height=40,
         grid_width=40,
         resolution=0.05,
-        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        laserscan_orientation=0.0,
+        sensor_configs=[SensorConfig()],
         is_pointcloud=False,
         scan_size=n,
-        angle_step=float(2.0 * np.pi / n),
         max_height=2.0,
         min_height=0.0,
         range_max=10.0,
@@ -433,11 +416,9 @@ def test_cpu_binding_pointcloud_accepts_bytes():
         grid_height=grid_height,
         grid_width=grid_width,
         resolution=0.05,
-        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        laserscan_orientation=0.0,
+        sensor_configs=[SensorConfig()],
         is_pointcloud=True,
         scan_size=n_rays,
-        angle_step=float(2.0 * np.pi / n_rays),
         max_height=1.5,
         min_height=-0.5,
         range_max=5.0,
@@ -480,11 +461,9 @@ def test_cpu_binding_pointcloud_nan_points_are_ignored():
             grid_height=40,
             grid_width=40,
             resolution=0.05,
-            laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-            laserscan_orientation=0.0,
+            sensor_configs=[SensorConfig()],
             is_pointcloud=True,
             scan_size=360,
-            angle_step=float(2.0 * np.pi / 360),
             max_height=1.5,
             min_height=-0.5,
             range_max=5.0,
@@ -520,11 +499,9 @@ def test_gpu_binding_pointcloud_nan_points_are_ignored():
             grid_height=40,
             grid_width=40,
             resolution=0.05,
-            laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-            laserscan_orientation=0.0,
+            sensor_configs=[SensorConfig()],
             is_pointcloud=True,
             scan_size=360,
-            angle_step=float(2.0 * np.pi / 360),
             max_height=1.5,
             min_height=-0.5,
             range_max=5.0,
@@ -561,11 +538,9 @@ def test_gpu_binding_pointcloud_rejects_negative_offsets():
         grid_height=40,
         grid_width=40,
         resolution=0.05,
-        laserscan_position=np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        laserscan_orientation=0.0,
+        sensor_configs=[SensorConfig()],
         is_pointcloud=True,
         scan_size=n_rays,
-        angle_step=float(2.0 * np.pi / n_rays),
         max_height=1.5,
         min_height=-0.5,
         range_max=5.0,
