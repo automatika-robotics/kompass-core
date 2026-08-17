@@ -1,6 +1,5 @@
 #include "utils/critical_zone_check.h"
 #include "utils/angles.h"
-#include "utils/pointcloud.h"
 #include <Eigen/Core>
 #include <stdexcept>
 
@@ -215,18 +214,18 @@ float CriticalZoneChecker::check(Span<PointCloudView> clouds,
           continue;
         }
 
+        // Coarse distance rejection for points beyond slow down distance
+        const float dist_sq = xb * xb + yb * yb;
+        if (dist_sq > slow_limit_sq_) {
+          continue;
+        }
+
         // Body-frame critical cone (forward: |angle| <= half-cone;
         // backward: |angle| >= pi - half-cone)
         const float abs_angle = std::fabs(std::atan2(yb, xb));
         const bool in_zone = forward ? (abs_angle <= critical_angle_)
                                      : (abs_angle >= M_PI - critical_angle_);
         if (!in_zone) {
-          continue;
-        }
-
-        // Skip points beyond slowdown limit
-        const float dist_sq = xb * xb + yb * yb;
-        if (dist_sq > slow_limit_sq_) {
           continue;
         }
 
