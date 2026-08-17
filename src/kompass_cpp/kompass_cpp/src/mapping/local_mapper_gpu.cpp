@@ -3,6 +3,7 @@
 #include "utils/pointcloud.h"
 #include <cmath>
 #include <stdexcept>
+#include <string>
 #include <sycl/sycl.hpp>
 
 namespace Kompass {
@@ -12,12 +13,15 @@ namespace {
 
 /**
  * @brief Convert a raw PointCloud2 byte buffer into a per-angle-bin
- *        laserscan on the GPU.
+ *        pseudo-laserscan on the GPU, around the sensor origin in BODY
+ *        orientation.
  *
  * One thread per input point. Each thread extracts (x, y, z) from the raw
- * buffer via load_and_cast_val, applies the Z and origin filters, computes
- * the angular bin as clamped `int((angle / 2π) * num_bins)`, and does an
- * atomic fetch_min into `device_ranges_out` for that bin.
+ * buffer via load_and_cast_val, rotates the point by the sensor mount
+ * rotation, gates it on BODY-frame z (rotation plus the mount's z offset),
+ * computes the angular bin from the rotated planar bearing as clamped
+ * `int((angle / 2π) * num_bins)`, and does an atomic fetch_min of the
+ * planar radius into `device_ranges_out` for that bin. .
  *
  * Caller owns every device allocation; this function only enqueues a fill
  * of `device_ranges_out` followed by the parallel_for. It does NOT wait
@@ -42,17 +46,17 @@ namespace {
  * @param x_offset          Byte offset of X within a point.
  * @param y_offset          Byte offset of Y within a point.
  * @param z_offset          Byte offset of Z within a point.
- * @param min_z             Minimum acceptable Z (inclusive). There is no
- *                          disable-sentinel for the lower bound: callers
- *                          that want a one-sided filter must pass a
- *                          suitably negative value (e.g. -FLT_MAX).
- * @param max_z             Maximum acceptable Z (inclusive). Applied as
- *                          given, matching the CPU
- *                          `pointCloudToLaserScanFromRaw`: the sign of the
- *                          bound carries no meaning of its own, so a
- *                          negative value is a real upper edge and not a
- *                          request to disable the gate. Callers wanting no
- *                          upper bound pass +FLT_MAX / infinity.
+ * @param tf_sensor_body    Rows 0..2 of the sensor→body isometry [R | t],
+ *                          row-major (12 floats). Identity reproduced the
+ yaw-only sensor frame conversion.
+ * @param min_z_body        Minimum acceptable BODY-frame z (inclusive).
+ *                          There is no disable-sentinel for the lower
+ *                          bound: callers that want a one-sided filter
+ *                          must pass a suitably negative value.
+ * @param max_z_body        Maximum acceptable BODY-frame z (inclusive).
+ *                          Applied as given. The sign of the bound carries no
+                            meaning of its own. Callers wanting no upper bound
+                            pass +FLT_MAX / infinity.
  * @param point_field_type  Dtype of the X/Y/Z fields (dispatches
  *                          load_and_cast_val).
  * @param element_size      sizeof(field) in bytes. Used for the
@@ -67,7 +71,8 @@ inline void submitPointCloudToLaserScanKernel(
     float *device_ranges_out, const int num_bins, const float max_range,
     const int point_step, const int row_step, const int width, const int height,
     const int x_offset, const int y_offset, const int z_offset,
-    const float min_z, const float max_z, const PointFieldType point_field_type,
+    const std::array<float, 12> &tf_sensor_body, const float min_z_body,
+    const float max_z_body, const PointFieldType point_field_type,
     const int element_size, const size_t wg_size) {
 
   // Fail loudly for a negative off-set (corrupted metadata)
@@ -102,14 +107,26 @@ inline void submitPointCloudToLaserScanKernel(
     const int x_off = x_offset;
     const int y_off = y_offset;
     const int z_off = z_offset;
-    const float f_min_z = min_z;
-    const float f_max_z = max_z;
+    const float f_min_z = min_z_body;
+    const float f_max_z = max_z_body;
     const int k_num_bins = num_bins;
     const float k_inv_two_pi_times_bins =
         static_cast<float>(k_num_bins) / static_cast<float>(2.0 * M_PI);
     const size_t k_total_bytes = total_bytes;
     const PointFieldType k_type = point_field_type;
     const int k_elem_size = element_size;
+
+    // Mount transform rows as kernel constants.
+    // NOTE: Only the rotation is used in x/y (bearing and radius stay relative
+    // to the sensor origin); the translation's z is used as body-frame height
+    // gate
+    const float r00 = tf_sensor_body[0], r01 = tf_sensor_body[1],
+                r02 = tf_sensor_body[2];
+    const float r10 = tf_sensor_body[4], r11 = tf_sensor_body[5],
+                r12 = tf_sensor_body[6];
+    const float r20 = tf_sensor_body[8], r21 = tf_sensor_body[9],
+                r22 = tf_sensor_body[10];
+    const float t_z = tf_sensor_body[11];
 
     const uint8_t *raw_bytes = device_raw_bytes;
     float *ranges_ptr = device_ranges_out;
@@ -138,31 +155,40 @@ inline void submitPointCloudToLaserScanKernel(
             return;
           }
 
-          // Early Z-filter. Both bounds are applied as given, matching the
-          // CPU path: a negative max_z is a real upper edge, not a
-          // disable-sentinel.
-          const float z =
-              load_and_cast_val(raw_bytes, byte_offset + z_off, k_type);
-          if (z < f_min_z || z > f_max_z)
-            return;
-
           const float x =
               load_and_cast_val(raw_bytes, byte_offset + x_off, k_type);
           const float y =
               load_and_cast_val(raw_bytes, byte_offset + y_off, k_type);
+          const float z =
+              load_and_cast_val(raw_bytes, byte_offset + z_off, k_type);
 
           // Reject non-finite points (NaN padding in organized clouds)
           if (!sycl::isfinite(x) || !sycl::isfinite(y) || !sycl::isfinite(z))
             return;
 
-          // Filter origin (±ε).
-          const float r2 = x * x + y * y;
+          // A point at the sensor origin carries no bearing. Reject in the
+          // SENSOR frame, before rotation, so it can never end up mapped to
+          // the mount position (inside the robot) downstream
+          if (x * x + y * y + z * z < 1e-6f)
+            return;
+
+          // Rotate into body orientation and gate on body-frame height.
+          // a negative max_z is a real upper edge, not a disable-sentinel
+          const float xr = r00 * x + r01 * y + r02 * z;
+          const float yr = r10 * x + r11 * y + r12 * z;
+          const float zb = r20 * x + r21 * y + r22 * z + t_z;
+          if (zb < f_min_z || zb > f_max_z)
+            return;
+
+          // No planar extent -> no bin (point straight above/below the
+          // sensor)
+          const float r2 = xr * xr + yr * yr;
           if (r2 < 1e-6f)
             return;
 
           // Angle + bin: normalize [0, 2π), bin = clamped
           // int((angle / 2π) * num_bins).
-          float angle = sycl::atan2(y, x);
+          float angle = sycl::atan2(yr, xr);
           if (angle < 0.0f)
             angle += static_cast<float>(2.0 * M_PI);
           int bin = static_cast<int>(angle * k_inv_two_pi_times_bins);
@@ -198,21 +224,23 @@ inline void submitPointCloudToLaserScanKernel(
  * @param devicePtrGrid        Output occupancy grid, `gridHeight * gridWidth`
  *                             ints, column-major. Must be pre-filled with
  *                             UNEXPLORED.
- * @param devicePtrDistances   Per-cell precomputed distance from the
- *                             laserscan origin, `gridHeight * gridWidth`
- *                             floats. Used to gate the super-cover line
- *                             fill so cells beyond the measured range
+ * @param devicePtrDistances   Per-cell precomputed PLANAR distance from the
+ *                             ray origin, `gridHeight * gridWidth` floats,
+ *                             column-major. Used to gate the super-cover
+ *                             line fill so cells beyond the measured range
  *                             aren't wrongly marked EMPTY.
  * @param devicePtrAngles      Per-ray angle in radians, `scanSize` doubles.
  * @param devicePtrRanges      Per-ray range in metres, `scanSize` floats.
  * @param gridHeight           Grid row count (= `rows`).
  * @param gridWidth            Grid column count (= `cols`).
  * @param resolution           Cell size in metres.
- * @param laserscanOrientation Sensor yaw offset added to every ray angle.
+ * @param laserscanOrientation Sensor yaw offset added to every ray angle
+ *                             (0 on the pointcloud path as the conversion
+ *                             already folded the mount rotation into the
+ *                             bearings).
  * @param centralPoint         Grid coordinates of the grid's central cell.
- * @param laserscanPosition    Sensor position in the local frame (metres).
- * @param startPoint           Grid coordinates of the sensor (origin of
- *                             every ray).
+ * @param laserscanPosition    Ray origin in the local frame (metres)
+ * @param startPoint           Grid coordinates of the ray origin.
  * @param scanSize             Number of rays = number of work-groups to
  *                             launch.
  * @param maxPointsPerLine     Threads per work-group; caps the ray length
@@ -306,31 +334,37 @@ inline void submitScanToGridKernel(
           int y = round(y_float);
 
           if (x >= 0 && x < rows && y >= 0 && y < cols) {
+            // Super-cover neighbor cells, bounds-checked INDIVIDUALLY at
+            // grid edges (x - steps[0]) or (y - steps[1])
+            const int xn = x - steps[0];
+            const int yn = y - steps[1];
+            const bool xn_ok = (xn >= 0 && xn < rows);
+            const bool yn_ok = (yn >= 0 && yn < cols);
+
             sycl::atomic_ref<int, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
                 atomic_val(devGrid[x + y * rows]);
-            sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                             sycl::memory_scope::device,
-                             sycl::access::address_space::global_space>
-                atomic_val_xstep(devGrid[(x - steps[0]) + (y * rows)]);
-            sycl::atomic_ref<int, sycl::memory_order::relaxed,
-                             sycl::memory_scope::device,
-                             sycl::access::address_space::global_space>
-                atomic_val_ystep(devGrid[x + ((y - steps[1]) * rows)]);
-            if (x == toPoint[0] && y == toPoint[1]) {
+
+            const bool is_endpoint = (x == toPoint[0] && y == toPoint[1]);
+            if (is_endpoint || devDistances[x + y * rows] < range) {
               atomic_val.fetch_max(
-                  static_cast<int>(Mapping::OccupancyType::OCCUPIED));
-              atomic_val_xstep.fetch_max(
-                  static_cast<int>(Mapping::OccupancyType::EMPTY));
-              atomic_val_ystep.fetch_max(
-                  static_cast<int>(Mapping::OccupancyType::EMPTY));
-            } else {
-              if (devDistances[x + y * rows] < range) {
-                atomic_val.fetch_max(
-                    static_cast<int>(Mapping::OccupancyType::EMPTY));
+                  is_endpoint
+                      ? static_cast<int>(Mapping::OccupancyType::OCCUPIED)
+                      : static_cast<int>(Mapping::OccupancyType::EMPTY));
+              if (xn_ok) {
+                sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                                 sycl::memory_scope::device,
+                                 sycl::access::address_space::global_space>
+                    atomic_val_xstep(devGrid[xn + (y * rows)]);
                 atomic_val_xstep.fetch_max(
                     static_cast<int>(Mapping::OccupancyType::EMPTY));
+              }
+              if (yn_ok) {
+                sycl::atomic_ref<int, sycl::memory_order::relaxed,
+                                 sycl::memory_scope::device,
+                                 sycl::access::address_space::global_space>
+                    atomic_val_ystep(devGrid[x + (yn * rows)]);
                 atomic_val_ystep.fetch_max(
                     static_cast<int>(Mapping::OccupancyType::EMPTY));
               }
@@ -342,51 +376,74 @@ inline void submitScanToGridKernel(
 
 } // namespace
 
-Eigen::MatrixXi &LocalMapperGPU::scanToGrid(ByteSpan data, int point_step,
-                                            int row_step, int height, int width,
-                                            int x_offset, int y_offset,
-                                            int z_offset) {
+Eigen::MatrixXi &LocalMapperGPU::scanToGrid(Span<PointCloudView> clouds) {
+  if (!m_isPointCloud) {
+    throw std::logic_error(
+        "scanToGrid(clouds): mapper was not constructed for pointcloud input");
+  }
+  if (clouds.size() != m_sensorDev.size()) {
+    throw std::invalid_argument(
+        "scanToGrid(clouds): got " + std::to_string(clouds.size()) +
+        " clouds for " + std::to_string(m_sensorDev.size()) + " sensors");
+  }
+  // Validate every cloud before touching the device, so a bad batch cannot
+  // leave a half-fused result
+  for (size_t i = 0; i < clouds.size(); ++i) {
+    const auto &cloud = clouds[i];
+    if (!cloud.empty() &&
+        (cloud.x_offset < 0 || cloud.y_offset < 0 || cloud.z_offset < 0)) {
+      throw std::invalid_argument(
+          "clouds[" + std::to_string(i) +
+          "]: point field offsets (x/y/z) must be non-negative: malformed "
+          "point cloud metadata");
+    }
+  }
+
   try {
-    // Reset output grid to UNEXPLORED before any kernel runs.
+    // Drain anything a previous throwing call may have left in flight
+    m_q.wait();
+
+    // Reset output grid to UNEXPLORED once
     m_q.fill(m_devicePtrGrid, static_cast<int>(OccupancyType::UNEXPLORED),
              m_gridHeight * m_gridWidth);
 
-    // Empty cloud → nothing to project. Return the grid as all-UNEXPLORED
-    const size_t total_bytes = data.size();
-    if (total_bytes == 0 || height == 0 || width == 0) {
-      m_q.memcpy(gridData.data(), m_devicePtrGrid,
-                 sizeof(int) * m_gridWidth * m_gridHeight);
-      m_q.wait_and_throw();
-      return gridData;
-    }
-
-    // Grow the raw-bytes device buffer to fit this scan.
-    if (m_rawCapacity < total_bytes) {
-      if (m_devicePtrRawBytes) {
-        sycl::free(m_devicePtrRawBytes, m_q);
+    for (size_t i = 0; i < clouds.size(); ++i) {
+      const auto &cloud = clouds[i];
+      if (cloud.empty()) {
+        continue; // no data from this sensor this tick
       }
-      m_devicePtrRawBytes = sycl::malloc_device<uint8_t>(total_bytes, m_q);
-      m_rawCapacity = total_bytes;
+      auto &dev = m_sensorDev[i];
+      const size_t total_bytes = cloud.data.size();
+
+      // Grow this sensor's raw-bytes device buffer to fit the cloud
+      if (dev.rawCapacity < total_bytes) {
+        if (dev.rawBytes) {
+          sycl::free(dev.rawBytes, m_q);
+        }
+        dev.rawBytes = sycl::malloc_device<uint8_t>(total_bytes, m_q);
+        dev.rawCapacity = total_bytes;
+      }
+      m_q.memcpy(dev.rawBytes, cloud.data.data(), total_bytes);
+
+      // Pointcloud → per-bin pseudo-scan around this sensor's origin in
+      // body orientation
+      submitPointCloudToLaserScanKernel(
+          m_q, dev.rawBytes, total_bytes, dev.ranges, m_scanSize,
+          static_cast<float>(m_rangeMax), cloud.point_step, cloud.row_step,
+          cloud.width, cloud.height, cloud.x_offset, cloud.y_offset,
+          cloud.z_offset, dev.tf, static_cast<float>(m_minHeight),
+          static_cast<float>(m_maxHeight), dev.fieldType, dev.elementSize,
+          m_max_wg_size);
+
+      // Ray-cast from this sensor's origin with orientation 0 (the mount
+      // rotation is already folded into the bearings)
+      submitScanToGridKernel(
+          m_q, m_devicePtrGrid, dev.distances, m_devicePtrAngles, dev.ranges,
+          m_gridHeight, m_gridWidth, m_resolution, /*orientation*/ 0.0f,
+          m_centralPoint,
+          Eigen::Vector3f{dev.originXY.x(), dev.originXY.y(), 0.0f},
+          dev.startPoint, m_scanSize, m_maxPointsPerLine);
     }
-
-    m_q.memcpy(m_devicePtrRawBytes, data.data(), total_bytes);
-
-    // Pointcloud → per-bin laserscan ranges on device. Fills
-    // m_devicePtrRanges with per-angle-bin minimum distance. Angles
-    // for the subsequent ray-cast kernel were pre-uploaded
-    submitPointCloudToLaserScanKernel(
-        m_q, m_devicePtrRawBytes, total_bytes, m_devicePtrRanges, m_scanSize,
-        static_cast<float>(m_rangeMax), point_step, row_step, width, height,
-        x_offset, y_offset, z_offset, static_cast<float>(m_minHeight),
-        static_cast<float>(m_maxHeight), PointFieldType::FLOAT32,
-        /*element_size*/ 4, m_max_wg_size);
-
-    // Ray-cast from laserscan → occupancy grid.
-    submitScanToGridKernel(m_q, m_devicePtrGrid, m_devicePtrDistances,
-                           m_devicePtrAngles, m_devicePtrRanges, m_gridHeight,
-                           m_gridWidth, m_resolution, m_laserscanOrientation,
-                           m_centralPoint, m_laserscanPosition, m_startPoint,
-                           m_scanSize, m_maxPointsPerLine);
 
     m_q.memcpy(gridData.data(), m_devicePtrGrid,
                sizeof(int) * m_gridWidth * m_gridHeight);
@@ -403,9 +460,27 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(ByteSpan data, int point_step,
   return gridData;
 }
 
+// Single pointcloud overload
+Eigen::MatrixXi &LocalMapperGPU::scanToGrid(ByteSpan data, int point_step,
+                                            int row_step, int height, int width,
+                                            int x_offset, int y_offset,
+                                            int z_offset) {
+  // Allocation-free N=1 adapter
+  const PointCloudView view{data,  point_step, row_step, height,
+                            width, x_offset,   y_offset, z_offset};
+  return scanToGrid(Span<PointCloudView>(&view, 1));
+}
+
+// Laserscan overload
 Eigen::MatrixXi &
 LocalMapperGPU::scanToGrid(Eigen::Ref<const Eigen::VectorXf> angles,
                            Eigen::Ref<const Eigen::VectorXf> ranges) {
+  if (m_isPointCloud) {
+    throw std::logic_error(
+        "scanToGrid(angles, ranges): mapper was constructed for pointcloud "
+        "input; the laserscan overload would overwrite the pre-uploaded "
+        "conversion bin angles");
+  }
 
   try {
     m_q.fill(m_devicePtrGrid, static_cast<int>(OccupancyType::UNEXPLORED),
@@ -433,11 +508,13 @@ LocalMapperGPU::scanToGrid(Eigen::Ref<const Eigen::VectorXf> angles,
                sizeof(double) * m_scanSize);
     m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(float) * m_scanSize);
 
-    submitScanToGridKernel(m_q, m_devicePtrGrid, m_devicePtrDistances,
-                           m_devicePtrAngles, m_devicePtrRanges, m_gridHeight,
-                           m_gridWidth, m_resolution, m_laserscanOrientation,
-                           m_centralPoint, m_laserscanPosition, m_startPoint,
-                           m_scanSize, m_maxPointsPerLine);
+    submitScanToGridKernel(
+        m_q, m_devicePtrGrid, m_devicePtrDistances, m_devicePtrAngles,
+        m_devicePtrRanges, m_gridHeight, m_gridWidth, m_resolution,
+        m_sensors[0].yaw, m_centralPoint,
+        Eigen::Vector3f{m_sensors[0].origin_xy.x(), m_sensors[0].origin_xy.y(),
+                        0.0f},
+        m_sensors[0].start_point, m_scanSize, m_maxPointsPerLine);
 
     m_q.memcpy(gridData.data(), m_devicePtrGrid,
                sizeof(int) * m_gridWidth * m_gridHeight);
