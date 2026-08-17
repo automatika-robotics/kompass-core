@@ -5,6 +5,7 @@
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
+#include "threadpool.h"
 #include <cmath>
 #include <memory>
 #include <vector>
@@ -156,6 +157,9 @@ protected:
   ControlLimitsParams ctrlimits;
   std::unique_ptr<CollisionChecker> collChecker;
   int maxNumThreads;
+  // Created once at construction when maxNumThreads > 1 and reused across
+  // calls
+  std::unique_ptr<ThreadPool> m_pool;
 
 private:
   double time_step_{0.0};
