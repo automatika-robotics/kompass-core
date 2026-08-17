@@ -201,17 +201,17 @@ int main(int argc, char *argv[]) {
     // and large enough for the longest ray here (range 3-7 m / res 0.05 m
     // = 60-140 cells) to reach its endpoint so OCCUPIED cells actually
     // get stamped
-    Mapping::LocalMapperGPU mapper(height, width, res, {0.0, 0.0, 0.0}, 0.0,
-                                   false, /*scan_size*/ 3600, 0.01, 2.0, 0.0,
-                                   20.0, /*max_points_per_line*/ 256);
+    Mapping::LocalMapperGPU mapper(height, width, res, {SensorConfig{}},
+                                   false, /*scan_size*/ 3600, 2.0, 0.0, 20.0,
+                                   /*max_points_per_line*/ 256);
     auto workload = [&]() { mapper.scanToGrid(angles, ranges); };
 #else
     float limit = width * res * std::sqrt(2);
     int maxPointsPerLine = static_cast<int>((limit / res) * 1.5);
-    Mapping::LocalMapper mapper(height, width, res, {0.0, 0.0, 0.0}, 0.0, false,
-                                0, 0.6, 0.9, 0.1, 0.1, 20.0, 0.2, 0.01, 2.0,
-                                0.0, maxPointsPerLine, 10);
-    auto workload = [&]() { mapper.scanToGridBaysian(angles, ranges); };
+    Mapping::LocalMapper mapper(height, width, res, {SensorConfig{}}, false,
+                                0, 0.6, 0.9, 0.1, 0.1, 20.0, 0.2, 2.0, 0.0,
+                                maxPointsPerLine, 10);
+    auto workload = [&]() { mapper.scanToGridBayesian(angles, ranges); };
 #endif
 
     results.push_back(measure_performance("Mapper_Dense_400x400", workload));
@@ -231,7 +231,6 @@ int main(int argc, char *argv[]) {
     const int width = 400;
     const float res = 0.05f;
     const int scan_size = 3600;  // matches the laserscan benchmark
-    const float angle_step = static_cast<float>(2.0 * M_PI / scan_size);
     const int max_points_per_line = 256;  // warp-multiple WG size, see TEST 2
 
     // Z-filter matches the critical-zone pointcloud benchmark so in-zone
@@ -240,10 +239,9 @@ int main(int argc, char *argv[]) {
     const float max_h = 2.0f;
     const float range_max = 20.0f;
 
-    Mapping::LocalMapperGPU mapper(height, width, res, {0.0, 0.0, 0.0}, 0.0,
-                                   /*isPointCloud*/ true, scan_size, angle_step,
-                                   max_h, min_h, range_max,
-                                   max_points_per_line);
+    Mapping::LocalMapperGPU mapper(height, width, res, {SensorConfig{}},
+                                   /*isPointCloud*/ true, scan_size, max_h,
+                                   min_h, range_max, max_points_per_line);
 
     auto cloud_bytes = generate_heavy_pointcloud_bytes(100000);
     const int point_step = sizeof(PointXYZ);
