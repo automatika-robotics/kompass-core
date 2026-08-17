@@ -5,7 +5,6 @@
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
-#include <array>
 #include <cmath>
 #include <memory>
 #include <vector>

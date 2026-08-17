@@ -7,7 +7,6 @@
 #include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
-#include "utils/logger.h"
 #include "utils/threadpool.h"
 #include "utils/trajectory_sampler.h"
 namespace Kompass {
