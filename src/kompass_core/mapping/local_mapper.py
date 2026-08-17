@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional, Sequence, Union
 from attrs import define, field, validators
 import math
 import numpy as np
@@ -7,6 +7,7 @@ from ..datatypes.pose import PoseData
 from kompass_cpp.mapping import (
     OCCUPANCY_TYPE,
 )
+from kompass_cpp.types import SensorConfig
 
 from ..utils.geometry import transform_point_from_local_to_global, get_relative_pose
 
@@ -75,7 +76,7 @@ class MapConfig(BaseAttrs):
     padding: float = field(
         default=0.0, validator=base_validators.in_range(min_value=0.0, max_value=10.0)
     )
-    baysian_update: bool = field(default=False)
+    bayesian_update: bool = field(default=False)
     max_num_threads: int = field(default=1, validator=validators.ge(1))
 
     filter_limit: float = field(
@@ -117,6 +118,8 @@ class LocalMapper:
         config: MapConfig,
         scan_model_config: ScanModelConfig,
         pose_laser_scanner_in_robot: Optional[PoseData] = None,
+        *,
+        sensors: Optional[Sequence[Union[PoseData, SensorConfig]]] = None,
     ):
         """Initialize a LocalMapper
 
@@ -124,6 +127,15 @@ class LocalMapper:
         :type config: MapConfig
         :param scan_model_config: LaserScan or PointCloud model config
         :type scan_model_config: ScanModelConfig
+        :param pose_laser_scanner_in_robot: Single-sensor mount pose
+            (mutually exclusive with ``sensors``)
+        :type pose_laser_scanner_in_robot: Optional[PoseData]
+        :param sensors: Multi-sensor mode: one mount per sensor, as PoseData
+            or kompass_cpp.types.SensorConfig (the latter also carries the
+            cloud field encoding). Point clouds are then fused with
+            ``update_from_pointclouds``, one cloud per sensor, positional
+            pairing
+        :type sensors: Optional[Sequence[Union[PoseData, SensorConfig]]]
         """
 
         self.config = config
@@ -148,12 +160,25 @@ class LocalMapper:
 
         self.scan_model = scan_model_config
 
+        # multi sensor config (pointclouds)
+        if sensors is not None:
+            if pose_laser_scanner_in_robot is not None:
+                raise ValueError(
+                    "Pass either 'pose_laser_scanner_in_robot' (single sensor) "
+                    "or 'sensors' (multi-sensor), not both"
+                )
+            if len(sensors) == 0:
+                raise ValueError("'sensors' requires at least one entry")
+            if config.bayesian_update:
+                raise ValueError(
+                    "bayesian_update is not supported with the multi-sensor "
+                    "pipeline ('sensors='); use the single-sensor "
+                    "'pose_laser_scanner_in_robot' argument instead"
+                )
+        self._sensors = list(sensors) if sensors is not None else None
+
         self.pose_laserscanner_in_robot = (
             pose_laser_scanner_in_robot if pose_laser_scanner_in_robot else PoseData()
-        )
-
-        self.laserscan_orientation_in_robot = 2 * np.arctan(
-            self.pose_laserscanner_in_robot.qz / self.pose_laserscanner_in_robot.qw
         )
 
         self.grid_data = GridData(
@@ -185,6 +210,33 @@ class LocalMapper:
         """
         return self.grid_data.occupancy_prob
 
+    @property
+    def num_sensors(self) -> int:
+        """Number of configured sensors"""
+        return len(self._sensors) if self._sensors is not None else 1
+
+    def _sensor_configs(self) -> List[SensorConfig]:
+        """Builds the per-sensor mount configs passed to the cpp mapper.
+
+        The full mount quaternion is forwarded (roll/pitch honored on the
+        pointcloud path; the laserscan path consumes the mount as planar).
+        """
+
+        def _to_config(sensor) -> SensorConfig:
+            if isinstance(sensor, SensorConfig):
+                return sensor
+            return SensorConfig(
+                position=sensor.get_position(),
+                rotation=np.array(
+                    [sensor.qx, sensor.qy, sensor.qz, sensor.qw],
+                    dtype=np.float32,
+                ),
+            )
+
+        if self._sensors is not None:
+            return [_to_config(sensor) for sensor in self._sensors]
+        return [_to_config(self.pose_laserscanner_in_robot)]
+
     def _initialize_mapper(self, scan_size: int) -> None:
         """Initialize cpp local mapper"""
         try:
@@ -194,11 +246,9 @@ class LocalMapper:
                 grid_height=self.grid_height,
                 grid_width=self.grid_width,
                 resolution=self.config.resolution,
-                laserscan_position=self.pose_laserscanner_in_robot.get_position(),
-                laserscan_orientation=self.laserscan_orientation_in_robot,
+                sensor_configs=self._sensor_configs(),
                 is_pointcloud=self.is_pointcloud,
                 scan_size=scan_size,
-                angle_step=self.scan_model.angle_step,
                 max_height=self.scan_model.max_height,
                 min_height=self.scan_model.min_height,
                 range_max=self.scan_model.range_max,
@@ -207,15 +257,18 @@ class LocalMapper:
         except ImportError:
             from kompass_cpp.mapping import LocalMapper as LocalMapperCpp
 
+            # angle_step only used to derive scan_size for pointclouds, not used
+            # in cpp ctor
+            scan_model_params = self.scan_model.asdict()
+            scan_model_params.pop("angle_step", None)
             self.local_mapper = LocalMapperCpp(
                 grid_height=self.grid_height,
                 grid_width=self.grid_width,
                 resolution=self.config.resolution,
-                laserscan_position=self.pose_laserscanner_in_robot.get_position(),
-                laserscan_orientation=self.laserscan_orientation_in_robot,
+                sensor_configs=self._sensor_configs(),
                 is_pointcloud=self.is_pointcloud,
                 scan_size=scan_size,
-                **self.scan_model.asdict(),
+                **scan_model_params,
                 max_points_per_line=self.config.max_points_per_line,
                 max_num_threads=self.config.max_num_threads,
             )
@@ -261,6 +314,11 @@ class LocalMapper:
         :param angles: Angle of each range measurement (rad)
         :type angles: np.ndarray
         """
+        if self.num_sensors > 1:
+            raise NotImplementedError(
+                "Multi-sensor LaserScan fusion is not supported; configure "
+                "multiple sensors with point cloud input"
+            )
         if not self.processed:
             self.is_pointcloud = False
             self._initialize_mapper(ranges.size)
@@ -320,15 +378,19 @@ class LocalMapper:
         :param z_offset: Byte offset of the 'z' field within a point
         :type z_offset: int
         """
+        if self.num_sensors > 1:
+            raise RuntimeError(
+                "This mapper is configured with multiple sensors; use "
+                "update_from_pointclouds instead"
+            )
         if not self.processed:
             self.is_pointcloud = True
             # NOTE: `angle_step` is the canonical knob on the Python side; the
             # bin count is derived from it with a ceil so every angle in
-            # [0, 2π) lands in a valid bin. The C++ ctor then enforces
-            # the inverse relation `angle_step = 2π / scan_size` so the
-            # conversion kernel (which bins by `scan_size`) and the
-            # ray-cast kernel (which reads `initializedAngles[i] =
-            # i * angle_step`) can't drift apart.
+            # [0, 2π) lands in a valid bin. The cpp mapping kernels derive their
+            # step as `2π / scan_size`, so the two can't drift apart by construction.
+            # The effective step is therefore marginally finer than the requested
+            # one whenever 2π isn't an exact multiple of it.
             self._initialize_mapper(math.ceil(2 * np.pi / self.scan_model.angle_step))
 
         self._move_grid_to(robot_pose)
@@ -344,6 +406,44 @@ class LocalMapper:
             z_offset=z_offset,
         )
 
+    def update_from_pointclouds(
+        self,
+        robot_pose: PoseData,
+        *,
+        clouds: Sequence,
+    ):
+        """
+        Update the local map by fusing one point cloud per configured sensor
+
+        ``clouds[i]`` pairs with the i-th configured sensor (positional
+        pairing). Each element is a dict and ``None`` means the sensor
+        contributed no data this tick.
+
+        :param robot_pose: Current robot position
+        :type robot_pose: PoseData
+        :param clouds: One cloud (or None) per configured sensor
+        :type clouds: Sequence
+        """
+        if self._sensors is None:
+            raise RuntimeError(
+                "update_from_pointclouds requires the mapper to be "
+                "constructed with 'sensors='"
+            )
+        if len(clouds) != self.num_sensors:
+            raise ValueError(
+                f"Expected {self.num_sensors} clouds (one per configured "
+                f"sensor), got {len(clouds)}"
+            )
+        if not self.processed:
+            self.is_pointcloud = True
+            # NOTE: (see update_from_pointcloud), cpp kernels derive their bin
+            # step from scan_size
+            scan_size = math.ceil(2 * np.pi / self.scan_model.angle_step)
+            self._initialize_mapper(scan_size)
+
+        self._move_grid_to(robot_pose)
+        self._update_grid(clouds=list(clouds))
+
     def _move_grid_to(self, robot_pose: PoseData) -> None:
         """Re-center the grid around a new robot pose
 
@@ -357,7 +457,7 @@ class LocalMapper:
 
         # Get transformation between the previous robot state (pose and grid)
         # w.r.t the current state.
-        if self.config.baysian_update and self.processed:
+        if self.config.bayesian_update and self.processed:
             self._calculate_grid_shift(robot_pose)
 
     def _update_grid(self, **scan) -> None:
@@ -367,9 +467,9 @@ class LocalMapper:
             overload: ``angles``/``ranges`` for a laser scan, or the raw buffer
             and its layout for a point cloud
         """
-        if self.config.baysian_update:
-            scan_occupancy, scan_occupancy_prob = self.local_mapper.scan_to_grid_baysian(
-                **scan
+        if self.config.bayesian_update:
+            scan_occupancy, scan_occupancy_prob = (
+                self.local_mapper.scan_to_grid_bayesian(**scan)
             )
 
             # Update grids in place, copy into preallocated storage
@@ -391,9 +491,7 @@ class LocalMapper:
 
         else:
             # Update grid in place
-            np.copyto(
-                self.grid_data.occupancy, self.local_mapper.scan_to_grid(**scan)
-            )
+            np.copyto(self.grid_data.occupancy, self.local_mapper.scan_to_grid(**scan))
 
         # flag to enable fetching the mapping data
         self.processed = True
