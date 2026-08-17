@@ -33,8 +33,12 @@ class ScanModelConfig(BaseAttrs):
         Thickness (in meters) beyond the measured range where a cell is assumed to be occupied (e.g., for modeling walls or obstacles).
     max_height : float
         Maximum Z-axis height (in meters) of a point to be considered valid for occupancy updates.
+        For point cloud input this band is applied on the BODY-frame z (each sensor's mount
+        transform is applied to the point first), so it is shared by all sensors — typically
+        ``0 .. robot_height``. For laser scan input the band is not applicable (planar data).
     min_height : float
         Minimum Z-axis height (in meters) of a point to be considered valid for occupancy updates.
+        BODY-frame for point cloud input, see ``max_height``.
     """
 
     p_prior: float = field(
