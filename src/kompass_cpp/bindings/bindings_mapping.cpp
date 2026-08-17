@@ -60,6 +60,22 @@ void bindings_mapping(py::module_ &m) {
           py::arg("y_offset"), py::arg("z_offset"),
           py::rv_policy::reference_internal)
 
+      .def(
+          "scan_to_grid",
+          [](Mapping::LocalMapper &self,
+             py::sequence clouds) -> Eigen::MatrixXi & {
+            std::vector<ByteArray> keepalive;
+            auto views = extractCloudViews(clouds, keepalive);
+            py::gil_scoped_release release;
+            return self.scanToGrid(views);
+          },
+          "Fuse N point clouds into one occupancy grid (zero-copy input). "
+          "clouds[i] pairs with sensor_configs[i]; each element is a dict "
+          "(e.g. PointCloudData.asdict()) carrying data/point_step/row_step/"
+          "height/width/x_offset/y_offset/z_offset (extra keys ignored); "
+          "None entries are skipped.",
+          py::arg("clouds"), py::rv_policy::reference_internal)
+
       .def("scan_to_grid_bayesian",
            py::overload_cast<Eigen::Ref<const Eigen::VectorXf>,
                              Eigen::Ref<const Eigen::VectorXf>>(

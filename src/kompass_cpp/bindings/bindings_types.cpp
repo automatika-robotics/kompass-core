@@ -11,7 +11,6 @@
 #include "datatypes/trajectory.h"
 #include "utils/collision_check.h"
 #include "utils/critical_zone_check.h"
-#include "utils/pointcloud.h"
 
 using namespace Kompass;
 

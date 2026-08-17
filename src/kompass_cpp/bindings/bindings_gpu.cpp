@@ -40,7 +40,23 @@ void bindings_mapping_gpu(py::module_ &m) {
           py::arg("data"), py::arg("point_step"), py::arg("row_step"),
           py::arg("height"), py::arg("width"), py::arg("x_offset"),
           py::arg("y_offset"), py::arg("z_offset"),
-          py::rv_policy::reference_internal);
+          py::rv_policy::reference_internal)
+
+      .def(
+          "scan_to_grid",
+          [](Mapping::LocalMapperGPU &self,
+             py::sequence clouds) -> Eigen::MatrixXi & {
+            std::vector<ByteArray> keepalive;
+            auto views = extractCloudViews(clouds, keepalive);
+            py::gil_scoped_release release;
+            return self.scanToGrid(views);
+          },
+          "Fuse N point clouds into one occupancy grid (zero-copy input). "
+          "clouds[i] pairs with sensor_configs[i]; each element is a dict "
+          "(e.g. PointCloudData.asdict()) carrying data/point_step/row_step/"
+          "height/width/x_offset/y_offset/z_offset (extra keys ignored); "
+          "None entries are skipped.",
+          py::arg("clouds"), py::rv_policy::reference_internal);
 }
 
 // Utils bindings submodule
