@@ -1,7 +1,6 @@
 #include "bindings.h"
 #include "mapping/local_mapper_gpu.h"
 #include "utils/critical_zone_check_gpu.h"
-#include "utils/pointcloud.h"
 #include <nanobind/stl/vector.h>
 
 using namespace Kompass;
@@ -9,13 +8,17 @@ using namespace Kompass;
 // Mapping bindings submodule
 void bindings_mapping_gpu(py::module_ &m) {
   py::class_<Mapping::LocalMapperGPU>(m, "LocalMapperGPU")
-      .def(py::init<const int, const int, float, const Eigen::Vector3f &, float,
-                    bool, int, float, float, float, float, int>(),
+      .def(py::init<const int, const int, float,
+                    const std::vector<SensorConfig> &, bool, int, float, float,
+                    float, int>(),
            py::arg("grid_height"), py::arg("grid_width"), py::arg("resolution"),
-           py::arg("laserscan_position"), py::arg("laserscan_orientation"),
-           py::arg("is_pointcloud"), py::arg("scan_size"),
-           py::arg("angle_step"), py::arg("max_height"), py::arg("min_height"),
-           py::arg("range_max"), py::arg("max_points_per_line") = 32)
+           py::arg("sensor_configs"), py::arg("is_pointcloud"),
+           py::arg("scan_size"), py::arg("max_height"), py::arg("min_height"),
+           py::arg("range_max"), py::arg("max_points_per_line") = 32,
+           "One SensorConfig per sensor. Laserscan input requires exactly one "
+           "sensor (mount consumed as planar); pointcloud input accepts N "
+           "sensors fused into one grid, with max/min height as a BODY-frame "
+           "band shared by all sensors.")
 
       .def("scan_to_grid",
            py::overload_cast<Eigen::Ref<const Eigen::VectorXf>,
@@ -68,8 +71,8 @@ void bindings_utils_gpu(py::module_ &m) {
              int row_step, int height, int width, int x_offset, int y_offset,
              int z_offset, bool forward) {
             py::gil_scoped_release release;
-            return self.check(toSpan(data), point_step, row_step, height,
-                              width, x_offset, y_offset, z_offset, forward);
+            return self.check(toSpan(data), point_step, row_step, height, width,
+                              x_offset, y_offset, z_offset, forward);
           },
           py::arg("data"), py::arg("point_step"), py::arg("row_step"),
           py::arg("height"), py::arg("width"), py::arg("x_offset"),
