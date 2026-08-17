@@ -6,6 +6,7 @@
 #include <Eigen/SparseCore>
 #include <cstdio>
 #include <mutex>
+#include <string>
 #include <vector>
 
 namespace Kompass {
@@ -123,12 +124,13 @@ float LocalMapper::updateGridCellProbability(float distance, float currentRange,
   return pCurr;
 }
 
-void LocalMapper::updateGrid_(const float angle, const float range) {
+void LocalMapper::updateGrid_(const float angle, const float range,
+                              const Eigen::Vector2f originXY,
+                              const float orientation,
+                              const Eigen::Vector2i startPoint) {
 
-  float x =
-      m_laserscanPosition(0) + (range * cos(m_laserscanOrientation + angle));
-  float y =
-      m_laserscanPosition(1) + (range * sin(m_laserscanOrientation + angle));
+  float x = originXY(0) + (range * cos(orientation + angle));
+  float y = originXY(1) + (range * sin(orientation + angle));
 
   Eigen::Vector2i toPoint = localToGrid(Eigen::Vector2f(x, y));
   // Reused across rays on the same worker thread: one heap allocation per
@@ -137,7 +139,7 @@ void LocalMapper::updateGrid_(const float angle, const float range) {
   points.clear();
   points.reserve(m_maxPointsPerLine);
 
-  bresenhamEnhanced(m_startPoint, toPoint, points);
+  bresenhamEnhanced(startPoint, toPoint, points);
 
   // One lock per ray. The writes below are cheap cell stores, so holding
   // the lock across the line beats a lock per cell
@@ -159,12 +161,13 @@ void LocalMapper::updateGrid_(const float angle, const float range) {
   }
 }
 
-void LocalMapper::updateGridBaysian_(const float angle, const float range) {
+void LocalMapper::updateGridBayesian_(const float angle, const float range,
+                                      const Eigen::Vector2f originXY,
+                                      const float orientation,
+                                      const Eigen::Vector2i startPoint) {
 
-  float x =
-      m_laserscanPosition(0) + (range * cos(m_laserscanOrientation + angle));
-  float y =
-      m_laserscanPosition(1) + (range * sin(m_laserscanOrientation + angle));
+  float x = originXY(0) + (range * cos(orientation + angle));
+  float y = originXY(1) + (range * sin(orientation + angle));
 
   Eigen::Vector2i toPoint = localToGrid(Eigen::Vector2f(x, y));
   // Reused across rays on the same worker thread
@@ -173,7 +176,7 @@ void LocalMapper::updateGridBaysian_(const float angle, const float range) {
   points.clear();
   points.reserve(m_maxPointsPerLine);
 
-  bresenhamEnhanced(m_startPoint, toPoint, points);
+  bresenhamEnhanced(startPoint, toPoint, points);
 
   // Do probability math outside the lock
   newValues.resize(points.size());
@@ -181,7 +184,7 @@ void LocalMapper::updateGridBaysian_(const float angle, const float range) {
     const auto &pt = points[i];
     if (pt(0) >= 0 && pt(0) < m_gridHeight && pt(1) >= 0 &&
         pt(1) < m_gridWidth) {
-      float distance = (pt - m_startPoint).norm();
+      float distance = (pt - startPoint).norm();
       newValues[i] = updateGridCellProbability(
           distance, range, previousGridDataProb(pt(0), pt(1)));
     }
@@ -209,75 +212,160 @@ void LocalMapper::updateGridBaysian_(const float angle, const float range) {
   }
 }
 
-Eigen::MatrixXi &
-LocalMapper::scanToGrid(Eigen::Ref<const Eigen::VectorXf> angles,
-                        Eigen::Ref<const Eigen::VectorXf> ranges) {
-
-  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+void LocalMapper::rasterizeScan_(Eigen::Ref<const Eigen::VectorXf> angles,
+                                 Eigen::Ref<const Eigen::VectorXf> ranges,
+                                 const Eigen::Vector2f originXY,
+                                 const float orientation,
+                                 const Eigen::Vector2i startPoint) {
   if (m_pool) {
     static thread_local std::vector<std::future<void>> futures;
     futures.clear();
     futures.reserve(angles.size());
     for (Eigen::Index i = 0; i < angles.size(); ++i) {
       futures.emplace_back(m_pool->enqueue(&LocalMapper::updateGrid_, this,
-                                           angles[i], ranges[i]));
+                                           angles[i], ranges[i], originXY,
+                                           orientation, startPoint));
     }
     for (auto &f : futures) {
       f.wait();
     }
   } else {
     for (Eigen::Index i = 0; i < angles.size(); ++i) {
-      updateGrid_(angles[i], ranges[i]);
+      updateGrid_(angles[i], ranges[i], originXY, orientation, startPoint);
     }
   }
-  return gridData;
 }
 
-std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
-LocalMapper::scanToGridBaysian(Eigen::Ref<const Eigen::VectorXf> angles,
-                               Eigen::Ref<const Eigen::VectorXf> ranges) {
-
-  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
-  gridDataProb.fill(m_pPrior);
+void LocalMapper::rasterizeScanBayesian_(
+    Eigen::Ref<const Eigen::VectorXf> angles,
+    Eigen::Ref<const Eigen::VectorXf> ranges, const Eigen::Vector2f originXY,
+    const float orientation, const Eigen::Vector2i startPoint) {
   if (m_pool) {
     static thread_local std::vector<std::future<void>> futures;
     futures.clear();
     futures.reserve(angles.size());
     for (Eigen::Index i = 0; i < angles.size(); ++i) {
-      futures.emplace_back(m_pool->enqueue(&LocalMapper::updateGridBaysian_,
-                                           this, angles[i], ranges[i]));
+      futures.emplace_back(m_pool->enqueue(&LocalMapper::updateGridBayesian_,
+                                           this, angles[i], ranges[i], originXY,
+                                           orientation, startPoint));
     }
     for (auto &f : futures) {
       f.wait();
     }
   } else {
     for (Eigen::Index i = 0; i < angles.size(); ++i) {
-      updateGridBaysian_(angles[i], ranges[i]);
+      updateGridBayesian_(angles[i], ranges[i], originXY, orientation,
+                          startPoint);
     }
   }
+}
+
+// Laserscan overload
+Eigen::MatrixXi &
+LocalMapper::scanToGrid(Eigen::Ref<const Eigen::VectorXf> angles,
+                        Eigen::Ref<const Eigen::VectorXf> ranges) {
+  if (m_isPointCloud) {
+    throw std::logic_error("scanToGrid(angles, ranges): mapper was "
+                           "constructed for pointcloud input");
+  }
+  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+  rasterizeScan_(angles, ranges, m_sensors[0].origin_xy, m_sensors[0].yaw,
+                 m_sensors[0].start_point);
+  return gridData;
+}
+
+// Laserscan Bayesian overload
+std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
+LocalMapper::scanToGridBayesian(Eigen::Ref<const Eigen::VectorXf> angles,
+                                Eigen::Ref<const Eigen::VectorXf> ranges) {
+  if (m_isPointCloud) {
+    throw std::logic_error("scanToGridBayesian(angles, ranges): mapper was "
+                           "constructed for pointcloud input");
+  }
+  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+  gridDataProb.fill(m_pPrior);
+  rasterizeScanBayesian_(angles, ranges, m_sensors[0].origin_xy,
+                         m_sensors[0].yaw, m_sensors[0].start_point);
   return std::tie(gridData, gridDataProb);
 }
 
+// Multi Pointcloud sensor overload
+Eigen::MatrixXi &LocalMapper::scanToGrid(Span<PointCloudView> clouds) {
+  if (!m_isPointCloud) {
+    throw std::logic_error(
+        "scanToGrid(clouds): mapper was not constructed for pointcloud input");
+  }
+  if (clouds.size() != m_sensors.size()) {
+    throw std::invalid_argument("scanToGrid(clouds): got " +
+                                std::to_string(clouds.size()) + " clouds for " +
+                                std::to_string(m_sensors.size()) + " sensors");
+  }
+  // Validate every cloud before touching the grid, so a bad batch cannot
+  // leave a half-fused result
+  for (size_t i = 0; i < clouds.size(); ++i) {
+    const auto &cloud = clouds[i];
+    if (!cloud.empty() &&
+        (cloud.x_offset < 0 || cloud.y_offset < 0 || cloud.z_offset < 0)) {
+      throw std::invalid_argument(
+          "clouds[" + std::to_string(i) +
+          "]: point field offsets (x/y/z) must be non-negative: malformed "
+          "point cloud metadata");
+    }
+  }
+
+  // initialize grid once
+  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+
+  for (size_t i = 0; i < clouds.size(); ++i) {
+    // Skip if cloud is empty
+    if (clouds[i].empty()) {
+      continue;
+    }
+    // Convert around this sensor's mount. Bearings come out in body
+    // orientation around the sensor origin, so the ray cast runs with
+    // orientation 0 from the sensor's own cell
+    pointCloudToLaserScanFromRaw(clouds[i], m_sensors[i].tf_body, m_rangeMax,
+                                 m_minHeight, m_maxHeight, m_scanSize,
+                                 initializedRanges);
+    rasterizeScan_(initializedAngles, initializedRanges, m_sensors[i].origin_xy,
+                   0.0f, m_sensors[i].start_point);
+  }
+  return gridData;
+}
+
+// Single sensor pointcloud convenience overload
 Eigen::MatrixXi &LocalMapper::scanToGrid(ByteSpan data, int point_step,
                                          int row_step, int height, int width,
                                          int x_offset, int y_offset,
                                          int z_offset) {
-  pointCloudToLaserScanFromRaw(
-      data, point_step, row_step, height, width, x_offset, y_offset, z_offset,
-      m_rangeMax, m_minHeight, m_maxHeight, m_scanSize, initializedRanges);
-  return scanToGrid(initializedAngles, initializedRanges);
+  const PointCloudView view{data,  point_step, row_step, height,
+                            width, x_offset,   y_offset, z_offset};
+  return scanToGrid(Span<PointCloudView>(&view, 1));
 }
 
+// Single sensor pointcloud Bayesian overload
 std::tuple<Eigen::MatrixXi &, Eigen::MatrixXf &>
-LocalMapper::scanToGridBaysian(ByteSpan data, int point_step, int row_step,
-                               int height, int width, int x_offset,
-                               int y_offset, int z_offset) {
-  // Bin by scan_size through the member buffers, exactly like the
-  // non-Bayesian path
-  pointCloudToLaserScanFromRaw(
-      data, point_step, row_step, height, width, x_offset, y_offset, z_offset,
-      m_rangeMax, m_minHeight, m_maxHeight, m_scanSize, initializedRanges);
-  return scanToGridBaysian(initializedAngles, initializedRanges);
+LocalMapper::scanToGridBayesian(ByteSpan data, int point_step, int row_step,
+                                int height, int width, int x_offset,
+                                int y_offset, int z_offset) {
+  // Bayesian fusion stays single-sensor
+  if (!m_isPointCloud || m_sensors.size() != 1) {
+    throw std::logic_error(
+        "scanToGridBayesian supports exactly one pointcloud sensor");
+  }
+  // Bin by scan_size through the member buffers. Bearings come out in body
+  // orientation around the sensor origin, so the ray cast runs with orientation 0
+  pointCloudToLaserScanFromRaw(PointCloudView{data, point_step, row_step,
+                                              height, width, x_offset, y_offset,
+                                              z_offset},
+                               m_sensors[0].tf_body, m_rangeMax, m_minHeight,
+                               m_maxHeight, m_scanSize, initializedRanges);
+  gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
+  gridDataProb.fill(m_pPrior);
+  rasterizeScanBayesian_(initializedAngles, initializedRanges,
+                         m_sensors[0].origin_xy, 0.0f,
+                         m_sensors[0].start_point);
+  return std::tie(gridData, gridDataProb);
 }
 } // namespace Mapping
 } // namespace Kompass
