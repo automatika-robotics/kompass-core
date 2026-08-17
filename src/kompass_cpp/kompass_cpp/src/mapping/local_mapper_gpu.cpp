@@ -3,7 +3,6 @@
 #include "utils/pointcloud.h"
 #include <cmath>
 #include <stdexcept>
-#include <string>
 #include <sycl/sycl.hpp>
 
 namespace Kompass {
@@ -381,23 +380,7 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(Span<PointCloudView> clouds) {
     throw std::logic_error(
         "scanToGrid(clouds): mapper was not constructed for pointcloud input");
   }
-  if (clouds.size() != m_sensorDev.size()) {
-    throw std::invalid_argument(
-        "scanToGrid(clouds): got " + std::to_string(clouds.size()) +
-        " clouds for " + std::to_string(m_sensorDev.size()) + " sensors");
-  }
-  // Validate every cloud before touching the device, so a bad batch cannot
-  // leave a half-fused result
-  for (size_t i = 0; i < clouds.size(); ++i) {
-    const auto &cloud = clouds[i];
-    if (!cloud.empty() &&
-        (cloud.x_offset < 0 || cloud.y_offset < 0 || cloud.z_offset < 0)) {
-      throw std::invalid_argument(
-          "clouds[" + std::to_string(i) +
-          "]: point field offsets (x/y/z) must be non-negative: malformed "
-          "point cloud metadata");
-    }
-  }
+  validateClouds(clouds, m_sensorDev.size());
 
   try {
     // Drain anything a previous throwing call may have left in flight

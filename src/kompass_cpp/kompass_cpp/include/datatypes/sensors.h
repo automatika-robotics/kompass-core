@@ -4,6 +4,8 @@
 #include "utils/transformation.h"
 #include <Eigen/Dense>
 #include <cmath>
+#include <stdexcept>
+#include <string>
 
 // Point field encoding of a PointCloud2-style byte buffer. Values match the
 // sensor_msgs/PointField datatype codes.
@@ -87,6 +89,33 @@ struct PointCloudView {
 
   /// An empty view means this sensor contributed no data this tick
   bool empty() const { return data.empty() || width * height == 0; }
+
+  /// Negative field offsets mean malformed PointCloud2 metadata
+  bool offsetsValid() const {
+    return x_offset >= 0 && y_offset >= 0 && z_offset >= 0;
+  }
 };
+
+/**
+ * Shared prologue of every batched cloud call. The batch must hold exactly one
+ * view per configured sensor (positional pairing), and every non-empty view
+ * must carry valid offsets.
+ */
+inline void validateClouds(Span<PointCloudView> clouds,
+                           const size_t num_sensors) {
+  if (clouds.size() != num_sensors) {
+    throw std::invalid_argument("expected " + std::to_string(num_sensors) +
+                                " clouds (one per configured sensor), got " +
+                                std::to_string(clouds.size()));
+  }
+  for (size_t i = 0; i < clouds.size(); ++i) {
+    if (!clouds[i].empty() && !clouds[i].offsetsValid()) {
+      throw std::invalid_argument(
+          "clouds[" + std::to_string(i) +
+          "]: point field offsets (x/y/z) must be non-negative: malformed "
+          "point cloud metadata");
+    }
+  }
+}
 
 } // namespace Kompass

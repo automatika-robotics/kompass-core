@@ -6,7 +6,6 @@
 #include <Eigen/SparseCore>
 #include <cstdio>
 #include <mutex>
-#include <string>
 #include <vector>
 
 namespace Kompass {
@@ -295,23 +294,7 @@ Eigen::MatrixXi &LocalMapper::scanToGrid(Span<PointCloudView> clouds) {
     throw std::logic_error(
         "scanToGrid(clouds): mapper was not constructed for pointcloud input");
   }
-  if (clouds.size() != m_sensors.size()) {
-    throw std::invalid_argument("scanToGrid(clouds): got " +
-                                std::to_string(clouds.size()) + " clouds for " +
-                                std::to_string(m_sensors.size()) + " sensors");
-  }
-  // Validate every cloud before touching the grid, so a bad batch cannot
-  // leave a half-fused result
-  for (size_t i = 0; i < clouds.size(); ++i) {
-    const auto &cloud = clouds[i];
-    if (!cloud.empty() &&
-        (cloud.x_offset < 0 || cloud.y_offset < 0 || cloud.z_offset < 0)) {
-      throw std::invalid_argument(
-          "clouds[" + std::to_string(i) +
-          "]: point field offsets (x/y/z) must be non-negative: malformed "
-          "point cloud metadata");
-    }
-  }
+  validateClouds(clouds, m_sensors.size());
 
   // initialize grid once
   gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
