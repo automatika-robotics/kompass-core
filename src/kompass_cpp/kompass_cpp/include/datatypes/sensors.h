@@ -40,6 +40,48 @@ inline int elementSizeOf(const PointFieldType type) {
   }
 }
 
+// Helper: Loads bytes safely handling potential misalignment
+inline float load_and_cast_val(const uint8_t *ptr, size_t offset,
+                               PointFieldType type) {
+  const uint8_t *addr = ptr + offset;
+
+  // Generic lambda to load unaligned data safely
+  auto load_safe = [&](auto dummy_type) {
+    using T = decltype(dummy_type);
+    T val;
+    // Copy byte-by-byte (compiler optimizes this to a register load)
+    // use uint8_t* to match the source pointer type
+    for (size_t i = 0; i < sizeof(T); ++i) {
+      reinterpret_cast<uint8_t *>(&val)[i] = addr[i];
+    }
+    return static_cast<float>(val);
+  };
+
+  switch (type) {
+  case PointFieldType::INT8:
+    // INT8 is always aligned (1 byte)
+    return static_cast<float>(*reinterpret_cast<const int8_t *>(addr));
+  case PointFieldType::UINT8:
+    // UINT8 is always aligned (1 byte)
+    return static_cast<float>(*addr);
+  case PointFieldType::INT16:
+    return load_safe(int16_t{});
+  case PointFieldType::UINT16:
+    return load_safe(uint16_t{});
+  case PointFieldType::INT32:
+    return load_safe(int32_t{});
+  case PointFieldType::UINT32:
+    return load_safe(uint32_t{});
+  case PointFieldType::FLOAT32:
+    return load_safe(float{});
+  case PointFieldType::FLOAT64:
+    return load_safe(double{});
+
+  default:
+    return 0.0f;
+  }
+}
+
 namespace Kompass {
 
 /**
