@@ -16,6 +16,10 @@
 
 using namespace Kompass;
 
+// Nx3 cartesian points (row-major so a numpy (N, 3) float32 array maps
+// zero-copy); float64 or non-contiguous input converts with one copy
+using RowMatrixX3f = Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor>;
+
 // Control bindings submodule
 void bindings_control(py::module_ &m) {
   auto m_control = m.def_submodule("control", "Control module");
