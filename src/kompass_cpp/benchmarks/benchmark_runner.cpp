@@ -273,12 +273,6 @@ int main(int argc, char *argv[]) {
     Eigen::Vector3f sensorPos{0.22, 0.0, 0.4};
     Eigen::Vector4f sensorRot{0, 0, 0.99, 0.0};
     float crit_angle = 160.0, crit_dist = 0.3, slow_dist = 0.6;
-    std::vector<double> dummy_angles;
-    dummy_angles.reserve(360);
-    double angle_step = 2.0 * M_PI / 360.0;
-    for (int i = 0; i < 360; ++i) {
-      dummy_angles.push_back(i * angle_step);
-    }
     auto cloud_bytes = generate_heavy_pointcloud_bytes(100000); // 100k points
 
     int point_step = sizeof(PointXYZ);
@@ -292,14 +286,16 @@ int main(int argc, char *argv[]) {
 
 #ifdef GPU
     CriticalZoneCheckerGPU checker(CriticalZoneChecker::InputType::POINTCLOUD,
-                                   shape, robotDim, sensorPos, sensorRot,
-                                   crit_angle, crit_dist, slow_dist,
-                                   dummy_angles, 0.1, 2.0, 20.0);
+                                   shape, robotDim,
+                                   {SensorConfig{sensorPos, sensorRot}},
+                                   crit_angle, crit_dist, slow_dist, 0.1, 2.0,
+                                   20.0);
 #else
     CriticalZoneChecker checker(CriticalZoneChecker::InputType::POINTCLOUD,
-                                shape, robotDim, sensorPos, sensorRot,
-                                crit_angle, crit_dist, slow_dist, dummy_angles,
-                                0.1, 2.0, 20.0);
+                                shape, robotDim,
+                                {SensorConfig{sensorPos, sensorRot}},
+                                crit_angle, crit_dist, slow_dist, 0.1, 2.0,
+                                20.0);
 #endif
 
     auto workload = [&]() {
@@ -364,13 +360,13 @@ int main(int argc, char *argv[]) {
 #ifdef GPU
     CriticalZoneCheckerGPU checker(CriticalZoneChecker::InputType::LASERSCAN,
                                    CollisionChecker::ShapeType::CYLINDER,
-                                   robotDim, sensorPos, sensorRot, 160.0, 0.3,
-                                   0.6, angles, 0.1, 2.0, 20.0);
+                                   robotDim, {SensorConfig{sensorPos, sensorRot}},
+                                   160.0, 0.3, 0.6, 0.1, 2.0, 20.0, angles);
 #else
     CriticalZoneChecker checker(CriticalZoneChecker::InputType::LASERSCAN,
                                 CollisionChecker::ShapeType::CYLINDER, robotDim,
-                                sensorPos, sensorRot, 160.0, 0.3, 0.6, angles,
-                                0.1, 2.0, 20.0);
+                                {SensorConfig{sensorPos, sensorRot}}, 160.0,
+                                0.3, 0.6, 0.1, 2.0, 20.0, angles);
 #endif
 
     auto workload = [&]() { checker.check(ranges, true); };
