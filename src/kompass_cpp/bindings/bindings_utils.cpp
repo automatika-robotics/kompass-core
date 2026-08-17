@@ -44,16 +44,20 @@ void bindings_utils(py::module_ &m) {
 
   py::class_<CriticalZoneChecker>(m_utils, "CriticalZoneChecker")
       .def(py::init<CriticalZoneChecker::InputType, CollisionChecker::ShapeType,
-                    const std::vector<float> &, const Eigen::Vector3f &,
-                    const Eigen::Vector4f &, const float, const float,
-                    const float, const std::vector<double> &, const float,
-                    const float, const float>(),
+                    const std::vector<float> &,
+                    const std::vector<SensorConfig> &, const float, const float,
+                    const float, const float, const float, const float,
+                    const std::vector<double> &>(),
            py::arg("input_type"), py::arg("robot_shape"),
-           py::arg("robot_dimensions"), py::arg("sensor_position_body"),
-           py::arg("sensor_rotation_body"), py::arg("critical_angle"),
-           py::arg("critical_distance"), py::arg("slowdown_distance"),
-           py::arg("scan_angles"), py::arg("min_height"), py::arg("max_height"),
-           py::arg("range_max"))
+           py::arg("robot_dimensions"), py::arg("sensor_configs"),
+           py::arg("critical_angle"), py::arg("critical_distance"),
+           py::arg("slowdown_distance"), py::arg("min_height"),
+           py::arg("max_height"), py::arg("range_max"),
+           py::arg("scan_angles") = std::vector<double>(),
+           "One SensorConfig per sensor. Laserscan input requires exactly one "
+           "sensor and non-empty scan_angles; pointcloud input accepts N "
+           "sensors (min factor wins) with min/max height as a BODY-frame "
+           "band shared by all sensors.")
 
       .def("check",
            py::overload_cast<Eigen::Ref<const Eigen::VectorXf>, const bool>(
@@ -71,7 +75,26 @@ void bindings_utils(py::module_ &m) {
           },
           py::arg("data"), py::arg("point_step"), py::arg("row_step"),
           py::arg("height"), py::arg("width"), py::arg("x_offset"),
-          py::arg("y_offset"), py::arg("z_offset"), py::arg("forward"));
+          py::arg("y_offset"), py::arg("z_offset"), py::arg("forward"))
+
+      .def(
+          "check",
+          [](CriticalZoneChecker &self, py::sequence clouds, bool forward) {
+            std::vector<ByteArray> keepalive;
+            auto views = extractCloudViews(clouds, keepalive);
+            py::gil_scoped_release release;
+            return self.check(views, forward);
+          },
+          "Check N point clouds (zero-copy input) and return the minimum "
+          "safety factor. clouds[i] pairs with sensor_configs[i]; each "
+          "element is a dict (e.g. PointCloudData.asdict()) carrying "
+          "data/point_step/row_step/height/width/x_offset/y_offset/z_offset "
+          "(extra keys ignored); None entries are skipped.",
+          py::arg("clouds"), py::arg("forward"))
+
+      .def_prop_ro("num_sensors", [](const CriticalZoneChecker &self) {
+        return self.numSensors();
+      });
 
   // Overload using angle_step (Returns: tuple(ranges, angles) as float32
   // numpy arrays)
