@@ -10,8 +10,7 @@
 //
 // Workaround: one checker per input mode (laserscan, pointcloud) held by
 // an intentionally-leaked function-local static. Each test also builds
-// its own fresh input state to avoid cross-test dependencies. Same
-// pattern in mapper_test_gpu.cpp and pointcloud_to_laserscan_test_gpu.cpp.
+// its own fresh input state to avoid cross-test dependencies.
 
 #include "test.h"
 #include <Eigen/Dense>
@@ -23,7 +22,7 @@
 #include <vector>
 
 // ---------------------------------------------------------------------------
-// Shared config (same values as the original single-case test).
+// Shared config
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -60,20 +59,30 @@ std::vector<double> make_reference_angles() {
 CriticalZoneCheckerGPU &shared_laserscan_checker() {
   static CriticalZoneCheckerGPU *c = new CriticalZoneCheckerGPU(
       CriticalZoneChecker::InputType::LASERSCAN, ROBOT_SHAPE, ROBOT_DIMS,
-      /*sensor_pos*/ Eigen::Vector3f{0.22f, 0.0f, 0.4f},
-      /*sensor_rot*/ Eigen::Vector4f{0.0f, 0.0f, 0.99f, 0.0f},
-      CRIT_ANGLE, CRIT_DIST, SLOW_DIST, make_reference_angles(),
-      LASERSCAN_MIN_H, LASERSCAN_MAX_H, MAX_RANGE);
+      {SensorConfig{Eigen::Vector3f{0.22f, 0.0f, 0.4f},
+                    Eigen::Vector4f{0.0f, 0.0f, 0.99f, 0.0f}}},
+      CRIT_ANGLE, CRIT_DIST, SLOW_DIST, LASERSCAN_MIN_H, LASERSCAN_MAX_H,
+      MAX_RANGE, make_reference_angles());
   return *c;
 }
 
 CriticalZoneCheckerGPU &shared_pointcloud_checker() {
   static CriticalZoneCheckerGPU *c = new CriticalZoneCheckerGPU(
       CriticalZoneChecker::InputType::POINTCLOUD, ROBOT_SHAPE, ROBOT_DIMS,
-      /*sensor_pos*/ Eigen::Vector3f{0.0f, 0.0f, 0.0f},
-      /*sensor_rot*/ Eigen::Vector4f{0.0f, 0.0f, 0.0f, 1.0f},
-      CRIT_ANGLE, CRIT_DIST, SLOW_DIST, make_reference_angles(),
-      POINTCLOUD_MIN_H, POINTCLOUD_MAX_H, MAX_RANGE);
+      {SensorConfig{}}, CRIT_ANGLE, CRIT_DIST, SLOW_DIST, POINTCLOUD_MIN_H,
+      POINTCLOUD_MAX_H, MAX_RANGE);
+  return *c;
+}
+
+// Front + back mounted sensors (fusion tests). Mount heights 0.2 m; the
+// body-frame band [POINTCLOUD_MIN_H, POINTCLOUD_MAX_H] is shared
+CriticalZoneCheckerGPU &shared_multi_checker() {
+  static CriticalZoneCheckerGPU *c = new CriticalZoneCheckerGPU(
+      CriticalZoneChecker::InputType::POINTCLOUD, ROBOT_SHAPE, ROBOT_DIMS,
+      {SensorConfig::fromYaw({0.2f, 0.0f, 0.2f}, 0.0f),
+       SensorConfig::fromYaw({-0.2f, 0.0f, 0.2f}, static_cast<float>(M_PI))},
+      CRIT_ANGLE, CRIT_DIST, SLOW_DIST, POINTCLOUD_MIN_H, POINTCLOUD_MAX_H,
+      MAX_RANGE);
   return *c;
 }
 
@@ -122,7 +131,8 @@ BOOST_AUTO_TEST_CASE(test_laserscan_behind_moving_forward) {
   setLaserscanAtAngle(0.1, 0.2, scan.ranges, scan.angles);
   setLaserscanAtAngle(-0.1, 0.2, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
+  float result =
+      shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
   BOOST_TEST(result == 1.0,
              "Angles behind, moving forward -> expected 1.0, got " << result);
 }
@@ -131,7 +141,8 @@ BOOST_AUTO_TEST_CASE(test_laserscan_front_far_moving_forward) {
   Timer time;
   auto scan = fresh_laserscan();
 
-  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
+  float result =
+      shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
   BOOST_TEST(result == 1.0,
              "Angles in front, far, moving forward -> expected 1.0, got "
                  << result);
@@ -144,7 +155,8 @@ BOOST_AUTO_TEST_CASE(test_laserscan_front_close_moving_forward) {
   setLaserscanAtAngle(M_PI + 0.1, 0.2, scan.ranges, scan.angles);
   setLaserscanAtAngle(M_PI - 0.1, 0.2, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
+  float result =
+      shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
   BOOST_TEST(result == 0.0,
              "Angles in front, close, moving forward -> expected 0.0, got "
                  << result);
@@ -157,7 +169,8 @@ BOOST_AUTO_TEST_CASE(test_laserscan_front_close_moving_backward) {
   setLaserscanAtAngle(M_PI + 0.1, 0.2, scan.ranges, scan.angles);
   setLaserscanAtAngle(M_PI - 0.1, 0.2, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ false);
+  float result =
+      shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ false);
   BOOST_TEST(result == 1.0,
              "Angles in front, close, moving backward -> expected 1.0, got "
                  << result);
@@ -170,7 +183,8 @@ BOOST_AUTO_TEST_CASE(test_laserscan_back_close_moving_backward) {
   setLaserscanAtAngle(0.1, 0.2, scan.ranges, scan.angles);
   setLaserscanAtAngle(-0.1, 0.2, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ false);
+  float result =
+      shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ false);
   BOOST_TEST(result == 0.0,
              "Angles behind, close, moving backward -> expected 0.0, got "
                  << result);
@@ -181,10 +195,12 @@ BOOST_AUTO_TEST_CASE(test_laserscan_back_slowdown_moving_backward) {
   auto scan = fresh_laserscan();
   setLaserscanAtAngle(0.0, 1.3, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ false);
+  float result =
+      shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ false);
   BOOST_TEST((result > 0.0 && result < 1.0),
              "Angle behind in slowdown zone, moving backward -> expected in "
-             "(0, 1), got " << result);
+             "(0, 1), got "
+                 << result);
 }
 
 BOOST_AUTO_TEST_CASE(test_laserscan_back_slowdown_moving_forward) {
@@ -192,10 +208,12 @@ BOOST_AUTO_TEST_CASE(test_laserscan_back_slowdown_moving_forward) {
   auto scan = fresh_laserscan();
   setLaserscanAtAngle(0.0, 1.3, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
+  float result =
+      shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
   BOOST_TEST(result == 1.0,
              "Angle behind in slowdown zone, moving forward -> expected 1.0, "
-             "got " << result);
+             "got "
+                 << result);
 }
 
 BOOST_AUTO_TEST_CASE(test_laserscan_front_slowdown_moving_forward) {
@@ -203,10 +221,12 @@ BOOST_AUTO_TEST_CASE(test_laserscan_front_slowdown_moving_forward) {
   auto scan = fresh_laserscan();
   setLaserscanAtAngle(M_PI, 0.7, scan.ranges, scan.angles);
 
-  float result = shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
+  float result =
+      shared_laserscan_checker().check(toVecF(scan.ranges), /*forward*/ true);
   BOOST_TEST((result > 0.0 && result < 1.0),
              "Angle in front in slowdown zone, moving forward -> expected in "
-             "(0, 1), got " << result);
+             "(0, 1), got "
+                 << result);
 }
 
 // ===========================================================================
@@ -264,8 +284,8 @@ BOOST_AUTO_TEST_CASE(test_pointcloud_mixed_stop_wins) {
   addPointToCloud(cloud, 0.75f, 0.0f, 0.5f);
 
   float result = run_pc_check(cloud, /*forward*/ true);
-  BOOST_TEST(result == 0.0f, "Stop-zone point should win min reduction, got "
-                                 << result);
+  BOOST_TEST(result == 0.0f,
+             "Stop-zone point should win min reduction, got " << result);
 }
 
 BOOST_AUTO_TEST_CASE(test_pointcloud_mixed_slowdown_backward) {
@@ -285,4 +305,186 @@ BOOST_AUTO_TEST_CASE(test_pointcloud_mixed_slowdown_backward) {
   BOOST_TEST((result > 0.4f && result < 0.6f),
              "Mixed cloud, moving backward -> expected slowdown ~0.5, got "
                  << result);
+}
+
+// ===========================================================================
+// MULTI-SENSOR POINTCLOUD tests (15-21): front + back mounts, see
+// shared_multi_checker above
+// ===========================================================================
+
+PointCloudView make_view(const std::vector<uint8_t> &cloud) {
+  const int n = static_cast<int>(cloud.size() / PC_POINT_STEP);
+  return PointCloudView{cloud, PC_POINT_STEP, n * PC_POINT_STEP, n > 0 ? 1 : 0,
+                        n,     PC_X_OFF,      PC_Y_OFF,          PC_Z_OFF};
+}
+
+// Back-Sensor Obstacle & Moving Backward (Headline Case) ---
+// An obstacle seen ONLY by the back sensor must stop reverse motion and
+// leave forward motion untouched. Back-sensor frame (0.55, 0, 0.3) ->
+// body (-0.75, 0, 0.5). Dist = 0.75. 0.75 - Radius(0.51) = 0.24 <
+// Crit(0.3) -> stop when backing up.
+BOOST_AUTO_TEST_CASE(test_multi_sensor_back_obstacle_stops_reverse) {
+  Timer time;
+  std::vector<uint8_t> back_cloud;
+  addPointToCloud(back_cloud, 0.55f, 0.0f, 0.3f);
+  const std::vector<uint8_t> empty_front;
+
+  auto &checker = shared_multi_checker();
+  const float backward =
+      checker.check({make_view(empty_front), make_view(back_cloud)},
+                    /*forward*/ false);
+  BOOST_TEST(backward == 0.0f,
+             "back obstacle must stop reverse motion, got " << backward);
+
+  const float forward = checker.check(
+      {make_view(empty_front), make_view(back_cloud)}, /*forward*/ true);
+  BOOST_TEST(forward == 1.0f,
+             "back obstacle must not affect forward motion, got " << forward);
+}
+
+// --- Critical Cone Is a Body-Frame Gate ---
+// The cone is not a per-sensor gate: a point in the BACK sensor's cloud
+// that lands ahead of the robot must trip the forward check. Back-sensor
+// frame (-0.9, 0, 0.3) -> body (0.7, 0, 0.5). 0.7 - Radius(0.51) = 0.19 <
+// Crit(0.3) -> forward stop from the back sensor's data.
+BOOST_AUTO_TEST_CASE(test_multi_sensor_cone_is_body_frame) {
+  Timer time;
+  std::vector<uint8_t> back_cloud;
+  addPointToCloud(back_cloud, -0.9f, 0.0f, 0.3f);
+  const std::vector<uint8_t> empty_front;
+
+  const float forward = shared_multi_checker().check(
+      {make_view(empty_front), make_view(back_cloud)}, /*forward*/ true);
+  BOOST_TEST(forward == 0.0f,
+             "a back-sensor point ahead of the robot must trip the forward "
+             "check, got "
+                 << forward);
+}
+
+// --- Min-Wins Fusion Across Clouds ---
+// Front cloud holds a slowdown-zone point: front-sensor (0.75, 0, 0.3) ->
+// body (0.95, 0, 0.5), factor (0.95 - 0.51 - 0.3) / 0.3 = ~0.467. The
+// back cloud is far. Fused factor equals the slowdown factor; adding a
+// closer front point lowers it to 0.
+BOOST_AUTO_TEST_CASE(test_multi_sensor_min_across_clouds) {
+  Timer time;
+  std::vector<uint8_t> front_cloud;
+  addPointToCloud(front_cloud, 0.75f, 0.0f, 0.3f);
+  std::vector<uint8_t> back_cloud;
+  addPointToCloud(back_cloud, 5.0f, 0.0f, 0.3f); // far, safe
+
+  auto &checker = shared_multi_checker();
+  const float slow = checker.check(
+      {make_view(front_cloud), make_view(back_cloud)}, /*forward*/ true);
+  BOOST_TEST((slow > 0.4f && slow < 0.55f),
+             "expected slowdown factor ~0.467, got " << slow);
+
+  addPointToCloud(front_cloud, 0.6f, 0.0f, 0.3f); // body 0.8 -> critical
+  const float stop = checker.check(
+      {make_view(front_cloud), make_view(back_cloud)}, /*forward*/ true);
+  BOOST_TEST(stop == 0.0f, "critical point must win the min, got " << stop);
+}
+
+// --- Repeat-Call State ---
+// A stop result must not leak into the next call (guards the shared-result
+// reset being hoisted before the batch's submits).
+BOOST_AUTO_TEST_CASE(test_multi_sensor_repeat_call_state) {
+  Timer time;
+  std::vector<uint8_t> danger;
+  addPointToCloud(danger, 0.55f, 0.0f, 0.3f); // front: body 0.75 -> stop
+  std::vector<uint8_t> safe;
+  addPointToCloud(safe, 5.0f, 0.0f, 0.3f);
+
+  auto &checker = shared_multi_checker();
+  const float stop =
+      checker.check({make_view(danger), make_view(safe)}, /*forward*/ true);
+  BOOST_TEST(stop == 0.0f);
+
+  const float clear =
+      checker.check({make_view(safe), make_view(safe)}, /*forward*/ true);
+  BOOST_TEST(clear == 1.0f,
+             "stop from the previous call leaked into this one, got " << clear);
+
+  // All-empty batch -> nothing observed -> no constraint
+  const std::vector<uint8_t> empty;
+  const float idle =
+      checker.check({make_view(empty), make_view(empty)}, /*forward*/ true);
+  BOOST_TEST(idle == 1.0f);
+}
+
+// --- Tilted Mount, Exact Values ---
+// 25 deg pitch at z=0.3 seeing sensor-frame (0.8, 0, 0.3). With the full
+// transform the point's z leans INTO x:
+// x_body = 0.8*cos25 + 0.3*sin25 = 0.852 -> slowdown (factor ~0.14).
+// The old kernel dropped the z column (x_body = 0.725 -> false STOP), so
+// a 0 here means the tilt terms regressed.
+BOOST_AUTO_TEST_CASE(test_multi_sensor_tilted_mount_exact) {
+  Timer time;
+  const float half_pitch = 12.5f * static_cast<float>(M_PI) / 180.0f;
+  SensorConfig tilted;
+  tilted.position = {0.0f, 0.0f, 0.3f};
+  tilted.rotation = {0.0f, std::sin(half_pitch), 0.0f, std::cos(half_pitch)};
+
+  static CriticalZoneCheckerGPU *tilted_checker = new CriticalZoneCheckerGPU(
+      CriticalZoneChecker::InputType::POINTCLOUD, ROBOT_SHAPE, ROBOT_DIMS,
+      {tilted}, CRIT_ANGLE, CRIT_DIST, SLOW_DIST, POINTCLOUD_MIN_H,
+      POINTCLOUD_MAX_H, MAX_RANGE);
+
+  std::vector<uint8_t> cloud;
+  addPointToCloud(cloud, 0.8f, 0.0f, 0.3f);
+  const float factor =
+      tilted_checker->check({make_view(cloud)}, /*forward*/ true);
+  BOOST_TEST((factor > 0.05f && factor < 0.25f),
+             "expected slowdown ~0.14 under the full tilt transform, got "
+                 << factor);
+}
+
+// --- N=1 Adapter ---
+// The  single-cloud byte entry is an N=1 adapter onto the batched
+// path: identical result for the identical cloud.
+BOOST_AUTO_TEST_CASE(test_multi_sensor_n1_adapter) {
+  Timer time;
+  std::vector<uint8_t> cloud;
+  addPointToCloud(cloud, 0.95f, 0.0f, 0.5f);
+  addPointToCloud(cloud, -1.0f, -1.0f, 0.5f);
+  addPointToCloud(cloud, 0.75f, 0.0f, 0.5f);
+
+  const float legacy = run_pc_check(cloud, /*forward*/ true);
+  const float batched =
+      shared_pointcloud_checker().check({make_view(cloud)}, /*forward*/ true);
+  BOOST_TEST(legacy == batched, "adapter and batched entry disagree: "
+                                    << legacy << " vs " << batched);
+}
+
+// --- Error Paths ---
+// Cloud-count mismatch, negative offsets named per cloud, and mode guards
+// on both entries.
+BOOST_AUTO_TEST_CASE(test_multi_sensor_error_paths) {
+  Timer time;
+  std::vector<uint8_t> cloud;
+  addPointToCloud(cloud, 5.0f, 0.0f, 0.3f);
+
+  auto &checker = shared_multi_checker();
+
+  BOOST_CHECK_THROW(checker.check({make_view(cloud)}, true),
+                    std::invalid_argument);
+
+  PointCloudView bad = make_view(cloud);
+  bad.y_offset = -4;
+  BOOST_CHECK_EXCEPTION(
+      checker.check({make_view(cloud), bad}, true), std::invalid_argument,
+      [](const std::invalid_argument &e) {
+        return std::string(e.what()).find("clouds[1]") != std::string::npos &&
+               std::string(e.what()).find("non-negative") != std::string::npos;
+      });
+
+  // Laserscan entry on a pointcloud-mode checker throws (was a silent
+  // memcpy into a null device pointer)
+  Eigen::VectorXf ranges(4);
+  ranges.setConstant(1.0f);
+  BOOST_CHECK_THROW(checker.check(ranges, true), std::logic_error);
+
+  // Batched entry on a laserscan-mode checker throws
+  BOOST_CHECK_THROW(shared_laserscan_checker().check({make_view(cloud)}, true),
+                    std::logic_error);
 }

@@ -30,9 +30,10 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
   float min_height = 0.1, max_height = 2.0;
 
   CriticalZoneChecker zoneChecker(
-      inputType, robotShapeType, robotDimensions, sensor_position_body,
-      sensor_rotation_body, critical_angle, critical_distance,
-      slowdown_distance, scan_angles, min_height, max_height, 20.0);
+      inputType, robotShapeType, robotDimensions,
+      {SensorConfig{sensor_position_body, sensor_rotation_body}},
+      critical_angle, critical_distance, slowdown_distance, min_height,
+      max_height, 20.0, scan_angles);
 
   LOG_INFO("Testing Emergency Stop with CPU (LASERSCAN)");
 
@@ -193,20 +194,14 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
 
   LOG_INFO("Testing Emergency Stop with CPU (POINTCLOUD)");
 
-  // Instantiate a separate checker for PointCloud
-  Eigen::Vector3f pcPos{0.0, 0.0, 0.0};
-  Eigen::Vector4f pcRot{0.0, 0.0, 0.0, 1.0};
-
-  std::vector<double> pc_angles;
-  std::vector<double> dummy_ranges;
-  initLaserscan(360, 10.0, dummy_ranges, pc_angles); // 1-degree resolution
-
-  CriticalZoneChecker pcChecker(
-      CriticalZoneChecker::InputType::POINTCLOUD, robotShapeType, robotDimensions, pcPos,
-      pcRot, critical_angle, critical_distance /*crit_dist*/,
-      slowdown_distance /*slow_dist*/,
-      pc_angles, // Size 360
-      0.1 /*min_h*/, 2.0 /*max_h*/, 20.0);
+  // Instantiate a separate checker for PointCloud (identity mount; the
+  // body-frame band coincides with the sensor frame here)
+  CriticalZoneChecker pcChecker(CriticalZoneChecker::InputType::POINTCLOUD,
+                                robotShapeType, robotDimensions,
+                                {SensorConfig{}}, critical_angle,
+                                critical_distance /*crit_dist*/,
+                                slowdown_distance /*slow_dist*/,
+                                0.1 /*min_h*/, 2.0 /*max_h*/, 20.0);
 
   std::vector<uint8_t> cloud_data;
 
@@ -330,5 +325,195 @@ BOOST_AUTO_TEST_CASE(test_critical_zone_check) {
 
     if (result > 0.4 && result < 0.6)
       LOG_INFO("Test14 PASSED: PointCloud Slowdown Factor: ", result);
+  }
+}
+
+// ===========================================================================
+//      MULTI-SENSOR POINT CLOUD TESTS (15-18)
+// ===========================================================================
+
+namespace {
+
+const auto MS_SHAPE = CollisionChecker::ShapeType::CYLINDER;
+const std::vector<float> MS_DIMS{0.51f, 2.0f};
+constexpr float MS_CRIT_ANGLE = 160.0f;
+constexpr float MS_CRIT_DIST = 0.3f;
+constexpr float MS_SLOW_DIST = 0.6f;
+constexpr float MS_MIN_H = 0.1f; // body frame
+constexpr float MS_MAX_H = 2.0f; // body frame
+
+const int MS_POINT_STEP = sizeof(PointXYZ);
+const int MS_X_OFF = offsetof(PointXYZ, x);
+const int MS_Y_OFF = offsetof(PointXYZ, y);
+const int MS_Z_OFF = offsetof(PointXYZ, z);
+
+PointCloudView ms_view(const std::vector<uint8_t> &cloud) {
+  const int n = static_cast<int>(cloud.size() / MS_POINT_STEP);
+  return PointCloudView{cloud, MS_POINT_STEP, n * MS_POINT_STEP,
+                        n > 0 ? 1 : 0, n,
+                        MS_X_OFF,      MS_Y_OFF, MS_Z_OFF};
+}
+
+CriticalZoneChecker make_ms_checker(const std::vector<SensorConfig> &sensors) {
+  return CriticalZoneChecker(CriticalZoneChecker::InputType::POINTCLOUD,
+                             MS_SHAPE, MS_DIMS, sensors, MS_CRIT_ANGLE,
+                             MS_CRIT_DIST, MS_SLOW_DIST, MS_MIN_H, MS_MAX_H,
+                             20.0f);
+}
+
+std::vector<SensorConfig> ms_front_back() {
+  return {SensorConfig::fromYaw({0.2f, 0.0f, 0.2f}, 0.0f),
+          SensorConfig::fromYaw({-0.2f, 0.0f, 0.2f},
+                                static_cast<float>(M_PI))};
+}
+
+} // namespace
+
+// --- Test 15: Back-Sensor Obstacle & Moving Backward (Headline Case) ---
+BOOST_AUTO_TEST_CASE(test_cpu_multi_back_obstacle_stops_reverse) {
+  Timer time;
+  auto checker = make_ms_checker(ms_front_back());
+  std::vector<uint8_t> back_cloud;
+  // Obstacle seen ONLY by the back sensor (mounted at x=-0.2, yaw=pi).
+  // Back-sensor frame (0.55, 0, 0.3) -> body (-0.75, 0, 0.5).
+  // Dist = 0.75. 0.75 - Radius(0.51) = 0.24 < Crit(0.3) -> Critical.
+  addPointToCloud(back_cloud, 0.55f, 0.0f, 0.3f);
+  const std::vector<uint8_t> empty_front;
+
+  const float backward = checker.check(
+      {ms_view(empty_front), ms_view(back_cloud)}, /*forward*/ false);
+  BOOST_TEST(backward == 0.0f,
+             "Obstacle is behind and robot is moving backward -> Critical "
+             "zone result should be 0.0, returned "
+                 << backward);
+
+  const float forward = checker.check(
+      {ms_view(empty_front), ms_view(back_cloud)}, /*forward*/ true);
+  BOOST_TEST(forward == 1.0f,
+             "Obstacle is behind and robot is moving forward -> Critical "
+             "zone result should be 1.0, returned "
+                 << forward);
+
+  if (backward == 0.0f && forward == 1.0f) {
+    LOG_INFO("Test15 PASSED: Back-sensor obstacle stops reverse motion and "
+             "does not affect forward motion");
+  }
+}
+
+// --- Test 16: Min-Wins Fusion Across Clouds ---
+BOOST_AUTO_TEST_CASE(test_cpu_multi_min_across_clouds) {
+  Timer time;
+  auto checker = make_ms_checker(ms_front_back());
+  std::vector<uint8_t> front_cloud;
+  // Front-sensor frame (0.75, 0, 0.3) -> body (0.95, 0, 0.5).
+  // Dist to robot = 0.95 - 0.51 = 0.44. Slowdown range [0.3, 0.6] ->
+  // factor (0.44 - 0.3) / 0.3 = ~0.467.
+  addPointToCloud(front_cloud, 0.75f, 0.0f, 0.3f);
+  std::vector<uint8_t> back_cloud;
+  // Far point in the back cloud -> safe, must not affect the fused result
+  addPointToCloud(back_cloud, 5.0f, 0.0f, 0.3f);
+
+  const float slow = checker.check(
+      {ms_view(front_cloud), ms_view(back_cloud)}, /*forward*/ true);
+  BOOST_TEST((slow > 0.4f && slow < 0.55f),
+             "Front slowdown point + far back point -> fused factor should "
+             "be ~0.467, returned "
+                 << slow);
+
+  // Front-sensor frame (0.6, 0, 0.3) -> body (0.8, 0, 0.5).
+  // 0.8 - Radius(0.51) = 0.29 < Crit(0.3) -> Critical, must win the min.
+  addPointToCloud(front_cloud, 0.6f, 0.0f, 0.3f);
+  const float stop = checker.check(
+      {ms_view(front_cloud), ms_view(back_cloud)}, /*forward*/ true);
+  BOOST_TEST(stop == 0.0f,
+             "Critical point should win the min across clouds -> result "
+             "should be 0.0, returned "
+                 << stop);
+
+  // All-empty batch -> nothing observed this tick -> no constraint
+  const std::vector<uint8_t> empty;
+  const float idle =
+      checker.check({ms_view(empty), ms_view(empty)}, /*forward*/ true);
+  BOOST_TEST(idle == 1.0f,
+             "All-empty batch -> result should be 1.0, returned " << idle);
+
+  if (slow > 0.4f && slow < 0.55f && stop == 0.0f && idle == 1.0f) {
+    LOG_INFO("Test16 PASSED: Min factor wins across fused clouds, slowdown "
+             "factor = ",
+             slow);
+  }
+}
+
+// --- Test 17: Tilted Mount, Exact Values ---
+BOOST_AUTO_TEST_CASE(test_cpu_multi_tilted_mount_exact) {
+  Timer time;
+  // 25 deg pitch mount at z=0.3 (quaternion built from the half angle)
+  const float half_pitch = 12.5f * static_cast<float>(M_PI) / 180.0f;
+  SensorConfig tilted;
+  tilted.position = {0.0f, 0.0f, 0.3f};
+  tilted.rotation = {0.0f, std::sin(half_pitch), 0.0f, std::cos(half_pitch)};
+  auto checker = make_ms_checker({tilted});
+
+  std::vector<uint8_t> cloud;
+  // Sensor frame (0.8, 0, 0.3): the full transform leans z INTO x:
+  // x_body = 0.8*cos25 + 0.3*sin25 = 0.852 -> slowdown factor ~0.14.
+  // Dropping the transform's z column (the old approximation) gives
+  // x_body = 0.725 -> a false STOP, so a 0 here means the tilt terms
+  // regressed.
+  addPointToCloud(cloud, 0.8f, 0.0f, 0.3f);
+  const float factor = checker.check({ms_view(cloud)}, /*forward*/ true);
+  BOOST_TEST((factor > 0.05f && factor < 0.25f),
+             "Tilted mount -> slowdown factor should be ~0.14 under the "
+             "full transform, returned "
+                 << factor);
+
+  if (factor > 0.05f && factor < 0.25f) {
+    LOG_INFO("Test17 PASSED: Full tilt transform applied, slowdown factor = ",
+             factor);
+  }
+}
+
+// --- Test 18: N=1 Adapter & Error Paths ---
+BOOST_AUTO_TEST_CASE(test_cpu_multi_adapter_and_errors) {
+  Timer time;
+  auto single = make_ms_checker({SensorConfig{}});
+  std::vector<uint8_t> cloud;
+  addPointToCloud(cloud, 0.95f, 0.0f, 0.5f);
+  addPointToCloud(cloud, 0.75f, 0.0f, 0.5f);
+
+  // The single-cloud byte entry is an N=1 adapter onto the batched
+  // path -> identical result for the identical cloud
+  const auto view = ms_view(cloud);
+  const float legacy =
+      single.check(view.data, view.point_step, view.row_step, view.height,
+                   view.width, view.x_offset, view.y_offset, view.z_offset,
+                   /*forward*/ true);
+  const float batched = single.check({view}, /*forward*/ true);
+  BOOST_TEST(legacy == batched,
+             "Adapter and batched entry should agree, returned "
+                 << legacy << " vs " << batched);
+
+  // Cloud count mismatch: two configured sensors, one cloud
+  auto multi = make_ms_checker(ms_front_back());
+  BOOST_CHECK_THROW(multi.check({view}, true), std::invalid_argument);
+
+  // Malformed metadata must name the offending cloud in the error message
+  PointCloudView bad = ms_view(cloud);
+  bad.y_offset = -4;
+  BOOST_CHECK_EXCEPTION(
+      multi.check({ms_view(cloud), bad}, true), std::invalid_argument,
+      [](const std::invalid_argument &e) {
+        return std::string(e.what()).find("clouds[1]") != std::string::npos &&
+               std::string(e.what()).find("non-negative") != std::string::npos;
+      });
+
+  // Laserscan entry on a pointcloud-mode checker throws
+  Eigen::VectorXf ranges(4);
+  ranges.setConstant(1.0f);
+  BOOST_CHECK_THROW(multi.check(ranges, true), std::logic_error);
+
+  if (legacy == batched) {
+    LOG_INFO("Test18 PASSED: N=1 adapter matches batched entry and error "
+             "paths throw as expected");
   }
 }
