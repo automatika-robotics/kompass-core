@@ -77,10 +77,11 @@ The package includes modules for mapping, control, trajectory planning, and visi
 
 - Implements efficient local mapping and occupancy grid generation algorithms, with configuration support for various scan models and grid resolution settings.
 - Supports **GPU-accelerated** mapping for real-time performance.
+- Fuses point clouds from **multiple 3D sensors** into a single occupancy grid with per-sensor free-space carving.
 
 ### Utilities Module
 
-- Provides collision checking utilities and critical zone detection to ensure safe navigation, including both CPU and GPU implementations.
+- Provides collision checking utilities and critical zone detection to ensure safe navigation, including both CPU and GPU implementations. Critical zone checking fuses point clouds from **multiple 3D sensors** into one safety decision (minimum factor across sensors).
 - Logger utilities for runtime diagnostics.
 - Linear state-space Kalman filter implementation for state estimation (C++).
 - Spline interpolation utilities for path control.
