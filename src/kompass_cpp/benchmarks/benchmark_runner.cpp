@@ -262,6 +262,51 @@ int main(int argc, char *argv[]) {
     results.push_back(
         measure_performance("Mapper_PointCloud_100k", workload));
   }
+
+  // -------------------------------------------------------------------------
+  // TEST 2c: MAPPING (Multi-sensor fusion, 2 x 50k clouds, GPU-only)
+  //
+  // Same total point count as Mapper_PointCloud_100k, split across a
+  // front + back mount and fused through the batched scanToGrid: expected
+  // cost is ~the single-cloud benchmark plus one extra kernel pair.
+  // -------------------------------------------------------------------------
+  {
+    const int height = 400;
+    const int width = 400;
+    const float res = 0.05f;
+    const int scan_size = 3600;           // matches the laserscan benchmark
+    const int max_points_per_line = 256;  // warp-multiple WG size, see TEST 2
+    const float min_h = 0.1f;
+    const float max_h = 2.0f;
+    const float range_max = 20.0f;
+
+    Mapping::LocalMapperGPU mapper(
+        height, width, res,
+        {SensorConfig::fromYaw({0.2f, 0.0f, 0.2f}, 0.0f),
+         SensorConfig::fromYaw({-0.2f, 0.0f, 0.2f},
+                               static_cast<float>(M_PI))},
+        /*isPointCloud*/ true, scan_size, max_h, min_h, range_max,
+        max_points_per_line);
+
+    auto front_bytes = generate_heavy_pointcloud_bytes(50000);
+    auto back_bytes = generate_heavy_pointcloud_bytes(50000);
+    const int point_step = sizeof(PointXYZ);
+    const int x_off = offsetof(PointXYZ, x);
+    const int y_off = offsetof(PointXYZ, y);
+    const int z_off = offsetof(PointXYZ, z);
+    auto view = [&](const std::vector<uint8_t> &bytes) {
+      const int n = static_cast<int>(bytes.size() / point_step);
+      return PointCloudView{bytes, point_step, n * point_step, 1, n,
+                            x_off, y_off, z_off};
+    };
+    const std::vector<PointCloudView> clouds{view(front_bytes),
+                                             view(back_bytes)};
+
+    auto workload = [&]() { mapper.scanToGrid(clouds); };
+
+    results.push_back(
+        measure_performance("Mapper_MultiCloud_2x50k", workload));
+  }
 #endif
 
   // -------------------------------------------------------------------------
@@ -304,6 +349,52 @@ int main(int argc, char *argv[]) {
     };
 
     results.push_back(measure_performance("CriticalZone_100k_Cloud", workload));
+  }
+
+  // -------------------------------------------------------------------------
+  // TEST 3b: CRITICAL ZONE (Multi-sensor fusion, 2 x 50k clouds)
+  //
+  // Same total point count as CriticalZone_100k_Cloud, split across a
+  // front + back mount and fused through the batched check (min across
+  // sensors). Runs on both platforms like TEST 3.
+  // -------------------------------------------------------------------------
+  {
+    auto shape = CollisionChecker::ShapeType::CYLINDER;
+    std::vector<float> robotDim{0.51, 2.0};
+    float crit_angle = 160.0, crit_dist = 0.3, slow_dist = 0.6;
+    std::vector<SensorConfig> sensors{
+        SensorConfig::fromYaw({0.2f, 0.0f, 0.2f}, 0.0f),
+        SensorConfig::fromYaw({-0.2f, 0.0f, 0.2f},
+                              static_cast<float>(M_PI))};
+
+    auto front_bytes = generate_heavy_pointcloud_bytes(50000);
+    auto back_bytes = generate_heavy_pointcloud_bytes(50000);
+    const int point_step = sizeof(PointXYZ);
+    const int x_off = offsetof(PointXYZ, x);
+    const int y_off = offsetof(PointXYZ, y);
+    const int z_off = offsetof(PointXYZ, z);
+    auto view = [&](const std::vector<uint8_t> &bytes) {
+      const int n = static_cast<int>(bytes.size() / point_step);
+      return PointCloudView{bytes, point_step, n * point_step, 1, n,
+                            x_off, y_off, z_off};
+    };
+    const std::vector<PointCloudView> clouds{view(front_bytes),
+                                             view(back_bytes)};
+
+#ifdef GPU
+    CriticalZoneCheckerGPU checker(CriticalZoneChecker::InputType::POINTCLOUD,
+                                   shape, robotDim, sensors, crit_angle,
+                                   crit_dist, slow_dist, 0.1, 2.0, 20.0);
+#else
+    CriticalZoneChecker checker(CriticalZoneChecker::InputType::POINTCLOUD,
+                                shape, robotDim, sensors, crit_angle,
+                                crit_dist, slow_dist, 0.1, 2.0, 20.0);
+#endif
+
+    auto workload = [&]() { checker.check(clouds, true); };
+
+    results.push_back(
+        measure_performance("CriticalZone_2x50k_Cloud", workload));
   }
 
   // -------------------------------------------------------------------------

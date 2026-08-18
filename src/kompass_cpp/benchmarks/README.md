@@ -14,13 +14,16 @@ We benchmark three critical components of the navigation stack:
     - **Stress Factor:** Massive parallel trajectory rollout and reduction.
 
 2.  **Local Mapper (Occupancy Grid)**
-    - **Workload:** Raycasts a dense LiDAR scan (3,600 points) into a $400 \times 400$ grid ($20m \times 20m$ @ $5cm$ resolution).
+    - **Scenario A (LaserScan):** Raycasts a dense LiDAR scan (3,600 points) into a $400 \times 400$ grid ($20m \times 20m$ @ $5cm$ resolution).
+    - **Scenario B (PointCloud, GPU builds):** Converts a raw 100,000-point cloud on device (byte buffer → per-angle-bin pseudo-laserscan) and raycasts it into the same grid.
+    - **Scenario C (Multi-sensor fusion, GPU builds):** Two 50,000-point clouds from a front + back mount fused into one grid through the batched entry — same total points as Scenario B, plus the second sensor's raycast pass (per-sensor free-space carving requires one pass per origin).
     - **Metric:** Time to update occupancy probabilities for the entire grid.
     - **Stress Factor:** Random memory access patterns and ray traversal.
 
 3.  **Critical Zone Checker (Safety System)**
     - **Scenario A (PointCloud):** Checks a dense 3D point cloud (100,000 points) against the robot's safety footprint.
-    - **Scenario B (LaserScan):** Checks a high-res 2D laser scan (3,600 rays) where points fall within the "slowdown" zone to force worst-case evaluation logic. This component is light-weight and highly optimized on the CPU, so performance gains are expected to be marginal. Use of the GPU is not default behaviour and left to the user.
+    - **Scenario B (Multi-sensor fusion):** Two 50,000-point clouds from a front + back mount through the batched entry (minimum factor across sensors) — same total points as Scenario A, one extra kernel submit.
+    - **Scenario C (LaserScan):** Checks a high-res 2D laser scan (3,600 rays) where points fall within the "slowdown" zone to force worst-case evaluation logic. This component is light-weight and highly optimized on the CPU, so performance gains are expected to be marginal. Use of the GPU is not default behaviour and left to the user.
     - **Metric:** Latency to return a safety factor $[0.0, 1.0]$.
     - **Stress Factor:** High-throughput collision checking.
 
