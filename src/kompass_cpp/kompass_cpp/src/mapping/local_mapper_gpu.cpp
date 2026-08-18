@@ -388,9 +388,6 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(Span<PointCloudView> clouds) {
   validateClouds(clouds, m_sensorDev.size());
 
   try {
-    // Drain anything a previous throwing call may have left in flight
-    m_q.wait();
-
     // Reset output grid to UNEXPLORED once
     m_q.fill(m_devicePtrGrid, static_cast<int>(OccupancyType::UNEXPLORED),
              m_gridHeight * m_gridWidth);
@@ -406,6 +403,10 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(Span<PointCloudView> clouds) {
       // Grow this sensor's raw-bytes device buffer to fit the cloud
       if (dev.rawCapacity < total_bytes) {
         if (dev.rawBytes) {
+          // A kernel from a previous throwing call could still be reading
+          // this buffer (sycl::free is host-side and NOT queue-ordered), so
+          // drain before freeing
+          m_q.wait();
           sycl::free(dev.rawBytes, m_q);
         }
         dev.rawBytes = sycl::malloc_device<uint8_t>(total_bytes, m_q);

@@ -197,11 +197,8 @@ float CriticalZoneCheckerGPU::check(Span<PointCloudView> clouds,
   validateClouds(clouds, m_sensorDev.size());
 
   try {
-    // Drain anything a previous throwing call may have left in flight
-    m_q.wait();
-
     // Reset the shared result ONCE
-    *m_result = 1.0f;
+    m_q.fill(m_result, 1.0f, 1);
 
     for (size_t s = 0; s < clouds.size(); ++s) {
       const auto &cloud = clouds[s];
@@ -214,6 +211,10 @@ float CriticalZoneCheckerGPU::check(Span<PointCloudView> clouds,
       // Grow this sensor's raw-bytes device buffer to fit the cloud
       if (devState.rawCapacity < total_bytes) {
         if (devState.rawBytes) {
+          // A kernel from a previous throwing call could still be reading
+          // this buffer (sycl::free is host-side and NOT queue-ordered), so
+          // drain before freeing
+          m_q.wait();
           sycl::free(devState.rawBytes, m_q);
         }
         devState.rawBytes = sycl::malloc_device<uint8_t>(total_bytes, m_q);
