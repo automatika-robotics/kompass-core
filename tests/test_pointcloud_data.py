@@ -7,7 +7,7 @@ from kompass_cpp.utils import pointcloud_to_laserscan_from_raw
 
 
 RESOURCES_DIR = Path(__file__).parent / "resources" / "mapping"
-LIVOX_CLOUD_JSON = RESOURCES_DIR / "livox_pointcloud_sample_0.json"
+LIVOX_CLOUD_JSON = RESOURCES_DIR / "livox_pointcloud_sample_1.json"
 
 
 # ---------------------------------------------------------------------------
@@ -305,7 +305,7 @@ def test_conversion_z_band_entirely_below_the_sensor_is_honoured():
 @pytest.mark.skipif(
     not LIVOX_CLOUD_JSON.exists() or LIVOX_CLOUD_JSON.stat().st_size < 1_000_000,
     reason=(
-        "livox_pointcloud_sample_0.json not committed (too large for CI). "
+        "livox_pointcloud_sample_1.json not committed (too large for CI). "
         "Drop the file into tests/resources/mapping/ to enable this test."
     ),
 )
