@@ -25,7 +25,8 @@ void bindings_mapping_gpu(py::module_ &m) {
                              Eigen::Ref<const Eigen::VectorXf>>(
                &Mapping::LocalMapperGPU::scanToGrid),
            "Convert laser scan data to occupancy grid", py::arg("angles"),
-           py::arg("ranges"), py::rv_policy::reference_internal)
+           py::arg("ranges"), py::rv_policy::reference_internal,
+           py::call_guard<py::gil_scoped_release>())
 
       .def(
           "scan_to_grid",
@@ -82,7 +83,8 @@ void bindings_utils_gpu(py::module_ &m) {
       .def("check",
            py::overload_cast<Eigen::Ref<const Eigen::VectorXf>, const bool>(
                &CriticalZoneCheckerGPU::check),
-           py::arg("ranges"), py::arg("forward"))
+           py::arg("ranges"), py::arg("forward"),
+           py::call_guard<py::gil_scoped_release>())
 
       .def(
           "check",

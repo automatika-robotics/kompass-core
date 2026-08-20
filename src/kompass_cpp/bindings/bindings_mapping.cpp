@@ -43,7 +43,8 @@ void bindings_mapping(py::module_ &m) {
                              Eigen::Ref<const Eigen::VectorXf>>(
                &Mapping::LocalMapper::scanToGrid),
            "Convert laser scan data to occupancy grid", py::arg("angles"),
-           py::arg("ranges"), py::rv_policy::reference_internal)
+           py::arg("ranges"), py::rv_policy::reference_internal,
+           py::call_guard<py::gil_scoped_release>())
 
       .def(
           "scan_to_grid",
@@ -82,7 +83,8 @@ void bindings_mapping(py::module_ &m) {
                &Mapping::LocalMapper::scanToGridBayesian),
            "Convert laser scan data to occupancy grid, with bayesian update",
            py::arg("angles"), py::arg("ranges"),
-           py::rv_policy::reference_internal)
+           py::rv_policy::reference_internal,
+           py::call_guard<py::gil_scoped_release>())
 
       .def(
           "scan_to_grid_bayesian",
@@ -104,7 +106,8 @@ void bindings_mapping(py::module_ &m) {
       .def("get_previous_grid_in_current_pose",
            &Mapping::LocalMapper::getPreviousGridInCurrentPose,
            py::arg("current_position_in_previous_pose"),
-           py::arg("current_orientation_in_previous_pose"));
+           py::arg("current_orientation_in_previous_pose"),
+           py::call_guard<py::gil_scoped_release>());
 
 #if GPU
   bindings_mapping_gpu(m_mapping);

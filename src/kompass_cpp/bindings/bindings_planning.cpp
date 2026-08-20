@@ -1,5 +1,5 @@
-#include "planning/ompl.h"
 #include "bindings.h"
+#include "planning/ompl.h"
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/vector.h>
 using namespace Kompass;
@@ -20,7 +20,8 @@ void bindings_planning(py::module_ &m) {
            py::arg("goal_x"), py::arg("goal_y"), py::arg("goal_yaw"),
            py::arg("map_3d"))
       .def("solve", &Planning::OMPL2DGeometricPlanner::solve,
-           py::arg("planning_timeout") = 1.0)
+           py::arg("planning_timeout") = 1.0,
+           py::call_guard<py::gil_scoped_release>())
       .def("get_solution", &Planning::OMPL2DGeometricPlanner::getPath)
       .def("set_space_bounds_from_map",
            &Planning::OMPL2DGeometricPlanner::setSpaceBoundsFromMap,

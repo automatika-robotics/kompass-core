@@ -179,8 +179,10 @@ void bindings_control(py::module_ &m) {
       .def(py::init<Control::Stanley::StanleyParameters>(),
            "Init Stanley follower with custom config")
       .def("compute_velocity_commands",
-           &Control::Stanley::computeVelocityCommand)
-      .def("execute", &Control::Stanley::execute)
+           &Control::Stanley::computeVelocityCommand,
+           py::call_guard<py::gil_scoped_release>())
+      .def("execute", &Control::Stanley::execute,
+           py::call_guard<py::gil_scoped_release>())
       .def("set_robot_wheelbase", &Control::Stanley::setWheelBase);
 
   py::class_<Control::PID, Control::Controller>(m_control, "PID")
@@ -215,12 +217,13 @@ void bindings_control(py::module_ &m) {
            (Control::Controller::Result (Control::PurePursuit::*)(
                const Path::State, const double))&Control::PurePursuit::execute,
            "Execute Pure Pursuit control step with state update",
-           py::arg("current_position"), py::arg("delta_time"))
+           py::arg("current_position"), py::arg("delta_time"),
+           py::call_guard<py::gil_scoped_release>())
       .def("execute",
            (Control::Controller::Result (Control::PurePursuit::*)(
                const double))&Control::PurePursuit::execute,
            "Execute Pure Pursuit control step (uses internal state)",
-           py::arg("delta_time"))
+           py::arg("delta_time"), py::call_guard<py::gil_scoped_release>())
       .def(
           "execute",
           [](Control::PurePursuit &self, const double dt,
