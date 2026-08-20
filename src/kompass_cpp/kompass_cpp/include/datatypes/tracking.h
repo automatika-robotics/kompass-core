@@ -19,10 +19,6 @@ struct PointsOfInterest {
 
   PointsOfInterest() {};
 
-  PointsOfInterest(const PointsOfInterest &poi)
-      : Points2D(poi.Points2D), timestamp(poi.timestamp), label(poi.label),
-        img_size(poi.img_size), vel(poi.vel) {};
-
   PointsOfInterest(const std::vector<Eigen::Vector2i> &points,
                    const Eigen::Vector2i &img_size = {640, 480},
                    const float timestamp = 0.0, const std::string &label = "")
