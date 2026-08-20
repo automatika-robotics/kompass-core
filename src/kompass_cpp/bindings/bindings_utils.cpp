@@ -44,16 +44,20 @@ void bindings_utils(py::module_ &m) {
 
   py::class_<CriticalZoneChecker>(m_utils, "CriticalZoneChecker")
       .def(py::init<CriticalZoneChecker::InputType, CollisionChecker::ShapeType,
-                    const std::vector<float> &, const Eigen::Vector3f &,
-                    const Eigen::Vector4f &, const float, const float,
-                    const float, const std::vector<double> &, const float,
-                    const float, const float>(),
+                    const std::vector<float> &,
+                    const std::vector<SensorConfig> &, const float, const float,
+                    const float, const float, const float, const float,
+                    const std::vector<double> &>(),
            py::arg("input_type"), py::arg("robot_shape"),
-           py::arg("robot_dimensions"), py::arg("sensor_position_body"),
-           py::arg("sensor_rotation_body"), py::arg("critical_angle"),
-           py::arg("critical_distance"), py::arg("slowdown_distance"),
-           py::arg("scan_angles"), py::arg("min_height"), py::arg("max_height"),
-           py::arg("range_max"))
+           py::arg("robot_dimensions"), py::arg("sensor_configs"),
+           py::arg("critical_angle"), py::arg("critical_distance"),
+           py::arg("slowdown_distance"), py::arg("min_height"),
+           py::arg("max_height"), py::arg("range_max"),
+           py::arg("scan_angles") = std::vector<double>(),
+           "One SensorConfig per sensor. Laserscan input requires exactly one "
+           "sensor and non-empty scan_angles; pointcloud input accepts N "
+           "sensors (min factor wins) with min/max height as a BODY-frame "
+           "band shared by all sensors.")
 
       .def("check",
            py::overload_cast<Eigen::Ref<const Eigen::VectorXf>, const bool>(
@@ -71,7 +75,26 @@ void bindings_utils(py::module_ &m) {
           },
           py::arg("data"), py::arg("point_step"), py::arg("row_step"),
           py::arg("height"), py::arg("width"), py::arg("x_offset"),
-          py::arg("y_offset"), py::arg("z_offset"), py::arg("forward"));
+          py::arg("y_offset"), py::arg("z_offset"), py::arg("forward"))
+
+      .def(
+          "check",
+          [](CriticalZoneChecker &self, py::sequence clouds, bool forward) {
+            std::vector<ByteArray> keepalive;
+            auto views = extractCloudViews(clouds, keepalive);
+            py::gil_scoped_release release;
+            return self.check(views, forward);
+          },
+          "Check N point clouds (zero-copy input) and return the minimum "
+          "safety factor. clouds[i] pairs with sensor_configs[i]; each "
+          "element is a dict (e.g. PointCloudData.asdict()) carrying "
+          "data/point_step/row_step/height/width/x_offset/y_offset/z_offset "
+          "(extra keys ignored); None entries are skipped.",
+          py::arg("clouds"), py::arg("forward"))
+
+      .def_prop_ro("num_sensors", [](const CriticalZoneChecker &self) {
+        return self.numSensors();
+      });
 
   // Overload using angle_step (Returns: tuple(ranges, angles) as float32
   // numpy arrays)
@@ -79,15 +102,18 @@ void bindings_utils(py::module_ &m) {
       "pointcloud_to_laserscan_from_raw",
       [](ByteArray data, int point_step, int row_step, int height, int width,
          int x_offset, int y_offset, int z_offset, double max_range,
-         double min_z, double max_z, double angle_step) {
+         double min_z, double max_z, double angle_step,
+         const Eigen::Vector3f &position, const Eigen::Vector4f &rotation,
+         PointFieldType cloud_field_type) {
         Eigen::VectorXf ranges_out;
         Eigen::VectorXf angles_out;
         {
           py::gil_scoped_release release;
-          pointCloudToLaserScanFromRaw(toSpan(data), point_step, row_step,
-                                       height, width, x_offset, y_offset,
-                                       z_offset, max_range, min_z, max_z,
-                                       angle_step, ranges_out, angles_out);
+          pointCloudToLaserScanFromRaw(
+              PointCloudView{toSpan(data), point_step, row_step, height, width,
+                             x_offset, y_offset, z_offset},
+              cloud_field_type, getTransformation(rotation, position),
+              max_range, min_z, max_z, angle_step, ranges_out, angles_out);
         }
         return std::make_tuple(std::move(ranges_out), std::move(angles_out));
       },
@@ -95,22 +121,32 @@ void bindings_utils(py::module_ &m) {
       py::arg("height"), py::arg("width"), py::arg("x_offset"),
       py::arg("y_offset"), py::arg("z_offset"), py::arg("max_range"),
       py::arg("min_z"), py::arg("max_z"), py::arg("angle_step"),
+      py::arg("position") = Eigen::Vector3f(0.0f, 0.0f, 0.0f),
+      py::arg("rotation") = Eigen::Vector4f(0.0f, 0.0f, 0.0f, 1.0f),
+      py::arg("cloud_field_type") = PointFieldType::FLOAT32,
       "Converts raw PointCloud2 to ranges and angles using a specific angular "
-      "step.");
+      "step. An optional sensor mount pose (position + quaternion x,y,z,w) "
+      "rotates points into body orientation and gates min_z/max_z on the "
+      "body-frame height; the default identity mount reproduces the plain "
+      "sensor-frame conversion. cloud_field_type selects the x/y/z field "
+      "encoding (default FLOAT32).");
 
   // Overload using num_bins (Returns: ranges as a float32 numpy array)
   m_utils.def(
       "pointcloud_to_laserscan_from_raw",
       [](ByteArray data, int point_step, int row_step, int height, int width,
          int x_offset, int y_offset, int z_offset, double max_range,
-         double min_z, double max_z, int num_bins) {
+         double min_z, double max_z, int num_bins,
+         const Eigen::Vector3f &position, const Eigen::Vector4f &rotation,
+         PointFieldType cloud_field_type) {
         Eigen::VectorXf ranges_out;
         {
           py::gil_scoped_release release;
-          pointCloudToLaserScanFromRaw(toSpan(data), point_step, row_step,
-                                       height, width, x_offset, y_offset,
-                                       z_offset, max_range, min_z, max_z,
-                                       num_bins, ranges_out);
+          pointCloudToLaserScanFromRaw(
+              PointCloudView{toSpan(data), point_step, row_step, height, width,
+                             x_offset, y_offset, z_offset},
+              cloud_field_type, getTransformation(rotation, position),
+              max_range, min_z, max_z, num_bins, ranges_out);
         }
         return ranges_out;
       },
@@ -118,7 +154,15 @@ void bindings_utils(py::module_ &m) {
       py::arg("height"), py::arg("width"), py::arg("x_offset"),
       py::arg("y_offset"), py::arg("z_offset"), py::arg("max_range"),
       py::arg("min_z"), py::arg("max_z"), py::arg("num_bins"),
-      "Converts raw PointCloud2 to ranges only, using a fixed number of bins.");
+      py::arg("position") = Eigen::Vector3f(0.0f, 0.0f, 0.0f),
+      py::arg("rotation") = Eigen::Vector4f(0.0f, 0.0f, 0.0f, 1.0f),
+      py::arg("cloud_field_type") = PointFieldType::FLOAT32,
+      "Converts raw PointCloud2 to ranges only, using a fixed number of bins. "
+      "An optional sensor mount pose (position + quaternion x,y,z,w) rotates "
+      "points into body orientation and gates min_z/max_z on the body-frame "
+      "height; the default identity mount reproduces the plain sensor-frame "
+      "conversion. cloud_field_type selects the x/y/z field encoding "
+      "(default FLOAT32).");
 
   m_utils.def(
       "read_pcd", &read_pcd_py, py::arg("filename"),

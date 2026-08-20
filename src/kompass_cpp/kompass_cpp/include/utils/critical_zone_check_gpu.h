@@ -3,7 +3,6 @@
 #include "utils/collision_check.h"
 #include "utils/critical_zone_check.h"
 #include "utils/logger.h"
-#include "utils/pointcloud.h"
 #include <Eigen/Dense>
 #include <sycl/sycl.hpp>
 #include <vector>
@@ -18,39 +17,39 @@ class CriticalZoneCheckerGPU : public CriticalZoneChecker {
 public:
   /**
    * @brief Constructor for GPU-accelerated Safety Check
-   * * @param input_type           Selects LASERSCAN or POINTCLOUD mode.
-   * - LASERSCAN: Allocates and pre-computes angular indices.
-   * - POINTCLOUD: Allocates raw byte buffer for 3D data.
-   * @param robot_shape_type     Robot shape (CIRCLE, RECTANGLE, POLYGON).
-   * @param robot_dimensions     Dimensions specific to the shape.
-   * @param sensor_position_body Position of sensor in body frame (x, y, z).
-   * @param sensor_rotation_body Rotation of sensor (Quaternion x, y, z, w).
-   * @param critical_angle       Half-angle of the safety cone (radians).
-   * @param critical_distance    Distance for emergency stop.
-   * @param slowdown_distance    Distance for linear slowdown.
-   * @param angles               (LASERSCAN ONLY) Vector of angles for the scan.
-   * Pass empty {} for PointCloud.
-   * @param min_height           Min Z height to consider (for PointCloud).
-   * @param max_height           Max Z height to consider (for PointCloud).
-   * @param range_max            Maximum valid sensor range.
-   * @param cloud_field_type: Data type of fields (for PointCloud default:
-   * FLOAT32).
+   *
+   * @param input_type        Selects LASERSCAN or POINTCLOUD mode.
+   * - LASERSCAN: requires exactly one sensor and non-empty `scan_angles`;
+   * - POINTCLOUD: accepts N sensors; each check() submits one kernel per
+   *   cloud, all min-reducing into one shared result.
+   * @param robot_shape_type  Robot shape (CYLINDER, BOX, ...).
+   * @param robot_dimensions  Dimensions specific to the shape.
+   * @param sensors           One SensorConfig per sensor (mount pose in the
+   * body frame + the point field encoding for pointcloud input).
+   * @param critical_angle    Full angle of the safety cone (degrees).
+   * @param critical_distance Distance for emergency stop (m).
+   * @param slowdown_distance Distance for linear slowdown (m).
+   * @param min_height        Minimum accepted point height (m); BODY-frame
+   * band for pointcloud input, shared by all sensors.
+   * @param max_height        Maximum accepted point height (m); body-frame
+   * for pointcloud input.
+   * @param range_max         Maximum valid sensor range (m).
+   * @param scan_angles       (LASERSCAN only) scan angles in radians.
    */
-  CriticalZoneCheckerGPU(
-      InputType input_type, const CollisionChecker::ShapeType robot_shape_type,
-      const std::vector<float> &robot_dimensions,
-      const Eigen::Vector3f &sensor_position_body,
-      const Eigen::Vector4f &sensor_rotation_body, const float critical_angle,
-      const float critical_distance, const float slowdown_distance,
-      const std::vector<double> &angles, const float min_height,
-      const float max_height, const float range_max,
-      const PointFieldType cloud_field_type = PointFieldType::FLOAT32)
+  CriticalZoneCheckerGPU(InputType input_type,
+                         const CollisionChecker::ShapeType robot_shape_type,
+                         const std::vector<float> &robot_dimensions,
+                         const std::vector<SensorConfig> &sensors,
+                         const float critical_angle,
+                         const float critical_distance,
+                         const float slowdown_distance, const float min_height,
+                         const float max_height, const float range_max,
+                         const std::vector<double> &scan_angles = {})
       : CriticalZoneChecker(input_type, robot_shape_type, robot_dimensions,
-                            sensor_position_body, sensor_rotation_body,
-                            critical_angle, critical_distance,
-                            slowdown_distance, angles, min_height, max_height,
-                            range_max),
-        m_scanSize(angles.size()), m_pointFieldType(cloud_field_type) {
+                            sensors, critical_angle, critical_distance,
+                            slowdown_distance, min_height, max_height,
+                            range_max, scan_angles),
+        m_scanSize(scan_angles.size()) {
 
     // Initialize Queue
     m_q = sycl::queue{sycl::default_selector_v,
@@ -67,13 +66,6 @@ public:
     // Mode-Specific Allocation
     if (input_type_ == InputType::LASERSCAN) {
       // --- LaserScan Setup ---
-      // Only allocate these if we actually have angles
-      if (m_scanSize == 0) {
-        LOG_ERROR(
-            "InputType::LASERSCAN selected but 'angles' vector is empty!");
-        return;
-      }
-
       m_devicePtrRanges = sycl::malloc_device<float>(m_scanSize, m_q);
 
       // Load pre-computed Sin/Cos for fast transform
@@ -97,38 +89,16 @@ public:
       m_q.wait(); // Finish transfers
     } else {
       // --- PointCloud Setup ---
-      // Defer large buffer allocation to the first 'check' call
-      // to know the exact size.
-      m_rawCapacity = 0;
-      m_devicePtrRawBytes = nullptr;
       max_wg_size_ = dev.get_info<sycl::info::device::max_work_group_size>();
-      // set element size based on point field type
-      switch (m_pointFieldType) {
-      case PointFieldType::INT8:
-      case PointFieldType::UINT8:
-        m_elementSize = 1;
-        break;
-      case PointFieldType::INT16:
-      case PointFieldType::UINT16:
-        m_elementSize = 2;
-        break;
-      case PointFieldType::INT32:
-      case PointFieldType::UINT32:
-      case PointFieldType::FLOAT32:
-        m_elementSize = 4;
-        break;
-      case PointFieldType::FLOAT64:
-        m_elementSize = 8;
-        break;
-      default:
-        m_elementSize = 4;
-        break;
-      }
+      // One device-buffer slot per sensor; grown lazily on first use.
+      m_sensorDev.resize(sensors_.size());
     }
   }
 
   // Destructor
   ~CriticalZoneCheckerGPU() {
+    m_q.wait(); // wait for the queue to finish before freeing memory
+
     // Free Shared Result
     if (m_result)
       sycl::free(m_result, m_q);
@@ -148,27 +118,51 @@ public:
     }
 
     // Free PointCloud Resources
-    if (m_devicePtrRawBytes) {
-      sycl::free(m_devicePtrRawBytes, m_q);
+    for (auto &devState : m_sensorDev) {
+      if (devState.rawBytes) {
+        sycl::free(devState.rawBytes, m_q);
+      }
     }
   }
 
   /**
    * @brief Process 2D LaserScan Data
    * Only valid if initialized with InputType::LASERSCAN
+   *
+   * @throws std::logic_error when the checker was constructed for pointcloud
+   * input.
    */
   float check(Eigen::Ref<const Eigen::VectorXf> ranges, const bool forward);
 
   /**
-   * @brief Process Raw 3D PointCloud Data
-   * Only valid if initialized with InputType::POINTCLOUD
+   * @brief Checks N point clouds (one per configured sensor, positional
+   * pairing) on the GPU and returns the minimum safety factor across all of
+   * them: one kernel per non-empty cloud, all atomically min-reducing into
+   * one shared result, with a single wait at the end. Empty views are
+   * skipped; an all-empty batch returns 1.0.
+   *
+   * @throws std::logic_error when the checker was not constructed for
+   * pointcloud input.
+   * @throws std::invalid_argument on cloud count mismatch or negative field
+   * offsets (message names the offending cloud index).
+   */
+  float check(Span<PointCloudView> clouds, const bool forward);
+
+  // Convenience overload for containers / braced lists
+  float check(const std::vector<PointCloudView> &clouds, const bool forward) {
+    return check(Span<PointCloudView>(clouds), forward);
+  }
+
+  /**
+   * @brief Process Raw 3D PointCloud Data. Single-cloud adapter onto the
+   * batched check above.
    */
   float check(ByteSpan data, int point_step, int row_step, int height,
               int width, int x_offset, int y_offset, int z_offset,
               const bool forward);
 
 private:
-  const size_t m_scanSize;
+  const size_t m_scanSize; // laserscan mode only
 
   // -- Shared --
   float *m_result = nullptr;
@@ -182,11 +176,15 @@ private:
   float *m_sin = nullptr;
 
   // -- PointCloud Specific --
+  // Per-sensor DEVICE BUFFERS only; one entry per configured sensor in
+  // pointcloud mode, empty in laserscan mode
+  struct SensorDeviceState {
+    // Raw PointCloud2 bytes. Grown lazily per call; grow-only
+    uint8_t *rawBytes = nullptr;
+    size_t rawCapacity = 0;
+  };
+  std::vector<SensorDeviceState> m_sensorDev;
   size_t max_wg_size_ = 0;
-  uint8_t *m_devicePtrRawBytes = nullptr;
-  size_t m_rawCapacity = 0;
-  PointFieldType m_pointFieldType; // intialized in init
-  int m_elementSize;               // initialized in init
 };
 
 } // namespace Kompass

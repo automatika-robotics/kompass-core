@@ -201,17 +201,17 @@ int main(int argc, char *argv[]) {
     // and large enough for the longest ray here (range 3-7 m / res 0.05 m
     // = 60-140 cells) to reach its endpoint so OCCUPIED cells actually
     // get stamped
-    Mapping::LocalMapperGPU mapper(height, width, res, {0.0, 0.0, 0.0}, 0.0,
-                                   false, /*scan_size*/ 3600, 0.01, 2.0, 0.0,
-                                   20.0, /*max_points_per_line*/ 256);
+    Mapping::LocalMapperGPU mapper(height, width, res, {SensorConfig{}},
+                                   false, /*scan_size*/ 3600, 2.0, 0.0, 20.0,
+                                   /*max_points_per_line*/ 256);
     auto workload = [&]() { mapper.scanToGrid(angles, ranges); };
 #else
     float limit = width * res * std::sqrt(2);
     int maxPointsPerLine = static_cast<int>((limit / res) * 1.5);
-    Mapping::LocalMapper mapper(height, width, res, {0.0, 0.0, 0.0}, 0.0, false,
-                                0, 0.6, 0.9, 0.1, 0.1, 20.0, 0.2, 0.01, 2.0,
-                                0.0, maxPointsPerLine, 10);
-    auto workload = [&]() { mapper.scanToGridBaysian(angles, ranges); };
+    Mapping::LocalMapper mapper(height, width, res, {SensorConfig{}}, false,
+                                0, 0.6, 0.9, 0.1, 0.1, 20.0, 0.2, 2.0, 0.0,
+                                maxPointsPerLine, 10);
+    auto workload = [&]() { mapper.scanToGridBayesian(angles, ranges); };
 #endif
 
     results.push_back(measure_performance("Mapper_Dense_400x400", workload));
@@ -231,7 +231,6 @@ int main(int argc, char *argv[]) {
     const int width = 400;
     const float res = 0.05f;
     const int scan_size = 3600;  // matches the laserscan benchmark
-    const float angle_step = static_cast<float>(2.0 * M_PI / scan_size);
     const int max_points_per_line = 256;  // warp-multiple WG size, see TEST 2
 
     // Z-filter matches the critical-zone pointcloud benchmark so in-zone
@@ -240,10 +239,9 @@ int main(int argc, char *argv[]) {
     const float max_h = 2.0f;
     const float range_max = 20.0f;
 
-    Mapping::LocalMapperGPU mapper(height, width, res, {0.0, 0.0, 0.0}, 0.0,
-                                   /*isPointCloud*/ true, scan_size, angle_step,
-                                   max_h, min_h, range_max,
-                                   max_points_per_line);
+    Mapping::LocalMapperGPU mapper(height, width, res, {SensorConfig{}},
+                                   /*isPointCloud*/ true, scan_size, max_h,
+                                   min_h, range_max, max_points_per_line);
 
     auto cloud_bytes = generate_heavy_pointcloud_bytes(100000);
     const int point_step = sizeof(PointXYZ);
@@ -264,6 +262,51 @@ int main(int argc, char *argv[]) {
     results.push_back(
         measure_performance("Mapper_PointCloud_100k", workload));
   }
+
+  // -------------------------------------------------------------------------
+  // TEST 2c: MAPPING (Multi-sensor fusion, 2 x 50k clouds, GPU-only)
+  //
+  // Same total point count as Mapper_PointCloud_100k, split across a
+  // front + back mount and fused through the batched scanToGrid: expected
+  // cost is ~the single-cloud benchmark plus one extra kernel pair.
+  // -------------------------------------------------------------------------
+  {
+    const int height = 400;
+    const int width = 400;
+    const float res = 0.05f;
+    const int scan_size = 3600;           // matches the laserscan benchmark
+    const int max_points_per_line = 256;  // warp-multiple WG size, see TEST 2
+    const float min_h = 0.1f;
+    const float max_h = 2.0f;
+    const float range_max = 20.0f;
+
+    Mapping::LocalMapperGPU mapper(
+        height, width, res,
+        {SensorConfig::fromYaw({0.2f, 0.0f, 0.2f}, 0.0f),
+         SensorConfig::fromYaw({-0.2f, 0.0f, 0.2f},
+                               static_cast<float>(M_PI))},
+        /*isPointCloud*/ true, scan_size, max_h, min_h, range_max,
+        max_points_per_line);
+
+    auto front_bytes = generate_heavy_pointcloud_bytes(50000);
+    auto back_bytes = generate_heavy_pointcloud_bytes(50000);
+    const int point_step = sizeof(PointXYZ);
+    const int x_off = offsetof(PointXYZ, x);
+    const int y_off = offsetof(PointXYZ, y);
+    const int z_off = offsetof(PointXYZ, z);
+    auto view = [&](const std::vector<uint8_t> &bytes) {
+      const int n = static_cast<int>(bytes.size() / point_step);
+      return PointCloudView{bytes, point_step, n * point_step, 1, n,
+                            x_off, y_off, z_off};
+    };
+    const std::vector<PointCloudView> clouds{view(front_bytes),
+                                             view(back_bytes)};
+
+    auto workload = [&]() { mapper.scanToGrid(clouds); };
+
+    results.push_back(
+        measure_performance("Mapper_MultiCloud_2x50k", workload));
+  }
 #endif
 
   // -------------------------------------------------------------------------
@@ -275,12 +318,6 @@ int main(int argc, char *argv[]) {
     Eigen::Vector3f sensorPos{0.22, 0.0, 0.4};
     Eigen::Vector4f sensorRot{0, 0, 0.99, 0.0};
     float crit_angle = 160.0, crit_dist = 0.3, slow_dist = 0.6;
-    std::vector<double> dummy_angles;
-    dummy_angles.reserve(360);
-    double angle_step = 2.0 * M_PI / 360.0;
-    for (int i = 0; i < 360; ++i) {
-      dummy_angles.push_back(i * angle_step);
-    }
     auto cloud_bytes = generate_heavy_pointcloud_bytes(100000); // 100k points
 
     int point_step = sizeof(PointXYZ);
@@ -294,14 +331,16 @@ int main(int argc, char *argv[]) {
 
 #ifdef GPU
     CriticalZoneCheckerGPU checker(CriticalZoneChecker::InputType::POINTCLOUD,
-                                   shape, robotDim, sensorPos, sensorRot,
-                                   crit_angle, crit_dist, slow_dist,
-                                   dummy_angles, 0.1, 2.0, 20.0);
+                                   shape, robotDim,
+                                   {SensorConfig{sensorPos, sensorRot}},
+                                   crit_angle, crit_dist, slow_dist, 0.1, 2.0,
+                                   20.0);
 #else
     CriticalZoneChecker checker(CriticalZoneChecker::InputType::POINTCLOUD,
-                                shape, robotDim, sensorPos, sensorRot,
-                                crit_angle, crit_dist, slow_dist, dummy_angles,
-                                0.1, 2.0, 20.0);
+                                shape, robotDim,
+                                {SensorConfig{sensorPos, sensorRot}},
+                                crit_angle, crit_dist, slow_dist, 0.1, 2.0,
+                                20.0);
 #endif
 
     auto workload = [&]() {
@@ -310,6 +349,52 @@ int main(int argc, char *argv[]) {
     };
 
     results.push_back(measure_performance("CriticalZone_100k_Cloud", workload));
+  }
+
+  // -------------------------------------------------------------------------
+  // TEST 3b: CRITICAL ZONE (Multi-sensor fusion, 2 x 50k clouds)
+  //
+  // Same total point count as CriticalZone_100k_Cloud, split across a
+  // front + back mount and fused through the batched check (min across
+  // sensors). Runs on both platforms like TEST 3.
+  // -------------------------------------------------------------------------
+  {
+    auto shape = CollisionChecker::ShapeType::CYLINDER;
+    std::vector<float> robotDim{0.51, 2.0};
+    float crit_angle = 160.0, crit_dist = 0.3, slow_dist = 0.6;
+    std::vector<SensorConfig> sensors{
+        SensorConfig::fromYaw({0.2f, 0.0f, 0.2f}, 0.0f),
+        SensorConfig::fromYaw({-0.2f, 0.0f, 0.2f},
+                              static_cast<float>(M_PI))};
+
+    auto front_bytes = generate_heavy_pointcloud_bytes(50000);
+    auto back_bytes = generate_heavy_pointcloud_bytes(50000);
+    const int point_step = sizeof(PointXYZ);
+    const int x_off = offsetof(PointXYZ, x);
+    const int y_off = offsetof(PointXYZ, y);
+    const int z_off = offsetof(PointXYZ, z);
+    auto view = [&](const std::vector<uint8_t> &bytes) {
+      const int n = static_cast<int>(bytes.size() / point_step);
+      return PointCloudView{bytes, point_step, n * point_step, 1, n,
+                            x_off, y_off, z_off};
+    };
+    const std::vector<PointCloudView> clouds{view(front_bytes),
+                                             view(back_bytes)};
+
+#ifdef GPU
+    CriticalZoneCheckerGPU checker(CriticalZoneChecker::InputType::POINTCLOUD,
+                                   shape, robotDim, sensors, crit_angle,
+                                   crit_dist, slow_dist, 0.1, 2.0, 20.0);
+#else
+    CriticalZoneChecker checker(CriticalZoneChecker::InputType::POINTCLOUD,
+                                shape, robotDim, sensors, crit_angle,
+                                crit_dist, slow_dist, 0.1, 2.0, 20.0);
+#endif
+
+    auto workload = [&]() { checker.check(clouds, true); };
+
+    results.push_back(
+        measure_performance("CriticalZone_2x50k_Cloud", workload));
   }
 
   // -------------------------------------------------------------------------
@@ -366,13 +451,13 @@ int main(int argc, char *argv[]) {
 #ifdef GPU
     CriticalZoneCheckerGPU checker(CriticalZoneChecker::InputType::LASERSCAN,
                                    CollisionChecker::ShapeType::CYLINDER,
-                                   robotDim, sensorPos, sensorRot, 160.0, 0.3,
-                                   0.6, angles, 0.1, 2.0, 20.0);
+                                   robotDim, {SensorConfig{sensorPos, sensorRot}},
+                                   160.0, 0.3, 0.6, 0.1, 2.0, 20.0, angles);
 #else
     CriticalZoneChecker checker(CriticalZoneChecker::InputType::LASERSCAN,
                                 CollisionChecker::ShapeType::CYLINDER, robotDim,
-                                sensorPos, sensorRot, 160.0, 0.3, 0.6, angles,
-                                0.1, 2.0, 20.0);
+                                {SensorConfig{sensorPos, sensorRot}}, 160.0,
+                                0.3, 0.6, 0.1, 2.0, 20.0, angles);
 #endif
 
     auto workload = [&]() { checker.check(ranges, true); };

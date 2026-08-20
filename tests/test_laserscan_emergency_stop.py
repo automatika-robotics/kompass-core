@@ -29,10 +29,6 @@ def laser_scan_data() -> Dict[str, np.ndarray]:
     return laser_scan_data_fixed()
 
 
-# Angular bin resolution for the pointcloud-configured checker (rad); the
-# conversion kernel bins cloud points into a virtual scan at this step
-_POINTCLOUD_ANGLE_STEP = 0.01
-
 
 def _make_checker(
     use_gpu: bool,
@@ -45,7 +41,7 @@ def _make_checker(
     Constructed the same way Kompass' drive manager does it in production —
     the raw class is the only supported entry point. A laser scan checker
     takes the real scan angles; a pointcloud checker (``scan_angles=None``)
-    bins the cloud into a virtual scan instead.
+    gates every point directly in the body frame instead.
 
     :param use_gpu: Use the GPU implementation; the test is skipped when the
         build does not include it
@@ -57,7 +53,7 @@ def _make_checker(
     :param sensor_rotation: Sensor rotation in the body frame (quaternion)
     :type sensor_rotation: Optional[np.ndarray]
     """
-    from kompass_cpp.types import SensorInputType
+    from kompass_cpp.types import SensorConfig, SensorInputType
 
     if use_gpu:
         try:
@@ -74,21 +70,28 @@ def _make_checker(
         geometry_params=np.array([robot_radius, 0.4]),
     )
 
+    sensor = SensorConfig(
+        position=sensor_position
+        if sensor_position is not None
+        else np.array([0.0, 0.0, 0.0], dtype=np.float32),
+        rotation=sensor_rotation
+        if sensor_rotation is not None
+        else np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32),
+    )
+
     if scan_angles is not None:
         input_type = SensorInputType.LASERSCAN
+        angles_kwargs = {"scan_angles": scan_angles}
     else:
+        # Pointcloud checkers take no scan angles: points are gated per
+        # point in the body frame
         input_type = SensorInputType.POINTCLOUD
-        scan_angles = np.arange(0.0, 2 * np.pi, _POINTCLOUD_ANGLE_STEP)
+        angles_kwargs = {}
 
     return Checker(
         robot_shape=robot.geometry_type,
         robot_dimensions=robot.geometry_params,
-        sensor_position_body=sensor_position
-        if sensor_position is not None
-        else np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        sensor_rotation_body=sensor_rotation
-        if sensor_rotation is not None
-        else np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32),
+        sensor_configs=[sensor],
         critical_angle=90.0,
         critical_distance=0.5,
         slowdown_distance=1.0,
@@ -96,7 +99,7 @@ def _make_checker(
         max_height=robot.height,
         range_max=20.0,
         input_type=input_type,
-        scan_angles=scan_angles,
+        **angles_kwargs,
     )
 
 

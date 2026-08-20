@@ -11,7 +11,6 @@
 #include "datatypes/trajectory.h"
 #include "utils/collision_check.h"
 #include "utils/critical_zone_check.h"
-#include "utils/pointcloud.h"
 
 using namespace Kompass;
 
@@ -202,8 +201,7 @@ void bindings_types(py::module_ &m) {
             }
             throw std::runtime_error("Invalid robot geometry type");
           },
-          py::arg("shape_type"),
-          "Number of parameters the geometry requires");
+          py::arg("shape_type"), "Number of parameters the geometry requires");
 
   // For pointcloud data type
   py::enum_<PointFieldType>(m_types, "PointFieldType")
@@ -228,6 +226,34 @@ void bindings_types(py::module_ &m) {
           py::arg("value"),
           "Creates a PointFieldType from its integer ID (1-8).");
 
+  // Per-sensor mount configuration (used by mapper and critical zone checker)
+  py::class_<SensorConfig>(m_types, "SensorConfig")
+      .def(
+          "__init__",
+          [](SensorConfig *self, const Eigen::Vector3f &position,
+             const Eigen::Vector4f &rotation,
+             const PointFieldType cloud_field_type) {
+            new (self) SensorConfig{position, rotation, cloud_field_type};
+          },
+          py::arg("position") = Eigen::Vector3f(0.0f, 0.0f, 0.0f),
+          py::arg("rotation") = Eigen::Vector4f(0.0f, 0.0f, 0.0f, 1.0f),
+          py::arg("cloud_field_type") = PointFieldType::FLOAT32,
+          "Sensor mount pose in the body frame (position + quaternion "
+          "x, y, z, w) and the encoding of the sensor's point fields.")
+      .def_rw("position", &SensorConfig::position)
+      .def_rw("rotation", &SensorConfig::rotation)
+      .def_rw("cloud_field_type", &SensorConfig::cloud_field_type)
+      .def("__repr__", [](const SensorConfig &config) {
+        return "SensorConfig(position=[" + std::to_string(config.position.x()) +
+               ", " + std::to_string(config.position.y()) + ", " +
+               std::to_string(config.position.z()) + "], rotation=[" +
+               std::to_string(config.rotation.x()) + ", " +
+               std::to_string(config.rotation.y()) + ", " +
+               std::to_string(config.rotation.z()) + ", " +
+               std::to_string(config.rotation.w()) + "], cloud_field_type=" +
+               std::to_string(static_cast<int>(config.cloud_field_type)) + ")";
+      });
+
   // For critical zone checking
   py::enum_<CriticalZoneChecker::InputType>(m_types, "SensorInputType")
       .value("LASERSCAN", CriticalZoneChecker::InputType::LASERSCAN)
@@ -244,10 +270,11 @@ void bindings_types(py::module_ &m) {
   py::class_<PointsOfInterest>(m_types, "PointsOfInterest")
       .def(py::init<>())
       .def(py::init<const PointsOfInterest &>())
-      .def(py::init<const std::vector<Eigen::Vector2i> &, const Eigen::Vector2i &,
-                    const float, const std::string &>(),
-           py::arg("points"), py::arg("img_size") = Eigen::Vector2i(640, 480),
-           py::arg("timestamp") = 0.0, py::arg("label") = "")
+      .def(
+          py::init<const std::vector<Eigen::Vector2i> &,
+                   const Eigen::Vector2i &, const float, const std::string &>(),
+          py::arg("points"), py::arg("img_size") = Eigen::Vector2i(640, 480),
+          py::arg("timestamp") = 0.0, py::arg("label") = "")
       .def_rw("points_2d", &PointsOfInterest::Points2D)
       .def_rw("timestamp", &PointsOfInterest::timestamp)
       .def_rw("label", &PointsOfInterest::label)

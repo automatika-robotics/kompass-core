@@ -7,7 +7,6 @@
 #include "datatypes/control.h"
 #include "datatypes/path.h"
 #include "datatypes/trajectory.h"
-#include "utils/logger.h"
 #include "utils/threadpool.h"
 #include "utils/trajectory_sampler.h"
 namespace Kompass {
@@ -57,6 +56,9 @@ TrajectorySampler::TrajectorySampler(
       getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
 
   this->maxNumThreads = maxNumThreads;
+  if (maxNumThreads > 1) {
+    m_pool = std::make_unique<ThreadPool>(maxNumThreads);
+  }
 }
 
 TrajectorySampler::TrajectorySampler(
@@ -88,6 +90,9 @@ TrajectorySampler::TrajectorySampler(
   numCtrlPoints_ = control_time_ / time_step_;
 
   this->maxNumThreads = maxNumThreads;
+  if (maxNumThreads > 1) {
+    m_pool = std::make_unique<ThreadPool>(maxNumThreads);
+  }
   this->drop_samples_ = config.getParameter<bool>("drop_samples");
 }
 
@@ -189,8 +194,11 @@ TrajectorySampler::generateTrajectoriesNonHolonomic(
   // Sample the (vx × omega) grid for arc-like motion. Skip vx ≈ 0 so no
   // pure-rotation samples are produced — unexecutable for Ackermann, and
   // intentionally excluded for diff-drive (goal-cost cannot rank spins).
-  if (maxNumThreads > 1) {
-    ThreadPool pool(maxNumThreads);
+  if (m_pool) {
+    // run in threadpool
+    static thread_local std::vector<std::future<void>> futures;
+    futures.clear();
+    futures.reserve(numTrajectories);
     for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
       if (std::abs(vx) >= MIN_VEL) {
         for (double omega = min_omega_; omega <= max_omega_;
@@ -198,10 +206,15 @@ TrajectorySampler::generateTrajectoriesNonHolonomic(
 
           Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
           // Get admissible trajectories in separate threads
-          pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
-                       current_pose, admissible_velocity_trajectories.get());
+          futures.emplace_back(m_pool->enqueue(
+              &TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
+              current_pose, admissible_velocity_trajectories.get()));
         }
       }
+    }
+    // wait on the futures before returning
+    for (auto &f : futures) {
+      f.wait();
     }
   } else {
     for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
@@ -226,8 +239,11 @@ TrajectorySampler::generateTrajectoriesHolonomic(
       std::make_unique<TrajectorySamples2D>(numTrajectories,
                                             numPointsPerTrajectory);
 
-  if (maxNumThreads > 1) {
-    ThreadPool pool(maxNumThreads);
+  if (m_pool) {
+    // spawn in threadpool
+    static thread_local std::vector<std::future<void>> futures;
+    futures.clear();
+    futures.reserve(numTrajectories);
     for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
       if (std::abs(vx) >= MIN_VEL) {
         // vx, omega
@@ -236,8 +252,9 @@ TrajectorySampler::generateTrajectoriesHolonomic(
 
           Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
           // Get admissible trajectories in separate threads
-          pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
-                       current_pose, admissible_velocity_trajectories.get());
+          futures.emplace_back(m_pool->enqueue(
+              &TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
+              current_pose, admissible_velocity_trajectories.get()));
         }
 
         // vx, vy
@@ -246,10 +263,15 @@ TrajectorySampler::generateTrajectoriesHolonomic(
 
           Velocity2D vel = Velocity2D(vx, vy, 0.0); // Limit Y movement
           // Get admissible trajectories in separate threads
-          pool.enqueue(&TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
-                       current_pose, admissible_velocity_trajectories.get());
+          futures.emplace_back(m_pool->enqueue(
+              &TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
+              current_pose, admissible_velocity_trajectories.get()));
         }
       }
+    }
+    // wait on the futures before returning
+    for (auto &f : futures) {
+      f.wait();
     }
   } else {
 

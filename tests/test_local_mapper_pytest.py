@@ -22,7 +22,7 @@ from kompass_cpp.mapping import OCCUPANCY_TYPE
 
 RESOURCES_DIR = Path(__file__).parent / "resources" / "mapping"
 LASERSCAN_JSON = RESOURCES_DIR / "laserscan_data.json"
-LIVOX_CLOUD_JSON = RESOURCES_DIR / "livox_pointcloud_sample_0.json"
+LIVOX_CLOUD_JSON = RESOURCES_DIR / "livox_pointcloud_sample_1.json"
 
 
 def _get_random_pose(rng: random.Random,
@@ -373,7 +373,7 @@ def test_update_from_pointcloud_origin_only_points_filtered():
 @pytest.mark.skipif(
     not LIVOX_CLOUD_JSON.exists() or LIVOX_CLOUD_JSON.stat().st_size < 1_000_000,
     reason=(
-        "livox_pointcloud_sample_0.json not available (too large for CI). "
+        "livox_pointcloud_sample_1.json not available (too large for CI). "
         "Drop the file into tests/resources/mapping/ to enable this test."
     ),
 )
