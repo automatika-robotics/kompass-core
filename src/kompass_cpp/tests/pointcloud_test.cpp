@@ -137,8 +137,8 @@ void run_test(const std::vector<uint8_t> &data, int width,
   pointCloudToLaserScanFromRaw(
       PointCloudView{data, point_step, row_step, height, width, x_offset,
                      y_offset, z_offset},
-      Eigen::Isometry3f::Identity(), max_range, min_z, max_z, angle_step,
-      ranges, angles);
+      PointFieldType::FLOAT32, Eigen::Isometry3f::Identity(), max_range, min_z,
+      max_z, angle_step, ranges, angles);
 
   saveScanToJson(std::vector<double>(ranges.begin(), ranges.end()),
                  std::vector<double>(angles.begin(), angles.end()),
@@ -231,8 +231,8 @@ BOOST_AUTO_TEST_CASE(test_pointcloud_conversion_body_frame_reference) {
 
   Eigen::VectorXf ranges;
   pointCloudToLaserScanFromRaw(
-      PointCloudView{data, 12, 12 * num_points, 1, num_points, 0, 4, 8}, tf,
-      max_range, min_z, max_z, num_bins, ranges);
+      PointCloudView{data, 12, 12 * num_points, 1, num_points, 0, 4, 8},
+      PointFieldType::FLOAT32, tf, max_range, min_z, max_z, num_bins, ranges);
 
   // Reference implementation (same scalar math, written independently of the
   // buffer walk)
@@ -309,12 +309,14 @@ BOOST_AUTO_TEST_CASE(test_pointcloud_conversion_yaw_equivalence) {
   tf.translate(Eigen::Vector3f(0.0f, 0.0f, sensor_z));
   tf.rotate(eulerToRotationMatrix(0.0f, 0.0f, yaw));
   Eigen::VectorXf ranges_mounted;
-  pointCloudToLaserScanFromRaw(view, tf, max_range, body_min_z, body_max_z,
-                               num_bins, ranges_mounted);
+  pointCloudToLaserScanFromRaw(view, PointFieldType::FLOAT32, tf, max_range,
+                               body_min_z, body_max_z, num_bins,
+                               ranges_mounted);
 
   // Identity conversion: sensor-frame band shifted down by the mount height
   Eigen::VectorXf ranges_identity;
-  pointCloudToLaserScanFromRaw(view, Eigen::Isometry3f::Identity(), max_range,
+  pointCloudToLaserScanFromRaw(view, PointFieldType::FLOAT32,
+                               Eigen::Isometry3f::Identity(), max_range,
                                body_min_z - sensor_z, body_max_z - sensor_z,
                                num_bins, ranges_identity);
 
@@ -322,4 +324,48 @@ BOOST_AUTO_TEST_CASE(test_pointcloud_conversion_yaw_equivalence) {
     const int rotated = (b + yaw_bins) % num_bins;
     BOOST_CHECK_SMALL(ranges_mounted[rotated] - ranges_identity[b], 1e-4f);
   }
+}
+
+/**
+ * FLOAT64 clouds decode through the same primitive: the same points packed
+ * as doubles (point_step 24, offsets 0/8/16) must produce the exact ranges
+ * of their FLOAT32 packing when the field type says so.
+ */
+BOOST_AUTO_TEST_CASE(test_pointcloud_float64_fields) {
+  const std::vector<Eigen::Vector3f> points = {
+      {1.0f, 0.0f, 0.5f}, {0.0f, 2.0f, 0.5f}, {-1.5f, -1.5f, 0.5f}};
+  const int n = static_cast<int>(points.size());
+
+  std::vector<uint8_t> data32;
+  std::vector<uint8_t> data64;
+  for (const auto &p : points) {
+    for (int k = 0; k < 3; ++k) {
+      const float f = p[k];
+      const double d = static_cast<double>(p[k]);
+      const auto *fb = reinterpret_cast<const uint8_t *>(&f);
+      const auto *db = reinterpret_cast<const uint8_t *>(&d);
+      data32.insert(data32.end(), fb, fb + sizeof(float));
+      data64.insert(data64.end(), db, db + sizeof(double));
+    }
+  }
+
+  const double max_range = 10.0, min_z = 0.0, max_z = 1.0;
+  const int num_bins = 360;
+
+  Eigen::VectorXf ranges32, ranges64;
+  pointCloudToLaserScanFromRaw(
+      PointCloudView{data32, 12, 12 * n, 1, n, 0, 4, 8},
+      PointFieldType::FLOAT32, Eigen::Isometry3f::Identity(), max_range, min_z,
+      max_z, num_bins, ranges32);
+  pointCloudToLaserScanFromRaw(
+      PointCloudView{data64, 24, 24 * n, 1, n, 0, 8, 16},
+      PointFieldType::FLOAT64, Eigen::Isometry3f::Identity(), max_range, min_z,
+      max_z, num_bins, ranges64);
+
+  BOOST_CHECK_EQUAL(ranges32.size(), ranges64.size());
+  for (int b = 0; b < num_bins; ++b) {
+    BOOST_CHECK_EQUAL(ranges32[b], ranges64[b]);
+  }
+  // Sanity: the clouds actually landed in some bins
+  BOOST_TEST((ranges32.array() < static_cast<float>(max_range)).any());
 }

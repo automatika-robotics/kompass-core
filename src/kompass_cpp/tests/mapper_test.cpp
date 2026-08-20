@@ -425,3 +425,45 @@ BOOST_AUTO_TEST_CASE(test_multi_sensor_error_paths) {
   BOOST_CHECK_THROW(scan_mapper.scanToGrid({makeView(cloud)}),
                     std::logic_error);
 }
+
+// Packs xyz points into a raw FLOAT64 buffer (point_step 24, offsets 0/8/16)
+static std::vector<uint8_t> packXYZ64(const std::vector<Eigen::Vector3f> &pts) {
+  std::vector<uint8_t> data;
+  data.reserve(pts.size() * 3 * sizeof(double));
+  for (const auto &p : pts) {
+    for (int k = 0; k < 3; ++k) {
+      const double v = static_cast<double>(p[k]);
+      const auto *bytes = reinterpret_cast<const uint8_t *>(&v);
+      data.insert(data.end(), bytes, bytes + sizeof(double));
+    }
+  }
+  return data;
+}
+
+/**
+ * A FLOAT64 cloud must produce exactly the grid its FLOAT32 twin produces:
+ * SensorConfig.cloud_field_type dispatches the CPU field decoding.
+ */
+BOOST_AUTO_TEST_CASE(test_multi_sensor_float64_cloud) {
+  const std::vector<Eigen::Vector3f> points = {
+      {0.4f, 0.0f, -0.1f}, {0.0f, 0.5f, -0.1f}, {-0.3f, -0.3f, -0.1f}};
+
+  auto mapper32 = makeMultiMapper({SensorConfig::fromYaw({0.3f, 0.0f, 0.2f},
+                                                         0.0f)});
+  const auto cloud32 = packXYZ(points);
+  const Eigen::MatrixXi grid32 = mapper32.scanToGrid({makeView(cloud32)});
+
+  SensorConfig sensor64 = SensorConfig::fromYaw({0.3f, 0.0f, 0.2f}, 0.0f);
+  sensor64.cloud_field_type = PointFieldType::FLOAT64;
+  auto mapper64 = makeMultiMapper({sensor64});
+  const auto cloud64 = packXYZ64(points);
+  const int n = static_cast<int>(points.size());
+  const PointCloudView view64{cloud64, 24, 24 * n, 1, n, 0, 8, 16};
+  const Eigen::MatrixXi grid64 = mapper64.scanToGrid({view64});
+
+  BOOST_CHECK_GT(countPointsInGrid(
+                     grid32, static_cast<int>(Mapping::OccupancyType::OCCUPIED)),
+                 0);
+  BOOST_TEST((grid32.array() == grid64.array()).all(),
+             "FLOAT64 cloud must produce the exact grid of its FLOAT32 twin");
+}

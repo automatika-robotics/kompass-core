@@ -49,6 +49,8 @@ inline from_chars_result from_chars(const char *first, const char *last,
  * use the sensor's planar mount position as ray origin and orientation 0
  *
  * @param cloud          View of the raw buffer + layout metadata.
+ * @param field_type     Encoding of the x/y/z fields (dispatches
+ * load_and_cast_val, same as the GPU kernel).
  * @param sensor_tf_body Sensor mount pose in the body frame (full isometry:
  * roll/pitch/yaw honored).
  * @param max_range      Initial value and upper clipping range for distances.
@@ -59,13 +61,11 @@ inline from_chars_result from_chars(const char *first, const char *last,
  * @param num_bins       Number of uniform bins over [0, 2π).
  * @param ranges_out     Output vector of minimum distances per bin.
  *
- * @TODO: Coordinates are read as FLOAT32 at the given offsets. Unlike the GPU
- * kernel, this CPU path does not honor other PointFieldType field encodings.
- *
  * @throws std::invalid_argument on negative field offsets (corrupt metadata).
  */
 inline void
 pointCloudToLaserScanFromRaw(const Kompass::PointCloudView &cloud,
+                             const PointFieldType field_type,
                              const Eigen::Isometry3f &sensor_tf_body,
                              const double max_range, const double min_z_body,
                              const double max_z_body, const int num_bins,
@@ -95,6 +95,8 @@ pointCloudToLaserScanFromRaw(const Kompass::PointCloudView &cloud,
   const float max_range_sq =
       static_cast<float>(max_range) * static_cast<float>(max_range);
 
+  const int elem_size = elementSizeOf(field_type);
+
   // Iterate over raw points. The inner walk is bounded by the row's payload
   // (width points). Organized clouds may pad rows, and padding bytes must not
   // be decoded as points (same as GPU kernel)
@@ -106,16 +108,21 @@ pointCloudToLaserScanFromRaw(const Kompass::PointCloudView &cloud,
       std::size_t max_offset =
           point_start +
           std::max({cloud.x_offset, cloud.y_offset, cloud.z_offset}) +
-          sizeof(float);
+          elem_size;
       if (max_offset > cloud.data.size()) {
         LOG_WARNING("Point offset out of bounds");
         continue;
       }
 
-      float x, y, z;
-      std::memcpy(&x, &cloud.data[point_start + cloud.x_offset], sizeof(float));
-      std::memcpy(&y, &cloud.data[point_start + cloud.y_offset], sizeof(float));
-      std::memcpy(&z, &cloud.data[point_start + cloud.z_offset], sizeof(float));
+      const float x = load_and_cast_val(cloud.data.data(),
+                                        point_start + cloud.x_offset,
+                                        field_type);
+      const float y = load_and_cast_val(cloud.data.data(),
+                                        point_start + cloud.y_offset,
+                                        field_type);
+      const float z = load_and_cast_val(cloud.data.data(),
+                                        point_start + cloud.z_offset,
+                                        field_type);
 
       // Reject non-finite points (NaN padding in organized clouds)
       if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
@@ -178,7 +185,7 @@ pointCloudToLaserScanFromRaw(const Kompass::PointCloudView &cloud,
  * step (size and contents are both checked).
  */
 inline void pointCloudToLaserScanFromRaw(
-    const Kompass::PointCloudView &cloud,
+    const Kompass::PointCloudView &cloud, const PointFieldType field_type,
     const Eigen::Isometry3f &sensor_tf_body, const double max_range,
     const double min_z_body, const double max_z_body, const double angle_step,
     Eigen::VectorXf &ranges_out, Eigen::VectorXf &angles_out) {
@@ -197,8 +204,8 @@ inline void pointCloudToLaserScanFromRaw(
     }
   }
 
-  pointCloudToLaserScanFromRaw(cloud, sensor_tf_body, max_range, min_z_body,
-                               max_z_body, num_bins, ranges_out);
+  pointCloudToLaserScanFromRaw(cloud, field_type, sensor_tf_body, max_range,
+                               min_z_body, max_z_body, num_bins, ranges_out);
 }
 
 inline bool is_space(char c) {

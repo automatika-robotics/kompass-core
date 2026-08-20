@@ -217,12 +217,14 @@ protected:
     Eigen::Vector2f origin_xy;   // planar mount position (ray-cast origin)
     float yaw;                   // planar heading extracted from the mount
     Eigen::Vector2i start_point; // ray-cast origin cell
+    PointFieldType field_type;   // point field encoding (pointcloud decode)
   };
 
   SensorRuntime makeSensorRuntime(const SensorConfig &config) {
     SensorRuntime runtime;
     runtime.tf_body = config.tfBody();
     runtime.origin_xy = config.position.head<2>();
+    runtime.field_type = config.cloud_field_type;
     const Eigen::Matrix3f rot = runtime.tf_body.rotation();
     runtime.yaw = std::atan2(rot(1, 0), rot(0, 0));
     runtime.start_point = localToGrid(runtime.origin_xy);

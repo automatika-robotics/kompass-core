@@ -281,3 +281,44 @@ def test_wrapper_multisensor_guards():
     # Cloud count must match the configured sensor count
     with pytest.raises(ValueError, match="Expected 2 clouds"):
         mapper.update_from_pointclouds(PoseData(), clouds=[cloud])
+
+
+def test_cpu_mapper_honors_float64_field_type():
+    """A FLOAT64 cloud through the CPU mapper must produce the exact grid of
+    its FLOAT32 twin when SensorConfig.cloud_field_type says FLOAT64."""
+    from kompass_cpp.types import PointFieldType
+
+    points = [(0.4, 0.0, -0.1), (0.0, 0.5, -0.1), (-0.3, -0.3, -0.1)]
+
+    mapper32 = _make_mapper(
+        [SensorConfig(position=np.array([0.3, 0.0, 0.2], dtype=np.float32))],
+        use_gpu=False,
+    )
+    grid32 = np.asarray(mapper32.scan_to_grid(clouds=[_cloud_dict(points)])).copy()
+
+    buffer64 = np.zeros((len(points), 3), dtype=np.float64)
+    for row, point in enumerate(points):
+        buffer64[row] = point
+    cloud64 = {
+        "data": buffer64.reshape(-1).view(np.uint8),
+        "point_step": 24,
+        "row_step": 24 * len(points),
+        "height": 1,
+        "width": len(points),
+        "x_offset": 0,
+        "y_offset": 8,
+        "z_offset": 16,
+    }
+    mapper64 = _make_mapper(
+        [
+            SensorConfig(
+                position=np.array([0.3, 0.0, 0.2], dtype=np.float32),
+                cloud_field_type=PointFieldType.FLOAT64,
+            )
+        ],
+        use_gpu=False,
+    )
+    grid64 = np.asarray(mapper64.scan_to_grid(clouds=[cloud64]))
+
+    assert (grid32 == OCCUPIED).sum() > 0
+    np.testing.assert_array_equal(grid32, grid64)

@@ -307,9 +307,9 @@ Eigen::MatrixXi &LocalMapper::scanToGrid(Span<PointCloudView> clouds) {
     // Convert around this sensor's mount. Bearings come out in body
     // orientation around the sensor origin, so the ray cast runs with
     // orientation 0 from the sensor's own cell
-    pointCloudToLaserScanFromRaw(clouds[i], m_sensors[i].tf_body, m_rangeMax,
-                                 m_minHeight, m_maxHeight, m_scanSize,
-                                 initializedRanges);
+    pointCloudToLaserScanFromRaw(clouds[i], m_sensors[i].field_type,
+                                 m_sensors[i].tf_body, m_rangeMax, m_minHeight,
+                                 m_maxHeight, m_scanSize, initializedRanges);
     rasterizeScan_(initializedAngles, initializedRanges, m_sensors[i].origin_xy,
                    0.0f, m_sensors[i].start_point);
   }
@@ -341,8 +341,9 @@ LocalMapper::scanToGridBayesian(ByteSpan data, int point_step, int row_step,
   pointCloudToLaserScanFromRaw(PointCloudView{data, point_step, row_step,
                                               height, width, x_offset, y_offset,
                                               z_offset},
-                               m_sensors[0].tf_body, m_rangeMax, m_minHeight,
-                               m_maxHeight, m_scanSize, initializedRanges);
+                               m_sensors[0].field_type, m_sensors[0].tf_body,
+                               m_rangeMax, m_minHeight, m_maxHeight, m_scanSize,
+                               initializedRanges);
   gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
   gridDataProb.fill(m_pPrior);
   rasterizeScanBayesian_(initializedAngles, initializedRanges,
