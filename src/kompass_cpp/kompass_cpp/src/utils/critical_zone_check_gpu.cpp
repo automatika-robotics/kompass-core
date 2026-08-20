@@ -115,8 +115,8 @@ inline void submitCloudCheckKernel(
                 !sycl::isfinite(z_sens))
               continue;
 
-            // Filter sensor points with no planar extent
-            if (x_sens * x_sens + y_sens * y_sens < 1e-6f) {
+            // A point at the sensor origin carries no direction.
+            if (x_sens * x_sens + y_sens * y_sens + z_sens * z_sens < 1e-6f) {
               continue;
             }
 

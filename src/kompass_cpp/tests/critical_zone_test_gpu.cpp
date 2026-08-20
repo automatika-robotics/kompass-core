@@ -488,3 +488,41 @@ BOOST_AUTO_TEST_CASE(test_multi_sensor_error_paths) {
   BOOST_CHECK_THROW(shared_laserscan_checker().check({make_view(cloud)}, true),
                     std::logic_error);
 }
+
+// --- Test 22: Optical-Axis Point Is Not Filtered (Depth Camera) ---
+// Depth camera in the ROS optical frame (z forward, x right, y down),
+// mounted at (0.1, 0, 0.3): a point ON the optical axis is straight ahead
+// of the robot and must trip the forward check. Sensor (0, 0, 0.4) ->
+// body (0.5, 0, 0.3): 0.5 - Radius(0.51) = -0.01 < Crit(0.3) -> Critical.
+// A TRUE origin point must still be rejected (it maps onto the mount position
+// inside the robot).
+BOOST_AUTO_TEST_CASE(test_multi_sensor_optical_axis_not_filtered) {
+  Timer time;
+  SensorConfig camera;
+  camera.position = {0.1f, 0.0f, 0.3f};
+  // Body-from-optical: x_body = z_opt, y_body = -x_opt, z_body = -y_opt
+  camera.rotation = {-0.5f, 0.5f, -0.5f, 0.5f};
+
+  static CriticalZoneCheckerGPU *camera_checker = new CriticalZoneCheckerGPU(
+      CriticalZoneChecker::InputType::POINTCLOUD, ROBOT_SHAPE, ROBOT_DIMS,
+      {camera}, CRIT_ANGLE, CRIT_DIST, SLOW_DIST, POINTCLOUD_MIN_H,
+      POINTCLOUD_MAX_H, MAX_RANGE);
+
+  std::vector<uint8_t> cloud;
+  addPointToCloud(cloud, 0.0f, 0.0f, 0.4f);
+  const float factor = camera_checker->check({make_view(cloud)},
+                                             /*forward*/ true);
+  BOOST_TEST(factor == 0.0f,
+             "On-axis point 40 cm ahead of a depth camera -> expected 0.0, "
+             "got "
+                 << factor);
+
+  std::vector<uint8_t> origin_cloud;
+  addPointToCloud(origin_cloud, 0.0f, 0.0f, 0.0f);
+  const float clear = camera_checker->check({make_view(origin_cloud)},
+                                            /*forward*/ true);
+  BOOST_TEST(clear == 1.0f,
+             "Sensor-origin self-return should be filtered -> expected 1.0, "
+             "got "
+                 << clear);
+}

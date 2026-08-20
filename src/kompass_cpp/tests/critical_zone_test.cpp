@@ -517,3 +517,42 @@ BOOST_AUTO_TEST_CASE(test_cpu_multi_adapter_and_errors) {
              "paths throw as expected");
   }
 }
+
+// --- Test 19: Optical-Axis Point Is Not Filtered (Depth Camera) ---
+BOOST_AUTO_TEST_CASE(test_cpu_multi_optical_axis_not_filtered) {
+  Timer time;
+  // Depth camera in the ROS optical frame (z forward, x right, y down),
+  // mounted at (0.1, 0, 0.3). Body-from-optical quaternion [x,y,z,w] =
+  // [-0.5, 0.5, -0.5, 0.5]: x_body = z_opt, y_body = -x_opt, z_body = -y_opt
+  SensorConfig camera;
+  camera.position = {0.1f, 0.0f, 0.3f};
+  camera.rotation = {-0.5f, 0.5f, -0.5f, 0.5f};
+  auto checker = make_ms_checker({camera});
+
+  std::vector<uint8_t> cloud;
+  // Sensor (0, 0, 0.4) lies ON the optical axis -> body (0.5, 0, 0.3).
+  // Dist = 0.5. 0.5 - Radius(0.51) = -0.01 < Crit(0.3) -> Critical. A
+  // planar sensor-frame origin filter (x^2+y^2 < 1e-6) deletes this point
+  // -> full speed into an obstacle 40 cm dead ahead of the camera
+  addPointToCloud(cloud, 0.0f, 0.0f, 0.4f);
+  const float factor = checker.check({ms_view(cloud)}, /*forward*/ true);
+  BOOST_TEST(factor == 0.0f,
+             "On-axis point 40 cm ahead of a depth camera -> Critical zone "
+             "result should be 0.0, returned "
+                 << factor);
+
+  // A TRUE origin point (all three coordinates zero) must still be
+  // rejected: it maps onto the mount position inside the robot
+  std::vector<uint8_t> origin_cloud;
+  addPointToCloud(origin_cloud, 0.0f, 0.0f, 0.0f);
+  const float clear = checker.check({ms_view(origin_cloud)}, /*forward*/ true);
+  BOOST_TEST(clear == 1.0f,
+             "Sensor-origin self-return -> Critical zone result should be "
+             "1.0, returned "
+                 << clear);
+
+  if (factor == 0.0f && clear == 1.0f) {
+    LOG_INFO("Test19 PASSED: Optical-axis obstacle detected and origin "
+             "self-return filtered");
+  }
+}

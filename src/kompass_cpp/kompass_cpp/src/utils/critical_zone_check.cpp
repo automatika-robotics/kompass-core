@@ -197,10 +197,8 @@ float CriticalZoneChecker::check(Span<PointCloudView> clouds,
           continue;
         }
 
-        // Filter sensor points with no planar extent in the SENSOR frame. Maps
-        // onto the mount position (inside the robot) and must never trigger a
-        // stop
-        if (x * x + y * y < 1e-6f) {
+        // A point at the sensor origin carries no direction.
+        if (x * x + y * y + z * z < 1e-6f) {
           continue;
         }
 
