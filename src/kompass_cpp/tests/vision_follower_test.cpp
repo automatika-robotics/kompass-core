@@ -171,13 +171,12 @@ struct RGBDFollowerTestConfig {
       LOG_ERROR("Could not open or find the image");
     }
 
-    // Create an Eigen matrix of type int from the OpenCV Mat
-    auto depth_image = Eigen::MatrixX<unsigned short>(cv_img.rows, cv_img.cols);
-    for (int i = 0; i < cv_img.rows; ++i) {
-      for (int j = 0; j < cv_img.cols; ++j) {
-        depth_image(i, j) = cv_img.at<unsigned short>(i, j);
-      }
-    }
+    // Zero-copy view over the row-major cv::Mat buffer (16UC1 = uint16 mm).
+    // The Mat owns the pixels and outlives every use of the view below
+    BOOST_REQUIRE(cv_img.isContinuous());
+    const DepthImageView depth_image(
+        ByteSpan(cv_img.ptr<uint8_t>(), cv_img.total() * cv_img.elemSize()),
+        cv_img.rows, cv_img.cols, PointFieldType::UINT16);
 
     controller->setCameraIntrinsics(focal_length.x(), focal_length.y(),
                                     principal_point.x(), principal_point.y());

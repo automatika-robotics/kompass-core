@@ -22,10 +22,10 @@
 #pragma once
 
 #include "datatypes/path.h"
+#include "datatypes/sensors.h"
 #include "datatypes/tracking.h"
 #include <Eigen/Dense>
 #include <Eigen/src/Geometry/Transform.h>
-#include <memory>
 #include <optional>
 #include <vector>
 
@@ -46,27 +46,35 @@ public:
                 const Eigen::Vector2f &principal_point,
                 const float depth_conversion_factor = 1e-3);
 
+  /**
+   * NOTE: Non owning zero-copy view of the depth image. UINT16 pixels are
+   * scaled by the configured depth_conversion_factor (mm -> m by default);
+   * FLOAT32 pixels are taken as metres. Non-finite pixels are rejected by the
+   * min/max range gate.
+   */
   void
-  updateBoxes(const Eigen::MatrixX<unsigned short> &aligned_depth_img,
+  updateBoxes(const DepthImageView &aligned_depth_img,
               const std::vector<Bbox2D> &detections,
               const std::optional<Path::State> &robot_state = std::nullopt);
 
-  void updatePOIs(const Eigen::MatrixX<unsigned short> &aligned_depth_img,
+  void updatePOIs(const DepthImageView &aligned_depth_img,
                   const PointsOfInterest &pois,
                   const std::optional<Path::State> &robot_state = std::nullopt);
 
-  std::optional<std::vector<Bbox3D>> get3dDetections() const;
+  /// Result of the last update; empty when no box converted.
+  const std::vector<Bbox3D> &get3dDetections() const { return boxes_; }
 
 private:
   float cx_, cy_, fx_, fy_; // Depth Image camera intrinsics
   float minDepth_, maxDepth_, depthConversionFactor_;
-  Eigen::MatrixX<unsigned short> alignedDepthImg_;
   Eigen::Isometry3f camera_in_body_tf_, body_in_world_tf_;
-  std::unique_ptr<std::vector<Bbox3D>> boxes_;
+  std::vector<Bbox3D> boxes_;
 
-  std::optional<Bbox3D> convert2Dboxto3Dbox(const Bbox2D &box2d);
+  std::optional<Bbox3D> convert2Dboxto3Dbox(const DepthImageView &depth,
+                                            const Bbox2D &box2d);
 
-  std::optional<Bbox3D> convertPOIto3Dbox(const PointsOfInterest &poi);
+  std::optional<Bbox3D> convertPOIto3Dbox(const DepthImageView &depth,
+                                          const PointsOfInterest &poi);
 
   static void calculateMAD(const std::vector<float> &depthValues, float &median,
                            float &mad);

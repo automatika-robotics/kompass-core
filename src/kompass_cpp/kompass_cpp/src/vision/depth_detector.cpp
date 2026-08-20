@@ -2,7 +2,6 @@
 #include "datatypes/tracking.h"
 #include "utils/logger.h"
 #include "utils/transformation.h"
-#include <memory>
 #include <optional>
 #include <vector>
 
@@ -42,56 +41,53 @@ DepthDetector::DepthDetector(
   body_in_world_tf_ = Eigen::Isometry3f::Identity();
 }
 
-std::optional<std::vector<Bbox3D>> DepthDetector::get3dDetections() const {
-  if (boxes_) {
-    return *boxes_;
-  }
-  return std::nullopt;
-}
-
-void DepthDetector::updateBoxes(
-    const Eigen::MatrixX<unsigned short> &aligned_depth_img,
-    const std::vector<Bbox2D> &detections,
-    const std::optional<Path::State> &robot_state) {
+void DepthDetector::updateBoxes(const DepthImageView &aligned_depth_img,
+                                const std::vector<Bbox2D> &detections,
+                                const std::optional<Path::State> &robot_state) {
   if (robot_state.has_value()) {
     body_in_world_tf_ = getTransformation(robot_state.value());
   }
-  alignedDepthImg_ = aligned_depth_img;
-  boxes_ = std::make_unique<std::vector<Bbox3D>>();
+  boxes_.clear();
   for (const auto &box2d : detections) {
-    auto converted_box = convert2Dboxto3Dbox(box2d);
+    auto converted_box = convert2Dboxto3Dbox(aligned_depth_img, box2d);
     if (converted_box) {
-      boxes_->push_back(converted_box.value());
+      boxes_.push_back(std::move(converted_box.value()));
     }
   }
 }
 
-void DepthDetector::updatePOIs(
-    const Eigen::MatrixX<unsigned short> &aligned_depth_img,
-    const PointsOfInterest &poi,
-    const std::optional<Path::State> &robot_state) {
+void DepthDetector::updatePOIs(const DepthImageView &aligned_depth_img,
+                               const PointsOfInterest &poi,
+                               const std::optional<Path::State> &robot_state) {
   if (robot_state.has_value()) {
     body_in_world_tf_ = getTransformation(robot_state.value());
   }
-  alignedDepthImg_ = aligned_depth_img;
-  boxes_ = std::make_unique<std::vector<Bbox3D>>();
-  auto converted_box = convertPOIto3Dbox(poi);
+  boxes_.clear();
+  auto converted_box = convertPOIto3Dbox(aligned_depth_img, poi);
   if (converted_box) {
-    boxes_->push_back(converted_box.value());
+    boxes_.push_back(std::move(converted_box.value()));
   }
 }
 
-std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
+std::optional<Bbox3D>
+DepthDetector::convert2Dboxto3Dbox(const DepthImageView &depth,
+                                   const Bbox2D &box2d) {
   Bbox3D box3d(box2d);
   Eigen::Vector2i x_limits = box2d.getXLimits();
   Eigen::Vector2i y_limits = box2d.getYLimits();
+  // FLOAT32 pixels are metres already; UINT16 scale by the configured factor
+  const float to_meters = depth.field_type == PointFieldType::FLOAT32
+                              ? 1.0f
+                              : depthConversionFactor_;
   float depth_meters;
-  // All depth values in the 2D box within the range of interest
+  // All depth values in the 2D box within the range of interest. Non-finite
+  // pixels (NaN padding in float images) -> rejected
   std::vector<float> depth_values;
+  depth_values.reserve(static_cast<std::size_t>(y_limits(1) - y_limits(0) + 1) *
+                       (x_limits(1) - x_limits(0) + 1));
   for (int row_idx = y_limits(0); row_idx <= y_limits(1); ++row_idx) {
     for (int col_idx = x_limits(0); col_idx <= x_limits(1); ++col_idx) {
-      depth_meters =
-          alignedDepthImg_(row_idx, col_idx) * depthConversionFactor_;
+      depth_meters = depth.at(row_idx, col_idx) * to_meters;
       if (depth_meters <= maxDepth_ && depth_meters >= minDepth_) {
         depth_values.push_back(depth_meters);
       }
@@ -142,7 +138,6 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
   // Register center in the world frame
   box3d.center = camera_in_world_tf * center_in_camera_frame;
 
-
   // Transform size from camera frame to world frame
   Eigen::Matrix3f abs_rotation = camera_in_world_tf.linear().cwiseAbs();
   box3d.size = abs_rotation * size_camera_frame;
@@ -151,9 +146,10 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
 }
 
 std::optional<Bbox3D>
-DepthDetector::convertPOIto3Dbox(const PointsOfInterest &poi) {
+DepthDetector::convertPOIto3Dbox(const DepthImageView &depth,
+                                 const PointsOfInterest &poi) {
   Bbox2D box2d(poi);
-  return convert2Dboxto3Dbox(box2d);
+  return convert2Dboxto3Dbox(depth, box2d);
 }
 
 float DepthDetector::getMedian(const std::vector<float> &values) {

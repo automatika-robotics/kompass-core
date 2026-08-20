@@ -146,7 +146,7 @@ bool RGBDFollower::setInitialTracking(const int pose_x_img,
 
 bool RGBDFollower::setInitialTracking(
     const int pose_x_img, const int pose_y_img,
-    const Eigen::MatrixX<unsigned short> &aligned_depth_image,
+    const DepthImageView &aligned_depth_image,
     const std::vector<Bbox2D> &detected_boxes, const float yaw) {
 
   std::unique_ptr<Bbox2D> target_box;
@@ -168,9 +168,9 @@ bool RGBDFollower::setInitialTracking(
   return setInitialTracking(aligned_depth_image, *target_box, yaw);
 }
 
-bool RGBDFollower::setInitialTracking(
-    const Eigen::MatrixX<unsigned short> &aligned_depth_image,
-    const Bbox2D &target_box_2d, const float yaw) {
+bool RGBDFollower::setInitialTracking(const DepthImageView &aligned_depth_image,
+                                      const Bbox2D &target_box_2d,
+                                      const float yaw) {
   if (!detector_) {
     throw std::runtime_error(
         "DepthDetector is not initialized with the camera intrinsics. Call "
@@ -182,12 +182,12 @@ bool RGBDFollower::setInitialTracking(
   } else {
     detector_->updateBoxes(aligned_depth_image, {target_box_2d});
   }
-  auto boxes_3d = detector_->get3dDetections();
-  if (!boxes_3d || boxes_3d->empty()) {
+  const auto &boxes_3d = detector_->get3dDetections();
+  if (boxes_3d.empty()) {
     LOG_DEBUG("Failed to get 3D box from 2D target box");
     return false;
   }
-  const bool ok = tracker_->setInitialTracking(boxes_3d.value()[0], yaw);
+  const bool ok = tracker_->setInitialTracking(boxes_3d[0], yaw);
   if (ok) {
     refreshTargetGeometry();
   }

@@ -61,8 +61,9 @@ def synthetic_depth_image(camera_params, center_bbox_2d):
     and the area exactly inside the 2D bounding box is 3000mm (3.0 meters).
     """
     h, w = camera_params["img_shape"]
-    # Force column-major layout to match Eigen's default MatrixX layout
-    img = np.zeros((h, w), dtype=np.uint16, order="F")
+    # C-contiguous, the native layout of every camera driver: this is the
+    # zero-copy fast path through the bindings
+    img = np.zeros((h, w), dtype=np.uint16)
 
     tl_x, tl_y = center_bbox_2d.top_left_corner
     w_box, h_box = center_bbox_2d.size
@@ -151,7 +152,7 @@ def synthetic_depth_image_poi(camera_params, center_poi):
     bounding box that Bbox2D(PointsOfInterest) computes.
     """
     h, w = camera_params["img_shape"]
-    img = np.zeros((h, w), dtype=np.uint16, order="F")
+    img = np.zeros((h, w), dtype=np.uint16)
 
     # Use the first point as reference for the fill region
     px, py_ = center_poi.points_2d[0]
@@ -230,7 +231,7 @@ def test_poi_multipoint_robot_frame(detector, camera_params):
     )
 
     # Build depth image filling a generous region around the cluster
-    img = np.zeros((img_h, img_w), dtype=np.uint16, order="F")
+    img = np.zeros((img_h, img_w), dtype=np.uint16)
     margin = 80
     img[cy - margin : cy + margin, cx - margin : cx + margin] = 3000
 
@@ -246,3 +247,43 @@ def test_poi_multipoint_robot_frame(detector, camera_params):
     assert box3d.center[0] == pytest.approx(3.0, abs=0.05)
     assert box3d.center[1] == pytest.approx(0.0, abs=0.1)
     assert box3d.center[2] == pytest.approx(0.0, abs=0.1)
+
+
+def test_compute_3d_float32_metres_matches_uint16_mm(
+    detector, synthetic_depth_image, center_bbox_2d
+):
+    """A float32 depth image in METRES must produce the same 3D detection as
+    its uint16-millimetres twin: the binding dispatches on the dtype and no
+    conversion pass is needed anywhere (zero-copy for both encodings)."""
+    img_f32 = synthetic_depth_image.astype(np.float32) * 1e-3  # mm -> m
+    assert img_f32.flags.c_contiguous
+
+    result_u16 = detector.compute_3d_detections(
+        synthetic_depth_image, [center_bbox_2d], 0.0, 0.0, 0.0, 0.0
+    )
+    result_f32 = detector.compute_3d_detections(
+        img_f32, [center_bbox_2d], 0.0, 0.0, 0.0, 0.0
+    )
+
+    assert len(result_u16) == 1 and len(result_f32) == 1
+    for axis in range(3):
+        assert result_f32[0].center[axis] == pytest.approx(
+            result_u16[0].center[axis], abs=1e-5
+        )
+        assert result_f32[0].size[axis] == pytest.approx(
+            result_u16[0].size[axis], abs=1e-5
+        )
+
+
+def test_compute_3d_float32_nan_pixels_are_rejected(
+    detector, camera_params, center_bbox_2d
+):
+    """NaN padding in float depth images dies in the min/max range gate: a
+    box whose region is all-NaN yields no detection instead of garbage."""
+    h, w = camera_params["img_shape"]
+    img = np.full((h, w), np.nan, dtype=np.float32)
+
+    results = detector.compute_3d_detections(
+        img, [center_bbox_2d], 0.0, 0.0, 0.0, 0.0
+    )
+    assert len(results) == 0

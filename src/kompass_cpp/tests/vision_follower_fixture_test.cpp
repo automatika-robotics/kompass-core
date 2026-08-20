@@ -80,20 +80,23 @@ std::vector<FixtureCase> discover_fixtures() {
   return out;
 }
 
-Eigen::MatrixX<unsigned short> load_depth_png(const fs::path &png_path) {
+cv::Mat load_depth_png(const fs::path &png_path) {
   cv::Mat raw = cv::imread(png_path.string(), cv::IMREAD_UNCHANGED);
   BOOST_REQUIRE_MESSAGE(!raw.empty(),
                         "Could not load depth.png at " << png_path.string());
   BOOST_REQUIRE_MESSAGE(raw.type() == CV_16UC1,
                         "depth.png must be 16-bit single-channel: "
                             << png_path.string());
-  Eigen::MatrixX<unsigned short> depth(raw.rows, raw.cols);
-  for (int r = 0; r < raw.rows; ++r) {
-    for (int c = 0; c < raw.cols; ++c) {
-      depth(r, c) = raw.at<unsigned short>(r, c);
-    }
-  }
-  return depth;
+  BOOST_REQUIRE(raw.isContinuous());
+  return raw;
+}
+
+// Zero-copy view over the row-major cv::Mat buffer (16UC1 = uint16 mm).
+// The Mat must outlive every use of the view
+DepthImageView depth_view(const cv::Mat &img) {
+  return DepthImageView(
+      ByteSpan(img.ptr<uint8_t>(), img.total() * img.elemSize()), img.rows,
+      img.cols, PointFieldType::UINT16);
 }
 
 std::vector<Bbox2D> parse_detections(const json &case_json) {
@@ -160,7 +163,8 @@ void run_one_fixture(const FixtureCase &fx) {
   json case_json;
   in >> case_json;
 
-  auto depth = load_depth_png(fx.dir / "depth.png");
+  const cv::Mat depth_mat = load_depth_png(fx.dir / "depth.png");
+  const auto depth = depth_view(depth_mat);
   auto detections = parse_detections(case_json);
   auto controller = build_controller(case_json);
 
