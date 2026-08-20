@@ -5,7 +5,6 @@
 #include "utils/logger.h"
 #include <algorithm>
 #include <cmath>
-#include <memory>
 
 namespace Kompass {
 namespace Control {
@@ -110,7 +109,8 @@ bool RGBFollower::run(const std::optional<Bbox2D> &target) {
     recorded_search_time_ = 0.0;
     // Access the TrackingData object
     const auto &data = target.value();
-    last_tracking_ = std::make_unique<Bbox2D>(data);
+    last_tracking_ = data;
+    has_last_tracking_ = true;
     // Track the target
     trackTarget(data);
     return true;
@@ -120,11 +120,11 @@ bool RGBFollower::run(const std::optional<Bbox2D> &target) {
     if (recorded_search_time_ < config_.target_search_timeout()) {
       if (search_commands_queue_.empty()) {
         int last_direction = 1;
-        if (last_tracking_ != nullptr) {
-          auto last_center = last_tracking_->getCenter();
+        if (has_last_tracking_) {
+          auto last_center = last_tracking_.getCenter();
           last_direction =
               ((last_center.x() - last_center.y() / 2.0) > 0.0) ? 1 : -1;
-          last_tracking_ = nullptr;
+          has_last_tracking_ = false;
         }
         getFindTargetCmds(last_direction);
       }
@@ -143,7 +143,7 @@ bool RGBFollower::run(const std::optional<Bbox2D> &target) {
   } else {
     if (recorded_wait_time_ < config_.target_wait_timeout()) {
       LOG_DEBUG("Target lost, waiting to get tracked target again ...");
-      last_tracking_ = nullptr;
+      has_last_tracking_ = false;
       // Do nothing and wait
       recorded_wait_time_ += config_.control_time_step();
       return true;

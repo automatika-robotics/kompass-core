@@ -4,7 +4,6 @@
 #include "datatypes/parameter.h"
 #include "datatypes/tracking.h"
 #include "datatypes/trajectory.h"
-#include <memory>
 #include <optional>
 #include <queue>
 
@@ -88,7 +87,9 @@ protected:
   double recorded_search_time_ = 0.0, recorded_wait_time_ = 0.0;
   std::queue<Eigen::Vector3d> search_commands_queue_;
   Eigen::Vector3d search_command_;
-  std::unique_ptr<Bbox2D> last_tracking_ = nullptr;
+  // Last seen tracking
+  Bbox2D last_tracking_;
+  bool has_last_tracking_ = false;
   float dist_error_ = 0.0f, orientation_error_ = 0.0f;
 
   void generateSearchCommands(float total_rotation, float search_radius,
