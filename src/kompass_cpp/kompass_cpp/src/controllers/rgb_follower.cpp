@@ -17,6 +17,10 @@ RGBFollower::RGBFollower(const ControlType robotCtrlType,
   config_ = config;
   rotate_in_place_ = (robotCtrlType == ControlType::DIFFERENTIAL_DRIVE ||
                        robotCtrlType == ControlType::OMNI);
+  // Reusable search/wait outputs (getCtrl must not allocate per tick)
+  search_vel_ = TrajectoryVelocities2D(2);
+  wait_vel_ = TrajectoryVelocities2D(2);
+  wait_vel_.add(0, 0.0, 0.0, 0.0);
 }
 
 void RGBFollower::resetTarget(const Bbox2D &target) {
@@ -98,7 +102,7 @@ void RGBFollower::getFindTargetCmds(const int last_direction) {
                          target_searchtimeout_part);
 }
 
-bool RGBFollower::run(const std::optional<Bbox2D> target) {
+bool RGBFollower::run(const std::optional<Bbox2D> &target) {
   // Check if tracking has a value
   if (target.has_value()) {
     // clear all
@@ -126,6 +130,9 @@ bool RGBFollower::run(const std::optional<Bbox2D> target) {
       }
       search_command_ = search_commands_queue_.front();
       search_commands_queue_.pop();
+      // Write the command into the reusable output for getCtrl()
+      search_vel_.add(0, search_command_.x(), search_command_.y(),
+                      search_command_.z());
       recorded_search_time_ += config_.control_time_step();
       return true;
     } else {
@@ -221,26 +228,20 @@ void RGBFollower::trackTarget(const Bbox2D &target) {
   return;
 }
 
-const TrajectoryVelocities2D RGBFollower::getCtrl() const {
+const TrajectoryVelocities2D &RGBFollower::getCtrl() const {
   if (recorded_search_time_ <= 0.0 && recorded_wait_time_ <= 0.0) {
     return out_vel_;
   }
-  // If search is on
+  // If search is on (search_vel_ was filled in run())
   else if (recorded_search_time_ > 0.0) {
-    TrajectoryVelocities2D _search(2);
     LOG_DEBUG(
         "Number of search commands remaining: ", search_commands_queue_.size(),
         "recorded search time: ", recorded_search_time_);
-    _search.add(0, search_command_.x(), search_command_.y(),
-                search_command_.z());
-    return _search;
+    return search_vel_;
   }
   // If search not active -> wait till timeout
   else {
-    // send 0.0 to wait
-    TrajectoryVelocities2D _wait(2);
-    _wait.add(0, 0.0, 0.0, 0.0);
-    return _wait;
+    return wait_vel_;
   }
 }
 
