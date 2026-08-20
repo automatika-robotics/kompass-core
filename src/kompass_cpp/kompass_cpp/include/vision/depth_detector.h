@@ -70,16 +70,22 @@ private:
   Eigen::Isometry3f camera_in_body_tf_, body_in_world_tf_;
   std::vector<Bbox3D> boxes_;
 
+  // Per-box scratch, refilled for every converted box. Keep the
+  // allocated capacity, so it grows to the largest box seen.
+  std::vector<float> depth_values_; // in-range depth values (metres)
+  std::vector<float> mad_scratch_; // absolute deviations from the median
+
   std::optional<Bbox3D> convert2Dboxto3Dbox(const DepthImageView &depth,
                                             const Bbox2D &box2d);
 
   std::optional<Bbox3D> convertPOIto3Dbox(const DepthImageView &depth,
                                           const PointsOfInterest &poi);
 
-  static void calculateMAD(const std::vector<float> &depthValues, float &median,
-                           float &mad);
+  void calculateMAD(std::vector<float> &depthValues, float &median, float &mad);
 
-  static float getMedian(const std::vector<float> &values);
+  /// Median via nth_element selection (O(n)).
+  /// for even n the result averages the two middle order statistics
+  static float getMedian(std::vector<float> &values);
 };
 
 } // namespace Kompass

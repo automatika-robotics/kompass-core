@@ -2,6 +2,7 @@
 #include "datatypes/tracking.h"
 #include "utils/logger.h"
 #include "utils/transformation.h"
+#include <algorithm>
 #include <optional>
 #include <vector>
 
@@ -80,35 +81,38 @@ DepthDetector::convert2Dboxto3Dbox(const DepthImageView &depth,
                               ? 1.0f
                               : depthConversionFactor_;
   float depth_meters;
-  // All depth values in the 2D box within the range of interest. Non-finite
-  // pixels (NaN padding in float images) -> rejected
-  std::vector<float> depth_values;
-  depth_values.reserve(static_cast<std::size_t>(y_limits(1) - y_limits(0) + 1) *
-                       (x_limits(1) - x_limits(0) + 1));
+  // All depth values in the 2D box within the range of interest.
+  // NaN padding in float images -> rejected.
+  depth_values_.clear();
+  depth_values_.reserve(
+      static_cast<std::size_t>(y_limits(1) - y_limits(0) + 1) *
+      (x_limits(1) - x_limits(0) + 1));
   for (int row_idx = y_limits(0); row_idx <= y_limits(1); ++row_idx) {
     for (int col_idx = x_limits(0); col_idx <= x_limits(1); ++col_idx) {
       depth_meters = depth.at(row_idx, col_idx) * to_meters;
       if (depth_meters <= maxDepth_ && depth_meters >= minDepth_) {
-        depth_values.push_back(depth_meters);
+        depth_values_.push_back(depth_meters);
       }
     }
   }
-  if (depth_values.size() <= 1) {
+  if (depth_values_.size() <= 1) {
     LOG_WARNING("Could not get any depth values for 2D bounding box at ",
                 box2d.top_corner.x(), ", ", box2d.top_corner.y());
     return std::nullopt;
   }
   float medianDepth, madDepth;
-  calculateMAD(depth_values, medianDepth, madDepth);
+  calculateMAD(depth_values_, medianDepth, madDepth);
 
   // Get min and max depth
   float minimum_d = maxDepth_, maximum_d = minDepth_;
-  for (auto depth : depth_values) {
-    if ((depth < minimum_d) && (depth >= medianDepth - 1.5 * madDepth)) {
-      minimum_d = depth;
+  for (auto depth_val : depth_values_) {
+    if ((depth_val < minimum_d) &&
+        (depth_val >= medianDepth - 1.5 * madDepth)) {
+      minimum_d = depth_val;
     }
-    if ((depth > maximum_d) && (depth <= medianDepth + 1.5 * madDepth)) {
-      maximum_d = depth;
+    if ((depth_val > maximum_d) &&
+        (depth_val <= medianDepth + 1.5 * madDepth)) {
+      maximum_d = depth_val;
     }
   }
 
@@ -152,24 +156,31 @@ DepthDetector::convertPOIto3Dbox(const DepthImageView &depth,
   return convert2Dboxto3Dbox(depth, box2d);
 }
 
-float DepthDetector::getMedian(const std::vector<float> &values) {
-  auto sorted_value = values;
-  std::sort(sorted_value.begin(), sorted_value.end());
-  const auto n = sorted_value.size();
-  if (n % 2 == 0) {
-    return 0.5f * (sorted_value[n / 2 - 1] + sorted_value[n / 2]);
+float DepthDetector::getMedian(std::vector<float> &values) {
+  const auto n = values.size();
+  const auto mid = values.begin() + n / 2;
+  // Selection: *mid becomes the n/2-th order statistic and everything left of
+  // it is <= *mid
+  std::nth_element(values.begin(), mid, values.end());
+  const float upper = *mid;
+  if (n % 2 == 0) { // for even elements
+    // The lower middle is the largest element of the left partition.
+    // Equivalent to sorted[n/2 - 1]
+    const float lower = *std::max_element(values.begin(), mid);
+    return 0.5f * (lower + upper);
   }
-  return sorted_value[n / 2];
+  return upper; // for odd elements
 }
 
-void DepthDetector::calculateMAD(const std::vector<float> &depthValues,
-                                 float &median, float &mad) {
+void DepthDetector::calculateMAD(std::vector<float> &depthValues, float &median,
+                                 float &mad) {
   median = getMedian(depthValues);
 
-  std::vector<float> deviations;
+  // resize and fill member scratch
+  mad_scratch_.resize(depthValues.size());
   for (size_t i = 0; i < depthValues.size(); ++i) {
-    deviations.push_back(std::abs(depthValues[i] - median));
+    mad_scratch_[i] = std::abs(depthValues[i] - median);
   }
-  mad = getMedian(deviations);
+  mad = getMedian(mad_scratch_);
 }
 } // namespace Kompass
