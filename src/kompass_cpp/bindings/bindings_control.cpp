@@ -20,6 +20,39 @@ using namespace Kompass;
 // zero-copy); float64 or non-contiguous input converts with one copy
 using RowMatrixX3f = Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor>;
 
+namespace {
+// Private to file. The depth-image follower entries accept uint16 (mm) or
+// float32 (m) arrays. Templated functions with per dtype bindings below.
+template <typename DepthArray>
+bool setInitialTrackingAtPixel(Control::RGBDFollower &self, const int pixel_x,
+                               const int pixel_y, const DepthArray &depth,
+                               const std::vector<Bbox2D> &boxes,
+                               const float yaw) {
+  const auto view = toDepthView(depth);
+  py::gil_scoped_release release;
+  return self.setInitialTracking(pixel_x, pixel_y, view, boxes, yaw);
+}
+
+template <typename DepthArray>
+bool setInitialTrackingBox(Control::RGBDFollower &self, const DepthArray &depth,
+                           const Bbox2D &target_box, const float yaw) {
+  const auto view = toDepthView(depth);
+  py::gil_scoped_release release;
+  return self.setInitialTracking(view, target_box, yaw);
+}
+
+template <typename DepthArray>
+Control::TrajSearchResult getTrackingCtrlDepth(Control::RGBDFollower &self,
+                                               const DepthArray &depth,
+                                               const std::vector<Bbox2D> &boxes,
+                                               const Control::Velocity2D &vel) {
+  const auto view = toDepthView(depth);
+  // Solve without the GIL (argument conversions above still held it)
+  py::gil_scoped_release release;
+  return self.getTrackingCtrl(view, boxes, vel);
+}
+} // namespace
+
 // Control bindings submodule
 void bindings_control(py::module_ &m) {
   auto m_control = m.def_submodule("control", "Control module");
@@ -254,21 +287,20 @@ void bindings_control(py::module_ &m) {
                              const Control::LaserScan &>(
                &Control::DWA::computeVelocityCommandsSet<Control::LaserScan>),
            py::call_guard<py::gil_scoped_release>())
-      .def(
-          "compute_velocity_commands",
-          [](Control::DWA &self, const Control::Velocity2D &vel,
-             Eigen::Ref<const RowMatrixX3f> cloud)
-              -> Control::TrajSearchResult {
-            std::vector<Path::Point> points;
-            points.reserve(cloud.rows());
-            for (Eigen::Index i = 0; i < cloud.rows(); ++i) {
-              points.emplace_back(cloud(i, 0), cloud(i, 1), cloud(i, 2));
-            }
-            // Solve without the GIL (conversion above still holds it)
-            py::gil_scoped_release release;
-            return self.computeVelocityCommandsSet<std::vector<Path::Point>>(
-                vel, points);
-          })
+      .def("compute_velocity_commands",
+           [](Control::DWA &self, const Control::Velocity2D &vel,
+              Eigen::Ref<const RowMatrixX3f> cloud)
+               -> Control::TrajSearchResult {
+             std::vector<Path::Point> points;
+             points.reserve(cloud.rows());
+             for (Eigen::Index i = 0; i < cloud.rows(); ++i) {
+               points.emplace_back(cloud(i, 0), cloud(i, 1), cloud(i, 2));
+             }
+             // Solve without the GIL (conversion above still holds it)
+             py::gil_scoped_release release;
+             return self.computeVelocityCommandsSet<std::vector<Path::Point>>(
+                 vel, points);
+           })
       .def("add_custom_cost",
            &Control::DWA::addCustomCost) // Custom cost function for DWA planner
                                          // of type (f(Trajectory2D, Path::Path)
@@ -309,8 +341,8 @@ void bindings_control(py::module_ &m) {
       .def("reset_target", &Control::RGBFollower::resetTarget)
       .def("get_ctrl", &Control::RGBFollower::getCtrl)
       .def("get_errors", &Control::RGBFollower::getErrors)
-      .def("run", &Control::RGBFollower::run,
-           py::arg("detection") = py::none());
+      .def("run", &Control::RGBFollower::run, py::arg("detection") = py::none(),
+           py::call_guard<py::gil_scoped_release>());
 
   // Vision DWA
   py::class_<Control::RGBDFollower::RGBDFollowerConfig,
@@ -340,18 +372,20 @@ void bindings_control(py::module_ &m) {
                &Control::RGBDFollower::setInitialTracking),
            py::arg("pixel_x"), py::arg("pixel_y"), py::arg("detected_boxes_3d"),
            py::arg("robot_orientation") = 0.0)
-      .def("set_initial_tracking",
-           py::overload_cast<const int, const int,
-                             const Eigen::MatrixX<unsigned short> &,
-                             const std::vector<Bbox2D> &, const float>(
-               &Control::RGBDFollower::setInitialTracking),
+      // Depth image binds as a zero-copy 2-D view (uint16 mm or float32 m,
+      // C-contiguous); one typed overload per dtype, sharing one template
+      .def("set_initial_tracking", &setInitialTrackingAtPixel<DepthArrayU16>,
            py::arg("pixel_x"), py::arg("pixel_y"),
            py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
            py::arg("robot_orientation") = 0.0)
-      .def("set_initial_tracking",
-           py::overload_cast<const Eigen::MatrixX<unsigned short> &,
-                             const Bbox2D &, const float>(
-               &Control::RGBDFollower::setInitialTracking),
+      .def("set_initial_tracking", &setInitialTrackingAtPixel<DepthArrayF32>,
+           py::arg("pixel_x"), py::arg("pixel_y"),
+           py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
+           py::arg("robot_orientation") = 0.0)
+      .def("set_initial_tracking", &setInitialTrackingBox<DepthArrayU16>,
+           py::arg("aligned_depth_image"), py::arg("target_box_2d"),
+           py::arg("robot_orientation") = 0.0)
+      .def("set_initial_tracking", &setInitialTrackingBox<DepthArrayF32>,
            py::arg("aligned_depth_image"), py::arg("target_box_2d"),
            py::arg("robot_orientation") = 0.0)
       .def("get_errors", &Control::RGBDFollower::getErrors)
@@ -359,12 +393,12 @@ void bindings_control(py::module_ &m) {
            py::overload_cast<const std::vector<Bbox3D> &,
                              const Control::Velocity2D &>(
                &Control::RGBDFollower::getTrackingCtrl),
-           py::arg("detected_boxes_3d"), py::arg("robot_velocity"))
-      .def("get_tracking_ctrl",
-           py::overload_cast<const Eigen::MatrixX<unsigned short> &,
-                             const std::vector<Bbox2D> &,
-                             const Control::Velocity2D &>(
-               &Control::RGBDFollower::getTrackingCtrl),
+           py::arg("detected_boxes_3d"), py::arg("robot_velocity"),
+           py::call_guard<py::gil_scoped_release>())
+      .def("get_tracking_ctrl", &getTrackingCtrlDepth<DepthArrayU16>,
+           py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
+           py::arg("robot_velocity"))
+      .def("get_tracking_ctrl", &getTrackingCtrlDepth<DepthArrayF32>,
            py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
            py::arg("robot_velocity"));
 }

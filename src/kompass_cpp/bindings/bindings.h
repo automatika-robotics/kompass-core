@@ -35,6 +35,34 @@ inline Kompass::ByteSpan toSpan(const ByteArray &a) {
   return Kompass::ByteSpan(a.data(), a.size());
 }
 
+// Zero-copy input types for aligned depth images: a 2-D C-contiguous
+// (rows, cols) numpy array, uint16 (depth in millimetres, ROS 16UC1) or
+// float32 (depth in metres, ROS 32FC1. Wrong-dtype or non-contiguous input
+// converts with a single C-level copy.
+using DepthArrayU16 =
+    py::ndarray<const uint16_t, py::ndim<2>, py::c_contig, py::device::cpu>;
+using DepthArrayF32 =
+    py::ndarray<const float, py::ndim<2>, py::c_contig, py::device::cpu>;
+
+// The returned view aliases the array's buffer: the array handle must
+// outlive the C++ call the view is passed to. Must be called with the GIL
+// held.
+inline Kompass::DepthImageView toDepthView(const DepthArrayU16 &a) {
+  return Kompass::DepthImageView(
+      Kompass::ByteSpan(reinterpret_cast<const uint8_t *>(a.data()),
+                        a.size() * sizeof(uint16_t)),
+      static_cast<int>(a.shape(0)), static_cast<int>(a.shape(1)),
+      PointFieldType::UINT16);
+}
+
+inline Kompass::DepthImageView toDepthView(const DepthArrayF32 &a) {
+  return Kompass::DepthImageView(
+      Kompass::ByteSpan(reinterpret_cast<const uint8_t *>(a.data()),
+                        a.size() * sizeof(float)),
+      static_cast<int>(a.shape(0)), static_cast<int>(a.shape(1)),
+      PointFieldType::FLOAT32);
+}
+
 // Extracts one PointCloudView from a Python cloud element. An element is a dict
 // (extra keys are ignored), or None, which yields an empty view. The element's
 // byte buffer crosses zero-copy. Its owner handle is appended to
