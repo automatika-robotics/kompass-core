@@ -98,7 +98,7 @@ BOOST_AUTO_TEST_CASE(test_Vision_Tracker) {
   while (step < config.maxSteps) {
     // Sed detected boxes and ask tracker to update
     config.tracker->updateTracking(config.detected_boxes);
-    auto measured_track = config.tracker->getRawTracking();
+    const auto *measured_track = config.tracker->getRawTracking();
     auto tracked_state = config.tracker->getTrackedState();
     if (tracked_state) {
       auto mat = tracked_state->col(0);

@@ -195,7 +195,7 @@ bool RGBDFollower::setInitialTracking(const DepthImageView &aligned_depth_image,
 }
 
 void RGBDFollower::refreshTargetGeometry() {
-  if (auto raw = tracker_->getRawTracking()) {
+  if (const auto *raw = tracker_->getRawTracking()) {
     const auto &sz = raw->box.size;
     currentTargetRadius_ = 0.5f * std::max(sz.x(), sz.y());
   }
