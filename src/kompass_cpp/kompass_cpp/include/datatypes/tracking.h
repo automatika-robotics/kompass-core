@@ -62,10 +62,6 @@ struct Bbox2D {
 
   Bbox2D() {};
 
-  Bbox2D(const Bbox2D &box)
-      : top_corner(box.top_corner), size(box.size), timestamp(box.timestamp),
-        label(box.label), img_size(box.img_size) {};
-
   Bbox2D(const Eigen::Vector2i top_corner, const Eigen::Vector2i size,
          const float timestamp = 0.0, const std::string &label = "",
          const Eigen::Vector2i img_size = {640, 480})
@@ -152,12 +148,6 @@ struct Bbox3D {
   std::string label = "";
 
   Bbox3D() {};
-
-  Bbox3D(const Bbox3D &box)
-      : center(box.center), size(box.size),
-        center_img_frame(box.center_img_frame),
-        size_img_frame(box.size_img_frame), pc_points(box.pc_points),
-        timestamp(box.timestamp), label(box.label) {};
 
   Bbox3D(const Eigen::Vector3f &center, const Eigen::Vector3f &size,
          const Eigen::Vector2i center_img_frame,
