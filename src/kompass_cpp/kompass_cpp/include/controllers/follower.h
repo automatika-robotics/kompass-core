@@ -60,7 +60,7 @@ public:
       // derivation.
       addParameter("curvature_horizon_tolerance",
                    Parameter(1.5, 0.5, 1000.0)); // [m] max chord-arc
-                                                   // deviation on curved paths
+                                                 // deviation on curved paths
     }
   };
 
@@ -158,7 +158,7 @@ public:
     return currentPath->totalPathLength() > 0.0;
   }
 
-  const Path::Path getCurrentPath() const;
+  const Path::Path &getCurrentPath() const;
 
   /**
    * @brief Calculates an exponential speed factor [0, 1] based on path
