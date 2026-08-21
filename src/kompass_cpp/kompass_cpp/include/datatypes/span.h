@@ -21,6 +21,9 @@ public:
   constexpr size_t size() const { return size_; }
   constexpr bool empty() const { return size_ == 0; }
   constexpr const T &operator[](size_t i) const { return data_[i]; }
+  // Iterators so a Span works in range-for and templated consumers
+  constexpr const T *begin() const { return data_; }
+  constexpr const T *end() const { return data_ + size_; }
 
 private:
   const T *data_ = nullptr;
