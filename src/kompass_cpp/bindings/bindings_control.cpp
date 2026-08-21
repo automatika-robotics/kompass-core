@@ -405,6 +405,28 @@ void bindings_control(py::module_ &m) {
            py::arg("aligned_depth_image"), py::arg("target_box_2d"),
            py::arg("robot_orientation") = 0.0)
       .def("get_errors", &Control::RGBDFollower::getErrors)
+      // NOTE:The C++ class also inherits RGBFollower (nanobind doesn't cover
+      // multiple inheritence), so the RGBFollower interface is re-bound here
+      // through lambdas as follows
+      .def(
+          "reset_target",
+          [](Control::RGBDFollower &self, const Bbox2D &tracking) {
+            self.resetTarget(tracking);
+          },
+          py::arg("tracking"))
+      .def("get_ctrl",
+           [](const Control::RGBDFollower &self)
+               -> const Control::TrajectoryVelocities2D & {
+             return self.getCtrl();
+           })
+      .def(
+          "run",
+          [](Control::RGBDFollower &self,
+             const std::optional<Bbox2D> &detection) {
+            return self.run(detection);
+          },
+          py::arg("detection") = py::none(),
+          py::call_guard<py::gil_scoped_release>())
       .def("get_tracking_ctrl",
            py::overload_cast<const std::vector<Bbox3D> &,
                              const Control::Velocity2D &>(

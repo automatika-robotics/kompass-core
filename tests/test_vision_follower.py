@@ -138,3 +138,25 @@ def test_vision_follower_fixture(case_dir: Path) -> None:
         f"{case_dir.name}: omega={omega} outside "
         f"[{exp['omega_min']}, {exp['omega_max']}]"
     )
+
+
+def test_rgbd_follower_exposes_rgb_follower_interface() -> None:
+    """The C++ RGBDFollower also inherits RGBFollower; nanobind registers a
+    single base (Follower), so the RGBFollower interface is re-bound on the
+    RGBDFollower binding and must stay reachable from Python."""
+    case = _load_case(_discover_fixtures()[0])
+    follower = _make_follower(case)
+    planner = follower._planner
+
+    box = Bbox2D(
+        top_left_corner=np.array([300, 220], dtype=np.int32),
+        size=np.array([40, 40], dtype=np.int32),
+    )
+    box.set_img_size(np.array([640, 480], dtype=np.int32))
+
+    planner.reset_target(box)
+    assert isinstance(planner.run(box), bool)
+    assert isinstance(planner.run(None), bool)
+    # get_ctrl returns the velocities the RGB control path produced
+    assert planner.get_ctrl() is not None
+    assert planner.get_errors() is not None
