@@ -132,10 +132,11 @@ void bindings_control(py::module_ &m) {
       .def("get_vy_cmd", &Control::Follower::getLinearVelocityCmdY)
       .def("get_omega_cmd", &Control::Follower::getAngularVelocityCmd)
       .def("get_steer_cmd", &Control::Follower::getSteeringAngleCmd)
-      .def("get_tracked_target", &Control::Follower::getTrackedTarget,
-           py::rv_policy::reference_internal)
+      .def("get_tracked_target", &Control::Follower::getTrackedTarget)
+      // NOTE: set_current_path/clear_current_path destroy the referenced Path,
+      // so return by copy to ensure no dangling pointers on python side
       .def("get_current_path", &Control::Follower::getCurrentPath,
-           py::rv_policy::reference_internal)
+           py::rv_policy::copy)
       .def("get_path_length", &Control::Follower::getPathLength)
       .def("has_path", &Control::Follower::hasPath);
 
@@ -292,6 +293,21 @@ void bindings_control(py::module_ &m) {
              return self.computeVelocityCommandsSet<Kompass::Span<Path::Point>>(
                  vel, points);
            })
+      .def(
+          "compute_velocity_commands",
+          // Overload for direct laserscan arrays. 1 copy of ranges/angles
+          // into the LaserScan, made after the GIL release
+          [](Control::DWA &self, const Control::Velocity2D &vel,
+             Eigen::Ref<const Eigen::VectorXf> ranges,
+             Eigen::Ref<const Eigen::VectorXf> angles)
+              -> Control::TrajSearchResult {
+            py::gil_scoped_release release;
+            const Control::LaserScan scan{Eigen::VectorXf(ranges),
+                                          Eigen::VectorXf(angles)};
+            return self.computeVelocityCommandsSet<Control::LaserScan>(vel,
+                                                                       scan);
+          },
+          py::arg("vel"), py::arg("ranges"), py::arg("angles"))
       .def("add_custom_cost",
            &Control::DWA::addCustomCost) // Custom cost function for DWA planner
                                          // of type (f(Trajectory2D, Path::Path)
@@ -313,6 +329,18 @@ void bindings_control(py::module_ &m) {
                              const Control::LaserScan &, const bool &>(
                &Control::DWA::debugVelocitySearch<Control::LaserScan>),
            py::call_guard<py::gil_scoped_release>())
+      .def("debug_velocity_search",
+           // Overload for direct laserscan arrays. 1 copy of ranges/angles
+           // into the LaserScan, made after the GIL release
+           [](Control::DWA &self, const Control::Velocity2D &vel,
+              Eigen::Ref<const Eigen::VectorXf> ranges,
+              Eigen::Ref<const Eigen::VectorXf> angles, const bool drop) {
+             py::gil_scoped_release release;
+             const Control::LaserScan scan{Eigen::VectorXf(ranges),
+                                           Eigen::VectorXf(angles)};
+             return self.debugVelocitySearch<Control::LaserScan>(vel, scan,
+                                                                 drop);
+           })
       .def("set_resolution", &Control::DWA::resetOctreeResolution);
 
   // Vision Follower
