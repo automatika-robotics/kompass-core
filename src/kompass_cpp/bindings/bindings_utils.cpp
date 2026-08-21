@@ -72,7 +72,7 @@ void bindings_utils(py::module_ &m) {
 
       .def(
           "check",
-          [](CriticalZoneChecker &self, ByteArray data, int point_step,
+          [](CriticalZoneChecker &self, const ByteArray &data, int point_step,
              int row_step, int height, int width, int x_offset, int y_offset,
              int z_offset, bool forward) {
             py::gil_scoped_release release;
@@ -106,7 +106,7 @@ void bindings_utils(py::module_ &m) {
   // numpy arrays)
   m_utils.def(
       "pointcloud_to_laserscan_from_raw",
-      [](ByteArray data, int point_step, int row_step, int height, int width,
+      [](const ByteArray &data, int point_step, int row_step, int height, int width,
          int x_offset, int y_offset, int z_offset, double max_range,
          double min_z, double max_z, double angle_step,
          const Eigen::Vector3f &position, const Eigen::Vector4f &rotation,
@@ -140,7 +140,7 @@ void bindings_utils(py::module_ &m) {
   // Overload using num_bins (Returns: ranges as a float32 numpy array)
   m_utils.def(
       "pointcloud_to_laserscan_from_raw",
-      [](ByteArray data, int point_step, int row_step, int height, int width,
+      [](const ByteArray &data, int point_step, int row_step, int height, int width,
          int x_offset, int y_offset, int z_offset, double max_range,
          double min_z, double max_z, int num_bins,
          const Eigen::Vector3f &position, const Eigen::Vector4f &rotation,

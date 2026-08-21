@@ -48,7 +48,7 @@ void bindings_mapping(py::module_ &m) {
 
       .def(
           "scan_to_grid",
-          [](Mapping::LocalMapper &self, ByteArray data, int point_step,
+          [](Mapping::LocalMapper &self, const ByteArray &data, int point_step,
              int row_step, int height, int width, int x_offset, int y_offset,
              int z_offset) -> Eigen::MatrixXi & {
             py::gil_scoped_release release;
@@ -88,7 +88,7 @@ void bindings_mapping(py::module_ &m) {
 
       .def(
           "scan_to_grid_bayesian",
-          [](Mapping::LocalMapper &self, ByteArray data, int point_step,
+          [](Mapping::LocalMapper &self, const ByteArray &data, int point_step,
              int row_step, int height, int width, int x_offset, int y_offset,
              int z_offset) {
             py::gil_scoped_release release;

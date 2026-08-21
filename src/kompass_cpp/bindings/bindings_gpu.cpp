@@ -30,7 +30,7 @@ void bindings_mapping_gpu(py::module_ &m) {
 
       .def(
           "scan_to_grid",
-          [](Mapping::LocalMapperGPU &self, ByteArray data, int point_step,
+          [](Mapping::LocalMapperGPU &self, const ByteArray &data, int point_step,
              int row_step, int height, int width, int x_offset, int y_offset,
              int z_offset) -> Eigen::MatrixXi & {
             py::gil_scoped_release release;
@@ -88,7 +88,7 @@ void bindings_utils_gpu(py::module_ &m) {
 
       .def(
           "check",
-          [](CriticalZoneCheckerGPU &self, ByteArray data, int point_step,
+          [](CriticalZoneCheckerGPU &self, const ByteArray &data, int point_step,
              int row_step, int height, int width, int x_offset, int y_offset,
              int z_offset, bool forward) {
             py::gil_scoped_release release;
