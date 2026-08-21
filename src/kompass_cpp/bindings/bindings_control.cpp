@@ -16,24 +16,6 @@
 
 using namespace Kompass;
 
-// Nx3 cartesian points (row-major so a numpy (N, 3) float32 array maps
-// zero-copy); float64 or non-contiguous input converts with one copy
-using RowMatrixX3f = Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor>;
-
-// The Nx3 float32 buffer. For the cloud entries below to reinterpret it as a
-// Span with NO per-point build. Path::Point (Eigen::Vector3f) must stay 3
-// packed floats
-static_assert(sizeof(Path::Point) == 3 * sizeof(float),
-              "Path::Point must be 3 packed floats for the zero-copy "
-              "Span reinterpret in the cloud bindings");
-
-inline Kompass::Span<Path::Point>
-toPointSpan(const Eigen::Ref<const RowMatrixX3f> &cloud) {
-  return Kompass::Span<Path::Point>(
-      reinterpret_cast<const Path::Point *>(cloud.data()),
-      static_cast<size_t>(cloud.rows()));
-}
-
 namespace {
 // Private to file. The depth-image follower entries accept uint16 (mm) or
 // float32 (m) arrays. Templated functions with per dtype bindings below.

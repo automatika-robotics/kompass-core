@@ -19,10 +19,10 @@ OMPL2DGeometricPlanner::OMPL2DGeometricPlanner(
 
 OMPL2DGeometricPlanner::~OMPL2DGeometricPlanner() {}
 
-void OMPL2DGeometricPlanner::setupProblem(
-    double start_x, double start_y, double start_yaw, double goal_x,
-    double goal_y, double goal_yaw,
-    const std::vector<Eigen::Vector3f> &map_3d) {
+void OMPL2DGeometricPlanner::setupProblem(double start_x, double start_y,
+                                          double start_yaw, double goal_x,
+                                          double goal_y, double goal_yaw,
+                                          Span<Path::Point> map_3d) {
   setup_->clear();
   // The planning map is already in the world frame, and this checker is built
   // with an identity sensor mount, so an identity capture pose makes the
