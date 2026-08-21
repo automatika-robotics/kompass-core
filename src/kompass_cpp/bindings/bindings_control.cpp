@@ -20,6 +20,20 @@ using namespace Kompass;
 // zero-copy); float64 or non-contiguous input converts with one copy
 using RowMatrixX3f = Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor>;
 
+// The Nx3 float32 buffer. For the cloud entries below to reinterpret it as a
+// Span with NO per-point build. Path::Point (Eigen::Vector3f) must stay 3
+// packed floats
+static_assert(sizeof(Path::Point) == 3 * sizeof(float),
+              "Path::Point must be 3 packed floats for the zero-copy "
+              "Span reinterpret in the cloud bindings");
+
+inline Kompass::Span<Path::Point>
+toPointSpan(const Eigen::Ref<const RowMatrixX3f> &cloud) {
+  return Kompass::Span<Path::Point>(
+      reinterpret_cast<const Path::Point *>(cloud.data()),
+      static_cast<size_t>(cloud.rows()));
+}
+
 namespace {
 // Private to file. The depth-image follower entries accept uint16 (mm) or
 // float32 (m) arrays. Templated functions with per dtype bindings below.
@@ -237,14 +251,10 @@ void bindings_control(py::module_ &m) {
           "execute",
           [](Control::PurePursuit &self, const double dt,
              Eigen::Ref<const RowMatrixX3f> cloud) {
-            std::vector<Path::Point> points;
-            points.reserve(cloud.rows());
-            for (Eigen::Index i = 0; i < cloud.rows(); ++i) {
-              points.emplace_back(cloud(i, 0), cloud(i, 1), cloud(i, 2));
-            }
-            // Solve without the GIL (conversion above still holds it)
+            // Zero-copy reinterpret
+            const auto points = toPointSpan(cloud);
             py::gil_scoped_release release;
-            return self.execute<std::vector<Path::Point>>(dt, points);
+            return self.execute<Kompass::Span<Path::Point>>(dt, points);
           },
           "Execute Pure Pursuit with PointCloud obstacle avoidance",
           py::arg("delta_time"), py::arg("point_cloud"));
@@ -294,14 +304,10 @@ void bindings_control(py::module_ &m) {
            [](Control::DWA &self, const Control::Velocity2D &vel,
               Eigen::Ref<const RowMatrixX3f> cloud)
                -> Control::TrajSearchResult {
-             std::vector<Path::Point> points;
-             points.reserve(cloud.rows());
-             for (Eigen::Index i = 0; i < cloud.rows(); ++i) {
-               points.emplace_back(cloud(i, 0), cloud(i, 1), cloud(i, 2));
-             }
-             // Solve without the GIL (conversion above still holds it)
+             // Zero-copy reinterpret
+             const auto points = toPointSpan(cloud);
              py::gil_scoped_release release;
-             return self.computeVelocityCommandsSet<std::vector<Path::Point>>(
+             return self.computeVelocityCommandsSet<Kompass::Span<Path::Point>>(
                  vel, points);
            })
       .def("add_custom_cost",
@@ -313,13 +319,10 @@ void bindings_control(py::module_ &m) {
            // Overload for Nx3 cartesian points
            [](Control::DWA &self, const Control::Velocity2D &vel,
               Eigen::Ref<const RowMatrixX3f> cloud, const bool drop) {
-             std::vector<Path::Point> points;
-             points.reserve(cloud.rows());
-             for (Eigen::Index i = 0; i < cloud.rows(); ++i) {
-               points.emplace_back(cloud(i, 0), cloud(i, 1), cloud(i, 2));
-             }
+             // Zero-copy reinterpret
+             const auto points = toPointSpan(cloud);
              py::gil_scoped_release release;
-             return self.debugVelocitySearch<std::vector<Path::Point>>(
+             return self.debugVelocitySearch<Kompass::Span<Path::Point>>(
                  vel, points, drop);
            })
       .def("debug_velocity_search",

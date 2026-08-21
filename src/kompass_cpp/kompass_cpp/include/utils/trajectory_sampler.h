@@ -4,6 +4,7 @@
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
+#include "datatypes/span.h"
 #include "datatypes/trajectory.h"
 #include "threadpool.h"
 #include <cmath>
@@ -118,7 +119,7 @@ public:
   std::unique_ptr<TrajectorySamples2D>
   generateTrajectories(const Velocity2D &current_vel,
                        const Path::State &current_pose,
-                       const std::vector<Path::Point> &cloud);
+                       Span<Path::Point> cloud);
 
   /**
    * @brief Reset the resolution of the obstacles Octree
@@ -163,8 +164,9 @@ protected:
 
 private:
   double time_step_{0.0};
-  double max_time_{0.0};       // current (possibly per-cycle-adapted) rollout horizon
-  double base_max_time_{0.0};  // constructor-provided upper bound; setter clamps to this
+  double max_time_{0.0}; // current (possibly per-cycle-adapted) rollout horizon
+  double base_max_time_{
+      0.0}; // constructor-provided upper bound; setter clamps to this
   double control_time_{0.0};
   int lin_samples_max_;
   int lin_samples_x_; // split of lin_samples_max_ used for the vx axis

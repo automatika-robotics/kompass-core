@@ -160,7 +160,7 @@ public:
         }
       }
     }
-    // -- CASE 2: PointCloud Input (Vector of Points, world frame) --
+    // -- CASE 2: PointCloud Input (Span of Points, world frame) --
     else {
       // Already world coordinates -> the octree needs no further placement
       sensor_tf_world_ = Eigen::Isometry3f::Identity();
