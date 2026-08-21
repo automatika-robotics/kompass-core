@@ -558,6 +558,11 @@ class VisionRGBDFollower(ControllerTemplate):
         :return: Whether the planner found a valid solution
         :rtype: bool
         """
+        if depth_image is None:
+            # No depth this tick, skip.
+            logging.debug("RGBDFollower loop_step called without a depth image")
+            return False
+
         robot_cmd = None
         if not self._config._use_local_coordinates:
             # Global mode: state is mandatory — detector and control law need it
