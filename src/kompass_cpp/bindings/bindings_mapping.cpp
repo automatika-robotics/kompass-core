@@ -9,7 +9,10 @@ using namespace Kompass;
 // Mapping bindings submodule
 void bindings_mapping(py::module_ &m) {
   auto m_mapping = m.def_submodule("mapping", "Local Mapping module");
-  py::enum_<Mapping::OccupancyType>(m_mapping, "OCCUPANCY_TYPE")
+  // is_arithmetic -> enum.IntEnum. The values are the grid-cell semantics
+  // and Python consumers use them as integers. Single source of truth
+  py::enum_<Mapping::OccupancyType>(m_mapping, "OCCUPANCY_TYPE",
+                                    py::is_arithmetic())
       .value("UNEXPLORED", Mapping::OccupancyType::UNEXPLORED)
       .value("EMPTY", Mapping::OccupancyType::EMPTY)
       .value("OCCUPIED", Mapping::OccupancyType::OCCUPIED);
