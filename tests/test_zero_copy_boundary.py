@@ -9,8 +9,15 @@ would be 10-100x the metadata cost) blows the ratio immediately.
 
 CPU classes are used on purpose: no JIT warm-up noise, and the binding
 boundary under test is the same code for the GPU classes.
+
+The vision guards use image-size scaling instead: the depth detector and
+follower only read pixels inside the (fixed-size) target box, so a
+zero-copy boundary costs the same on a VGA image and on one with 4x the
+pixels. Any hidden full-image copy or dtype/layout conversion scales with
+the image area and blows the ratio.
 """
 
+import itertools
 import time
 
 import numpy as np
@@ -18,6 +25,19 @@ import numpy as np
 from kompass_cpp.mapping import LocalMapper as LocalMapperCpp
 from kompass_cpp.types import RobotGeometry, SensorConfig, SensorInputType
 from kompass_cpp.utils import CriticalZoneChecker
+
+from kompass_core.control import VisionRGBDFollower, VisionRGBDFollowerConfig
+from kompass_core.datatypes import Bbox2D
+from kompass_core.models import (
+    AngularCtrlLimits,
+    LinearCtrlLimits,
+    Robot,
+    RobotCtrlLimits,
+    RobotGeometry as CoreRobotGeometry,
+    RobotState,
+    RobotType,
+)
+from kompass_core.vision import DepthDetector
 
 _PC_STRIDE = 16  # 16B points (x, y, z, pad)
 _N_POINTS = 100_000
@@ -122,4 +142,149 @@ def test_mapper_batched_n1_within_noise_of_single_cloud():
     assert ratio < _MAX_RATIO, (
         f"batched N=1 scan_to_grid() costs {ratio:.2f}x the single-cloud "
         "entry: the binding boundary is doing per-point work"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Vision depth boundary
+# ---------------------------------------------------------------------------
+
+_BOX_SIZE = 40  # px, target box shared by both image sizes
+_BOX_CORNER = (300, 220)  # inside VGA and the 4x image alike
+
+
+def _depth_image(rows: int, cols: int) -> np.ndarray:
+    """C-contiguous uint16 depth (the zero-copy fast path): background 0
+    (invalid), the target box filled with 3000mm."""
+    img = np.zeros((rows, cols), dtype=np.uint16)
+    x0, y0 = _BOX_CORNER
+    img[y0 : y0 + _BOX_SIZE, x0 : x0 + _BOX_SIZE] = 3000
+    return img
+
+
+def _target_box(img_w: int, img_h: int) -> Bbox2D:
+    box = Bbox2D(
+        top_left_corner=np.array(_BOX_CORNER, dtype=np.int32),
+        size=np.array([_BOX_SIZE, _BOX_SIZE], dtype=np.int32),
+    )
+    box.set_img_size(np.array([img_w, img_h], dtype=np.int32))
+    return box
+
+
+def test_depth_detector_boundary_does_not_scale_with_image_size():
+    detector = DepthDetector(
+        np.array([0.1, 10.0], dtype=np.float32),  # depth range
+        np.array([0.0, 0.0, 0.0], dtype=np.float32),  # camera translation
+        np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32),  # camera rotation
+        np.array([500.0, 500.0], dtype=np.float32),  # focal length
+        np.array([320.0, 240.0], dtype=np.float32),  # principal point
+        1e-3,  # mm -> m
+    )
+    small = _depth_image(480, 640)
+    big = _depth_image(960, 1280)  # 4x the pixels, same box content
+
+    # Same box pixels -> identical 3D result regardless of image size, and
+    # a read-only buffer (np.frombuffer-style input) must be accepted as-is
+    res_small = detector.compute_3d_detections(
+        small, [_target_box(640, 480)], 0.0, 0.0, 0.0, 0.0
+    )
+    res_big = detector.compute_3d_detections(
+        big, [_target_box(1280, 960)], 0.0, 0.0, 0.0, 0.0
+    )
+    np.testing.assert_allclose(res_small[0].center, res_big[0].center)
+    read_only = small.copy()
+    read_only.setflags(write=False)
+    res_ro = detector.compute_3d_detections(
+        read_only, [_target_box(640, 480)], 0.0, 0.0, 0.0, 0.0
+    )
+    np.testing.assert_allclose(res_ro[0].center, res_small[0].center)
+
+    small_box, big_box = _target_box(640, 480), _target_box(1280, 960)
+    ratio = _median_ratio(
+        lambda: detector.compute_3d_detections(
+            small, [small_box], 0.0, 0.0, 0.0, 0.0
+        ),
+        lambda: detector.compute_3d_detections(big, [big_box], 0.0, 0.0, 0.0, 0.0),
+    )
+    assert ratio < _MAX_RATIO, (
+        f"compute_3d_detections on a 4x-pixel image costs {ratio:.2f}x the "
+        "VGA call: the depth boundary is doing per-pixel (full image) work"
+    )
+
+
+def _tracking_depth_image(rows: int, cols: int) -> np.ndarray:
+    """Materialized (non-lazy) pages so a copy regression costs a real
+    memcpy: 60m background (rejected by the 10m range gate), 3m target box."""
+    img = np.full((rows, cols), 60000, dtype=np.uint16)
+    x0, y0 = _BOX_CORNER
+    img[y0 : y0 + _BOX_SIZE, x0 : x0 + _BOX_SIZE] = 3000
+    return img
+
+
+def test_rgbd_follower_boundary_does_not_scale_with_image_size():
+    # NOTE: the timed calls run the REAL tracking path (a detection per
+    # call, advancing timestamps). The no-detections wait path is not a
+    # usable timing subject: its internal state machine alternates between
+    # a cheap and an expensive tick, which interleaved A/B timing folds
+    # into a bogus ratio.
+    robot = Robot(
+        robot_type=RobotType.DIFFERENTIAL_DRIVE,
+        geometry_type=CoreRobotGeometry.Type.CYLINDER,
+        geometry_params=np.array([0.1, 0.4]),
+    )
+    ctrl_limits = RobotCtrlLimits(
+        vx_limits=LinearCtrlLimits(max_vel=1.5, max_acc=3.0, max_decel=3.0),
+        omega_limits=AngularCtrlLimits(
+            max_omega=2.5, max_acc=2.5, max_decel=2.5, max_ang=np.pi / 2
+        ),
+    )
+    follower = VisionRGBDFollower(
+        robot=robot,
+        ctrl_limits=ctrl_limits,
+        config=VisionRGBDFollowerConfig(
+            control_time_step=0.1,
+            _use_local_coordinates=True,
+            depth_conversion_factor=1e-3,
+            min_depth=0.1,
+            max_depth=10.0,
+        ),
+        camera_focal_length=[500.0, 500.0],
+        camera_principal_point=[320.0, 240.0],
+    )
+    small = _tracking_depth_image(480, 640)
+    big = _tracking_depth_image(960, 1280)  # 4x the pixels, same box
+    state = RobotState(x=0.0, y=0.0, yaw=0.0, speed=0.0)
+
+    x0, y0 = _BOX_CORNER
+    assert follower.set_initial_tracking_image(
+        current_state=state,
+        pose_x_img=x0 + _BOX_SIZE // 2,
+        pose_y_img=y0 + _BOX_SIZE // 2,
+        detected_boxes=[_target_box(640, 480)],
+        aligned_depth_image=small,
+    )
+
+    clock = itertools.count(1)
+
+    def detection(img_w: int, img_h: int) -> list:
+        # Fresh timestamp per call: the tracker needs dt > 0
+        box = _target_box(img_w, img_h)
+        box.timestamp = next(clock) * 0.1
+        return [box]
+
+    ratio = _median_ratio(
+        lambda: follower.loop_step(
+            current_state=state,
+            detections_2d=detection(640, 480),
+            depth_image=small,
+        ),
+        lambda: follower.loop_step(
+            current_state=state,
+            detections_2d=detection(1280, 960),
+            depth_image=big,
+        ),
+    )
+    assert ratio < _MAX_RATIO, (
+        f"loop_step with a 4x-pixel depth image costs {ratio:.2f}x the VGA "
+        "call: the depth boundary is doing per-pixel (full image) work"
     )
