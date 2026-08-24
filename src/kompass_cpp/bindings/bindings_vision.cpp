@@ -50,6 +50,14 @@ compute3dDetections(DepthDetector &self, const DepthArray &depth_img,
 void bindings_vision(py::module_ &m) {
   auto m_vision = m.def_submodule("vision", "Vision and Detection module");
 
+  py::enum_<DepthDetector::CameraFrameConvention>(m_vision,
+                                                  "CameraFrameConvention")
+      .value("OPTICAL", DepthDetector::CameraFrameConvention::Optical,
+             "x right, y down, z into the image (REP 103 optical). What ROS "
+             "Image/CameraInfo headers name and TF resolves.")
+      .value("BODY_ALIGNED", DepthDetector::CameraFrameConvention::BodyAligned,
+             "x forward, y left, z up (REP 103 body).");
+
   py::class_<DepthDetector>(m_vision, "DepthDetector")
       // --- Constructor ---
       .def(
@@ -59,7 +67,8 @@ void bindings_vision(py::module_ &m) {
              const Eigen::Vector4f &camera_in_body_rotation,
              const Eigen::Vector2f &focal_length,
              const Eigen::Vector2f &principal_point,
-             const float depth_conversion_factor) {
+             const float depth_conversion_factor,
+             const DepthDetector::CameraFrameConvention convention) {
             // Map Vector4f [x, y, z, w] to Eigen::Quaternionf (w, x, y, z)
             Eigen::Quaternionf quat(camera_in_body_rotation(3),  // w
                                     camera_in_body_rotation(0),  // x
@@ -69,13 +78,16 @@ void bindings_vision(py::module_ &m) {
             // Placement new to initialize the Python object
             new (t) DepthDetector(depth_range, camera_in_body_translation, quat,
                                   focal_length, principal_point,
-                                  depth_conversion_factor);
+                                  depth_conversion_factor, convention);
           },
           py::arg("depth_range"), py::arg("camera_in_body_translation"),
           py::arg("camera_in_body_rotation"), py::arg("focal_length"),
           py::arg("principal_point"), py::arg("depth_conversion_factor") = 1e-3,
+          py::arg("convention") = DepthDetector::CameraFrameConvention::Optical,
           "Initialize with camera translation and rotation (Vector4f as [x, y, "
-          "z, w]).")
+          "z, w]). The pose is read in the optical convention by default, "
+          "which is what a ROS TF lookup against an Image/CameraInfo frame_id "
+          "gives; pass BODY_ALIGNED for a pose already in robot axes.")
 
       // --- Converter Functions ---
       // Zero-copy depth view (uint16 mm / float32 m, C-contiguous); one

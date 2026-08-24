@@ -1,3 +1,3 @@
-from kompass_cpp.vision import DepthDetector
+from kompass_cpp.vision import CameraFrameConvention, DepthDetector
 
-__all__ = ["DepthDetector"]
+__all__ = ["CameraFrameConvention", "DepthDetector"]
