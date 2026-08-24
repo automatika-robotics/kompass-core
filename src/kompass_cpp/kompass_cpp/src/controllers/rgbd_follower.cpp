@@ -54,11 +54,14 @@ void RGBDFollower::setCameraIntrinsics(const float focal_length_x,
                                        const float focal_length_y,
                                        const float principal_point_x,
                                        const float principal_point_y) {
+  // The mount pose comes from a TF lookup against the frame the depth
+  // Image/CameraInfo names, which ROS always expresses in optical axes.
   detector_ = std::make_unique<DepthDetector>(
       config_.depth_range(), vision_sensor_tf_,
       Eigen::Vector2f{focal_length_x, focal_length_y},
       Eigen::Vector2f{principal_point_x, principal_point_y},
-      config_.depth_conversion_factor());
+      config_.depth_conversion_factor(),
+      DepthDetector::CameraFrameConvention::Optical);
 }
 
 Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
