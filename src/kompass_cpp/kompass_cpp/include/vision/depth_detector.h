@@ -33,18 +33,43 @@ namespace Kompass {
 
 class DepthDetector {
 public:
+  /**
+   * @brief Axis convention the camera pose handed to the constructor is
+   * expressed in.
+   *
+   * ROS names a camera's optical frame in the header of every Image and
+   * CameraInfo message, and that is the frame TF can resolve, so `Optical` is
+   * the default: a pose looked up straight out of the ROS graph is correct
+   * with no further handling. `BodyAligned` is for callers that have already
+   * turned the pose into robot axes themselves.
+   *
+   * The two differ by the fixed REP 103 quarter rotation, so passing the wrong
+   * one puts every detection 90 degrees off.
+   */
+  enum class CameraFrameConvention {
+    Optical,    ///< x right, y down, z into the image (REP 103 optical)
+    BodyAligned ///< x forward, y left, z up (REP 103 body)
+  };
+
   DepthDetector(const Eigen::Vector2f &depth_range,
                 const Eigen::Vector3f &camera_in_body_translation,
                 const Eigen::Quaternionf &camera_in_body_rotation,
                 const Eigen::Vector2f &focal_length,
                 const Eigen::Vector2f &principal_point,
-                const float depth_conversion_factor = 1e-3);
+                const float depth_conversion_factor = 1e-3,
+                const CameraFrameConvention convention =
+                    CameraFrameConvention::Optical);
 
   DepthDetector(const Eigen::Vector2f &depth_range,
                 const Eigen::Isometry3f &camera_in_body_tf,
                 const Eigen::Vector2f &focal_length,
                 const Eigen::Vector2f &principal_point,
-                const float depth_conversion_factor = 1e-3);
+                const float depth_conversion_factor = 1e-3,
+                const CameraFrameConvention convention =
+                    CameraFrameConvention::Optical);
+
+  /// REP 103 rotation taking optical axes to body-aligned ones.
+  static const Eigen::Quaternionf &opticalToBodyAligned();
 
   /**
    * NOTE: Non owning zero-copy view of the depth image. UINT16 pixels are

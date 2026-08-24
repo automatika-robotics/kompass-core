@@ -8,30 +8,48 @@
 
 namespace Kompass {
 
+const Eigen::Quaternionf &DepthDetector::opticalToBodyAligned() {
+  // Takes (x right, y down, z forward) to (x forward, y left, z up).
+  // Eigen's quaternion constructor is (w, x, y, z).
+  static const Eigen::Quaternionf kOpticalToBody{0.5f, -0.5f, 0.5f, -0.5f};
+  return kOpticalToBody;
+}
+
 DepthDetector::DepthDetector(const Eigen::Vector2f &depth_range,
                              const Eigen::Vector3f &camera_in_body_translation,
                              const Eigen::Quaternionf &camera_in_body_rotation,
                              const Eigen::Vector2f &focal_length,
                              const Eigen::Vector2f &principal_point,
-                             const float depth_conversion_factor)
+                             const float depth_conversion_factor,
+                             const CameraFrameConvention convention)
     : DepthDetector(depth_range,
                     getTransformation(camera_in_body_rotation,
                                       camera_in_body_translation),
-                    focal_length, principal_point, depth_conversion_factor) {}
+                    focal_length, principal_point, depth_conversion_factor,
+                    convention) {}
 
 DepthDetector::DepthDetector(
     const Eigen::Vector2f &depth_range,
     const Eigen::Isometry3f &camera_in_body_tf,
     const Eigen::Vector2f &focal_length, const Eigen::Vector2f &principal_point,
-    const float depth_conversion_factor) { // Range of interest for depth values
-                                           // in meters
+    const float depth_conversion_factor,
+    const CameraFrameConvention convention) { // Range of interest for depth
+                                              // values in meters
   minDepth_ = depth_range(0);
   maxDepth_ = depth_range(1);
   // Factor to convert depth image data to meters (in ROS2 its given in mm ->
   // depthConversionFactor = 1e-3)
   depthConversionFactor_ = depth_conversion_factor;
-  // Set camera tf
-  camera_in_body_tf_ = camera_in_body_tf;
+  // Set camera tf.
+  //
+  // Projection below turns the optical axes into body-aligned ones before
+  // applying this transform, so a pose given in the optical convention has
+  // that fixed quarter rotation taken back out here. Without this the
+  // rotation lands twice and every detection is 90 degrees off.
+  camera_in_body_tf_ =
+      convention == CameraFrameConvention::Optical
+          ? camera_in_body_tf * Eigen::Isometry3f(opticalToBodyAligned().conjugate())
+          : camera_in_body_tf;
 
   // Set camera  intrinsic parameters
   fx_ = focal_length.x();
