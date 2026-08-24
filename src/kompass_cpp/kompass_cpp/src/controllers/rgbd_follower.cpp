@@ -66,12 +66,11 @@ void RGBDFollower::setCameraIntrinsics(const float focal_length_x,
 
 Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
                                              const bool update_global_error) {
-  float distance, psi, gamma = 0.0f;
+  float range, psi, gamma = 0.0f;
   if (track_velocity_) {
     // World frame: target bearing must be measured from the robot's body,
     // not from the world origin.
-    distance = tracking_pose.distance(currentState.x, currentState.y, 0.0) -
-               robot_radius_ - currentTargetRadius_;
+    range = tracking_pose.distance(currentState.x, currentState.y, 0.0);
     psi = Angle::normalizeToMinusPiPlusPi(
         std::atan2(tracking_pose.y() - currentState.y,
                    tracking_pose.x() - currentState.x) -
@@ -79,14 +78,17 @@ Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
     gamma =
         Angle::normalizeToMinusPiPlusPi(tracking_pose.yaw() - currentState.yaw);
   } else {
-    distance = tracking_pose.distance(0.0, 0.0, 0.0) - robot_radius_ -
-               currentTargetRadius_;
+    range = tracking_pose.distance(0.0, 0.0, 0.0);
     psi = Angle::normalizeToMinusPiPlusPi(
         std::atan2(tracking_pose.y(), tracking_pose.x()));
   }
-  // Floor distance to avoid division by zero in the omega formula below
+  // Gap between the two bodies' surfaces: what the standoff is controlled
+  // against. Floored at zero because a target inside the combined radii is
+  // as close as "touching" gets, not a negative separation.
   constexpr float kMinDistance = 0.001f;
-  distance = std::max(distance, kMinDistance);
+  float distance = std::max(
+      static_cast<float>(range - robot_radius_ - currentTargetRadius_),
+      kMinDistance);
 
   float distance_error = config_.target_distance() - distance;
   // target_orientation is the bearing-to-target to maintain in the robot
@@ -118,12 +120,22 @@ Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
       v = 0.0;
     }
     followingVel.setVx(v);
-    double omega;
 
-    omega = (track_velocity_ * tracking_pose.v() * sin_diff / distance +
-             v * sin(psi) / distance -
-             config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
-                 tanh(angle_error));
+    constexpr float kMinRange = 0.1f;
+    const double ff_range = std::max(range, kMinRange);
+    double omega_ff =
+        (track_velocity_ * tracking_pose.v() * sin_diff + v * std::sin(psi)) /
+        ff_range;
+
+    // Backstop for whatever the floor above cannot cover: the feedforward
+    // alone must never be able to saturate the command, since the feedback
+    // term is what actually steers toward the target.
+    omega_ff = std::clamp(omega_ff, -0.5 * ctrl_limits_.omegaParams.maxOmega,
+                          0.5 * ctrl_limits_.omegaParams.maxOmega);
+
+    double omega = omega_ff - config_.K_omega() *
+                                  ctrl_limits_.omegaParams.maxOmega *
+                                  std::tanh(angle_error);
 
     omega = std::clamp(omega, -ctrl_limits_.omegaParams.maxOmega,
                        ctrl_limits_.omegaParams.maxOmega);
