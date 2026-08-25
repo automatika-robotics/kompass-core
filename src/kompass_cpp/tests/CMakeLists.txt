@@ -71,6 +71,11 @@ add_executable(vision_tracking_test vision_tracking_test.cpp)
 target_link_libraries(vision_tracking_test PRIVATE ${MODULE_NAME} Boost::headers nlohmann_json::nlohmann_json)
 add_test(vision_tracking_tests vision_tracking_test)
 
+# Depth detector unit tests (point-cloud path, parity against the depth image)
+add_executable(depth_detector_test depth_detector_test.cpp)
+target_link_libraries(depth_detector_test PRIVATE ${MODULE_NAME} Boost::headers)
+add_test(depth_detector_tests depth_detector_test)
+
 # add sycl based GPU tests
 if(AdaptiveCpp_FOUND)
   # Mapper GPU test
