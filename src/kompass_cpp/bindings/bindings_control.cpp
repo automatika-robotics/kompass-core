@@ -17,8 +17,10 @@
 using namespace Kompass;
 
 namespace {
-// Private to file. The depth-image follower entries accept uint16 (mm) or
-// float32 (m) arrays. Templated functions with per dtype bindings below.
+// Private to file.
+
+// The depth-image follower entries accept uint16 (mm) or float32 (m) arrays.
+// Templated functions with per dtype bindings below.
 template <typename DepthArray>
 bool setInitialTrackingAtPixel(Control::RGBDFollower &self, const int pixel_x,
                                const int pixel_y, const DepthArray &depth,
@@ -44,6 +46,44 @@ Control::TrajSearchResult getTrackingCtrlDepth(Control::RGBDFollower &self,
                                                const Control::Velocity2D &vel) {
   const auto view = toDepthView(depth);
   // Solve without the GIL (argument conversions above still held it)
+  py::gil_scoped_release release;
+  return self.getTrackingCtrl(view, boxes, vel);
+}
+
+// Point-cloud variants that take the raw byte buffer (zero-copy), plus the
+// layout integers
+bool setInitialTrackingAtPixelCloud(Control::RGBDFollower &self,
+                                    const int pixel_x, const int pixel_y,
+                                    const ByteArray &data, int point_step,
+                                    int row_step, int height, int width,
+                                    int x_offset, int y_offset, int z_offset,
+                                    const std::vector<Bbox2D> &boxes,
+                                    const float yaw) {
+  const PointCloudView view{toSpan(data), point_step, row_step, height,
+                            width,        x_offset,   y_offset, z_offset};
+  py::gil_scoped_release release;
+  return self.setInitialTracking(pixel_x, pixel_y, view, boxes, yaw);
+}
+
+bool setInitialTrackingBoxCloud(Control::RGBDFollower &self,
+                                const ByteArray &data, int point_step,
+                                int row_step, int height, int width,
+                                int x_offset, int y_offset, int z_offset,
+                                const Bbox2D &target_box, const float yaw) {
+  const PointCloudView view{toSpan(data), point_step, row_step, height,
+                            width,        x_offset,   y_offset, z_offset};
+  py::gil_scoped_release release;
+  return self.setInitialTracking(view, target_box, yaw);
+}
+
+Control::TrajSearchResult
+getTrackingCtrlCloud(Control::RGBDFollower &self, const ByteArray &data,
+                     int point_step, int row_step, int height, int width,
+                     int x_offset, int y_offset, int z_offset,
+                     const std::vector<Bbox2D> &boxes,
+                     const Control::Velocity2D &vel) {
+  const PointCloudView view{toSpan(data), point_step, row_step, height,
+                            width,        x_offset,   y_offset, z_offset};
   py::gil_scoped_release release;
   return self.getTrackingCtrl(view, boxes, vel);
 }
@@ -404,6 +444,23 @@ void bindings_control(py::module_ &m) {
       .def("set_initial_tracking", &setInitialTrackingBox<DepthArrayF32>,
            py::arg("aligned_depth_image"), py::arg("target_box_2d"),
            py::arg("robot_orientation") = 0.0)
+      .def("set_point_cloud_sensor",
+           &Control::RGBDFollower::setPointCloudSensor, py::arg("sensor"),
+           "Describes the point-cloud sensor: mount pose in the robot body "
+           "frame and encoding of its x/y/z fields, the same SensorConfig the "
+           "mapper takes. Identity mount with FLOAT32 fields until called.")
+      // Point cloud variants
+      .def("set_initial_tracking", &setInitialTrackingAtPixelCloud,
+           py::arg("pixel_x"), py::arg("pixel_y"), py::arg("data"),
+           py::arg("point_step"), py::arg("row_step"), py::arg("height"),
+           py::arg("width"), py::arg("x_offset"), py::arg("y_offset"),
+           py::arg("z_offset"), py::arg("detected_boxes_2d"),
+           py::arg("robot_orientation") = 0.0)
+      .def("set_initial_tracking", &setInitialTrackingBoxCloud, py::arg("data"),
+           py::arg("point_step"), py::arg("row_step"), py::arg("height"),
+           py::arg("width"), py::arg("x_offset"), py::arg("y_offset"),
+           py::arg("z_offset"), py::arg("target_box_2d"),
+           py::arg("robot_orientation") = 0.0)
       .def("get_errors", &Control::RGBDFollower::getErrors)
       // NOTE:The C++ class also inherits RGBFollower (nanobind doesn't cover
       // multiple inheritence), so the RGBFollower interface is re-bound here
@@ -433,10 +490,17 @@ void bindings_control(py::module_ &m) {
                &Control::RGBDFollower::getTrackingCtrl),
            py::arg("detected_boxes_3d"), py::arg("robot_velocity"),
            py::call_guard<py::gil_scoped_release>())
+      // Depth Array variants
       .def("get_tracking_ctrl", &getTrackingCtrlDepth<DepthArrayU16>,
            py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
            py::arg("robot_velocity"))
       .def("get_tracking_ctrl", &getTrackingCtrlDepth<DepthArrayF32>,
            py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
+           py::arg("robot_velocity"))
+      // Point-cloud variant
+      .def("get_tracking_ctrl", &getTrackingCtrlCloud, py::arg("data"),
+           py::arg("point_step"), py::arg("row_step"), py::arg("height"),
+           py::arg("width"), py::arg("x_offset"), py::arg("y_offset"),
+           py::arg("z_offset"), py::arg("detected_boxes_2d"),
            py::arg("robot_velocity"));
 }

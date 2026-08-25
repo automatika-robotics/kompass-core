@@ -45,6 +45,31 @@ compute3dDetections(DepthDetector &self, const DepthArray &depth_img,
   return out;
 }
 
+// Point-cloud variant (raw byte buffer, zero-copy) and input is either 2D boxes
+// or a PointsOfInterest set. The detection pass runs without the GIL
+template <typename InputT>
+std::vector<Bbox3D>
+compute3dDetectionsCloud(DepthDetector &self, const ByteArray &data,
+                         int point_step, int row_step, int height, int width,
+                         int x_offset, int y_offset, int z_offset,
+                         const InputT &input, float robot_x, float robot_y,
+                         float robot_yaw, float robot_speed) {
+  const PointCloudView view{toSpan(data), point_step, row_step, height,
+                            width,        x_offset,   y_offset, z_offset};
+  const auto state = makeState(robot_x, robot_y, robot_yaw, robot_speed);
+  std::vector<Bbox3D> out;
+  {
+    py::gil_scoped_release release;
+    if constexpr (std::is_same_v<InputT, PointsOfInterest>) {
+      self.updatePOIs(view, input, state);
+    } else {
+      self.updateBoxes(view, input, state);
+    }
+    out = self.get3dDetections();
+  }
+  return out;
+}
+
 } // namespace
 
 void bindings_vision(py::module_ &m) {
@@ -107,5 +132,24 @@ void bindings_vision(py::module_ &m) {
       .def("compute_3d_detections",
            &compute3dDetections<DepthArrayF32, PointsOfInterest>,
            py::arg("depth_img"), py::arg("input"), py::arg("robot_x"),
-           py::arg("robot_y"), py::arg("robot_yaw"), py::arg("robot_speed"));
+           py::arg("robot_y"), py::arg("robot_yaw"), py::arg("robot_speed"))
+      .def("set_point_cloud_sensor", &DepthDetector::setPointCloudSensor,
+           py::arg("sensor"),
+           "Describes the point-cloud sensor: mount pose in the robot body "
+           "frame and encoding of its x/y/z fields, the same SensorConfig the "
+           "mapper takes. Identity mount with FLOAT32 fields until called.")
+      // Zero copy pointcloud view along with info; with points in the sensor
+      // frame described by set_point_cloud_sensor()
+      .def("compute_3d_detections",
+           &compute3dDetectionsCloud<std::vector<Bbox2D>>, py::arg("data"),
+           py::arg("point_step"), py::arg("row_step"), py::arg("height"),
+           py::arg("width"), py::arg("x_offset"), py::arg("y_offset"),
+           py::arg("z_offset"), py::arg("input"), py::arg("robot_x"),
+           py::arg("robot_y"), py::arg("robot_yaw"), py::arg("robot_speed"))
+      .def("compute_3d_detections", &compute3dDetectionsCloud<PointsOfInterest>,
+           py::arg("data"), py::arg("point_step"), py::arg("row_step"),
+           py::arg("height"), py::arg("width"), py::arg("x_offset"),
+           py::arg("y_offset"), py::arg("z_offset"), py::arg("input"),
+           py::arg("robot_x"), py::arg("robot_y"), py::arg("robot_yaw"),
+           py::arg("robot_speed"));
 }
