@@ -1,13 +1,14 @@
 // Parametrized fixture-based test for RGBDFollower.
 //
-// Loads each fixture under tests/resources/vision_follower/<case>/ which contains:
+// Loads each fixture under tests/resources/vision_follower/<case>/ which
+// contains:
 //   - depth.png: 16-bit single-channel depth image (millimeters)
 //   - case.json: camera intrinsics, robot state, 2D detections, click pixel,
 //                and loose expected bounds for the resulting control command.
 //
 // Mirrors tests/test_vision_follower.py so both layers exercise the same
-// data. To add cases, edit tests/resources/vision_follower/generate_fixtures.py and
-// re-run it (or drop a new fixture directory in by hand).
+// data. To add cases, edit tests/resources/vision_follower/generate_fixtures.py
+// and re-run it (or drop a new fixture directory in by hand).
 
 #include "controllers/rgbd_follower.h"
 #include "datatypes/control.h"
@@ -54,8 +55,11 @@ fs::path locate_fixture_root() {
     }
   }
   // Fall back to the source-tree path (cmake current source dir).
-  fs::path src_default = fs::path(__FILE__).parent_path().parent_path()
-                             .parent_path().parent_path() /
+  fs::path src_default = fs::path(__FILE__)
+                             .parent_path()
+                             .parent_path()
+                             .parent_path()
+                             .parent_path() /
                          "tests" / "resources" / "vision_follower";
   return src_default;
 }
@@ -68,9 +72,12 @@ std::vector<FixtureCase> discover_fixtures() {
     return out;
   }
   for (auto const &entry : fs::directory_iterator(root)) {
-    if (!fs::is_directory(entry.path())) continue;
-    if (!fs::exists(entry.path() / "case.json")) continue;
-    if (!fs::exists(entry.path() / "depth.png")) continue;
+    if (!fs::is_directory(entry.path()))
+      continue;
+    if (!fs::exists(entry.path() / "case.json"))
+      continue;
+    if (!fs::exists(entry.path() / "depth.png"))
+      continue;
     out.push_back({entry.path().filename().string(), entry.path()});
   }
   std::sort(out.begin(), out.end(),
@@ -84,9 +91,9 @@ cv::Mat load_depth_png(const fs::path &png_path) {
   cv::Mat raw = cv::imread(png_path.string(), cv::IMREAD_UNCHANGED);
   BOOST_REQUIRE_MESSAGE(!raw.empty(),
                         "Could not load depth.png at " << png_path.string());
-  BOOST_REQUIRE_MESSAGE(raw.type() == CV_16UC1,
-                        "depth.png must be 16-bit single-channel: "
-                            << png_path.string());
+  BOOST_REQUIRE_MESSAGE(
+      raw.type() == CV_16UC1,
+      "depth.png must be 16-bit single-channel: " << png_path.string());
   BOOST_REQUIRE(raw.isContinuous());
   return raw;
 }
@@ -139,10 +146,13 @@ std::unique_ptr<Control::RGBDFollower> build_controller(const json &case_json) {
                       case_json["camera"]["max_depth"].get<double>());
 
   std::vector<float> robot_dimensions{0.1f, 0.4f};
-  // Synthetic fixtures are rendered as if the camera coincides with the
-  // robot body frame, so use an identity body->camera transform here.
+  // Synthetic fixtures are rendered as if the camera sits at the robot body
+  // origin looking straight ahead. The follower reads the pose in the optical
+  // convention, so that pose is the REP 103 optical -> body quarter turn as [x,
+  // y, z, w]. An identity here would be read as an optical frame pointing along
+  // body +z and put every target 90 degrees off.
   Eigen::Vector3f cam_pos{0.0f, 0.0f, 0.0f};
-  Eigen::Vector4f cam_rot{0.0f, 0.0f, 0.0f, 1.0f};
+  Eigen::Vector4f cam_rot{-0.5f, 0.5f, -0.5f, 0.5f};
 
   auto controller = std::make_unique<RGBDFollower>(
       ControlType::DIFFERENTIAL_DRIVE, ctrl_limits,
@@ -150,10 +160,9 @@ std::unique_ptr<Control::RGBDFollower> build_controller(const json &case_json) {
       config);
 
   const auto &cam = case_json["camera"];
-  controller->setCameraIntrinsics(cam["fx"].get<float>(),
-                                  cam["fy"].get<float>(),
-                                  cam["cx"].get<float>(),
-                                  cam["cy"].get<float>());
+  controller->setCameraIntrinsics(
+      cam["fx"].get<float>(), cam["fy"].get<float>(), cam["cx"].get<float>(),
+      cam["cy"].get<float>());
   return controller;
 }
 
@@ -182,13 +191,15 @@ void run_one_fixture(const FixtureCase &fx) {
   BOOST_TEST(init_ok == expected_init,
              fx.name << ": setInitialTracking returned " << init_ok
                      << ", expected " << expected_init);
-  if (!init_ok) return;
+  if (!init_ok)
+    return;
 
   Control::Velocity2D current_vel;
   auto result = controller->getTrackingCtrl(depth, detections, current_vel);
   BOOST_TEST(result.isTrajFound,
              fx.name << ": planner failed to find a control");
-  if (!result.isTrajFound) return;
+  if (!result.isTrajFound)
+    return;
 
   const float vx = result.trajectory.velocities.vx[0];
   const float omega = result.trajectory.velocities.omega[0];
@@ -199,17 +210,15 @@ void run_one_fixture(const FixtureCase &fx) {
   const float w_min = exp["omega_min"].get<float>();
   const float w_max = exp["omega_max"].get<float>();
 
-  BOOST_TEST(vx >= vx_min,
-             fx.name << ": vx=" << vx << " < vx_min=" << vx_min);
-  BOOST_TEST(vx <= vx_max,
-             fx.name << ": vx=" << vx << " > vx_max=" << vx_max);
+  BOOST_TEST(vx >= vx_min, fx.name << ": vx=" << vx << " < vx_min=" << vx_min);
+  BOOST_TEST(vx <= vx_max, fx.name << ": vx=" << vx << " > vx_max=" << vx_max);
   BOOST_TEST(omega >= w_min,
              fx.name << ": omega=" << omega << " < omega_min=" << w_min);
   BOOST_TEST(omega <= w_max,
              fx.name << ": omega=" << omega << " > omega_max=" << w_max);
 }
 
-}  // namespace
+} // namespace
 
 BOOST_AUTO_TEST_CASE(RGBDFollower_fixture_cases) {
   auto fixtures = discover_fixtures();
