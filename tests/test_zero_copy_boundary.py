@@ -201,9 +201,7 @@ def test_depth_detector_boundary_does_not_scale_with_image_size():
 
     small_box, big_box = _target_box(640, 480), _target_box(1280, 960)
     ratio = _median_ratio(
-        lambda: detector.compute_3d_detections(
-            small, [small_box], 0.0, 0.0, 0.0, 0.0
-        ),
+        lambda: detector.compute_3d_detections(small, [small_box], 0.0, 0.0, 0.0, 0.0),
         lambda: detector.compute_3d_detections(big, [big_box], 0.0, 0.0, 0.0, 0.0),
     )
     assert ratio < _MAX_RATIO, (
@@ -288,3 +286,68 @@ def test_rgbd_follower_boundary_does_not_scale_with_image_size():
         f"loop_step with a 4x-pixel depth image costs {ratio:.2f}x the VGA "
         "call: the depth boundary is doing per-pixel (full image) work"
     )
+
+
+def test_rgbd_follower_point_cloud_accepts_readonly_buffer():
+    # NOTE: there is deliberately no timing-ratio guard for the point-cloud
+    # path. Its cost is O(points) by design (every point is projected into
+    # the image), so a copy of the buffer is not separable from the work
+    # itself by scaling the input the way the depth-image guards do. What the
+    # boundary must guarantee is that the sensor's buffer crosses as
+    # delivered: a ROS callback hands out a read-only np.frombuffer view.
+    follower = VisionRGBDFollower(
+        robot=Robot(
+            robot_type=RobotType.DIFFERENTIAL_DRIVE,
+            geometry_type=CoreRobotGeometry.Type.CYLINDER,
+            geometry_params=np.array([0.1, 0.4]),
+        ),
+        ctrl_limits=RobotCtrlLimits(
+            vx_limits=LinearCtrlLimits(max_vel=1.5, max_acc=3.0, max_decel=3.0),
+            omega_limits=AngularCtrlLimits(
+                max_omega=2.5, max_acc=2.5, max_decel=2.5, max_ang=np.pi / 2
+            ),
+        ),
+        config=VisionRGBDFollowerConfig(
+            control_time_step=0.1,
+            _use_local_coordinates=True,
+            min_depth=0.1,
+            max_depth=10.0,
+        ),
+        camera_focal_length=[500.0, 500.0],
+        camera_principal_point=[320.0, 240.0],
+    )
+    # The default sensor (identity mount) takes the cloud in the body frame:
+    # a 3 m target, 1 m wide and tall, dense enough to fill its box
+    ys, zs = np.meshgrid(np.linspace(-0.5, 0.5, 60), np.linspace(-0.5, 0.5, 60))
+    target = np.zeros((ys.size, 4), dtype=np.float32)
+    target[:, 0] = 3.0
+    target[:, 1] = ys.ravel()
+    target[:, 2] = zs.ravel()
+    readonly = np.frombuffer(target.tobytes(), dtype=np.uint8)
+    assert not readonly.flags.writeable
+    cloud = {
+        "data": readonly,
+        "point_step": _PC_STRIDE,
+        "row_step": _PC_STRIDE * len(target),
+        "height": 1,
+        "width": len(target),
+        "x_offset": 0,
+        "y_offset": 4,
+        "z_offset": 8,
+    }
+    # The target projects to a ~167 px square around the principal point
+    box = Bbox2D(
+        top_left_corner=np.array([230, 150], dtype=np.int32),
+        size=np.array([180, 180], dtype=np.int32),
+    )
+    box.set_img_size(np.array([640, 480], dtype=np.int32))
+    state = RobotState(x=0.0, y=0.0, yaw=0.0, speed=0.0)
+    assert follower.set_initial_tracking_image(
+        current_state=state,
+        pose_x_img=320,
+        pose_y_img=240,
+        detected_boxes=[box],
+        **cloud,
+    )
+    box.timestamp = 0.1
+    assert follower.loop_step(current_state=state, detections_2d=[box], **cloud)

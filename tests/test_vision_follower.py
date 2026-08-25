@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -17,6 +17,7 @@ import pytest
 
 from kompass_core.control import VisionRGBDFollower, VisionRGBDFollowerConfig
 from kompass_core.datatypes import Bbox2D
+from kompass_cpp.types import SensorConfig
 from kompass_core.models import (
     AngularCtrlLimits,
     LinearCtrlLimits,
@@ -89,21 +90,57 @@ def _make_follower(case: dict) -> VisionRGBDFollower:
     )
 
 
-@pytest.mark.parametrize(
-    "case_dir", _discover_fixtures(), ids=lambda p: p.name
-)
-def test_vision_follower_fixture(case_dir: Path) -> None:
-    case = _load_case(case_dir)
-    depth = cv2.imread(str(case_dir / "depth.png"), cv2.IMREAD_UNCHANGED)
-    assert depth is not None and depth.dtype == np.uint16, (
-        f"Could not load 16-bit depth.png for {case_dir.name}"
+def _cloud_from_depth(depth_mm: np.ndarray, cam: dict) -> dict:
+    """The depth PNG as a point cloud in the camera's optical frame: every
+    valid pixel back-projected at its centre, packed as the PointCloud2
+    layout dict the mapper takes (16-byte float32 records, x/y/z at 0/4/8)."""
+    rows, cols = np.nonzero(depth_mm)
+    d = depth_mm[rows, cols].astype(np.float32) * float(cam["depth_conversion_factor"])
+    records = np.zeros((len(d), 4), dtype=np.float32)
+    records[:, 0] = (cols + 0.5 - float(cam["cx"])) * d / float(cam["fx"])
+    records[:, 1] = (rows + 0.5 - float(cam["cy"])) * d / float(cam["fy"])
+    records[:, 2] = d
+    n = len(d)
+    return {
+        "data": records.reshape(-1).view(np.uint8),
+        "point_step": 16,
+        "row_step": 16 * n,
+        "height": 1,
+        "width": n,
+        "x_offset": 0,
+        "y_offset": 4,
+        "z_offset": 8,
+    }
+
+
+def _camera_as_cloud_sensor(follower: VisionRGBDFollower) -> SensorConfig:
+    """A cloud in the camera's optical frame has the camera as its sensor."""
+    return SensorConfig(
+        position=follower._config.camera_position_to_robot,
+        rotation=follower._config.camera_rotation_to_robot,
     )
 
+
+def _run_fixture(
+    case_dir: Path,
+    case: dict,
+    *,
+    depth_image: Optional[np.ndarray] = None,
+    point_cloud: Optional[dict] = None,
+) -> Optional[Tuple[float, float]]:
+    """Runs one fixture through one depth source on a fresh follower and
+    checks the fixture's expected bounds. Returns (vx, omega) when a command
+    was found."""
+    source = "point cloud" if point_cloud is not None else "depth image"
     follower = _make_follower(case)
+    if point_cloud is not None:
+        follower.set_point_cloud_sensor(_camera_as_cloud_sensor(follower))
     detections = _build_detections(case)
     state = RobotState(
-        x=case["robot"]["x"], y=case["robot"]["y"],
-        yaw=case["robot"]["yaw"], speed=case["robot"]["speed"],
+        x=case["robot"]["x"],
+        y=case["robot"]["y"],
+        yaw=case["robot"]["yaw"],
+        speed=case["robot"]["speed"],
     )
 
     init_ok = follower.set_initial_tracking_image(
@@ -111,33 +148,68 @@ def test_vision_follower_fixture(case_dir: Path) -> None:
         pose_x_img=int(case["click"]["x"]),
         pose_y_img=int(case["click"]["y"]),
         detected_boxes=detections,
-        aligned_depth_image=depth,
+        aligned_depth_image=depth_image,
+        **(point_cloud or {}),
     )
     assert init_ok == case["expected"]["init_success"], (
-        f"{case_dir.name}: setInitialTracking returned {init_ok}, "
+        f"{case_dir.name} ({source}): setInitialTracking returned {init_ok}, "
         f"expected {case['expected']['init_success']}"
     )
     if not init_ok:
-        return
+        return None
 
     # Run one control step. Sensor data is an empty point cloud (no obstacles).
     found = follower.loop_step(
         current_state=state,
         detections_2d=detections,
-        depth_image=depth,
+        depth_image=depth_image,
+        **(point_cloud or {}),
     )
-    assert found, f"{case_dir.name}: planner failed to find a control"
+    assert found, f"{case_dir.name} ({source}): planner failed to find a control"
 
     vx = follower.linear_x_control[0]
     omega = follower.angular_control[0]
     exp = case["expected"]
     assert exp["vx_min"] <= vx <= exp["vx_max"], (
-        f"{case_dir.name}: vx={vx} outside [{exp['vx_min']}, {exp['vx_max']}]"
+        f"{case_dir.name} ({source}): vx={vx} outside [{exp['vx_min']}, {exp['vx_max']}]"
     )
     assert exp["omega_min"] <= omega <= exp["omega_max"], (
-        f"{case_dir.name}: omega={omega} outside "
+        f"{case_dir.name} ({source}): omega={omega} outside "
         f"[{exp['omega_min']}, {exp['omega_max']}]"
     )
+    return vx, omega
+
+
+def _load_depth(case_dir: Path) -> np.ndarray:
+    depth = cv2.imread(str(case_dir / "depth.png"), cv2.IMREAD_UNCHANGED)
+    assert depth is not None and depth.dtype == np.uint16, (
+        f"Could not load 16-bit depth.png for {case_dir.name}"
+    )
+    return depth
+
+
+@pytest.mark.parametrize("case_dir", _discover_fixtures(), ids=lambda p: p.name)
+def test_vision_follower_fixture(case_dir: Path) -> None:
+    case = _load_case(case_dir)
+    _run_fixture(case_dir, case, depth_image=_load_depth(case_dir))
+
+
+@pytest.mark.parametrize("case_dir", _discover_fixtures(), ids=lambda p: p.name)
+def test_vision_follower_fixture_point_cloud(case_dir: Path) -> None:
+    """The same fixture lifted from a point cloud instead of the depth image
+    must pass the same bounds and give the same command."""
+    case = _load_case(case_dir)
+    depth = _load_depth(case_dir)
+    from_depth = _run_fixture(case_dir, case, depth_image=depth)
+    from_cloud = _run_fixture(
+        case_dir, case, point_cloud=_cloud_from_depth(depth, case["camera"])
+    )
+    assert (from_depth is None) == (from_cloud is None), (
+        f"{case_dir.name}: depth-image and point-cloud paths disagree on finding a command"
+    )
+    if from_depth and from_cloud:
+        assert from_depth[0] == pytest.approx(from_cloud[0], abs=1e-3)
+        assert from_depth[1] == pytest.approx(from_cloud[1], abs=1e-3)
 
 
 def test_rgbd_follower_exposes_rgb_follower_interface() -> None:
@@ -252,3 +324,20 @@ def test_close_target_does_not_saturate_omega() -> None:
         f"omega={omega} on a close target: the feedforward is running away "
         f"(limit is {max_omega})"
     )
+
+
+def test_rgbd_follower_rejects_ambiguous_or_incomplete_depth_source(tmp_path):
+    """Two sources at once, or a cloud with layout fields missing, is a
+    programming error and raises instead of silently picking one."""
+    case = _load_case(_discover_fixtures()[0])
+    follower = _make_follower(case)
+    depth = np.zeros((480, 640), dtype=np.uint16)
+    cloud = _cloud_from_depth(depth + 3000, case["camera"])
+    state = RobotState(x=0.0, y=0.0, yaw=0.0, speed=0.0)
+    with pytest.raises(ValueError, match="not both"):
+        follower.loop_step(
+            current_state=state, detections_2d=[], depth_image=depth, **cloud
+        )
+    incomplete = {k: v for k, v in cloud.items() if k != "row_step"}
+    with pytest.raises(ValueError, match="row_step"):
+        follower.loop_step(current_state=state, detections_2d=[], **incomplete)

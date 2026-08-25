@@ -7,15 +7,52 @@ from kompass_cpp.control import (
 )
 from kompass_cpp.types import (
     Bbox2D,
+    SensorConfig,
     Velocity2D,
     TrajectoryVelocities2D,
     TrajectoryPath,
 )
-from typing import Optional, List, Union
+from typing import Any, Dict, Optional, List, Union
 import numpy as np
 import logging
 from ._base_ import ControllerTemplate, FollowerConfig
 from ..models import Robot, RobotState, RobotCtrlLimits, RobotGeometry, RobotType
+
+
+def _depth_source(
+    depth_image: Optional[np.ndarray],
+    data: Optional[np.ndarray],
+    **layout: Optional[int],
+) -> Optional[Union[np.ndarray, Dict[str, Any]]]:
+    """Pick the one depth source a call was given. Depth image or PointCloud2
+    Passing both sources, or a cloud with layout fields missing, is an error.
+
+    :param depth_image: Aligned depth image, if any
+    :type depth_image: Optional[np.ndarray]
+    :param data: Raw PointCloud2 buffer, if any
+    :type data: Optional[np.ndarray]
+    :param layout: point_step, row_step, height, width, x_offset, y_offset,
+        z_offset of the cloud
+    :type layout: Optional[int]
+    :return: The depth image, the cloud keyword dict, or None when neither is
+        given
+    :rtype: Optional[Union[np.ndarray, Dict[str, Any]]]
+    """
+    if depth_image is not None and data is not None:
+        raise ValueError(
+            "Provide either a depth image or a point cloud as the depth source, "
+            "not both"
+        )
+    if depth_image is not None:
+        return depth_image
+    if data is None:
+        return None
+    missing = [name for name, value in layout.items() if value is None]
+    if missing:
+        raise ValueError(
+            f"Point cloud layout is incomplete, missing: {', '.join(missing)}"
+        )
+    return {"data": data, **layout}
 
 
 @define
@@ -425,13 +462,36 @@ class VisionRGBDFollower(ControllerTemplate):
         """
         self._planner.set_camera_intrinsics(fx, fy, cx, cy)
 
+    def set_point_cloud_sensor(self, sensor: SensorConfig) -> None:
+        """Describe the point cloud sensor used when detections are lifted
+        from a point cloud instead of a depth image.
+
+        Until this is called the cloud is taken as already expressed in the
+        body frame with FLOAT32 fields.
+
+        :param sensor: Mount pose and field encoding of the point cloud sensor
+        :type sensor: SensorConfig
+        """
+        self._planner.set_point_cloud_sensor(sensor)
+
     def set_initial_tracking_2d_target(
         self,
         current_state: RobotState,
         target_box: Bbox2D,
-        aligned_depth_image: np.ndarray,
+        aligned_depth_image: Optional[np.ndarray] = None,
+        *,
+        data: Optional[np.ndarray] = None,
+        point_step: Optional[int] = None,
+        row_step: Optional[int] = None,
+        height: Optional[int] = None,
+        width: Optional[int] = None,
+        x_offset: Optional[int] = None,
+        y_offset: Optional[int] = None,
+        z_offset: Optional[int] = None,
+        **_,
     ) -> bool:
-        """Set initial tracking from a single 2D target box and depth image.
+        """Set initial tracking from a single 2D target box and one depth
+        source: an aligned depth image or a point cloud.
 
         In global mode the robot state is used by the depth detector to project
         the 3D box into the world frame. In local mode the state is ignored
@@ -441,11 +501,50 @@ class VisionRGBDFollower(ControllerTemplate):
         :type current_state: RobotState
         :param target_box: 2D bounding box of the target
         :type target_box: Bbox2D
-        :param aligned_depth_image: Aligned depth image
-        :type aligned_depth_image: np.ndarray
+        :param aligned_depth_image: Aligned depth image (uint16 millimeters or
+            float32 meters)
+        :type aligned_depth_image: Optional[np.ndarray]
+        :param data: Raw PointCloud2 buffer of a point cloud, the alternative
+            depth source. The layout keywords mirror the sensor_msgs/PointCloud2
+            message and are the same the local mapper's
+            ``update_from_pointcloud`` takes, so a whole cloud container can
+            be splatted in (further fields are ignored). The points are in the
+            sensor frame described by ``set_point_cloud_sensor``.
+        :type data: Optional[np.ndarray]
+        :param point_step: Bytes per point
+        :type point_step: Optional[int]
+        :param row_step: Bytes per row
+        :type row_step: Optional[int]
+        :param height: Number of rows (1 for an unorganized cloud)
+        :type height: Optional[int]
+        :param width: Points per row
+        :type width: Optional[int]
+        :param x_offset: Byte offset of the x field in a point
+        :type x_offset: Optional[int]
+        :param y_offset: Byte offset of the y field in a point
+        :type y_offset: Optional[int]
+        :param z_offset: Byte offset of the z field in a point
+        :type z_offset: Optional[int]
         :return: Whether tracking was successfully initialized
         :rtype: bool
         """
+        depth_source = _depth_source(
+            aligned_depth_image,
+            data,
+            point_step=point_step,
+            row_step=row_step,
+            height=height,
+            width=width,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            z_offset=z_offset,
+        )
+        if depth_source is None:
+            logging.error(
+                "Could not set initial tracking state: No depth image or point "
+                "cloud is provided"
+            )
+            return False
         try:
             if not self._config._use_local_coordinates:
                 # Global mode: detector needs the robot pose for world-frame projection
@@ -455,11 +554,14 @@ class VisionRGBDFollower(ControllerTemplate):
                     current_state.yaw,
                     current_state.speed,
                 )
-            return self._planner.set_initial_tracking(
-                aligned_depth_image,
-                target_box,
-                current_state.yaw if current_state else 0.0,
-            )
+            yaw = current_state.yaw if current_state else 0.0
+            if isinstance(depth_source, dict):
+                # point cloud
+                return self._planner.set_initial_tracking(
+                    **depth_source, target_box_2d=target_box, robot_orientation=yaw
+                )
+            # depth image
+            return self._planner.set_initial_tracking(depth_source, target_box, yaw)
 
         except Exception as e:
             logging.error(f"Could not set initial tracking state: {e}")
@@ -489,10 +591,21 @@ class VisionRGBDFollower(ControllerTemplate):
         pose_x_img: int,
         pose_y_img: int,
         detected_boxes: List[Bbox2D],
-        aligned_depth_image: np.ndarray,
+        aligned_depth_image: Optional[np.ndarray] = None,
+        *,
+        data: Optional[np.ndarray] = None,
+        point_step: Optional[int] = None,
+        row_step: Optional[int] = None,
+        height: Optional[int] = None,
+        width: Optional[int] = None,
+        x_offset: Optional[int] = None,
+        y_offset: Optional[int] = None,
+        z_offset: Optional[int] = None,
+        **_,
     ) -> bool:
         """Set initial tracking by selecting a pixel inside one of the 2D
-        detection boxes.
+        detection boxes, lifted through one depth source: an aligned depth
+        image or a point cloud.
 
         In global mode the robot state is used by the depth detector to project
         the 3D box into the world frame. In local mode the state is ignored
@@ -506,11 +619,33 @@ class VisionRGBDFollower(ControllerTemplate):
         :type pose_y_img: int
         :param detected_boxes: List of 2D detection bounding boxes
         :type detected_boxes: List[Bbox2D]
-        :param aligned_depth_image: Aligned depth image
-        :type aligned_depth_image: np.ndarray
+        :param aligned_depth_image: Aligned depth image (uint16 millimeters or
+            float32 meters)
+        :type aligned_depth_image: Optional[np.ndarray]
+        :param data: Raw PointCloud2 buffer of a point cloud, the alternative
+            depth source; the layout keywords are as in
+            ``set_initial_tracking_2d_target``
+        :type data: Optional[np.ndarray]
         :return: Whether tracking was successfully initialized
         :rtype: bool
         """
+        depth_source = _depth_source(
+            aligned_depth_image,
+            data,
+            point_step=point_step,
+            row_step=row_step,
+            height=height,
+            width=width,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            z_offset=z_offset,
+        )
+        if depth_source is None:
+            logging.error(
+                "Could not set initial tracking state: No depth image or point "
+                "cloud is provided"
+            )
+            return False
         try:
             if not self._config._use_local_coordinates:
                 # Global mode: detector needs the robot pose for world-frame projection
@@ -521,12 +656,19 @@ class VisionRGBDFollower(ControllerTemplate):
                     current_state.speed,
                 )
             if any(detected_boxes):
+                yaw = current_state.yaw if current_state else 0.0
+                if isinstance(depth_source, dict):
+                    # point cloud
+                    return self._planner.set_initial_tracking(
+                        pose_x_img,
+                        pose_y_img,
+                        **depth_source,
+                        detected_boxes_2d=detected_boxes,
+                        robot_orientation=yaw,
+                    )
+                # depth image
                 return self._planner.set_initial_tracking(
-                    pose_x_img,
-                    pose_y_img,
-                    aligned_depth_image,
-                    detected_boxes,
-                    current_state.yaw if current_state else 0.0,
+                    pose_x_img, pose_y_img, depth_source, detected_boxes, yaw
                 )
             logging.error(
                 "Could not set initial tracking state: No detections are provided"
@@ -543,9 +685,21 @@ class VisionRGBDFollower(ControllerTemplate):
         current_state: Optional[RobotState] = None,
         detections_2d: Optional[List[Bbox2D]] = None,
         depth_image: Optional[np.ndarray] = None,
+        data: Optional[np.ndarray] = None,
+        point_step: Optional[int] = None,
+        row_step: Optional[int] = None,
+        height: Optional[int] = None,
+        width: Optional[int] = None,
+        x_offset: Optional[int] = None,
+        y_offset: Optional[int] = None,
+        z_offset: Optional[int] = None,
         **_,
     ) -> bool:
         """Run one iteration of the vision follower.
+
+        The 2D detections are lifted to 3D through exactly one depth source:
+        an aligned depth image or a point cloud given as its PointCloud2
+        layout. Without either the step is skipped.
 
         In global mode (``_use_local_coordinates=False``) ``current_state`` is
         **mandatory** — it is used by the depth detector (world-frame
@@ -560,14 +714,32 @@ class VisionRGBDFollower(ControllerTemplate):
         :type current_state: Optional[RobotState]
         :param detections_2d: 2D detection bounding boxes from the vision pipeline
         :type detections_2d: Optional[List[Bbox2D]]
-        :param depth_image: Aligned depth image
+        :param depth_image: Aligned depth image (uint16 millimeters or float32
+            meters)
         :type depth_image: Optional[np.ndarray]
+        :param data: Raw PointCloud2 buffer of a point cloud, the alternative
+            depth source; the layout keywords are as in
+            ``set_initial_tracking_2d_target``
+        :type data: Optional[np.ndarray]
         :return: Whether the planner found a valid solution
         :rtype: bool
         """
-        if depth_image is None:
+        depth_source = _depth_source(
+            depth_image,
+            data,
+            point_step=point_step,
+            row_step=row_step,
+            height=height,
+            width=width,
+            x_offset=x_offset,
+            y_offset=y_offset,
+            z_offset=z_offset,
+        )
+        if depth_source is None:
             # No depth this tick, skip.
-            logging.debug("RGBDFollower loop_step called without a depth image")
+            logging.debug(
+                "RGBDFollower loop_step called without a depth image or a point cloud"
+            )
             return False
 
         robot_cmd = None
@@ -592,9 +764,19 @@ class VisionRGBDFollower(ControllerTemplate):
             )
 
         try:
-            self._result = self._planner.get_tracking_ctrl(
-                depth_image, detections_2d, robot_cmd or self._last_cmd
-            )
+            robot_velocity = robot_cmd or self._last_cmd
+            if isinstance(depth_source, dict):
+                # point cloud
+                self._result = self._planner.get_tracking_ctrl(
+                    **depth_source,
+                    detected_boxes_2d=detections_2d,
+                    robot_velocity=robot_velocity,
+                )
+            else:
+                # depth image
+                self._result = self._planner.get_tracking_ctrl(
+                    depth_source, detections_2d, robot_velocity
+                )
 
         except Exception as e:
             logging.error(f"Could not find velocity command: {e}")
