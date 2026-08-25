@@ -25,11 +25,12 @@ void bindings_mapping_gpu(py::module_ &m) {
                              Eigen::Ref<const Eigen::VectorXf>>(
                &Mapping::LocalMapperGPU::scanToGrid),
            "Convert laser scan data to occupancy grid", py::arg("angles"),
-           py::arg("ranges"), py::rv_policy::reference_internal)
+           py::arg("ranges"), py::rv_policy::reference_internal,
+           py::call_guard<py::gil_scoped_release>())
 
       .def(
           "scan_to_grid",
-          [](Mapping::LocalMapperGPU &self, ByteArray data, int point_step,
+          [](Mapping::LocalMapperGPU &self, const ByteArray &data, int point_step,
              int row_step, int height, int width, int x_offset, int y_offset,
              int z_offset) -> Eigen::MatrixXi & {
             py::gil_scoped_release release;
@@ -82,11 +83,12 @@ void bindings_utils_gpu(py::module_ &m) {
       .def("check",
            py::overload_cast<Eigen::Ref<const Eigen::VectorXf>, const bool>(
                &CriticalZoneCheckerGPU::check),
-           py::arg("ranges"), py::arg("forward"))
+           py::arg("ranges"), py::arg("forward"),
+           py::call_guard<py::gil_scoped_release>())
 
       .def(
           "check",
-          [](CriticalZoneCheckerGPU &self, ByteArray data, int point_step,
+          [](CriticalZoneCheckerGPU &self, const ByteArray &data, int point_step,
              int row_step, int height, int width, int x_offset, int y_offset,
              int z_offset, bool forward) {
             py::gil_scoped_release release;

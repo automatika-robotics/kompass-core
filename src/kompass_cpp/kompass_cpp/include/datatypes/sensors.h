@@ -139,6 +139,43 @@ struct PointCloudView {
 };
 
 /**
+ * @brief Non-owning view of an aligned depth image: a C-contiguous
+ * ROW-MAJOR (rows x cols) pixel buffer plus its encoding. Expected encodings:
+ * UINT16 (depth in millimetres, ROS 16UC1) and FLOAT32 (depth in metres, ROS
+ * 32FC1); the consumer resolves the value scale from the encoding.
+ */
+struct DepthImageView {
+  ByteSpan data{};
+  int rows = 0;
+  int cols = 0;
+  PointFieldType field_type = PointFieldType::UINT16;
+
+  DepthImageView() = default;
+  DepthImageView(ByteSpan data, const int rows, const int cols,
+                 const PointFieldType field_type = PointFieldType::UINT16)
+      : data(data), rows(rows), cols(cols), field_type(field_type),
+        elem_size_(elementSizeOf(field_type)) {}
+
+  bool empty() const { return rows <= 0 || cols <= 0 || data.size() == 0; }
+
+  /// The buffer must hold at least rows * cols pixels of the declared type
+  bool sizeValid() const {
+    return data.size() >= static_cast<std::size_t>(rows) * cols * elem_size_;
+  }
+
+  /// Raw pixel value at (row, col), cast to float. Bounds are upto the caller
+  /// to set
+  float at(const int row, const int col) const {
+    return load_and_cast_val(
+        data.data(), (static_cast<std::size_t>(row) * cols + col) * elem_size_,
+        field_type);
+  }
+
+private:
+  int elem_size_ = 2; // elementSizeOf(field_type), hoisted at construction
+};
+
+/**
  * Shared prologue of every batched cloud call. The batch must hold exactly one
  * view per configured sensor (positional pairing), and every non-empty view
  * must carry valid offsets.

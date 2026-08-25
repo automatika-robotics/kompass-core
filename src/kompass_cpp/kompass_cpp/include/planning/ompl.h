@@ -1,5 +1,6 @@
 #pragma once
 
+#include "datatypes/span.h"
 #include "utils/collision_check.h"
 #include <fcl/fcl.h>
 #include <ompl/base/Cost.h>
@@ -32,11 +33,11 @@ public:
    * @param goal_x
    * @param goal_y
    * @param goal_yaw
-   * @param map_3d
+   * @param map_3d Map PointCloud in the world frame.
    */
   void setupProblem(double start_x, double start_y, double start_yaw,
                     double goal_x, double goal_y, double goal_yaw,
-                    const std::vector<Eigen::Vector3f> &map_3d);
+                    Span<Path::Point> map_3d);
   /**
    * @brief Solve the planning problem
    *

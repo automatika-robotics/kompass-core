@@ -3,6 +3,7 @@
 #include "datatypes/control.h"
 #include "datatypes/parameter.h"
 #include "datatypes/path.h"
+#include "datatypes/span.h"
 #include "datatypes/trajectory.h"
 #include "utils/transformation.h"
 #include <array>
@@ -208,7 +209,7 @@ public:
    * @param max_sensor_range                  Sensor's max valid range [m].
    * @param max_obstacle_cost_range_multiple  See the LaserScan overload.
    */
-  void setPointScan(const std::vector<Path::Point> &cloud,
+  void setPointScan(Span<Path::Point> cloud,
                     [[maybe_unused]] const Path::State &current_state,
                     const float max_sensor_range,
                     const float max_obstacle_cost_range_multiple = 3.0) {
@@ -216,7 +217,7 @@ public:
     obstaclePointsY.clear();
     maxObstaclesDist = max_sensor_range / max_obstacle_cost_range_multiple;
 
-    for (auto &point : cloud) {
+    for (const auto &point : cloud) {
       obstaclePointsX.emplace_back(point.x());
       obstaclePointsY.emplace_back(point.y());
     }

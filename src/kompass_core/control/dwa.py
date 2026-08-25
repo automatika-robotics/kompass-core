@@ -324,19 +324,21 @@ class DWA(FollowerTemplate):
         # float32 C-contiguous is the zero-copy fast path at the binding
         # (no-op for ROS-native data)
         if local_map is not None:
-            sensor_data = np.ascontiguousarray(local_map, dtype=np.float32)
+            sensor_args = (np.ascontiguousarray(local_map, dtype=np.float32),)
         elif ranges is not None and angles is not None:
             if len(angles) != len(ranges):
                 logging.error(
                     "Received incompatible LaserScan data -> Cannot compute control"
                 )
                 return False
-            sensor_data = kompass_cpp.types.LaserScan(
-                ranges=np.asarray(ranges, dtype=np.float32),
-                angles=np.asarray(angles, dtype=np.float32),
+            # Passed as raw arrays. The scan is built C++-side after the GIL
+            # release
+            sensor_args = (
+                np.asarray(ranges, dtype=np.float32),
+                np.asarray(angles, dtype=np.float32),
             )
         elif points is not None:
-            sensor_data = np.ascontiguousarray(points, dtype=np.float32)
+            sensor_args = (np.ascontiguousarray(points, dtype=np.float32),)
         else:
             logging.error(
                 "Cannot compute control without sensor data. Provide 'ranges' and 'angles', 'points' or 'local_map' input"
@@ -346,10 +348,10 @@ class DWA(FollowerTemplate):
         try:
             if debug:
                 self._planner.debug_velocity_search(
-                    current_velocity, sensor_data, self._config.drop_samples
+                    current_velocity, *sensor_args, self._config.drop_samples
                 )
             self._result = self._planner.compute_velocity_commands(
-                current_velocity, sensor_data
+                current_velocity, *sensor_args
             )
 
         except Exception as e:

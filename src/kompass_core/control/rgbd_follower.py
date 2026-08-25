@@ -145,12 +145,15 @@ class VisionRGBDFollowerConfig(FollowerConfig):
     * - camera_position_to_robot
       - `np.ndarray`
       - `[0.0, 0.0, 0.0]`
-      - Translation vector from the robot base to the camera frame (m).
+      - Translation from the robot base to the camera's **optical** frame (m),
+        which is the frame a ROS Image or CameraInfo names in its header.
 
     * - camera_rotation_to_robot
       - `np.ndarray`
-      - `[0.0, 0.0, 0.0, 1.0]`
-      - Quaternion `(x, y, z, w)` from the robot base to the camera frame.
+      - `[-0.5, 0.5, -0.5, 0.5]`
+      - Quaternion `(x, y, z, w)` from the robot base to the camera's
+        **optical** frame. The default is the REP 103 turn, i.e. a camera at
+        the body origin looking straight ahead.
 
     ```
     """
@@ -234,8 +237,12 @@ class VisionRGBDFollowerConfig(FollowerConfig):
         default=np.array([0.0, 0.0, 0.0], dtype=np.float32)
     )
 
+    # Pose of the camera's OPTICAL frame in the robot base, matching what a TF
+    # lookup against a depth Image/CameraInfo frame_id resolves to. The default
+    # is the REP 103 optical -> body turn: a camera at the body origin looking
+    # straight ahead.
     camera_rotation_to_robot: np.ndarray = field(
-        default=np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
+        default=np.array([-0.5, 0.5, -0.5, 0.5], dtype=np.float32)
     )
 
     def to_kompass_cpp(self) -> RGBDFollowerParameters:
@@ -558,6 +565,11 @@ class VisionRGBDFollower(ControllerTemplate):
         :return: Whether the planner found a valid solution
         :rtype: bool
         """
+        if depth_image is None:
+            # No depth this tick, skip.
+            logging.debug("RGBDFollower loop_step called without a depth image")
+            return False
+
         robot_cmd = None
         if not self._config._use_local_coordinates:
             # Global mode: state is mandatory — detector and control law need it

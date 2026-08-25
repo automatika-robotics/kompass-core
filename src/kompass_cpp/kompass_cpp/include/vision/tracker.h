@@ -31,7 +31,9 @@ public:
 
   bool updateTracking(const std::vector<Bbox3D> &detected_boxes);
 
-  std::optional<TrackedBbox3D> getRawTracking() const;
+  /// Non-owning view of the raw tracked box (nullptr when uninitialized).
+  /// Valid until the next setInitialTracking call
+  const TrackedBbox3D *getRawTracking() const { return trackedBox_.get(); }
 
   std::optional<Eigen::MatrixXf> getTrackedState() const;
 
@@ -42,6 +44,9 @@ private:
   std::string trackedLabel_;
   std::unique_ptr<TrackedBbox3D> trackedBox_;
   std::unique_ptr<LinearSSKalmanFilter> stateKalmanFilter_;
+  // Kalman measurement scratch. Fixed Size: StateSize x 1, set once
+  // in the ctor and never resized.
+  Eigen::MatrixXf measurement_;
 
   FeaturesVector extractFeatures(const TrackedBbox3D &bBox) const;
 

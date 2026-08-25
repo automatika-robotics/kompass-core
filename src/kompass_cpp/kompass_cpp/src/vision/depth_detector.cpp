@@ -2,36 +2,54 @@
 #include "datatypes/tracking.h"
 #include "utils/logger.h"
 #include "utils/transformation.h"
-#include <memory>
+#include <algorithm>
 #include <optional>
 #include <vector>
 
 namespace Kompass {
+
+const Eigen::Quaternionf &DepthDetector::opticalToBodyAligned() {
+  // Takes (x right, y down, z forward) to (x forward, y left, z up).
+  // Eigen's quaternion constructor is (w, x, y, z).
+  static const Eigen::Quaternionf kOpticalToBody{0.5f, -0.5f, 0.5f, -0.5f};
+  return kOpticalToBody;
+}
 
 DepthDetector::DepthDetector(const Eigen::Vector2f &depth_range,
                              const Eigen::Vector3f &camera_in_body_translation,
                              const Eigen::Quaternionf &camera_in_body_rotation,
                              const Eigen::Vector2f &focal_length,
                              const Eigen::Vector2f &principal_point,
-                             const float depth_conversion_factor)
+                             const float depth_conversion_factor,
+                             const CameraFrameConvention convention)
     : DepthDetector(depth_range,
                     getTransformation(camera_in_body_rotation,
                                       camera_in_body_translation),
-                    focal_length, principal_point, depth_conversion_factor) {}
+                    focal_length, principal_point, depth_conversion_factor,
+                    convention) {}
 
 DepthDetector::DepthDetector(
     const Eigen::Vector2f &depth_range,
     const Eigen::Isometry3f &camera_in_body_tf,
     const Eigen::Vector2f &focal_length, const Eigen::Vector2f &principal_point,
-    const float depth_conversion_factor) { // Range of interest for depth values
-                                           // in meters
+    const float depth_conversion_factor,
+    const CameraFrameConvention convention) { // Range of interest for depth
+                                              // values in meters
   minDepth_ = depth_range(0);
   maxDepth_ = depth_range(1);
   // Factor to convert depth image data to meters (in ROS2 its given in mm ->
   // depthConversionFactor = 1e-3)
   depthConversionFactor_ = depth_conversion_factor;
-  // Set camera tf
-  camera_in_body_tf_ = camera_in_body_tf;
+  // Set camera tf.
+  //
+  // Projection below turns the optical axes into body-aligned ones before
+  // applying this transform, so a pose given in the optical convention has
+  // that fixed quarter rotation taken back out here. Without this the
+  // rotation lands twice and every detection is 90 degrees off.
+  camera_in_body_tf_ =
+      convention == CameraFrameConvention::Optical
+          ? camera_in_body_tf * Eigen::Isometry3f(opticalToBodyAligned().conjugate())
+          : camera_in_body_tf;
 
   // Set camera  intrinsic parameters
   fx_ = focal_length.x();
@@ -42,77 +60,77 @@ DepthDetector::DepthDetector(
   body_in_world_tf_ = Eigen::Isometry3f::Identity();
 }
 
-std::optional<std::vector<Bbox3D>> DepthDetector::get3dDetections() const {
-  if (boxes_) {
-    return *boxes_;
-  }
-  return std::nullopt;
-}
-
-void DepthDetector::updateBoxes(
-    const Eigen::MatrixX<unsigned short> &aligned_depth_img,
-    const std::vector<Bbox2D> &detections,
-    const std::optional<Path::State> &robot_state) {
+void DepthDetector::updateBoxes(const DepthImageView &aligned_depth_img,
+                                const std::vector<Bbox2D> &detections,
+                                const std::optional<Path::State> &robot_state) {
   if (robot_state.has_value()) {
     body_in_world_tf_ = getTransformation(robot_state.value());
   }
-  alignedDepthImg_ = aligned_depth_img;
-  boxes_ = std::make_unique<std::vector<Bbox3D>>();
+  boxes_.clear();
   for (const auto &box2d : detections) {
-    auto converted_box = convert2Dboxto3Dbox(box2d);
+    auto converted_box = convert2Dboxto3Dbox(aligned_depth_img, box2d);
     if (converted_box) {
-      boxes_->push_back(converted_box.value());
+      boxes_.push_back(std::move(converted_box.value()));
     }
   }
 }
 
-void DepthDetector::updatePOIs(
-    const Eigen::MatrixX<unsigned short> &aligned_depth_img,
-    const PointsOfInterest &poi,
-    const std::optional<Path::State> &robot_state) {
+void DepthDetector::updatePOIs(const DepthImageView &aligned_depth_img,
+                               const PointsOfInterest &poi,
+                               const std::optional<Path::State> &robot_state) {
   if (robot_state.has_value()) {
     body_in_world_tf_ = getTransformation(robot_state.value());
   }
-  alignedDepthImg_ = aligned_depth_img;
-  boxes_ = std::make_unique<std::vector<Bbox3D>>();
-  auto converted_box = convertPOIto3Dbox(poi);
+  boxes_.clear();
+  auto converted_box = convertPOIto3Dbox(aligned_depth_img, poi);
   if (converted_box) {
-    boxes_->push_back(converted_box.value());
+    boxes_.push_back(std::move(converted_box.value()));
   }
 }
 
-std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
+std::optional<Bbox3D>
+DepthDetector::convert2Dboxto3Dbox(const DepthImageView &depth,
+                                   const Bbox2D &box2d) {
   Bbox3D box3d(box2d);
   Eigen::Vector2i x_limits = box2d.getXLimits();
   Eigen::Vector2i y_limits = box2d.getYLimits();
+  // FLOAT32 pixels are metres already; UINT16 scale by the configured factor
+  const float to_meters = depth.field_type == PointFieldType::FLOAT32
+                              ? 1.0f
+                              : depthConversionFactor_;
   float depth_meters;
-  // All depth values in the 2D box within the range of interest
-  std::vector<float> depth_values;
+  // All depth values in the 2D box within the range of interest.
+  // NaN padding in float images -> rejected.
+  depth_values_.clear();
+  depth_values_.reserve(
+      static_cast<std::size_t>(y_limits(1) - y_limits(0) + 1) *
+      (x_limits(1) - x_limits(0) + 1));
   for (int row_idx = y_limits(0); row_idx <= y_limits(1); ++row_idx) {
     for (int col_idx = x_limits(0); col_idx <= x_limits(1); ++col_idx) {
-      depth_meters =
-          alignedDepthImg_(row_idx, col_idx) * depthConversionFactor_;
+      depth_meters = depth.at(row_idx, col_idx) * to_meters;
       if (depth_meters <= maxDepth_ && depth_meters >= minDepth_) {
-        depth_values.push_back(depth_meters);
+        depth_values_.push_back(depth_meters);
       }
     }
   }
-  if (depth_values.size() <= 1) {
+  if (depth_values_.size() <= 1) {
     LOG_WARNING("Could not get any depth values for 2D bounding box at ",
                 box2d.top_corner.x(), ", ", box2d.top_corner.y());
     return std::nullopt;
   }
   float medianDepth, madDepth;
-  calculateMAD(depth_values, medianDepth, madDepth);
+  calculateMAD(depth_values_, medianDepth, madDepth);
 
   // Get min and max depth
   float minimum_d = maxDepth_, maximum_d = minDepth_;
-  for (auto depth : depth_values) {
-    if ((depth < minimum_d) && (depth >= medianDepth - 1.5 * madDepth)) {
-      minimum_d = depth;
+  for (auto depth_val : depth_values_) {
+    if ((depth_val < minimum_d) &&
+        (depth_val >= medianDepth - 1.5 * madDepth)) {
+      minimum_d = depth_val;
     }
-    if ((depth > maximum_d) && (depth <= medianDepth + 1.5 * madDepth)) {
-      maximum_d = depth;
+    if ((depth_val > maximum_d) &&
+        (depth_val <= medianDepth + 1.5 * madDepth)) {
+      maximum_d = depth_val;
     }
   }
 
@@ -142,7 +160,6 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
   // Register center in the world frame
   box3d.center = camera_in_world_tf * center_in_camera_frame;
 
-
   // Transform size from camera frame to world frame
   Eigen::Matrix3f abs_rotation = camera_in_world_tf.linear().cwiseAbs();
   box3d.size = abs_rotation * size_camera_frame;
@@ -151,29 +168,37 @@ std::optional<Bbox3D> DepthDetector::convert2Dboxto3Dbox(const Bbox2D &box2d) {
 }
 
 std::optional<Bbox3D>
-DepthDetector::convertPOIto3Dbox(const PointsOfInterest &poi) {
+DepthDetector::convertPOIto3Dbox(const DepthImageView &depth,
+                                 const PointsOfInterest &poi) {
   Bbox2D box2d(poi);
-  return convert2Dboxto3Dbox(box2d);
+  return convert2Dboxto3Dbox(depth, box2d);
 }
 
-float DepthDetector::getMedian(const std::vector<float> &values) {
-  auto sorted_value = values;
-  std::sort(sorted_value.begin(), sorted_value.end());
-  const auto n = sorted_value.size();
-  if (n % 2 == 0) {
-    return 0.5f * (sorted_value[n / 2 - 1] + sorted_value[n / 2]);
+float DepthDetector::getMedian(std::vector<float> &values) {
+  const auto n = values.size();
+  const auto mid = values.begin() + n / 2;
+  // Selection: *mid becomes the n/2-th order statistic and everything left of
+  // it is <= *mid
+  std::nth_element(values.begin(), mid, values.end());
+  const float upper = *mid;
+  if (n % 2 == 0) { // for even elements
+    // The lower middle is the largest element of the left partition.
+    // Equivalent to sorted[n/2 - 1]
+    const float lower = *std::max_element(values.begin(), mid);
+    return 0.5f * (lower + upper);
   }
-  return sorted_value[n / 2];
+  return upper; // for odd elements
 }
 
-void DepthDetector::calculateMAD(const std::vector<float> &depthValues,
-                                 float &median, float &mad) {
+void DepthDetector::calculateMAD(std::vector<float> &depthValues, float &median,
+                                 float &mad) {
   median = getMedian(depthValues);
 
-  std::vector<float> deviations;
+  // resize and fill member scratch
+  mad_scratch_.resize(depthValues.size());
   for (size_t i = 0; i < depthValues.size(); ++i) {
-    deviations.push_back(std::abs(depthValues[i] - median));
+    mad_scratch_[i] = std::abs(depthValues[i] - median);
   }
-  mad = getMedian(deviations);
+  mad = getMedian(mad_scratch_);
 }
 } // namespace Kompass

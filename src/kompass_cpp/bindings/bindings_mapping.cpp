@@ -9,7 +9,10 @@ using namespace Kompass;
 // Mapping bindings submodule
 void bindings_mapping(py::module_ &m) {
   auto m_mapping = m.def_submodule("mapping", "Local Mapping module");
-  py::enum_<Mapping::OccupancyType>(m_mapping, "OCCUPANCY_TYPE")
+  // is_arithmetic -> enum.IntEnum. The values are the grid-cell semantics
+  // and Python consumers use them as integers. Single source of truth
+  py::enum_<Mapping::OccupancyType>(m_mapping, "OCCUPANCY_TYPE",
+                                    py::is_arithmetic())
       .value("UNEXPLORED", Mapping::OccupancyType::UNEXPLORED)
       .value("EMPTY", Mapping::OccupancyType::EMPTY)
       .value("OCCUPIED", Mapping::OccupancyType::OCCUPIED);
@@ -43,11 +46,12 @@ void bindings_mapping(py::module_ &m) {
                              Eigen::Ref<const Eigen::VectorXf>>(
                &Mapping::LocalMapper::scanToGrid),
            "Convert laser scan data to occupancy grid", py::arg("angles"),
-           py::arg("ranges"), py::rv_policy::reference_internal)
+           py::arg("ranges"), py::rv_policy::reference_internal,
+           py::call_guard<py::gil_scoped_release>())
 
       .def(
           "scan_to_grid",
-          [](Mapping::LocalMapper &self, ByteArray data, int point_step,
+          [](Mapping::LocalMapper &self, const ByteArray &data, int point_step,
              int row_step, int height, int width, int x_offset, int y_offset,
              int z_offset) -> Eigen::MatrixXi & {
             py::gil_scoped_release release;
@@ -82,11 +86,12 @@ void bindings_mapping(py::module_ &m) {
                &Mapping::LocalMapper::scanToGridBayesian),
            "Convert laser scan data to occupancy grid, with bayesian update",
            py::arg("angles"), py::arg("ranges"),
-           py::rv_policy::reference_internal)
+           py::rv_policy::reference_internal,
+           py::call_guard<py::gil_scoped_release>())
 
       .def(
           "scan_to_grid_bayesian",
-          [](Mapping::LocalMapper &self, ByteArray data, int point_step,
+          [](Mapping::LocalMapper &self, const ByteArray &data, int point_step,
              int row_step, int height, int width, int x_offset, int y_offset,
              int z_offset) {
             py::gil_scoped_release release;
@@ -104,7 +109,8 @@ void bindings_mapping(py::module_ &m) {
       .def("get_previous_grid_in_current_pose",
            &Mapping::LocalMapper::getPreviousGridInCurrentPose,
            py::arg("current_position_in_previous_pose"),
-           py::arg("current_orientation_in_previous_pose"));
+           py::arg("current_orientation_in_previous_pose"),
+           py::call_guard<py::gil_scoped_release>());
 
 #if GPU
   bindings_mapping_gpu(m_mapping);

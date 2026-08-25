@@ -62,7 +62,7 @@ Follower::Target Follower::getTrackedTarget() const {
   return *currentTrackedTarget_;
 }
 
-const Path::Path Follower::getCurrentPath() const { return *currentPath; }
+const Path::Path &Follower::getCurrentPath() const { return *currentPath; }
 
 void Follower::clearCurrentPath() {
   // Delete old current path before setting new values

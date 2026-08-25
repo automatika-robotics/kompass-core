@@ -140,8 +140,13 @@ public:
     return this->getTrackingCtrl(tracked_pose, current_vel);
   };
 
+  /**
+   * Depth-image variant. The image crosses as a non-owning zero-copy view
+   * (UINT16 millimetres or FLOAT32 metres, row-major) and is only read for
+   * the duration of the call.
+   */
   Control::TrajSearchResult
-  getTrackingCtrl(const Eigen::MatrixX<unsigned short> &aligned_depth_img,
+  getTrackingCtrl(const DepthImageView &aligned_depth_img,
                   const std::vector<Bbox2D> &detected_boxes_2d,
                   const Velocity2D &current_vel) {
     if (!detector_) {
@@ -163,10 +168,10 @@ public:
       } else {
         detector_->updateBoxes(aligned_depth_img, detected_boxes_2d);
       }
-      auto boxes_3d = detector_->get3dDetections();
-      if (boxes_3d) {
+      const auto &boxes_3d = detector_->get3dDetections();
+      if (!boxes_3d.empty()) {
         // Update the tracker with the detected boxes
-        bool tracking_updated = tracker_->updateTracking(boxes_3d.value());
+        bool tracking_updated = tracker_->updateTracking(boxes_3d);
         if (!tracking_updated) {
           LOG_WARNING(
               "Tracker failed to update target with the detected boxes");
@@ -204,15 +209,13 @@ public:
    * @return true
    * @return false
    */
-  bool
-  setInitialTracking(const int pose_x_img, const int pose_y_img,
-                     const Eigen::MatrixX<unsigned short> &aligned_depth_image,
-                     const std::vector<Bbox2D> &detected_boxes_2d,
-                     const float yaw = 0.0);
+  bool setInitialTracking(const int pose_x_img, const int pose_y_img,
+                          const DepthImageView &aligned_depth_image,
+                          const std::vector<Bbox2D> &detected_boxes_2d,
+                          const float yaw = 0.0);
 
-  bool
-  setInitialTracking(const Eigen::MatrixX<unsigned short> &aligned_depth_image,
-                     const Bbox2D &target_box_2d, const float yaw = 0.0);
+  bool setInitialTracking(const DepthImageView &aligned_depth_image,
+                          const Bbox2D &target_box_2d, const float yaw = 0.0);
 
   Eigen::Vector2f getErrors() const {
     return Eigen::Vector2f(dist_error_, orientation_error_);

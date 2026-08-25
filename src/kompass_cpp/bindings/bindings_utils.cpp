@@ -12,7 +12,13 @@ using namespace Kompass;
 
 py::ndarray<py::numpy, float, py::shape<-1, 3>, py::c_contig>
 read_pcd_py(const std::string &filename) {
-  auto result = readPCD(filename);
+  // NOTE: The capsule/ndarray construction below is Python C-API and needs the
+  // GIL (a call_guard on the def would segfault)
+  auto result = [&] {
+    // File I/O + parse without the GIL.
+    py::gil_scoped_release release;
+    return readPCD(filename);
+  }();
 
   if (!result) {
     throw std::runtime_error("Failed to read PCD file: " + filename);
@@ -36,7 +42,6 @@ read_pcd_py(const std::string &filename) {
 
   return arr;
 }
-
 
 // Utils submodule
 void bindings_utils(py::module_ &m) {
@@ -62,16 +67,17 @@ void bindings_utils(py::module_ &m) {
       .def("check",
            py::overload_cast<Eigen::Ref<const Eigen::VectorXf>, const bool>(
                &CriticalZoneChecker::check),
-           py::arg("ranges"), py::arg("forward"))
+           py::arg("ranges"), py::arg("forward"),
+           py::call_guard<py::gil_scoped_release>())
 
       .def(
           "check",
-          [](CriticalZoneChecker &self, ByteArray data, int point_step,
+          [](CriticalZoneChecker &self, const ByteArray &data, int point_step,
              int row_step, int height, int width, int x_offset, int y_offset,
              int z_offset, bool forward) {
             py::gil_scoped_release release;
-            return self.check(toSpan(data), point_step, row_step, height,
-                              width, x_offset, y_offset, z_offset, forward);
+            return self.check(toSpan(data), point_step, row_step, height, width,
+                              x_offset, y_offset, z_offset, forward);
           },
           py::arg("data"), py::arg("point_step"), py::arg("row_step"),
           py::arg("height"), py::arg("width"), py::arg("x_offset"),
@@ -100,7 +106,7 @@ void bindings_utils(py::module_ &m) {
   // numpy arrays)
   m_utils.def(
       "pointcloud_to_laserscan_from_raw",
-      [](ByteArray data, int point_step, int row_step, int height, int width,
+      [](const ByteArray &data, int point_step, int row_step, int height, int width,
          int x_offset, int y_offset, int z_offset, double max_range,
          double min_z, double max_z, double angle_step,
          const Eigen::Vector3f &position, const Eigen::Vector4f &rotation,
@@ -134,7 +140,7 @@ void bindings_utils(py::module_ &m) {
   // Overload using num_bins (Returns: ranges as a float32 numpy array)
   m_utils.def(
       "pointcloud_to_laserscan_from_raw",
-      [](ByteArray data, int point_step, int row_step, int height, int width,
+      [](const ByteArray &data, int point_step, int row_step, int height, int width,
          int x_offset, int y_offset, int z_offset, double max_range,
          double min_z, double max_z, int num_bins,
          const Eigen::Vector3f &position, const Eigen::Vector4f &rotation,
@@ -171,6 +177,7 @@ void bindings_utils(py::module_ &m) {
   m_utils.def("read_pcd_to_occupancy_grid", &readPCDToOccupancyGrid,
               py::arg("filename"), py::arg("grid_resolution"),
               py::arg("z_ground_limit"), py::arg("robot_height"),
+              py::call_guard<py::gil_scoped_release>(),
               "Convert PCD file to an occupancy grid (zero-copy return).");
 
 #if GPU

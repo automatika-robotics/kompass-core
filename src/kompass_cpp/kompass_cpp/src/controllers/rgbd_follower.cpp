@@ -54,21 +54,23 @@ void RGBDFollower::setCameraIntrinsics(const float focal_length_x,
                                        const float focal_length_y,
                                        const float principal_point_x,
                                        const float principal_point_y) {
+  // The mount pose comes from a TF lookup against the frame the depth
+  // Image/CameraInfo names, which ROS always expresses in optical axes.
   detector_ = std::make_unique<DepthDetector>(
       config_.depth_range(), vision_sensor_tf_,
       Eigen::Vector2f{focal_length_x, focal_length_y},
       Eigen::Vector2f{principal_point_x, principal_point_y},
-      config_.depth_conversion_factor());
+      config_.depth_conversion_factor(),
+      DepthDetector::CameraFrameConvention::Optical);
 }
 
 Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
                                              const bool update_global_error) {
-  float distance, psi, gamma = 0.0f;
+  float range, psi, gamma = 0.0f;
   if (track_velocity_) {
     // World frame: target bearing must be measured from the robot's body,
     // not from the world origin.
-    distance = tracking_pose.distance(currentState.x, currentState.y, 0.0) -
-               robot_radius_ - currentTargetRadius_;
+    range = tracking_pose.distance(currentState.x, currentState.y, 0.0);
     psi = Angle::normalizeToMinusPiPlusPi(
         std::atan2(tracking_pose.y() - currentState.y,
                    tracking_pose.x() - currentState.x) -
@@ -76,14 +78,17 @@ Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
     gamma =
         Angle::normalizeToMinusPiPlusPi(tracking_pose.yaw() - currentState.yaw);
   } else {
-    distance = tracking_pose.distance(0.0, 0.0, 0.0) - robot_radius_ -
-               currentTargetRadius_;
+    range = tracking_pose.distance(0.0, 0.0, 0.0);
     psi = Angle::normalizeToMinusPiPlusPi(
         std::atan2(tracking_pose.y(), tracking_pose.x()));
   }
-  // Floor distance to avoid division by zero in the omega formula below
+  // Gap between the two bodies' surfaces: what the standoff is controlled
+  // against. Floored at zero because a target inside the combined radii is
+  // as close as "touching" gets, not a negative separation.
   constexpr float kMinDistance = 0.001f;
-  distance = std::max(distance, kMinDistance);
+  float distance = std::max(
+      static_cast<float>(range - robot_radius_ - currentTargetRadius_),
+      kMinDistance);
 
   float distance_error = config_.target_distance() - distance;
   // target_orientation is the bearing-to-target to maintain in the robot
@@ -115,12 +120,22 @@ Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
       v = 0.0;
     }
     followingVel.setVx(v);
-    double omega;
 
-    omega = (track_velocity_ * tracking_pose.v() * sin_diff / distance +
-             v * sin(psi) / distance -
-             config_.K_omega() * ctrl_limits_.omegaParams.maxOmega *
-                 tanh(angle_error));
+    constexpr float kMinRange = 0.1f;
+    const double ff_range = std::max(range, kMinRange);
+    double omega_ff =
+        (track_velocity_ * tracking_pose.v() * sin_diff + v * std::sin(psi)) /
+        ff_range;
+
+    // Backstop for whatever the floor above cannot cover: the feedforward
+    // alone must never be able to saturate the command, since the feedback
+    // term is what actually steers toward the target.
+    omega_ff = std::clamp(omega_ff, -0.5 * ctrl_limits_.omegaParams.maxOmega,
+                          0.5 * ctrl_limits_.omegaParams.maxOmega);
+
+    double omega = omega_ff - config_.K_omega() *
+                                  ctrl_limits_.omegaParams.maxOmega *
+                                  std::tanh(angle_error);
 
     omega = std::clamp(omega, -ctrl_limits_.omegaParams.maxOmega,
                        ctrl_limits_.omegaParams.maxOmega);
@@ -146,7 +161,7 @@ bool RGBDFollower::setInitialTracking(const int pose_x_img,
 
 bool RGBDFollower::setInitialTracking(
     const int pose_x_img, const int pose_y_img,
-    const Eigen::MatrixX<unsigned short> &aligned_depth_image,
+    const DepthImageView &aligned_depth_image,
     const std::vector<Bbox2D> &detected_boxes, const float yaw) {
 
   std::unique_ptr<Bbox2D> target_box;
@@ -168,9 +183,9 @@ bool RGBDFollower::setInitialTracking(
   return setInitialTracking(aligned_depth_image, *target_box, yaw);
 }
 
-bool RGBDFollower::setInitialTracking(
-    const Eigen::MatrixX<unsigned short> &aligned_depth_image,
-    const Bbox2D &target_box_2d, const float yaw) {
+bool RGBDFollower::setInitialTracking(const DepthImageView &aligned_depth_image,
+                                      const Bbox2D &target_box_2d,
+                                      const float yaw) {
   if (!detector_) {
     throw std::runtime_error(
         "DepthDetector is not initialized with the camera intrinsics. Call "
@@ -182,12 +197,12 @@ bool RGBDFollower::setInitialTracking(
   } else {
     detector_->updateBoxes(aligned_depth_image, {target_box_2d});
   }
-  auto boxes_3d = detector_->get3dDetections();
-  if (!boxes_3d || boxes_3d->empty()) {
+  const auto &boxes_3d = detector_->get3dDetections();
+  if (boxes_3d.empty()) {
     LOG_DEBUG("Failed to get 3D box from 2D target box");
     return false;
   }
-  const bool ok = tracker_->setInitialTracking(boxes_3d.value()[0], yaw);
+  const bool ok = tracker_->setInitialTracking(boxes_3d[0], yaw);
   if (ok) {
     refreshTargetGeometry();
   }
@@ -195,7 +210,7 @@ bool RGBDFollower::setInitialTracking(
 }
 
 void RGBDFollower::refreshTargetGeometry() {
-  if (auto raw = tracker_->getRawTracking()) {
+  if (const auto *raw = tracker_->getRawTracking()) {
     const auto &sz = raw->box.size;
     currentTargetRadius_ = 0.5f * std::max(sz.x(), sz.y());
   }

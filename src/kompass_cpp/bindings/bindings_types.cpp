@@ -94,11 +94,11 @@ void bindings_types(py::module_ &m) {
            "Initialize from Eigen vectors", py::arg("vx"), py::arg("vy"),
            py::arg("omega"))
       .def_ro("vx", &Control::TrajectoryVelocities2D::vx,
-              py::rv_policy::reference_internal, "Speed on x-axis (m/s)")
+              "Speed on x-axis (m/s)")
       .def_ro("vy", &Control::TrajectoryVelocities2D::vy,
-              py::rv_policy::reference_internal, "Speed on y-axis (m/s)")
+              "Speed on y-axis (m/s)")
       .def_ro("omega", &Control::TrajectoryVelocities2D::omega,
-              py::rv_policy::reference_internal, "Angular velocity (rad/s)")
+              "Angular velocity (rad/s)")
       // Exposes 'length' as (numPointsPerTrajectory_ - 1)
       .def_prop_rw(
           "length",
@@ -117,12 +117,9 @@ void bindings_types(py::module_ &m) {
 
   py::class_<Control::TrajectoryPath>(m_types, "TrajectoryPath")
       .def(py::init<>())
-      .def_ro("x", &Control::TrajectoryPath::x,
-              py::rv_policy::reference_internal)
-      .def_ro("y", &Control::TrajectoryPath::y,
-              py::rv_policy::reference_internal)
-      .def_ro("z", &Control::TrajectoryPath::z,
-              py::rv_policy::reference_internal);
+      .def_ro("x", &Control::TrajectoryPath::x)
+      .def_ro("y", &Control::TrajectoryPath::y)
+      .def_ro("z", &Control::TrajectoryPath::z);
 
   py::class_<Control::Trajectory2D>(m_types, "Trajectory")
       .def(py::init<>())

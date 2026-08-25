@@ -16,9 +16,38 @@
 
 using namespace Kompass;
 
-// Nx3 cartesian points (row-major so a numpy (N, 3) float32 array maps
-// zero-copy); float64 or non-contiguous input converts with one copy
-using RowMatrixX3f = Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor>;
+namespace {
+// Private to file. The depth-image follower entries accept uint16 (mm) or
+// float32 (m) arrays. Templated functions with per dtype bindings below.
+template <typename DepthArray>
+bool setInitialTrackingAtPixel(Control::RGBDFollower &self, const int pixel_x,
+                               const int pixel_y, const DepthArray &depth,
+                               const std::vector<Bbox2D> &boxes,
+                               const float yaw) {
+  const auto view = toDepthView(depth);
+  py::gil_scoped_release release;
+  return self.setInitialTracking(pixel_x, pixel_y, view, boxes, yaw);
+}
+
+template <typename DepthArray>
+bool setInitialTrackingBox(Control::RGBDFollower &self, const DepthArray &depth,
+                           const Bbox2D &target_box, const float yaw) {
+  const auto view = toDepthView(depth);
+  py::gil_scoped_release release;
+  return self.setInitialTracking(view, target_box, yaw);
+}
+
+template <typename DepthArray>
+Control::TrajSearchResult getTrackingCtrlDepth(Control::RGBDFollower &self,
+                                               const DepthArray &depth,
+                                               const std::vector<Bbox2D> &boxes,
+                                               const Control::Velocity2D &vel) {
+  const auto view = toDepthView(depth);
+  // Solve without the GIL (argument conversions above still held it)
+  py::gil_scoped_release release;
+  return self.getTrackingCtrl(view, boxes, vel);
+}
+} // namespace
 
 // Control bindings submodule
 void bindings_control(py::module_ &m) {
@@ -103,10 +132,11 @@ void bindings_control(py::module_ &m) {
       .def("get_vy_cmd", &Control::Follower::getLinearVelocityCmdY)
       .def("get_omega_cmd", &Control::Follower::getAngularVelocityCmd)
       .def("get_steer_cmd", &Control::Follower::getSteeringAngleCmd)
-      .def("get_tracked_target", &Control::Follower::getTrackedTarget,
-           py::rv_policy::reference_internal)
+      .def("get_tracked_target", &Control::Follower::getTrackedTarget)
+      // NOTE: set_current_path/clear_current_path destroy the referenced Path,
+      // so return by copy to ensure no dangling pointers on python side
       .def("get_current_path", &Control::Follower::getCurrentPath,
-           py::rv_policy::reference_internal)
+           py::rv_policy::copy)
       .def("get_path_length", &Control::Follower::getPathLength)
       .def("has_path", &Control::Follower::hasPath);
 
@@ -146,8 +176,10 @@ void bindings_control(py::module_ &m) {
       .def(py::init<Control::Stanley::StanleyParameters>(),
            "Init Stanley follower with custom config")
       .def("compute_velocity_commands",
-           &Control::Stanley::computeVelocityCommand)
-      .def("execute", &Control::Stanley::execute)
+           &Control::Stanley::computeVelocityCommand,
+           py::call_guard<py::gil_scoped_release>())
+      .def("execute", &Control::Stanley::execute,
+           py::call_guard<py::gil_scoped_release>())
       .def("set_robot_wheelbase", &Control::Stanley::setWheelBase);
 
   py::class_<Control::PID, Control::Controller>(m_control, "PID")
@@ -182,12 +214,13 @@ void bindings_control(py::module_ &m) {
            (Control::Controller::Result (Control::PurePursuit::*)(
                const Path::State, const double))&Control::PurePursuit::execute,
            "Execute Pure Pursuit control step with state update",
-           py::arg("current_position"), py::arg("delta_time"))
+           py::arg("current_position"), py::arg("delta_time"),
+           py::call_guard<py::gil_scoped_release>())
       .def("execute",
            (Control::Controller::Result (Control::PurePursuit::*)(
                const double))&Control::PurePursuit::execute,
            "Execute Pure Pursuit control step (uses internal state)",
-           py::arg("delta_time"))
+           py::arg("delta_time"), py::call_guard<py::gil_scoped_release>())
       .def(
           "execute",
           [](Control::PurePursuit &self, const double dt,
@@ -201,14 +234,10 @@ void bindings_control(py::module_ &m) {
           "execute",
           [](Control::PurePursuit &self, const double dt,
              Eigen::Ref<const RowMatrixX3f> cloud) {
-            std::vector<Path::Point> points;
-            points.reserve(cloud.rows());
-            for (Eigen::Index i = 0; i < cloud.rows(); ++i) {
-              points.emplace_back(cloud(i, 0), cloud(i, 1), cloud(i, 2));
-            }
-            // Solve without the GIL (conversion above still holds it)
+            // Zero-copy reinterpret
+            const auto points = toPointSpan(cloud);
             py::gil_scoped_release release;
-            return self.execute<std::vector<Path::Point>>(dt, points);
+            return self.execute<Kompass::Span<Path::Point>>(dt, points);
           },
           "Execute Pure Pursuit with PointCloud obstacle avoidance",
           py::arg("delta_time"), py::arg("point_cloud"));
@@ -254,21 +283,31 @@ void bindings_control(py::module_ &m) {
                              const Control::LaserScan &>(
                &Control::DWA::computeVelocityCommandsSet<Control::LaserScan>),
            py::call_guard<py::gil_scoped_release>())
+      .def("compute_velocity_commands",
+           [](Control::DWA &self, const Control::Velocity2D &vel,
+              Eigen::Ref<const RowMatrixX3f> cloud)
+               -> Control::TrajSearchResult {
+             // Zero-copy reinterpret
+             const auto points = toPointSpan(cloud);
+             py::gil_scoped_release release;
+             return self.computeVelocityCommandsSet<Kompass::Span<Path::Point>>(
+                 vel, points);
+           })
       .def(
           "compute_velocity_commands",
+          // Overload for direct laserscan arrays. 1 copy of ranges/angles
+          // into the LaserScan, made after the GIL release
           [](Control::DWA &self, const Control::Velocity2D &vel,
-             Eigen::Ref<const RowMatrixX3f> cloud)
+             Eigen::Ref<const Eigen::VectorXf> ranges,
+             Eigen::Ref<const Eigen::VectorXf> angles)
               -> Control::TrajSearchResult {
-            std::vector<Path::Point> points;
-            points.reserve(cloud.rows());
-            for (Eigen::Index i = 0; i < cloud.rows(); ++i) {
-              points.emplace_back(cloud(i, 0), cloud(i, 1), cloud(i, 2));
-            }
-            // Solve without the GIL (conversion above still holds it)
             py::gil_scoped_release release;
-            return self.computeVelocityCommandsSet<std::vector<Path::Point>>(
-                vel, points);
-          })
+            const Control::LaserScan scan{Eigen::VectorXf(ranges),
+                                          Eigen::VectorXf(angles)};
+            return self.computeVelocityCommandsSet<Control::LaserScan>(vel,
+                                                                       scan);
+          },
+          py::arg("vel"), py::arg("ranges"), py::arg("angles"))
       .def("add_custom_cost",
            &Control::DWA::addCustomCost) // Custom cost function for DWA planner
                                          // of type (f(Trajectory2D, Path::Path)
@@ -278,13 +317,10 @@ void bindings_control(py::module_ &m) {
            // Overload for Nx3 cartesian points
            [](Control::DWA &self, const Control::Velocity2D &vel,
               Eigen::Ref<const RowMatrixX3f> cloud, const bool drop) {
-             std::vector<Path::Point> points;
-             points.reserve(cloud.rows());
-             for (Eigen::Index i = 0; i < cloud.rows(); ++i) {
-               points.emplace_back(cloud(i, 0), cloud(i, 1), cloud(i, 2));
-             }
+             // Zero-copy reinterpret
+             const auto points = toPointSpan(cloud);
              py::gil_scoped_release release;
-             return self.debugVelocitySearch<std::vector<Path::Point>>(
+             return self.debugVelocitySearch<Kompass::Span<Path::Point>>(
                  vel, points, drop);
            })
       .def("debug_velocity_search",
@@ -293,6 +329,18 @@ void bindings_control(py::module_ &m) {
                              const Control::LaserScan &, const bool &>(
                &Control::DWA::debugVelocitySearch<Control::LaserScan>),
            py::call_guard<py::gil_scoped_release>())
+      .def("debug_velocity_search",
+           // Overload for direct laserscan arrays. 1 copy of ranges/angles
+           // into the LaserScan, made after the GIL release
+           [](Control::DWA &self, const Control::Velocity2D &vel,
+              Eigen::Ref<const Eigen::VectorXf> ranges,
+              Eigen::Ref<const Eigen::VectorXf> angles, const bool drop) {
+             py::gil_scoped_release release;
+             const Control::LaserScan scan{Eigen::VectorXf(ranges),
+                                           Eigen::VectorXf(angles)};
+             return self.debugVelocitySearch<Control::LaserScan>(vel, scan,
+                                                                 drop);
+           })
       .def("set_resolution", &Control::DWA::resetOctreeResolution);
 
   // Vision Follower
@@ -309,8 +357,8 @@ void bindings_control(py::module_ &m) {
       .def("reset_target", &Control::RGBFollower::resetTarget)
       .def("get_ctrl", &Control::RGBFollower::getCtrl)
       .def("get_errors", &Control::RGBFollower::getErrors)
-      .def("run", &Control::RGBFollower::run,
-           py::arg("detection") = py::none());
+      .def("run", &Control::RGBFollower::run, py::arg("detection") = py::none(),
+           py::call_guard<py::gil_scoped_release>());
 
   // Vision DWA
   py::class_<Control::RGBDFollower::RGBDFollowerConfig,
@@ -340,31 +388,55 @@ void bindings_control(py::module_ &m) {
                &Control::RGBDFollower::setInitialTracking),
            py::arg("pixel_x"), py::arg("pixel_y"), py::arg("detected_boxes_3d"),
            py::arg("robot_orientation") = 0.0)
-      .def("set_initial_tracking",
-           py::overload_cast<const int, const int,
-                             const Eigen::MatrixX<unsigned short> &,
-                             const std::vector<Bbox2D> &, const float>(
-               &Control::RGBDFollower::setInitialTracking),
+      // Depth image binds as a zero-copy 2-D view (uint16 mm or float32 m,
+      // C-contiguous); one typed overload per dtype, sharing one template
+      .def("set_initial_tracking", &setInitialTrackingAtPixel<DepthArrayU16>,
            py::arg("pixel_x"), py::arg("pixel_y"),
            py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
            py::arg("robot_orientation") = 0.0)
-      .def("set_initial_tracking",
-           py::overload_cast<const Eigen::MatrixX<unsigned short> &,
-                             const Bbox2D &, const float>(
-               &Control::RGBDFollower::setInitialTracking),
+      .def("set_initial_tracking", &setInitialTrackingAtPixel<DepthArrayF32>,
+           py::arg("pixel_x"), py::arg("pixel_y"),
+           py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
+           py::arg("robot_orientation") = 0.0)
+      .def("set_initial_tracking", &setInitialTrackingBox<DepthArrayU16>,
+           py::arg("aligned_depth_image"), py::arg("target_box_2d"),
+           py::arg("robot_orientation") = 0.0)
+      .def("set_initial_tracking", &setInitialTrackingBox<DepthArrayF32>,
            py::arg("aligned_depth_image"), py::arg("target_box_2d"),
            py::arg("robot_orientation") = 0.0)
       .def("get_errors", &Control::RGBDFollower::getErrors)
+      // NOTE:The C++ class also inherits RGBFollower (nanobind doesn't cover
+      // multiple inheritence), so the RGBFollower interface is re-bound here
+      // through lambdas as follows
+      .def(
+          "reset_target",
+          [](Control::RGBDFollower &self, const Bbox2D &tracking) {
+            self.resetTarget(tracking);
+          },
+          py::arg("tracking"))
+      .def("get_ctrl",
+           [](const Control::RGBDFollower &self)
+               -> const Control::TrajectoryVelocities2D & {
+             return self.getCtrl();
+           })
+      .def(
+          "run",
+          [](Control::RGBDFollower &self,
+             const std::optional<Bbox2D> &detection) {
+            return self.run(detection);
+          },
+          py::arg("detection") = py::none(),
+          py::call_guard<py::gil_scoped_release>())
       .def("get_tracking_ctrl",
            py::overload_cast<const std::vector<Bbox3D> &,
                              const Control::Velocity2D &>(
                &Control::RGBDFollower::getTrackingCtrl),
-           py::arg("detected_boxes_3d"), py::arg("robot_velocity"))
-      .def("get_tracking_ctrl",
-           py::overload_cast<const Eigen::MatrixX<unsigned short> &,
-                             const std::vector<Bbox2D> &,
-                             const Control::Velocity2D &>(
-               &Control::RGBDFollower::getTrackingCtrl),
+           py::arg("detected_boxes_3d"), py::arg("robot_velocity"),
+           py::call_guard<py::gil_scoped_release>())
+      .def("get_tracking_ctrl", &getTrackingCtrlDepth<DepthArrayU16>,
+           py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
+           py::arg("robot_velocity"))
+      .def("get_tracking_ctrl", &getTrackingCtrlDepth<DepthArrayF32>,
            py::arg("aligned_depth_image"), py::arg("detected_boxes_2d"),
            py::arg("robot_velocity"));
 }

@@ -1,17 +1,10 @@
 from enum import IntEnum
 from typing import Any, Tuple
 
+from kompass_cpp.mapping import OCCUPANCY_TYPE
 from .pose import PoseData
 
-
-class OCCUPANCY_TYPE(IntEnum):
-    """
-    Integer Enum to represent the occupancy status on a grid
-    """
-
-    UNEXPLORED = -1
-    EMPTY = 0
-    OCCUPIED = 100
+__all__ = ["OCCUPANCY_TYPE", "OBSTACLE_TYPE", "ObstaclesData"]
 
 
 class OBSTACLE_TYPE(IntEnum):

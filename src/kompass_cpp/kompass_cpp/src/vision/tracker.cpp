@@ -38,6 +38,7 @@ FeatureBasedBboxTracker::FeatureBasedBboxTracker(const float &time_step,
 
   stateKalmanFilter_ = std::make_unique<LinearSSKalmanFilter>(StateSize, 1);
   stateKalmanFilter_->setup(A, B, Err, H, Err);
+  measurement_.resize(StateSize, 1);
 }
 
 bool FeatureBasedBboxTracker::setInitialTracking(const TrackedBbox3D &bBox) {
@@ -75,14 +76,14 @@ bool FeatureBasedBboxTracker::setInitialTracking(const Bbox3D &bBox,
 bool FeatureBasedBboxTracker::setInitialTracking(
     const int &pose_x_img, const int &pose_y_img,
     const std::vector<Bbox3D> &detected_boxes, const float yaw) {
-  std::unique_ptr<Bbox3D> target_box;
   // Find a detected box containing the point
-  for (auto box : detected_boxes) {
+  const Bbox3D *target_box = nullptr;
+  for (const auto &box : detected_boxes) {
     auto limits_x = box.getXLimitsImg();
     if (pose_x_img >= limits_x(0) and pose_x_img <= limits_x(1)) {
       auto limits_y = box.getYLimitsImg();
       if (pose_y_img >= limits_y(0) and pose_y_img <= limits_y(1)) {
-        target_box = std::make_unique<Bbox3D>(box);
+        target_box = &box;
         break;
       }
     }
@@ -102,26 +103,26 @@ bool FeatureBasedBboxTracker::trackerInitialized() const {
 }
 
 void FeatureBasedBboxTracker::updateTrackedBoxState(const int numberSteps) {
-  Eigen::MatrixXf measurement;
-  measurement.resize(StateSize, 1);
-  measurement(0) = trackedBox_->box.center.x();
-  measurement(1) = trackedBox_->box.center.y();
-  measurement(2) = trackedBox_->yaw();
-  measurement(3) = trackedBox_->vel.x();
-  measurement(4) = trackedBox_->vel.y();
-  measurement(5) = trackedBox_->omega();
-  measurement(6) = trackedBox_->acc.x();
-  measurement(7) = trackedBox_->acc.y();
-  measurement(8) = trackedBox_->ang_acc();
-  stateKalmanFilter_->estimate(measurement, numberSteps);
+  // Fill the ctor-sized member scratch
+  measurement_(0) = trackedBox_->box.center.x();
+  measurement_(1) = trackedBox_->box.center.y();
+  measurement_(2) = trackedBox_->yaw();
+  measurement_(3) = trackedBox_->vel.x();
+  measurement_(4) = trackedBox_->vel.y();
+  measurement_(5) = trackedBox_->omega();
+  measurement_(6) = trackedBox_->acc.x();
+  measurement_(7) = trackedBox_->acc.y();
+  measurement_(8) = trackedBox_->ang_acc();
+  stateKalmanFilter_->estimate(measurement_, numberSteps);
 }
 
 bool FeatureBasedBboxTracker::updateTracking(
     const std::vector<Bbox3D> &detected_boxes) {
-  std::vector<Bbox3D> label_boxes;
-  for(auto box : detected_boxes) {
-    if(box.label == trackedLabel_) {
-      label_boxes.push_back(box);
+  // each candidate carries a pc_points vector and a label string
+  std::vector<const Bbox3D *> label_boxes;
+  for (const auto &box : detected_boxes) {
+    if (box.label == trackedLabel_) {
+      label_boxes.push_back(&box);
     }
   }
   if (label_boxes.empty()) {
@@ -130,13 +131,13 @@ bool FeatureBasedBboxTracker::updateTracking(
   }
 
   float max_similarity_score = 0.0f; // Similarity score
-  Bbox3D * found_box;
-  float dt = label_boxes[0].timestamp - trackedBox_->box.timestamp;
+  const Bbox3D *found_box = nullptr;
+  float dt = label_boxes[0]->timestamp - trackedBox_->box.timestamp;
 
   if(label_boxes.size() == 1) {
     // Only one box detected, so it is the same
     max_similarity_score = 1.0f;
-    found_box = &label_boxes[0];
+    found_box = label_boxes[0];
   }
   else{
     // Compute similarity score and find box
@@ -149,8 +150,8 @@ bool FeatureBasedBboxTracker::updateTracking(
     FeaturesVector detected_boxes_feature_vec;
     size_t similar_box_idx = 0, count = 0;
 
-    for (auto box : label_boxes) {
-      detected_boxes_feature_vec = extractFeatures(box);
+    for (const Bbox3D *box : label_boxes) {
+      detected_boxes_feature_vec = extractFeatures(*box);
       FeaturesVector error_vec = detected_boxes_feature_vec - ref_box_features;
       // Error vector normalization
       for (int i = 0; i < error_vec.size(); ++i) {
@@ -166,7 +167,7 @@ bool FeatureBasedBboxTracker::updateTracking(
       }
       count++;
     }
-    found_box = &label_boxes[similar_box_idx];
+    found_box = label_boxes[similar_box_idx];
   }
 
   if (max_similarity_score > minAcceptedSimilarityScore_) {
@@ -210,13 +211,6 @@ FeatureBasedBboxTracker::extractFeatures(const Bbox3D &bBox) const {
   return features_vec;
 }
 
-std::optional<TrackedBbox3D> FeatureBasedBboxTracker::getRawTracking() const {
-  if (trackedBox_) {
-    return *trackedBox_;
-  }
-  return std::nullopt;
-}
-
 std::optional<Eigen::MatrixXf>
 FeatureBasedBboxTracker::getTrackedState() const {
   if (trackedBox_) {
@@ -240,13 +234,13 @@ Eigen::Vector3f FeatureBasedBboxTracker::computePointsStdDev(
   // compute the mean in each direction
   auto size = std::max(int(pc_points.size() - 1), 1);
   Eigen::Vector3f mean = Eigen::Vector3f::Zero();
-  for (auto point : pc_points) {
+  for (const auto &point : pc_points) {
     mean += point;
   }
   mean /= size;
   // Compute the variance
   Eigen::Vector3f variance = Eigen::Vector3f::Zero();
-  for (auto point : pc_points) {
+  for (const auto &point : pc_points) {
     auto diff = point - mean;
     variance += diff.cwiseProduct(diff);
   }

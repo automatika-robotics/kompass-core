@@ -4,7 +4,6 @@
 #include "datatypes/parameter.h"
 #include "datatypes/tracking.h"
 #include "datatypes/trajectory.h"
-#include <memory>
 #include <optional>
 #include <queue>
 
@@ -74,9 +73,9 @@ public:
 
   void resetTarget(const Bbox2D &tracking);
 
-  bool run(const std::optional<Bbox2D> tracking);
+  bool run(const std::optional<Bbox2D> &tracking);
 
-  const TrajectoryVelocities2D getCtrl() const;
+  const TrajectoryVelocities2D &getCtrl() const;
 
   Eigen::Vector2f getErrors() const {
     return Eigen::Vector2f(dist_error_, orientation_error_);
@@ -88,7 +87,9 @@ protected:
   double recorded_search_time_ = 0.0, recorded_wait_time_ = 0.0;
   std::queue<Eigen::Vector3d> search_commands_queue_;
   Eigen::Vector3d search_command_;
-  std::unique_ptr<Bbox2D> last_tracking_ = nullptr;
+  // Last seen tracking
+  Bbox2D last_tracking_;
+  bool has_last_tracking_ = false;
   float dist_error_ = 0.0f, orientation_error_ = 0.0f;
 
   void generateSearchCommands(float total_rotation, float search_radius,
@@ -99,6 +100,9 @@ protected:
 private:
   RGBFollowerConfig config_;
   TrajectoryVelocities2D out_vel_;
+  // Search/wait outputs built once at construction and reused every tick
+  TrajectoryVelocities2D search_vel_;
+  TrajectoryVelocities2D wait_vel_;
 
   void trackTarget(const Bbox2D &tracking);
   //

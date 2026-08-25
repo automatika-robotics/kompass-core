@@ -328,7 +328,7 @@ TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
 std::unique_ptr<TrajectorySamples2D>
 TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
                                         const Path::State &current_pose,
-                                        const std::vector<Path::Point> &cloud) {
+                                        Span<Path::Point> cloud) {
   collChecker->updateState(current_pose);
   // Pin the cloud to the pose it was captured at (see the LaserScan overload)
   collChecker->updateSensorData(cloud, current_pose);
