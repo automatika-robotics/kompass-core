@@ -362,21 +362,21 @@ class VisionRGBDFollower(ControllerTemplate):
     # Prepare detections + depth image
     bbox = Bbox2D(top_left_corner=np.array([200, 150]), size=np.array([50, 100]))
     bbox.set_img_size(np.array([640, 480]))
-    aligned_depth_image = np.zeros((480, 640), dtype=np.uint16)  # mm depth
+    depth_image = np.zeros((480, 640), dtype=np.uint16)  # mm depth
     robot_state = RobotState(x=0.0, y=0.0, yaw=0.0, speed=0.0)
 
     # Initialize target tracking
     controller.set_initial_tracking_2d_target(
         current_state=robot_state,
         target_box=bbox,
-        aligned_depth_image=aligned_depth_image,
+        depth_image=depth_image,
     )
 
     # Run one control step
     success = controller.loop_step(
         current_state=robot_state,
         detections_2d=[bbox],
-        depth_image=aligned_depth_image,
+        depth_image=depth_image,
     )
 
     # Access control outputs
@@ -478,7 +478,7 @@ class VisionRGBDFollower(ControllerTemplate):
         self,
         current_state: RobotState,
         target_box: Bbox2D,
-        aligned_depth_image: Optional[np.ndarray] = None,
+        depth_image: Optional[np.ndarray] = None,
         *,
         data: Optional[np.ndarray] = None,
         point_step: Optional[int] = None,
@@ -501,9 +501,9 @@ class VisionRGBDFollower(ControllerTemplate):
         :type current_state: RobotState
         :param target_box: 2D bounding box of the target
         :type target_box: Bbox2D
-        :param aligned_depth_image: Aligned depth image (uint16 millimeters or
+        :param depth_image: Aligned depth image (uint16 millimeters or
             float32 meters)
-        :type aligned_depth_image: Optional[np.ndarray]
+        :type depth_image: Optional[np.ndarray]
         :param data: Raw PointCloud2 buffer of a point cloud, the alternative
             depth source. The layout keywords mirror the sensor_msgs/PointCloud2
             message and are the same the local mapper's
@@ -529,7 +529,7 @@ class VisionRGBDFollower(ControllerTemplate):
         :rtype: bool
         """
         depth_source = _depth_source(
-            aligned_depth_image,
+            depth_image,
             data,
             point_step=point_step,
             row_step=row_step,
@@ -591,7 +591,7 @@ class VisionRGBDFollower(ControllerTemplate):
         pose_x_img: int,
         pose_y_img: int,
         detected_boxes: List[Bbox2D],
-        aligned_depth_image: Optional[np.ndarray] = None,
+        depth_image: Optional[np.ndarray] = None,
         *,
         data: Optional[np.ndarray] = None,
         point_step: Optional[int] = None,
@@ -619,9 +619,9 @@ class VisionRGBDFollower(ControllerTemplate):
         :type pose_y_img: int
         :param detected_boxes: List of 2D detection bounding boxes
         :type detected_boxes: List[Bbox2D]
-        :param aligned_depth_image: Aligned depth image (uint16 millimeters or
+        :param depth_image: Aligned depth image (uint16 millimeters or
             float32 meters)
-        :type aligned_depth_image: Optional[np.ndarray]
+        :type depth_image: Optional[np.ndarray]
         :param data: Raw PointCloud2 buffer of a point cloud, the alternative
             depth source; the layout keywords are as in
             ``set_initial_tracking_2d_target``
@@ -630,7 +630,7 @@ class VisionRGBDFollower(ControllerTemplate):
         :rtype: bool
         """
         depth_source = _depth_source(
-            aligned_depth_image,
+            depth_image,
             data,
             point_step=point_step,
             row_step=row_step,

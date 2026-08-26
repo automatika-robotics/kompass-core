@@ -148,7 +148,7 @@ def _run_fixture(
         pose_x_img=int(case["click"]["x"]),
         pose_y_img=int(case["click"]["y"]),
         detected_boxes=detections,
-        aligned_depth_image=depth_image,
+        depth_image=depth_image,
         **(point_cloud or {}),
     )
     assert init_ok == case["expected"]["init_success"], (
@@ -312,7 +312,7 @@ def test_close_target_does_not_saturate_omega() -> None:
         pose_x_img=click_x,
         pose_y_img=click_y,
         detected_boxes=[box],
-        aligned_depth_image=depth,
+        depth_image=depth,
     )
     assert follower.loop_step(
         current_state=state, detections_2d=[box], depth_image=depth

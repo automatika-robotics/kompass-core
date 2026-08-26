@@ -119,19 +119,19 @@ void bindings_vision(py::module_ &m) {
       // typed overload per dtype x input kind, all sharing one template
       .def("compute_3d_detections",
            &compute3dDetections<DepthArrayU16, std::vector<Bbox2D>>,
-           py::arg("depth_img"), py::arg("input"), py::arg("robot_x"),
+           py::arg("depth_image"), py::arg("input"), py::arg("robot_x"),
            py::arg("robot_y"), py::arg("robot_yaw"), py::arg("robot_speed"))
       .def("compute_3d_detections",
            &compute3dDetections<DepthArrayF32, std::vector<Bbox2D>>,
-           py::arg("depth_img"), py::arg("input"), py::arg("robot_x"),
+           py::arg("depth_image"), py::arg("input"), py::arg("robot_x"),
            py::arg("robot_y"), py::arg("robot_yaw"), py::arg("robot_speed"))
       .def("compute_3d_detections",
            &compute3dDetections<DepthArrayU16, PointsOfInterest>,
-           py::arg("depth_img"), py::arg("input"), py::arg("robot_x"),
+           py::arg("depth_image"), py::arg("input"), py::arg("robot_x"),
            py::arg("robot_y"), py::arg("robot_yaw"), py::arg("robot_speed"))
       .def("compute_3d_detections",
            &compute3dDetections<DepthArrayF32, PointsOfInterest>,
-           py::arg("depth_img"), py::arg("input"), py::arg("robot_x"),
+           py::arg("depth_image"), py::arg("input"), py::arg("robot_x"),
            py::arg("robot_y"), py::arg("robot_yaw"), py::arg("robot_speed"))
       .def("set_point_cloud_sensor", &DepthDetector::setPointCloudSensor,
            py::arg("sensor"),

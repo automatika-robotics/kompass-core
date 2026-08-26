@@ -259,7 +259,7 @@ def test_rgbd_follower_boundary_does_not_scale_with_image_size():
         pose_x_img=x0 + _BOX_SIZE // 2,
         pose_y_img=y0 + _BOX_SIZE // 2,
         detected_boxes=[_target_box(640, 480)],
-        aligned_depth_image=small,
+        depth_image=small,
     )
 
     clock = itertools.count(1)
