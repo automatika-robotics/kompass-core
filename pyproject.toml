@@ -52,8 +52,6 @@ build-dir = "build/{wheel_tag}"
 wheel.py-api = "cp312"
 # Min cmake version
 cmake.version = ">=3.5.0"
-# Fast build
-build.tool-args = ["-j8"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -131,4 +129,4 @@ manylinux-aarch64-image = "manylinux_2_28"
 
 [tool.cibuildwheel.linux]
 before-all = "bash build_dependencies/install_linux.sh"
-environment = { SKBUILD_CMAKE_DEFINE = "CMAKE_TOOLCHAIN_FILE=/project/conan_build/conan_toolchain.cmake" }
+environment = { SKBUILD_CMAKE_DEFINE = "CMAKE_TOOLCHAIN_FILE=/project/conan_build/conan_toolchain.cmake", CMAKE_BUILD_PARALLEL_LEVEL = "$(nproc)" }
