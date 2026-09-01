@@ -446,6 +446,8 @@ class VisionRGBDFollower(ControllerTemplate):
         # Init the following result
         self._result = SamplingControlResult()
         self._end_of_ctrl_horizon: int = max(self._config.control_horizon, 1)
+        # Becomes True once the core tracker holds an initial target
+        self._tracking_initialized = False
         logging.info("RGBDFollower CONTROLLER IS READY")
 
     def set_camera_intrinsics(self, fx: float, fy: float, cx: float, cy: float) -> None:
@@ -473,6 +475,14 @@ class VisionRGBDFollower(ControllerTemplate):
         :type sensor: SensorConfig
         """
         self._planner.set_point_cloud_sensor(sensor)
+
+    def _note_initial_tracking(self, ok: bool) -> bool:
+        """Record a successful initial tracking so later ticks without depth
+        are treated as observation gaps. A failed re-initialization leaves the
+        core tracker (and the flag) as it was."""
+        if ok:
+            self._tracking_initialized = True
+        return ok
 
     def set_initial_tracking_2d_target(
         self,
@@ -557,11 +567,17 @@ class VisionRGBDFollower(ControllerTemplate):
             yaw = current_state.yaw if current_state else 0.0
             if isinstance(depth_source, dict):
                 # point cloud
-                return self._planner.set_initial_tracking(
-                    **depth_source, target_box_2d=target_box, robot_orientation=yaw
+                return self._note_initial_tracking(
+                    self._planner.set_initial_tracking(
+                        **depth_source,
+                        target_box_2d=target_box,
+                        robot_orientation=yaw,
+                    )
                 )
             # depth image
-            return self._planner.set_initial_tracking(depth_source, target_box, yaw)
+            return self._note_initial_tracking(
+                self._planner.set_initial_tracking(depth_source, target_box, yaw)
+            )
 
         except Exception as e:
             logging.error(f"Could not set initial tracking state: {e}")
@@ -659,16 +675,20 @@ class VisionRGBDFollower(ControllerTemplate):
                 yaw = current_state.yaw if current_state else 0.0
                 if isinstance(depth_source, dict):
                     # point cloud
-                    return self._planner.set_initial_tracking(
-                        pose_x_img,
-                        pose_y_img,
-                        **depth_source,
-                        detected_boxes_2d=detected_boxes,
-                        robot_orientation=yaw,
+                    return self._note_initial_tracking(
+                        self._planner.set_initial_tracking(
+                            pose_x_img,
+                            pose_y_img,
+                            **depth_source,
+                            detected_boxes_2d=detected_boxes,
+                            robot_orientation=yaw,
+                        )
                     )
                 # depth image
-                return self._planner.set_initial_tracking(
-                    pose_x_img, pose_y_img, depth_source, detected_boxes, yaw
+                return self._note_initial_tracking(
+                    self._planner.set_initial_tracking(
+                        pose_x_img, pose_y_img, depth_source, detected_boxes, yaw
+                    )
                 )
             logging.error(
                 "Could not set initial tracking state: No detections are provided"
@@ -699,7 +719,10 @@ class VisionRGBDFollower(ControllerTemplate):
 
         The 2D detections are lifted to 3D through exactly one depth source:
         an aligned depth image or a point cloud given as its PointCloud2
-        layout. Without either the step is skipped.
+        layout. A tick without either counts as an observation gap once
+        tracking has started: the follower holds or searches per its
+        wait/search configuration and only reports failure when that recovery
+        is exhausted. Before tracking has started such a tick is skipped.
 
         In global mode (``_use_local_coordinates=False``) ``current_state`` is
         **mandatory** — it is used by the depth detector (world-frame
@@ -735,8 +758,8 @@ class VisionRGBDFollower(ControllerTemplate):
             y_offset=y_offset,
             z_offset=z_offset,
         )
-        if depth_source is None:
-            # No depth this tick, skip.
+        if depth_source is None and not self._tracking_initialized:
+            # No depth and no target to recover: nothing to do this tick.
             logging.debug(
                 "RGBDFollower loop_step called without a depth image or a point cloud"
             )
@@ -765,7 +788,13 @@ class VisionRGBDFollower(ControllerTemplate):
 
         try:
             robot_velocity = robot_cmd or self._last_cmd
-            if isinstance(depth_source, dict):
+            if depth_source is None:
+                # No depth this tick, report an observation gap so the
+                # follower's own wait/search recovery decides the outcome
+                self._result = self._planner.get_tracking_ctrl(
+                    [], robot_velocity
+                )
+            elif isinstance(depth_source, dict):
                 # point cloud
                 self._result = self._planner.get_tracking_ctrl(
                     **depth_source,
