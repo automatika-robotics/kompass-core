@@ -21,6 +21,7 @@ import itertools
 import time
 
 import numpy as np
+import pytest
 
 from kompass_cpp.mapping import LocalMapper as LocalMapperCpp
 from kompass_cpp.types import RobotGeometry, SensorConfig, SensorInputType
@@ -351,3 +352,45 @@ def test_rgbd_follower_point_cloud_accepts_readonly_buffer():
     )
     box.timestamp = 0.1
     assert follower.loop_step(current_state=state, detections_2d=[box], **cloud)
+
+
+def test_depth_image_dtype_binds_its_own_overload_and_is_never_cast():
+    """The uint16 and float32 depth-image overloads differ only by dtype, so
+    the depth argument is bound noconvert. Without it, any call that needs an
+    implicit conversion elsewhere (an int for a float argument, say) drops to
+    nanobind's converting pass, where the uint16 overload -- registered first
+    -- accepts a float32 image by casting it: metres truncated to integers,
+    then read as millimetres. So a float32 image must lift the same whatever
+    the other arguments look like, and a dtype or layout matching neither
+    overload must be refused rather than silently copied."""
+    detector = DepthDetector(
+        np.array([0.1, 10.0], dtype=np.float32),  # depth range
+        np.array([0.0, 0.0, 0.0], dtype=np.float32),  # camera translation
+        np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32),  # camera rotation
+        np.array([500.0, 500.0], dtype=np.float32),  # focal length
+        np.array([320.0, 240.0], dtype=np.float32),  # principal point
+        1e-3,  # mm -> m, applies to the uint16 path only
+    )
+    box = _target_box(640, 480)
+    metres = np.zeros((480, 640), dtype=np.float32)
+    x0, y0 = _BOX_CORNER
+    metres[y0 : y0 + _BOX_SIZE, x0 : x0 + _BOX_SIZE] = 2.5
+
+    exact = detector.compute_3d_detections(metres, [box], 0.0, 0.0, 0.0, 0.0)
+    # robot_x as an int forces the converting pass. A cast to uint16 would
+    # read the box as 2 mm, below the depth range, and lift nothing at all.
+    converted_elsewhere = detector.compute_3d_detections(
+        metres, [box], 0, 0.0, 0.0, 0.0
+    )
+    assert exact and converted_elsewhere, "the float32 image was not lifted"
+    np.testing.assert_allclose(converted_elsewhere[0].center, exact[0].center)
+    assert np.linalg.norm(exact[0].center) == pytest.approx(2.5, abs=0.05)
+
+    # Neither overload matches: refuse instead of copying into one of them
+    for unsupported in (
+        metres.astype(np.float64),
+        metres.astype(np.int32),
+        np.repeat(metres, 2, axis=1)[:, ::2],  # right shape, not contiguous
+    ):
+        with pytest.raises(TypeError):
+            detector.compute_3d_detections(unsupported, [box], 0.0, 0.0, 0.0, 0.0)

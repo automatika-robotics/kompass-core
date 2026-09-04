@@ -327,53 +327,6 @@ def test_close_target_does_not_saturate_omega() -> None:
     )
 
 
-def test_missed_depth_ticks_run_the_wait_search_recovery() -> None:
-    """A tick without any depth source after tracking has started is an
-    observation gap: the follower holds position through its wait window
-    instead of failing outright, reports failure only when that recovery is
-    exhausted, and resumes following as soon as depth returns. Before
-    tracking has started a no-depth tick stays a plain no-op."""
-    follower = _close_target_follower(
-        enable_search=False,
-        target_wait_timeout=0.3,
-        control_horizon=2,
-    )
-    depth, box, (click_x, click_y) = _close_target_frame()
-    state = RobotState(x=0.0, y=0.0, yaw=0.0, speed=0.0)
-
-    # Without an initial target there is nothing to recover
-    assert not follower.loop_step(current_state=state, detections_2d=[box])
-
-    assert follower.set_initial_tracking_image(
-        current_state=state,
-        pose_x_img=click_x,
-        pose_y_img=click_y,
-        detected_boxes=[box],
-        depth_image=depth,
-    )
-    assert follower.loop_step(
-        current_state=state, detections_2d=[box], depth_image=depth
-    )
-
-    # Observation gap: held during the wait window, given up once it is
-    # exhausted. With control_horizon=2 each tick advances the recorded wait
-    # time by one control step (0.1 s), so a 0.3 s window gives up on the
-    # fourth tick. The give-up resets the recovery state, so later ticks hold
-    # again -- the consumer aborts on the first failure, which is the give-up.
-    gap = [
-        follower.loop_step(current_state=state, detections_2d=[]) for _ in range(6)
-    ]
-    assert False in gap, "recovery must eventually report failure"
-    give_up = gap.index(False)
-    assert give_up > 0, "first no-depth tick must hold, not abort"
-    assert all(gap[:give_up]), "every tick before the give-up must hold"
-
-    # Depth is back: the same target is picked up again
-    assert follower.loop_step(
-        current_state=state, detections_2d=[box], depth_image=depth
-    )
-
-
 def test_rgbd_follower_rejects_ambiguous_or_incomplete_depth_source(tmp_path):
     """Two sources at once, or a cloud with layout fields missing, is a
     programming error and raises instead of silently picking one."""

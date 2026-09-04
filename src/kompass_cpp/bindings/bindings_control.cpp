@@ -432,17 +432,17 @@ void bindings_control(py::module_ &m) {
       // C-contiguous); one typed overload per dtype, sharing one template
       .def("set_initial_tracking", &setInitialTrackingAtPixel<DepthArrayU16>,
            py::arg("pixel_x"), py::arg("pixel_y"),
-           py::arg("depth_image"), py::arg("detected_boxes_2d"),
+           py::arg("depth_image").noconvert(), py::arg("detected_boxes_2d"),
            py::arg("robot_orientation") = 0.0)
       .def("set_initial_tracking", &setInitialTrackingAtPixel<DepthArrayF32>,
            py::arg("pixel_x"), py::arg("pixel_y"),
-           py::arg("depth_image"), py::arg("detected_boxes_2d"),
+           py::arg("depth_image").noconvert(), py::arg("detected_boxes_2d"),
            py::arg("robot_orientation") = 0.0)
       .def("set_initial_tracking", &setInitialTrackingBox<DepthArrayU16>,
-           py::arg("depth_image"), py::arg("target_box_2d"),
+           py::arg("depth_image").noconvert(), py::arg("target_box_2d"),
            py::arg("robot_orientation") = 0.0)
       .def("set_initial_tracking", &setInitialTrackingBox<DepthArrayF32>,
-           py::arg("depth_image"), py::arg("target_box_2d"),
+           py::arg("depth_image").noconvert(), py::arg("target_box_2d"),
            py::arg("robot_orientation") = 0.0)
       .def("set_point_cloud_sensor",
            &Control::RGBDFollower::setPointCloudSensor, py::arg("sensor"),
@@ -492,10 +492,10 @@ void bindings_control(py::module_ &m) {
            py::call_guard<py::gil_scoped_release>())
       // Depth Array variants
       .def("get_tracking_ctrl", &getTrackingCtrlDepth<DepthArrayU16>,
-           py::arg("depth_image"), py::arg("detected_boxes_2d"),
+           py::arg("depth_image").noconvert(), py::arg("detected_boxes_2d"),
            py::arg("robot_velocity"))
       .def("get_tracking_ctrl", &getTrackingCtrlDepth<DepthArrayF32>,
-           py::arg("depth_image"), py::arg("detected_boxes_2d"),
+           py::arg("depth_image").noconvert(), py::arg("detected_boxes_2d"),
            py::arg("robot_velocity"))
       // Point-cloud variant
       .def("get_tracking_ctrl", &getTrackingCtrlCloud, py::arg("data"),

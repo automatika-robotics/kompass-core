@@ -116,23 +116,31 @@ void bindings_vision(py::module_ &m) {
 
       // --- Converter Functions ---
       // Zero-copy depth view (uint16 mm / float32 m, C-contiguous); one
-      // typed overload per dtype x input kind, all sharing one template
+      // typed overload per dtype x input kind, all sharing one template.
+      // noconvert: the overloads differ only by dtype, and nanobind's
+      // permissive pass would otherwise cast a float32 image to the uint16
+      // overload (truncating metres to integers) whenever any other argument
+      // needs converting. A mismatched dtype or layout must fail loudly.
       .def("compute_3d_detections",
            &compute3dDetections<DepthArrayU16, std::vector<Bbox2D>>,
-           py::arg("depth_image"), py::arg("input"), py::arg("robot_x"),
-           py::arg("robot_y"), py::arg("robot_yaw"), py::arg("robot_speed"))
+           py::arg("depth_image").noconvert(), py::arg("input"),
+           py::arg("robot_x"), py::arg("robot_y"), py::arg("robot_yaw"),
+           py::arg("robot_speed"))
       .def("compute_3d_detections",
            &compute3dDetections<DepthArrayF32, std::vector<Bbox2D>>,
-           py::arg("depth_image"), py::arg("input"), py::arg("robot_x"),
-           py::arg("robot_y"), py::arg("robot_yaw"), py::arg("robot_speed"))
+           py::arg("depth_image").noconvert(), py::arg("input"),
+           py::arg("robot_x"), py::arg("robot_y"), py::arg("robot_yaw"),
+           py::arg("robot_speed"))
       .def("compute_3d_detections",
            &compute3dDetections<DepthArrayU16, PointsOfInterest>,
-           py::arg("depth_image"), py::arg("input"), py::arg("robot_x"),
-           py::arg("robot_y"), py::arg("robot_yaw"), py::arg("robot_speed"))
+           py::arg("depth_image").noconvert(), py::arg("input"),
+           py::arg("robot_x"), py::arg("robot_y"), py::arg("robot_yaw"),
+           py::arg("robot_speed"))
       .def("compute_3d_detections",
            &compute3dDetections<DepthArrayF32, PointsOfInterest>,
-           py::arg("depth_image"), py::arg("input"), py::arg("robot_x"),
-           py::arg("robot_y"), py::arg("robot_yaw"), py::arg("robot_speed"))
+           py::arg("depth_image").noconvert(), py::arg("input"),
+           py::arg("robot_x"), py::arg("robot_y"), py::arg("robot_yaw"),
+           py::arg("robot_speed"))
       .def("set_point_cloud_sensor", &DepthDetector::setPointCloudSensor,
            py::arg("sensor"),
            "Describes the point-cloud sensor: mount pose in the robot body "
