@@ -299,3 +299,58 @@ BOOST_AUTO_TEST_CASE(cloud_path_matches_depth_image_path_for_pois) {
 
   checkSameBoxes(from_depth.get3dDetections(), from_cloud.get3dDetections());
 }
+
+// Every lifted box says which input it came from and how many depth readings
+// it rests on, on both paths.
+BOOST_AUTO_TEST_CASE(lifted_boxes_carry_their_provenance) {
+  const Bbox3D untouched;
+  BOOST_CHECK_EQUAL(untouched.sample_count, 0);
+  BOOST_CHECK_EQUAL(untouched.source_index, -1);
+
+  // box_a rests on a plateau in range; box_b sits beyond the depth range and
+  // is dropped
+  const Bbox2D box_a(Eigen::Vector2i{270, 190}, Eigen::Vector2i{100, 100});
+  const Bbox2D box_b(Eigen::Vector2i{50, 300}, Eigen::Vector2i{60, 40});
+  const Scene scene = makeScene({{box_a, 2000}, {box_b, 6000}});
+  const std::vector<Bbox2D> boxes{box_b, box_a};
+  const Eigen::Isometry3f camera =
+      opticalCameraPose(Eigen::Vector3f{0.0f, 0.0f, 0.0f}, 0.0f);
+
+  // The readings the image path can use: in-range pixels within the box's
+  // inclusive limits
+  int usable = 0;
+  const Eigen::Vector2i x_limits = box_a.getXLimits();
+  const Eigen::Vector2i y_limits = box_a.getYLimits();
+  for (int row = y_limits(0); row <= y_limits(1); ++row) {
+    for (int col = x_limits(0); col <= x_limits(1); ++col) {
+      const float metres = scene.depth_mm[row * kCols + col] * kDepthConversion;
+      usable += (metres >= kDepthRange(0) && metres <= kDepthRange(1)) ? 1 : 0;
+    }
+  }
+
+  DepthDetector from_depth = makeDetector(camera);
+  from_depth.updateBoxes(scene.depthView(), boxes);
+  BOOST_REQUIRE_EQUAL(from_depth.get3dDetections().size(), 1);
+  const Bbox3D &from_image = from_depth.get3dDetections()[0];
+  BOOST_CHECK_EQUAL(from_image.source_index, 1);
+  BOOST_CHECK_EQUAL(from_image.sample_count, usable);
+
+  // One point per pixel, so the cloud path rests on the same readings
+  DepthDetector from_cloud = makeDetector(camera);
+  from_cloud.setPointCloudSensor(sensorAt(camera));
+  const PackedCloud cloud = pack(scene.points);
+  from_cloud.updateBoxes(cloud.view(), boxes);
+  BOOST_REQUIRE_EQUAL(from_cloud.get3dDetections().size(), 1);
+  BOOST_CHECK_EQUAL(from_cloud.get3dDetections()[0].source_index, 1);
+  BOOST_CHECK_EQUAL(from_cloud.get3dDetections()[0].sample_count, usable);
+
+  // A points-of-interest set is one input
+  const PointsOfInterest poi(
+      {Eigen::Vector2i{300, 220}, Eigen::Vector2i{340, 260},
+       Eigen::Vector2i{320, 240}},
+      Eigen::Vector2i{kCols, kRows});
+  from_depth.updatePOIs(scene.depthView(), poi);
+  BOOST_REQUIRE_EQUAL(from_depth.get3dDetections().size(), 1);
+  BOOST_CHECK_EQUAL(from_depth.get3dDetections()[0].source_index, 0);
+  BOOST_CHECK_GT(from_depth.get3dDetections()[0].sample_count, 1);
+}

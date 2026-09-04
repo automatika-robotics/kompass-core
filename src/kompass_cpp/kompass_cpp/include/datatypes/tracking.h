@@ -142,6 +142,12 @@ struct Bbox3D {
   std::vector<Eigen::Vector3f> pc_points = {};
   float timestamp = 0.0; // Timestamp of the detection in seconds
   std::string label = "";
+  // Number of in-range pixels of an aligned depth image or cloud points projected
+  // into the 2D box. Zero for a box not produced by the detector
+  int sample_count = 0;
+  // Index of the 2D box (or points-of-interest set) in the detector input
+  // this box was lifted from. -1 for a box not produced by the detector
+  int source_index = -1;
 
   Bbox3D() {};
 

@@ -672,3 +672,78 @@ def test_point_cloud_accepts_bytes_and_readonly_buffers(
     broken = {k: v for k, v in cloud.items() if k != "z_offset"}
     with pytest.raises(TypeError):
         detector.compute_3d_detections(**broken, **args)
+
+
+# -----------------------------------------------------------------------------
+# Provenance of a lifted box: which input it came from, how much depth it rests on
+# -----------------------------------------------------------------------------
+
+
+def _box_over_the_void(center_bbox_2d):
+    """A box on pixels that carry no depth, which the detector drops."""
+    box = Bbox2D()
+    box.top_left_corner = np.array([0, 0], dtype=np.int32)
+    box.size = np.array([50, 50], dtype=np.int32)
+    box.img_size = center_bbox_2d.img_size
+    return box
+
+
+def test_boxes_keep_their_source_index_when_others_are_dropped(
+    detector, synthetic_depth_image, center_bbox_2d
+):
+    """The output is not positional, so a survivor must say which input it
+    was lifted from."""
+    results = detector.compute_3d_detections(
+        synthetic_depth_image,
+        [_box_over_the_void(center_bbox_2d), center_bbox_2d],
+        0.0, 0.0, 0.0, 0.0,
+    )
+    assert [box.source_index for box in results] == [1]
+
+
+def test_sample_count_is_the_usable_depth_inside_the_box(
+    detector, synthetic_depth_image, center_bbox_2d
+):
+    """The synthetic scene carries depth exactly inside the box, so every
+    pixel counts; a box half over the void counts half."""
+    (box,) = detector.compute_3d_detections(
+        synthetic_depth_image, [center_bbox_2d], 0.0, 0.0, 0.0, 0.0
+    )
+    w, h = center_bbox_2d.size
+    assert box.sample_count == w * h
+
+    half = Bbox2D()
+    half.top_left_corner = center_bbox_2d.top_left_corner - np.array(
+        [w // 2, 0], dtype=np.int32
+    )
+    half.size = center_bbox_2d.size
+    half.img_size = center_bbox_2d.img_size
+    (box,) = detector.compute_3d_detections(
+        synthetic_depth_image, [half], 0.0, 0.0, 0.0, 0.0
+    )
+    # the box limits are inclusive, which may add one column
+    assert box.sample_count == pytest.approx(w * h / 2, abs=h)
+
+
+def test_poi_boxes_carry_provenance(detector, synthetic_depth_image_poi, center_poi):
+    (box,) = detector.compute_3d_detections(
+        synthetic_depth_image_poi, center_poi, 0.0, 0.0, 0.0, 0.0
+    )
+    assert box.source_index == 0
+    assert box.sample_count > 1
+
+
+def test_point_cloud_boxes_carry_provenance(
+    detector, camera_params, camera_as_cloud_sensor, synthetic_depth_image, center_bbox_2d
+):
+    """Every back-projected point of the scene lands in the box, so the
+    count is the point count, and the index survives a dropped box."""
+    detector.set_point_cloud_sensor(camera_as_cloud_sensor)
+    points = _optical_points_from_depth(synthetic_depth_image, camera_params)
+    (box,) = detector.compute_3d_detections(
+        **_cloud_dict(points),
+        input=[_box_over_the_void(center_bbox_2d), center_bbox_2d],
+        robot_x=0.0, robot_y=0.0, robot_yaw=0.0, robot_speed=0.0,
+    )
+    assert box.source_index == 1
+    assert box.sample_count == len(points)

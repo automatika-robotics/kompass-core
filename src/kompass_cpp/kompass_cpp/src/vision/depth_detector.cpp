@@ -78,9 +78,10 @@ void DepthDetector::updateBoxes(const DepthImageView &aligned_depth_img,
     body_in_world_tf_ = getTransformation(robot_state.value());
   }
   boxes_.clear();
-  for (const auto &box2d : detections) {
-    auto converted_box = convert2Dboxto3Dbox(aligned_depth_img, box2d);
+  for (std::size_t i = 0; i < detections.size(); ++i) {
+    auto converted_box = convert2Dboxto3Dbox(aligned_depth_img, detections[i]);
     if (converted_box) {
+      converted_box->source_index = static_cast<int>(i);
       boxes_.push_back(std::move(converted_box.value()));
     }
   }
@@ -95,6 +96,7 @@ void DepthDetector::updatePOIs(const DepthImageView &aligned_depth_img,
   boxes_.clear();
   auto converted_box = convertPOIto3Dbox(aligned_depth_img, poi);
   if (converted_box) {
+    converted_box->source_index = 0;
     boxes_.push_back(std::move(converted_box.value()));
   }
 }
@@ -113,6 +115,7 @@ void DepthDetector::updateBoxes(const PointCloudView &cloud,
   for (std::size_t i = 0; i < detections.size(); ++i) {
     auto converted_box = boxFromDepthSamples(detections[i], cloud_samples_[i]);
     if (converted_box) {
+      converted_box->source_index = static_cast<int>(i);
       boxes_.push_back(std::move(converted_box.value()));
     }
   }
@@ -252,6 +255,7 @@ std::optional<Bbox3D>
 DepthDetector::boxFromDepthSamples(const Bbox2D &box2d,
                                    std::vector<float> &samples) {
   Bbox3D box3d(box2d);
+  box3d.sample_count = static_cast<int>(samples.size());
   if (samples.size() <= 1) {
     LOG_WARNING("Could not get any depth values for 2D bounding box at ",
                 box2d.top_corner.x(), ", ", box2d.top_corner.y());

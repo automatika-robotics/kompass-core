@@ -311,5 +311,13 @@ void bindings_types(py::module_ &m) {
       .def_rw("size_img_frame", &Bbox3D::size_img_frame)
       .def_rw("pc_points", &Bbox3D::pc_points)
       .def_rw("timestamp", &Bbox3D::timestamp)
-      .def_rw("label", &Bbox3D::label);
+      .def_rw("label", &Bbox3D::label)
+      .def_rw("sample_count", &Bbox3D::sample_count,
+              "Number of in-range pixels of an aligned depth image or cloud "
+              "points projected into the 2D box. Zero for a box not produced "
+              "by the detector"
+      .def_rw("source_index", &Bbox3D::source_index,
+              "Index of the 2D box, or points-of-interest set, in the "
+              "detector input this box was lifted from. -1 for a box "
+              "not produced by the detector");
 }
