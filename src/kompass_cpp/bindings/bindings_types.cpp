@@ -315,7 +315,7 @@ void bindings_types(py::module_ &m) {
       .def_rw("sample_count", &Bbox3D::sample_count,
               "Number of in-range pixels of an aligned depth image or cloud "
               "points projected into the 2D box. Zero for a box not produced "
-              "by the detector"
+              "by the detector")
       .def_rw("source_index", &Bbox3D::source_index,
               "Index of the 2D box, or points-of-interest set, in the "
               "detector input this box was lifted from. -1 for a box "
