@@ -4,6 +4,7 @@
 #include "utils/critical_zone_check.h"
 #include "utils/logger.h"
 #include <Eigen/Dense>
+#include <mutex>
 #include <sycl/sycl.hpp>
 #include <vector>
 
@@ -185,6 +186,9 @@ private:
   };
   std::vector<SensorDeviceState> m_sensorDev;
   size_t max_wg_size_ = 0;
+  // Mutex to make sure that two concurrent grow-and-reallocate paths dont free
+  // the same buffer or copy into a buffer the other thread just freed
+  std::mutex m_mutex;
 };
 
 } // namespace Kompass
