@@ -11,6 +11,7 @@
 #include <boost/dll/runtime_symbol_info.hpp> // for program_location
 #include <boost/filesystem.hpp>
 #include <boost/test/included/unit_test.hpp>
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -158,8 +159,10 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
 // steps, a 5 s rollout and a speed grid whose smallest speed (0.2 m/s)
 // travels 0.9 m, twice the distance to the goal. Every straight grid sample
 // overshoots, so only the stop sample and the creep speed can end near the
-// goal. The controller must reach it with forward motion only: no reverse,
-// turning, or overshoot.
+// goal, and with the horizon capped at the goal the grid speeds can end on
+// it too. The controller must reach it with forward motion only: no
+// reverse, turning, or overshoot, and within a few steps rather than by
+// creeping the whole way.
 BOOST_AUTO_TEST_CASE(test_DWA_creeps_onto_a_close_goal) {
   std::vector<Path::Point> points{Path::Point(0.0, 0.0, 0.0),
                                   Path::Point(1.5, 0.0, 0.0),
@@ -235,6 +238,99 @@ BOOST_AUTO_TEST_CASE(test_DWA_creeps_onto_a_close_goal) {
   }
   BOOST_TEST(planner.isGoalReached(),
              "Goal not reached in " << counter << " steps");
+  // Four steps with the goal-aware horizon; fifteen when creeping at the
+  // minimum speed the whole way
+  BOOST_TEST(counter <= 6);
+}
+
+// The rollout horizon follows the distance left to the goal: the base
+// horizon far away, the time to reach the goal at full speed (rounded to
+// steps, never below two steps) close to it.
+BOOST_AUTO_TEST_CASE(test_DWA_horizon_caps_at_the_goal) {
+  // Reads the sampler's rollout length and the tracked remaining distance,
+  // which the planner keeps protected
+  struct Probe : Control::DWA {
+    using Control::DWA::DWA;
+    size_t rolloutPoints() const { return trajSampler->numPointsPerTrajectory; }
+    double remainingDistance() const {
+      return currentPath->totalPathLength() -
+             currentPath->getDistanceAtIndex(closestPosition->index);
+    }
+  };
+
+  std::vector<Path::Point> points{Path::Point(0.0, 0.0, 0.0),
+                                  Path::Point(5.0, 0.0, 0.0),
+                                  Path::Point(10.0, 0.0, 0.0)};
+  Path::Path path(points);
+
+  const double timeStep = 0.5;
+  const double predictionHorizon = 5.0;
+  Control::CostEvaluator::TrajectoryCostsWeights costWeights;
+  costWeights.setParameter("reference_path_distance_weight", 1.0);
+  costWeights.setParameter("goal_distance_weight", 1.0);
+  costWeights.setParameter("obstacles_distance_weight", 0.0);
+  costWeights.setParameter("smoothness_weight", 0.0);
+  costWeights.setParameter("jerk_weight", 0.0);
+  Control::LinearVelocityControlParams x_params(0.8, 5.0, 10.0, 0.05);
+  Control::LinearVelocityControlParams y_params(0.0, 0.0, 0.0, 0.0);
+  Control::AngularVelocityControlParams angular_params(M_PI, 1.5, 3.0, 3.0);
+  Control::ControlLimitsParams controlLimits(x_params, y_params,
+                                             angular_params);
+  Probe planner(controlLimits, Control::ControlType::DIFFERENTIAL_DRIVE,
+                timeStep, predictionHorizon, 2.5, 9, 10,
+                Kompass::CollisionChecker::ShapeType::CYLINDER,
+                std::vector<float>{0.2, 0.4}, Eigen::Vector3f{0.0, 0.0, 0.0},
+                Eigen::Vector4f{0, 0, 0, 1}, 0.1, costWeights, 1);
+  planner.setCurrentPath(path);
+
+  Eigen::VectorXf ranges = Eigen::VectorXf::Constant(36, 20.0f);
+  Eigen::VectorXf angles(36);
+  for (int i = 0; i < 36; ++i) {
+    angles(i) = static_cast<float>(i) * 2.0f * M_PI / 36;
+  }
+  Control::LaserScan robotScan(ranges, angles);
+
+  // The goal tolerance of the follower defaults to 0.1 m
+  const double goal_tolerance = 0.1;
+  const double v_max = 0.8;
+  auto expected_points = [&](double remaining) {
+    const double horizon = (remaining + goal_tolerance) / v_max + timeStep;
+    return Control::getNumPointsPerTrajectory(
+        timeStep, std::clamp(horizon, 3.0 * timeStep, predictionHorizon));
+  };
+
+  // Moves the robot along the path in small steps with a planning tick at
+  // each, as the follower's segment tracking follows the state tick by tick
+  // and cannot jump across segments
+  double x = 0.0;
+  auto driveTo = [&](double target_x) {
+    while (x < target_x - 1e-9) {
+      x = std::min(x + 0.25, target_x);
+      planner.setCurrentState(Path::State(x, 0.0, 0.0, 0.0));
+      planner.computeVelocityCommandsSet(Control::Velocity2D(), robotScan);
+    }
+  };
+
+  // 9.5 m from the goal: the base horizon
+  driveTo(0.5);
+  BOOST_TEST(planner.rolloutPoints() ==
+             Control::getNumPointsPerTrajectory(timeStep, predictionHorizon));
+
+  // About 2 m from the goal: the remaining path plus the tolerance at
+  // 0.8 m/s, plus one step, rounded down to whole steps
+  driveTo(8.0);
+  BOOST_TEST(planner.remainingDistance() > 1.5);
+  BOOST_TEST(planner.remainingDistance() < 2.5);
+  BOOST_TEST(planner.rolloutPoints() ==
+             expected_points(planner.remainingDistance()));
+  BOOST_TEST(planner.rolloutPoints() <
+             Control::getNumPointsPerTrajectory(timeStep, predictionHorizon));
+
+  // 0.45 m from the goal: the two-step floor
+  driveTo(9.55);
+  BOOST_TEST(planner.rolloutPoints() ==
+             expected_points(planner.remainingDistance()));
+  BOOST_TEST(planner.rolloutPoints() == 3u);
 }
 
 // DWA scenario matrix: same {robot × path × avoidance} cross-product the

@@ -375,9 +375,9 @@ TrajectorySampler::generateTrajectories(const Velocity2D &current_vel,
 }
 
 void TrajectorySampler::setPredictionHorizon(double horizon) {
-  // Clamp to at least 2 time steps so rollout has room for a finite
-  // difference, and never exceed the horizon passed at construction.
-  const double min_horizon = 2.0 * time_step_;
+  // Clamp to at least 3 points (two rollout steps) and never exceed the
+  // horizon passed at construction.
+  const double min_horizon = 3.0 * time_step_;
   if (horizon < min_horizon)
     horizon = min_horizon;
   if (horizon > base_max_time_)

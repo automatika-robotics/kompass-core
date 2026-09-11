@@ -530,8 +530,10 @@ def test_dwa_creeps_onto_a_close_goal():
     0.5 s steps, a 5 s rollout and a speed grid whose smallest speed (0.2 m/s)
     travels 0.9 m, twice the distance to the goal. Every straight grid sample
     overshoots, so only the stop sample and the creep speed can end near the
-    goal. The controller must reach it with forward motion only: no reverse,
-    no turning, no overshoot.
+    goal, and with the horizon capped at the goal the grid speeds can end on
+    it too. The controller must reach it with forward motion only: no reverse,
+    no turning, no overshoot, and within a few steps rather than by creeping
+    the whole way.
     """
     robot = Robot(
         robot_type=RobotType.DIFFERENTIAL_DRIVE,
@@ -600,6 +602,9 @@ def test_dwa_creeps_onto_a_close_goal():
         assert distance <= start_distance + 0.05, f"moved away at step {steps}"
 
     assert dwa.reached_end(), f"goal not reached in {steps} steps"
+    # Four steps with the goal-aware horizon; fifteen when creeping at the
+    # minimum speed the whole way
+    assert steps <= 6, f"took {steps} steps"
 
 
 def test_pure_pursuit(

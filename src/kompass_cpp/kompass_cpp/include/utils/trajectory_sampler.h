@@ -141,13 +141,17 @@ public:
   // Temporarily shrink the rollout horizon (e.g., when the reference path
   // has high curvature ahead and straight-tangent samples would diverge too
   // far from the arc). Updates numPointsPerTrajectory in lockstep so buffer
-  // sizing stays consistent. Clamped to >= 2 time steps and <= the sampler's
-  // originally-constructed horizon.
+  // sizing stays consistent. Clamped to >= 3 time steps (two rollout steps,
+  // the least that lets angular velocity show in the end point) and <= the
+  // sampler's originally-constructed horizon.
   void setPredictionHorizon(double horizon);
 
   // The prediction horizon the sampler was originally constructed with.
   // Callers use this as the upper bound when adapting the horizon per cycle.
   double getBasePredictionHorizon() const { return base_max_time_; }
+
+  // Duration of one rollout step, the resolution any horizon is rounded to
+  double getTimeStep() const { return time_step_; }
 
   size_t numTrajectories;
   size_t numPointsPerTrajectory;

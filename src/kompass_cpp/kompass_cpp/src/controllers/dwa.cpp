@@ -101,6 +101,7 @@ void DWA::configure(ControlLimitsParams controlLimits, ControlType controlType,
                     const double octreeRes,
                     CostEvaluator::TrajectoryCostsWeights costWeights,
                     const int maxNumThreads) {
+  ctrlimitsParams = controlLimits;
   trajSampler = std::make_unique<TrajectorySampler>(
       controlLimits, controlType, timeStep, predictionHorizon, controlHorizon,
       maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
@@ -123,6 +124,7 @@ void DWA::configure(TrajectorySampler::TrajectorySamplerParameters config,
                     const Eigen::Vector4f &sensor_rotation_body,
                     CostEvaluator::TrajectoryCostsWeights costWeights,
                     const int maxNumThreads) {
+  ctrlimitsParams = controlLimits;
   trajSampler = std::make_unique<TrajectorySampler>(
       config, controlLimits, controlType, robotShapeType, robotDimensions,
       sensor_position_body, Eigen::Quaternionf(sensor_rotation_body),
@@ -154,7 +156,7 @@ void DWA::setCurrentState(const Path::State &position) {
   this->trajSampler->updateState(position);
 }
 
-void DWA::adaptPredictionHorizonToCurvature() {
+void DWA::adaptPredictionHorizon() {
   const double base_horizon = trajSampler->getBasePredictionHorizon();
   const double v_max = ctrlimitsParams.velXParams.maxVel;
   if (!currentPath || v_max < 1e-3 || max_point_interpolation_distance_ <= 0.0) {
@@ -199,6 +201,23 @@ void DWA::adaptPredictionHorizonToCurvature() {
         std::sqrt(8.0 * curvature_horizon_tolerance_ / kappa_max) / v_max;
     adaptive_horizon = std::min(base_horizon, horizon_cap);
     LOG_DEBUG("Using Adaptive Horizon: ", adaptive_horizon);
+  }
+
+  // NOTE: Cap the horizon at the time the robot needs to reach the end of the path
+  // at full speed. With a longer rollout every sample at a useful speed
+  // overshoots the goal, and since the goal cost scores the rollout's end
+  // point the samples that curl back toward the goal would score best. The
+  // goal tolerance keeps the last steps from collapsing, and one extra step
+  // pays for the rollout's first point being the current pose.
+  const double remaining_distance =
+      std::max(0.0, static_cast<double>(currentPath->totalPathLength() -
+                                        currentPath->getDistanceAtIndex(start_idx)));
+  const double goal_horizon =
+      (remaining_distance + goal_dist_tolerance) / v_max +
+      trajSampler->getTimeStep();
+  if (goal_horizon < adaptive_horizon) {
+    adaptive_horizon = goal_horizon;
+    LOG_DEBUG("Horizon capped by the distance to the goal: ", adaptive_horizon);
   }
 
   trajSampler->setPredictionHorizon(adaptive_horizon);
