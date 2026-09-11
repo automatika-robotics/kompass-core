@@ -114,15 +114,17 @@ void bindings_control(py::module_ &m) {
   py::class_<Control::AngularVelocityControlParams>(
       m_control, "AngularVelocityControlParams")
       .def(py::init<const Control::AngularVelocityControlParams &>())
-      .def(py::init<double, double, double, double>(),
+      .def(py::init<double, double, double, double, double>(),
            py::arg("max_ang") = M_PI, py::arg("max_omega") = 0.0,
-           py::arg("max_acc") = 0.0, py::arg("max_decel") = 0.0)
+           py::arg("max_acc") = 0.0, py::arg("max_decel") = 0.0,
+           py::arg("min_omega") = 0.05)
       .def_rw("max_ang", &Control::AngularVelocityControlParams::maxAngle)
       .def_rw("max_omega", &Control::AngularVelocityControlParams::maxOmega)
       .def_rw("max_acc",
               &Control::AngularVelocityControlParams::maxAcceleration)
       .def_rw("max_decel",
-              &Control::AngularVelocityControlParams::maxDeceleration);
+              &Control::AngularVelocityControlParams::maxDeceleration)
+      .def_rw("min_omega", &Control::AngularVelocityControlParams::minOmega);
 
   py::class_<Control::ControlLimitsParams>(m_control, "ControlLimitsParams")
       .def(py::init<>())

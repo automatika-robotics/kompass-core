@@ -208,14 +208,16 @@ struct AngularVelocityControlParams {
   double maxOmega = 1.0;
   double maxAcceleration = 10.0;
   double maxDeceleration = 10.0;
+  double minOmega = 0.05; // [rad/sec]
 
   AngularVelocityControlParams(const AngularVelocityControlParams &) = default;
 
   // Parameterized constructor
   AngularVelocityControlParams(double maxAng = M_PI, double maxOmg = 1.0,
-                               double maxAcc = 10.0, double maxDec = 10.0)
+                               double maxAcc = 10.0, double maxDec = 10.0,
+                               double minOmg = 0.05)
       : maxAngle(maxAng), maxOmega(maxOmg), maxAcceleration(maxAcc),
-        maxDeceleration(maxDec) {}
+        maxDeceleration(maxDec), minOmega(minOmg) {}
 };
 
 // General Control parameters
