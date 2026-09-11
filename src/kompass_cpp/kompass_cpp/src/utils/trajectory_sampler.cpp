@@ -49,7 +49,7 @@ TrajectorySampler::TrajectorySampler(
 
   if (ctrType != ControlType::OMNI) {
     // Discard Vy limits to eliminate movement on Y axis
-    ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
+    ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0, 0.0);
   }
 
   numTrajectories =
@@ -82,7 +82,7 @@ TrajectorySampler::TrajectorySampler(
 
   if (ctrType != ControlType::OMNI) {
     // Discard Vy limits to eliminate movement on Y axis
-    ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
+    ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0, 0.0);
   }
 
   numTrajectories =
@@ -120,14 +120,48 @@ void TrajectorySampler::updateParams(TrajectorySamplerParameters config) {
   ang_samples_max_ = maxAngularSamples + 1 - (maxAngularSamples % 2);
 }
 
+const std::vector<double> &TrajectorySampler::linearSamples() {
+  lin_samples_scratch_.clear();
+  for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+    lin_samples_scratch_.push_back(vx);
+  }
+  // Stop and creep speeds, when reachable and not already on the grid
+  const double min_speed = ctrlimits.velXParams.minVel;
+  for (const double extra : {0.0, min_speed, -min_speed}) {
+    if (extra < min_vx_ || extra > max_vx_) {
+      continue;
+    }
+    bool present = false;
+    for (const double vx : lin_samples_scratch_) {
+      if (std::abs(vx - extra) < 1e-3) {
+        present = true;
+        break;
+      }
+    }
+    if (!present) {
+      lin_samples_scratch_.push_back(extra);
+    }
+  }
+  return lin_samples_scratch_;
+}
+
+void TrajectorySampler::addStopSample(
+    const Path::State &current_pose,
+    TrajectorySamples2D *admissible_velocity_trajectories) {
+  // Only executable when zero lies inside the reachable window of every axis
+  // (vy is a zero window for non-holonomic robots)
+  if (min_vx_ > 0.0 || max_vx_ < 0.0 || min_vy_ > 0.0 || max_vy_ < 0.0 ||
+      min_omega_ > 0.0 || max_omega_ < 0.0) {
+    return;
+  }
+  getAdmissibleTrajsFromVel(Velocity2D(0.0, 0.0, 0.0), current_pose,
+                            admissible_velocity_trajectories);
+}
+
 void TrajectorySampler::getAdmissibleTrajsFromVel(
     const Velocity2D &vel, const Path::State &start_pose,
     TrajectorySamples2D *admissible_velocity_trajectories) {
 
-  if (std::abs(vel.vx()) < MIN_VEL and std::abs(vel.vy()) < MIN_VEL and
-      std::abs(vel.omega()) < MIN_VEL) {
-    return;
-  }
   Path::State simulated_pose = start_pose;
   TrajectoryVelocities2D simulated_velocities(numPointsPerTrajectory);
   TrajectoryPath path(numPointsPerTrajectory);
@@ -199,7 +233,7 @@ TrajectorySampler::generateTrajectoriesNonHolonomic(
     static thread_local std::vector<std::future<void>> futures;
     futures.clear();
     futures.reserve(numTrajectories);
-    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+    for (const double vx : linearSamples()) {
       if (std::abs(vx) >= MIN_VEL) {
         for (double omega = min_omega_; omega <= max_omega_;
              omega += ang_sample_resolution_) {
@@ -217,7 +251,7 @@ TrajectorySampler::generateTrajectoriesNonHolonomic(
       f.wait();
     }
   } else {
-    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+    for (const double vx : linearSamples()) {
       if (std::abs(vx) >= MIN_VEL) {
         for (double omega = min_omega_; omega <= max_omega_;
              omega += ang_sample_resolution_) {
@@ -229,6 +263,7 @@ TrajectorySampler::generateTrajectoriesNonHolonomic(
       }
     }
   }
+  addStopSample(current_pose, admissible_velocity_trajectories.get());
   return admissible_velocity_trajectories;
 }
 
@@ -244,7 +279,7 @@ TrajectorySampler::generateTrajectoriesHolonomic(
     static thread_local std::vector<std::future<void>> futures;
     futures.clear();
     futures.reserve(numTrajectories);
-    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+    for (const double vx : linearSamples()) {
       if (std::abs(vx) >= MIN_VEL) {
         // vx, omega
         for (double omega = min_omega_; omega <= max_omega_;
@@ -275,10 +310,13 @@ TrajectorySampler::generateTrajectoriesHolonomic(
     }
   } else {
 
-    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+    for (const double vx : linearSamples()) {
       // vx, vy
       for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
-
+        if (std::abs(vx) < MIN_VEL && std::abs(vy) < MIN_VEL) {
+          // The stop sample is added once after the loops
+          continue;
+        }
         getAdmissibleTrajsFromVel(Velocity2D(vx, vy, 0.0), current_pose,
                                   admissible_velocity_trajectories.get());
       }
@@ -293,6 +331,7 @@ TrajectorySampler::generateTrajectoriesHolonomic(
       }
     }
   }
+  addStopSample(current_pose, admissible_velocity_trajectories.get());
   return admissible_velocity_trajectories;
 }
 

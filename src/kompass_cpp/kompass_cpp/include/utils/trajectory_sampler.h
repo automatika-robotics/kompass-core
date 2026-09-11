@@ -173,6 +173,7 @@ private:
   int lin_samples_y_; // split of lin_samples_max_ used for the vy axis (1 for
                       // non-holonomic robots)
   int ang_samples_max_;
+  std::vector<double> lin_samples_scratch_;  // Linear speed samples of the current tick
   double lin_sample_x_resolution_;
   double lin_sample_y_resolution_;
   double ang_sample_resolution_;
@@ -191,6 +192,21 @@ private:
    * @param config
    */
   void updateParams(TrajectorySamplerParameters config);
+
+  /**
+   * @brief Linear speed samples of the current window: the regular grid
+   * over [min_vx_, max_vx_] plus 0 and +/- the minimum speed of the x-axis
+   * control limits whenever they lie inside the window.
+   */
+  const std::vector<double> &linearSamples();
+
+  /**
+   * @brief Adds the stop sample (zero velocity): a rollout that stays at the
+   * current pose, kept when zero is inside the reachable window and the pose
+   * is collision free. Rankable by the costs, unlike a pure rotation.
+   */
+  void addStopSample(const Path::State &current_pose,
+                     TrajectorySamples2D *admissible_velocity_trajectories);
 
   /**
    * @brief Updates the range of valid velocity actions that can be reached from
