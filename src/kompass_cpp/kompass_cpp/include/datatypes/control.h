@@ -191,13 +191,15 @@ struct LinearVelocityControlParams {
   double maxVel = 1.0;
   double maxAcceleration = 10.0;
   double maxDeceleration = 10.0;
+  double minVel = 0.05;
 
   LinearVelocityControlParams(const LinearVelocityControlParams &) = default;
 
   // Parameterized constructor
   LinearVelocityControlParams(double maxVel = 1.0, double maxAcc = 10.0,
-                              double maxDec = 10.0)
-      : maxVel(maxVel), maxAcceleration(maxAcc), maxDeceleration(maxDec) {}
+                              double maxDec = 10.0, double minVel = 0.05)
+      : maxVel(maxVel), maxAcceleration(maxAcc), maxDeceleration(maxDec),
+        minVel(minVel) {}
 };
 
 // Structure for Angular Velocity Control parameters
