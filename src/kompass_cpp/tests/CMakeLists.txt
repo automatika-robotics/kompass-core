@@ -26,9 +26,9 @@ add_executable(dwa_test dwa_test.cpp)
 target_link_libraries(dwa_test PRIVATE ${MODULE_NAME} Boost::headers nlohmann_json::nlohmann_json)
 add_test(dwa_tests dwa_test)
 
-# Trajectory Sampler Test (Generate and Plot Samples)
+# Trajectory Sampler Tests (sample set checks, and plots of the samples)
 add_executable(trajectory_sampler_test trajectory_sampler_test.cpp)
-target_link_libraries(trajectory_sampler_test PRIVATE ${MODULE_NAME} nlohmann_json::nlohmann_json)
+target_link_libraries(trajectory_sampler_test PRIVATE ${MODULE_NAME} Boost::headers nlohmann_json::nlohmann_json)
 add_test(trajectory_sampler_tests trajectory_sampler_test)
 
 # Cost evaluator tests
