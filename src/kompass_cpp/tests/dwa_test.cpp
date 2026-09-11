@@ -154,6 +154,89 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
              "Goal not reached in " << counter << " steps");
 }
 
+// A goal closer than the smallest grid speed covers within the horizon: 0.5 s
+// steps, a 5 s rollout and a speed grid whose smallest speed (0.2 m/s)
+// travels 0.9 m, twice the distance to the goal. Every straight grid sample
+// overshoots, so only the stop sample and the creep speed can end near the
+// goal. The controller must reach it with forward motion only: no reverse,
+// turning, or overshoot.
+BOOST_AUTO_TEST_CASE(test_DWA_creeps_onto_a_close_goal) {
+  std::vector<Path::Point> points{Path::Point(0.0, 0.0, 0.0),
+                                  Path::Point(1.5, 0.0, 0.0),
+                                  Path::Point(3.0, 0.0, 0.0)};
+  Path::Path path(points);
+
+  const double timeStep = 0.5;
+  const double predictionHorizon = 5.0;
+  const double controlHorizon = 2.5;
+  // 9 speeds over [-0.8, 0.8]: +/-0.2, +/-0.4, +/-0.6, +/-0.8 and a zero
+  // the sampler skips, exactly the grid seen in the bag
+  const int maxLinearSamples = 9;
+  const int maxAngularSamples = 10;
+
+  Control::CostEvaluator::TrajectoryCostsWeights costWeights;
+  costWeights.setParameter("reference_path_distance_weight", 1.0);
+  costWeights.setParameter("goal_distance_weight", 1.0);
+  costWeights.setParameter("obstacles_distance_weight", 0.0);
+  costWeights.setParameter("smoothness_weight", 0.0);
+  costWeights.setParameter("jerk_weight", 0.0);
+
+  // The creep speed is the minimum speed of the x-axis limits
+  Control::LinearVelocityControlParams x_params(0.8, 5.0, 10.0, 0.05);
+  Control::LinearVelocityControlParams y_params(0.0, 0.0, 0.0, 0.0);
+  Control::AngularVelocityControlParams angular_params(M_PI, 1.5, 3.0, 3.0);
+  Control::ControlLimitsParams controlLimits(x_params, y_params,
+                                             angular_params);
+  std::vector<float> robotDimensions{0.2, 0.4};
+  const Eigen::Vector3f sensor_position_body{0.0, 0.0, 0.0};
+  const Eigen::Vector4f sensor_rotation_body{0, 0, 0, 1};
+
+  Control::DWA planner(controlLimits, Control::ControlType::DIFFERENTIAL_DRIVE,
+                       timeStep, predictionHorizon, controlHorizon,
+                       maxLinearSamples, maxAngularSamples,
+                       Kompass::CollisionChecker::ShapeType::CYLINDER,
+                       robotDimensions, sensor_position_body,
+                       sensor_rotation_body, 0.1, costWeights, 1);
+  planner.setCurrentPath(path);
+
+  // Nothing within 20 m in any direction
+  Eigen::VectorXf ranges = Eigen::VectorXf::Constant(36, 20.0f);
+  Eigen::VectorXf angles(36);
+  for (int i = 0; i < 36; ++i) {
+    angles(i) = static_cast<float>(i) * 2.0f * M_PI / 36;
+  }
+  Control::LaserScan robotScan(ranges, angles);
+
+  // 0.45 m short of the goal, facing it, at rest
+  Path::State robotState(2.55, 0.0, 0.0, 0.0);
+  Control::Velocity2D robotControl;
+  const double start_distance = 0.45;
+
+  int counter = 0;
+  while (!planner.isGoalReached() and counter < 60) {
+    counter++;
+    planner.setCurrentState(robotState);
+    Control::TrajSearchResult result =
+        planner.computeVelocityCommandsSet(robotControl, robotScan);
+    BOOST_REQUIRE_MESSAGE(result.isTrajFound,
+                          "No command found at step " << counter);
+
+    const double vx = planner.getLinearVelocityCmdX();
+    const double omega = planner.getAngularVelocityCmd();
+    BOOST_TEST_CONTEXT("step " << counter << ", x " << robotState.x) {
+      BOOST_TEST(vx >= 0.0);
+      BOOST_TEST(std::abs(omega) < 0.3);
+    }
+    // The chosen command becomes the measured velocity of the next step
+    robotControl = Control::Velocity2D(vx, 0.0, omega);
+    applyControl(robotState, robotControl, timeStep);
+    const double distance = std::hypot(3.0 - robotState.x, robotState.y);
+    BOOST_TEST(distance <= start_distance + 0.05);
+  }
+  BOOST_TEST(planner.isGoalReached(),
+             "Goal not reached in " << counter << " steps");
+}
+
 // DWA scenario matrix: same {robot × path × avoidance} cross-product the
 // PurePursuit test uses, with the same obstacle locations. Verifies DWA can
 // drive each robot type along each reference path, with and without a
