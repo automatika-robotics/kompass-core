@@ -204,7 +204,7 @@ protected:
       return TrajSearchResult{trajectory, true, 0.0};
     }
 
-    adaptPredictionHorizon();
+    adaptPredictionHorizonToCurvature();
 
     // Generate set of valid trajectories in the DW
     std::unique_ptr<TrajectorySamples2D> samples_ =
@@ -241,16 +241,14 @@ private:
 
   Path::Path::View findTrackedPathSegment();
 
-  // Adapt the sampler's rollout horizon to the path ahead. At straight
-  // sections far from the goal use the full constructor-provided horizon; as
-  // the reference curvature rises, shrink it so straight-tangent samples
-  // don't diverge from the arc by more than `kSagittaTolerance` meters (a
-  // constant-curvature arc deviates from its tangent by ~(v·T)²·κ/8, so the
-  // cap is T ≤ sqrt(8·ε/κ) / v_max). Near the end of the path shrink it to
-  // the time the robot needs to reach the goal, so the samples can end on
-  // the goal instead of overshooting it, which with an end-point goal cost
-  // would make curling back score best.
-  void adaptPredictionHorizon();
+  // Adapt the sampler's rollout horizon to local path curvature. At straight
+  // sections use the full constructor-provided horizon; as the reference
+  // curvature rises, shrink it so straight-tangent samples don't diverge
+  // from the arc by more than `kSagittaTolerance` meters (a constant-
+  // curvature arc deviates from its tangent by ~(v·T)²·κ/8, so the cap is
+  // T ≤ sqrt(8·ε/κ) / v_max). Keeps straight-tangent samples from drifting
+  // too far off the arc and flat-lining the cost gradient at tight curves.
+  void adaptPredictionHorizonToCurvature();
 
   // One-shot warmup that dispatches every cost-evaluator kernel once with a
   // dummy reference path, forcing the SYCL runtime to JIT-compile them at
