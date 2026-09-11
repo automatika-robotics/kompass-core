@@ -36,15 +36,17 @@ inline size_t getNumTrajectories(ControlType ctrType, int maxLinearSamples,
   const int angSlots = maxAngularSamples + 1 - (maxAngularSamples % 2);
   int vx_n, vy_n;
   computeLinearSampleSplit(ctrType, maxLinearSamples, vx_n, vy_n);
-  // Size for 3 extra linear speeds (0 and +/- the minimum speed), each with the
-  // full angular fan, plus the single stop sample added by the "+ 1" below.
+  // Every axis gets up to 3 extra samples (0 and +/- its minimum velocity):
+  // 3 more linear rows, each with the full angular fan of angSlots + 2, plus
+  // the single stop sample added by the "+ 1" below.
   const size_t vx_rows = static_cast<size_t>(vx_n) + 3;
+  const size_t omega_cols = static_cast<size_t>(angSlots) + 2;
   if (ctrType == ControlType::OMNI) {
-    return vx_rows * static_cast<size_t>(angSlots) +
-           vx_rows * static_cast<size_t>(vy_n) + 1;
+    const size_t vy_cols = static_cast<size_t>(vy_n) + 3;
+    return vx_rows * omega_cols + vx_rows * vy_cols + 1;
   }
   // Non-holonomic: (vx, omega) grid, with an unused vy axis.
-  return vx_rows * static_cast<size_t>(angSlots) + 1;
+  return vx_rows * omega_cols + 1;
 }
 
 // calculate number of points per trajectory based on time step and horizon

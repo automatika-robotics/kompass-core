@@ -120,29 +120,36 @@ void TrajectorySampler::updateParams(TrajectorySamplerParameters config) {
   ang_samples_max_ = maxAngularSamples + 1 - (maxAngularSamples % 2);
 }
 
-const std::vector<double> &TrajectorySampler::linearSamples() {
-  lin_samples_scratch_.clear();
-  for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
-    lin_samples_scratch_.push_back(vx);
+const std::vector<double> &
+TrajectorySampler::axisSamples(std::vector<double> &samples, double low,
+                               double high, double resolution,
+                               double min_abs) const {
+  samples.clear();
+  for (double v = low; v <= high; v += resolution) {
+    // Drop values between 0 and minVel, the exact zero is added below
+    if (std::abs(v) < min_abs) {
+      continue;
+    }
+    samples.push_back(v);
   }
-  // Stop and creep speeds, when reachable and not already on the grid
-  const double min_speed = ctrlimits.velXParams.minVel;
-  for (const double extra : {0.0, min_speed, -min_speed}) {
-    if (extra < min_vx_ || extra > max_vx_) {
+  // Zero and the slowest executable motion, when reachable and not already
+  // on the grid
+  for (const double extra : {0.0, min_abs, -min_abs}) {
+    if (extra < low || extra > high) {
       continue;
     }
     bool present = false;
-    for (const double vx : lin_samples_scratch_) {
-      if (std::abs(vx - extra) < 1e-3) {
+    for (const double v : samples) {
+      if (std::abs(v - extra) < 1e-3) {
         present = true;
         break;
       }
     }
     if (!present) {
-      lin_samples_scratch_.push_back(extra);
+      samples.push_back(extra);
     }
   }
-  return lin_samples_scratch_;
+  return samples;
 }
 
 void TrajectorySampler::addStopSample(
@@ -225,19 +232,23 @@ TrajectorySampler::generateTrajectoriesNonHolonomic(
   std::unique_ptr<TrajectorySamples2D> admissible_velocity_trajectories =
       std::make_unique<TrajectorySamples2D>(numTrajectories,
                                             numPointsPerTrajectory);
-  // Sample the (vx × omega) grid for arc-like motion. Skip vx ≈ 0 so no
-  // pure-rotation samples are produced — unexecutable for Ackermann, and
-  // intentionally excluded for diff-drive (goal-cost cannot rank spins).
+  // Sample the (vx × omega) grid for arc-like motion. The vx = 0 row gets no
+  // angular fan so no pure-rotation samples are produced. Zero velocity itself
+  // is the stop sample added after the loops.
+  const std::vector<double> &vx_samples =
+      axisSamples(vx_samples_, min_vx_, max_vx_, lin_sample_x_resolution_,
+                  ctrlimits.velXParams.minVel);
+  const std::vector<double> &omega_samples =
+      axisSamples(omega_samples_, min_omega_, max_omega_,
+                  ang_sample_resolution_, ctrlimits.omegaParams.minOmega);
   if (m_pool) {
     // run in threadpool
     static thread_local std::vector<std::future<void>> futures;
     futures.clear();
     futures.reserve(numTrajectories);
-    for (const double vx : linearSamples()) {
-      if (std::abs(vx) >= MIN_VEL) {
-        for (double omega = min_omega_; omega <= max_omega_;
-             omega += ang_sample_resolution_) {
-
+    for (const double vx : vx_samples) {
+      if (vx != 0.0) {
+        for (const double omega : omega_samples) {
           Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
           // Get admissible trajectories in separate threads
           futures.emplace_back(m_pool->enqueue(
@@ -251,11 +262,9 @@ TrajectorySampler::generateTrajectoriesNonHolonomic(
       f.wait();
     }
   } else {
-    for (const double vx : linearSamples()) {
-      if (std::abs(vx) >= MIN_VEL) {
-        for (double omega = min_omega_; omega <= max_omega_;
-             omega += ang_sample_resolution_) {
-
+    for (const double vx : vx_samples) {
+      if (vx != 0.0) {
+        for (const double omega : omega_samples) {
           Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
           getAdmissibleTrajsFromVel(vel, current_pose,
                                     admissible_velocity_trajectories.get());
@@ -274,17 +283,24 @@ TrajectorySampler::generateTrajectoriesHolonomic(
       std::make_unique<TrajectorySamples2D>(numTrajectories,
                                             numPointsPerTrajectory);
 
+  const std::vector<double> &vx_samples =
+      axisSamples(vx_samples_, min_vx_, max_vx_, lin_sample_x_resolution_,
+                  ctrlimits.velXParams.minVel);
+  const std::vector<double> &vy_samples =
+      axisSamples(vy_samples_, min_vy_, max_vy_, lin_sample_y_resolution_,
+                  ctrlimits.velYParams.minVel);
+  const std::vector<double> &omega_samples =
+      axisSamples(omega_samples_, min_omega_, max_omega_,
+                  ang_sample_resolution_, ctrlimits.omegaParams.minOmega);
   if (m_pool) {
     // spawn in threadpool
     static thread_local std::vector<std::future<void>> futures;
     futures.clear();
     futures.reserve(numTrajectories);
-    for (const double vx : linearSamples()) {
-      if (std::abs(vx) >= MIN_VEL) {
+    for (const double vx : vx_samples) {
+      if (vx != 0.0) {
         // vx, omega
-        for (double omega = min_omega_; omega <= max_omega_;
-             omega += ang_sample_resolution_) {
-
+        for (const double omega : omega_samples) {
           Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
           // Get admissible trajectories in separate threads
           futures.emplace_back(m_pool->enqueue(
@@ -293,9 +309,7 @@ TrajectorySampler::generateTrajectoriesHolonomic(
         }
 
         // vx, vy
-        for (double vy = min_vy_; vy <= max_vy_;
-             vy += lin_sample_y_resolution_) {
-
+        for (const double vy : vy_samples) {
           Velocity2D vel = Velocity2D(vx, vy, 0.0); // Limit Y movement
           // Get admissible trajectories in separate threads
           futures.emplace_back(m_pool->enqueue(
@@ -310,21 +324,19 @@ TrajectorySampler::generateTrajectoriesHolonomic(
     }
   } else {
 
-    for (const double vx : linearSamples()) {
+    for (const double vx : vx_samples) {
       // vx, vy
-      for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
-        if (std::abs(vx) < MIN_VEL && std::abs(vy) < MIN_VEL) {
+      for (const double vy : vy_samples) {
+        if (vx == 0.0 && vy == 0.0) {
           // The stop sample is added once after the loops
           continue;
         }
         getAdmissibleTrajsFromVel(Velocity2D(vx, vy, 0.0), current_pose,
                                   admissible_velocity_trajectories.get());
       }
-      if (std::abs(vx) >= MIN_VEL) {
+      if (vx != 0.0) {
         // vx, omega
-        for (double omega = min_omega_; omega <= max_omega_;
-             omega += ang_sample_resolution_) {
-
+        for (const double omega : omega_samples) {
           getAdmissibleTrajsFromVel(Velocity2D(vx, 0.0, omega), current_pose,
                                     admissible_velocity_trajectories.get());
         }
@@ -480,7 +492,9 @@ TrajectorySampler::generateSingleSampleFromVel(const Velocity2D &vel,
   trajectory.path.add(0, simulated_pose.x, simulated_pose.y);
   if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
     for (size_t i = 0; i < (numPointsPerTrajectory - 1); ++i) {
-      if (std::abs(vel.vx()) > MIN_VEL && std::abs(vel.omega()) > MIN_VEL) {
+      // Rotate then move only when both parts are motions the robot executes
+      if (std::abs(vel.vx()) >= ctrlimits.velXParams.minVel &&
+          std::abs(vel.omega()) >= ctrlimits.omegaParams.minOmega) {
         // Rotate then move
         Velocity2D tempVel = vel;
         tempVel.setVx(0.0);

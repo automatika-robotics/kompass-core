@@ -11,10 +11,6 @@
 #include <memory>
 #include <vector>
 
-#ifndef MIN_VEL
-#define MIN_VEL 0.01
-#endif
-
 namespace Kompass {
 
 namespace Control {
@@ -173,7 +169,10 @@ private:
   int lin_samples_y_; // split of lin_samples_max_ used for the vy axis (1 for
                       // non-holonomic robots)
   int ang_samples_max_;
-  std::vector<double> lin_samples_scratch_;  // Linear speed samples of the current tick
+  // Samples of each velocity axis for the current tick
+  std::vector<double> vx_samples_;
+  std::vector<double> vy_samples_;
+  std::vector<double> omega_samples_;
   double lin_sample_x_resolution_;
   double lin_sample_y_resolution_;
   double ang_sample_resolution_;
@@ -194,11 +193,15 @@ private:
   void updateParams(TrajectorySamplerParameters config);
 
   /**
-   * @brief Linear speed samples of the current window: the regular grid
-   * over [min_vx_, max_vx_] plus 0 and +/- the minimum speed of the x-axis
-   * control limits whenever they lie inside the window.
+   * @brief Samples of one velocity axis for the current tick, written into
+   * the given scratch vector: the regular grid over [low, high] with every
+   * value inside 0 < |v| < min_abs dropped, plus 0 and +/- min_abs whenever
+   * they lie inside the window.
    */
-  const std::vector<double> &linearSamples();
+  const std::vector<double> &axisSamples(std::vector<double> &samples,
+                                         double low, double high,
+                                         double resolution,
+                                         double min_abs) const;
 
   /**
    * @brief Adds the stop sample (zero velocity): a rollout that stays at the

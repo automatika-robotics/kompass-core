@@ -149,9 +149,10 @@ Control::LaserScan clearScan() {
 std::unique_ptr<Control::TrajectorySampler>
 makeSampler(Control::ControlType type,
             const Control::LinearVelocityControlParams &x_params,
-            int maxLinearSamples, int maxAngularSamples, int maxNumThreads) {
+            int maxLinearSamples, int maxAngularSamples, int maxNumThreads,
+            const Control::AngularVelocityControlParams &angular_params =
+                Control::AngularVelocityControlParams(M_PI, 3.14, 2.0, 3.0)) {
   Control::LinearVelocityControlParams y_params(1.0, 5.0, 10.0, 0.0);
-  Control::AngularVelocityControlParams angular_params(M_PI, 3.14, 2.0, 3.0);
   Control::ControlLimitsParams limits(x_params, y_params, angular_params);
   return std::make_unique<Control::TrajectorySampler>(
       limits, type, 0.5, 5.0, 2.5, maxLinearSamples, maxAngularSamples,
@@ -272,6 +273,65 @@ BOOST_AUTO_TEST_CASE(no_stop_or_creep_when_zero_is_not_reachable) {
   BOOST_TEST(smallestSpeed(*samples) >= 0.9 - 1e-6);
 }
 
+// Number of samples whose first commanded omega equals the given value
+size_t countOmega(const Control::TrajectorySamples2D &samples, double omega) {
+  size_t count = 0;
+  for (size_t i = 0; i < samples.size(); ++i) {
+    if (std::abs(samples.velocities.omega(i, 0) - omega) < 1e-6) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+// Grid values inside the robot's dead band are not sampled: with a minimum
+// speed of 0.3 m/s the grid speeds +/-0.25 are gone, +/-0.3 take their
+// place and the stop sample stays
+BOOST_AUTO_TEST_CASE(grid_speeds_inside_the_dead_band_are_not_sampled) {
+  const Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0, 0.3);
+  // 9 speeds over [-1, 1]: 0, +/-0.25, +/-0.5, +/-0.75, +/-1
+  auto sampler = makeSampler(Control::ControlType::DIFFERENTIAL_DRIVE, x_params,
+                             8, 4, 1);
+  auto samples = sampler->generateTrajectories(
+      Control::Velocity2D(), Path::State(0.0, 0.0, 0.0, 0.0), clearScan());
+
+  BOOST_TEST(countVx(*samples, 0.25) == 0);
+  BOOST_TEST(countVx(*samples, -0.25) == 0);
+  BOOST_TEST(countVx(*samples, 0.3) == countVx(*samples, 0.5));
+  BOOST_TEST(countVx(*samples, -0.3) == countVx(*samples, 0.5));
+  BOOST_TEST(countStops(*samples) == 1);
+  for (size_t i = 0; i < samples->size(); ++i) {
+    const double vx = samples->velocities.vx(i, 0);
+    BOOST_TEST((vx == 0.0 || std::abs(vx) >= 0.3 - 1e-6));
+  }
+}
+
+// The same for the angular axis: with a minimum rate of 0.4 rad/s the grid
+// rates +/-0.3 are gone, +/-0.4 take their place, and straight driving
+// (omega = 0) stays
+BOOST_AUTO_TEST_CASE(angular_rates_inside_the_dead_band_are_not_sampled) {
+  const Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0, 0.05);
+  // Window [-1.5, 1.5] in 11 slots: 0, +/-0.3, +/-0.6, ..., +/-1.5
+  const Control::AngularVelocityControlParams angular_params(M_PI, 1.5, 3.0,
+                                                             3.0, 0.4);
+  auto sampler = makeSampler(Control::ControlType::DIFFERENTIAL_DRIVE, x_params,
+                             4, 10, 1, angular_params);
+  auto samples = sampler->generateTrajectories(
+      Control::Velocity2D(), Path::State(0.0, 0.0, 0.0, 0.0), clearScan());
+
+  BOOST_TEST(countOmega(*samples, 0.3) == 0);
+  BOOST_TEST(countOmega(*samples, -0.3) == 0);
+  BOOST_TEST(countOmega(*samples, 0.4) >= 1);
+  BOOST_TEST(countOmega(*samples, 0.4) == countOmega(*samples, 0.6));
+  BOOST_TEST(countOmega(*samples, -0.4) == countOmega(*samples, 0.6));
+  BOOST_TEST(countOmega(*samples, 0.0) >= 1);
+  BOOST_TEST(countPureSpins(*samples) == 0);
+  for (size_t i = 0; i < samples->size(); ++i) {
+    const double omega = samples->velocities.omega(i, 0);
+    BOOST_TEST((omega == 0.0 || std::abs(omega) >= 0.4 - 1e-6));
+  }
+}
+
 // A creep speed that happens to be on the grid is not sampled twice
 BOOST_AUTO_TEST_CASE(creep_speed_on_the_grid_is_not_duplicated) {
   const Control::LinearVelocityControlParams on_grid(1.0, 5.0, 10.0, 0.5);
@@ -335,10 +395,12 @@ BOOST_AUTO_TEST_CASE(stop_sample_is_dropped_when_the_pose_collides) {
 // The sample buffers are sized for the grid plus the three extra speeds and
 // the stop sample, for every robot type
 BOOST_AUTO_TEST_CASE(capacity_counts_the_extra_samples) {
+  // Differential drive, 4 and 4: (5 + 3) speeds x (5 + 2) rates + 1
   BOOST_TEST(Control::getNumTrajectories(
-                 Control::ControlType::DIFFERENTIAL_DRIVE, 4, 4) == 41u);
+                 Control::ControlType::DIFFERENTIAL_DRIVE, 4, 4) == 57u);
+  // Omni, 20 and 20: (15 + 3) x (21 + 2) + (15 + 3) x (5 + 3) + 1
   BOOST_TEST(Control::getNumTrajectories(Control::ControlType::OMNI, 20, 20) ==
-             469u);
+             559u);
 
   const Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0, 0.05);
   const std::vector<Control::ControlType> types{
