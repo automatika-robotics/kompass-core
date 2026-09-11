@@ -510,6 +510,21 @@ def test_linear_ctrl_limits_min_vel():
     assert limits.min_vel == 0.2
 
 
+def test_angular_ctrl_limits_min_omega():
+    """The angular deadband of the controllers is the minimum angular velocity
+    of the angular control limits, 0.05 rad/s when not given."""
+    limits = AngularCtrlLimits(max_omega=1.0, max_acc=3.0, max_decel=3.0, max_ang=np.pi)
+    assert limits.min_omega == 0.05
+    assert (
+        AngularCtrlLimits(
+            max_omega=1.0, max_acc=3.0, max_decel=3.0, max_ang=np.pi, min_omega=0.2
+        ).min_omega
+        == 0.2
+    )
+    limits.min_omega = 0.3
+    assert limits.min_omega == 0.3
+
+
 def test_dwa_creeps_onto_a_close_goal():
     """A goal closer than the smallest grid speed covers within the horizon:
     0.5 s steps, a 5 s rollout and a speed grid whose smallest speed (0.2 m/s)
