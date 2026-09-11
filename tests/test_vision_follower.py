@@ -244,7 +244,9 @@ def test_rgbd_follower_exposes_rgb_follower_interface() -> None:
 _TILTED_MOUNT = (-0.5839669, 0.5936764, -0.38588133, 0.3970222)
 
 
-def _close_target_follower(**config_overrides) -> VisionRGBDFollower:
+def _close_target_follower(
+    ctrl_limits: Optional[RobotCtrlLimits] = None, **config_overrides
+) -> VisionRGBDFollower:
     robot = Robot(
         robot_type=RobotType.DIFFERENTIAL_DRIVE,
         # A real chassis: the circumradius is 0.357 m, so a target closer than
@@ -252,7 +254,7 @@ def _close_target_follower(**config_overrides) -> VisionRGBDFollower:
         geometry_type=RobotGeometry.Type.BOX,
         geometry_params=np.array([0.61, 0.37, 0.4]),
     )
-    ctrl_limits = RobotCtrlLimits(
+    ctrl_limits = ctrl_limits or RobotCtrlLimits(
         vx_limits=LinearCtrlLimits(max_vel=1.5, max_acc=3.0, max_decel=3.0),
         omega_limits=AngularCtrlLimits(
             max_omega=2.5, max_acc=2.5, max_decel=2.5, max_ang=np.pi / 2
@@ -325,6 +327,55 @@ def test_close_target_does_not_saturate_omega() -> None:
         f"omega={omega} on a close target: the feedforward is running away "
         f"(limit is {max_omega})"
     )
+
+
+def test_commands_below_the_robot_minimums_are_zeroed() -> None:
+    """The follower zeroes linear and angular commands below the minimum
+    velocities of the control limits instead of sending them to the robot.
+    The thresholds come from the limits, not from a follower parameter."""
+    depth, box, (click_x, click_y) = _close_target_frame()
+    state = RobotState(x=0.0, y=0.0, yaw=0.0, speed=0.0)
+
+    def commands(min_vel: float, min_omega: float):
+        limits = RobotCtrlLimits(
+            vx_limits=LinearCtrlLimits(
+                max_vel=1.5, max_acc=3.0, max_decel=3.0, min_vel=min_vel
+            ),
+            omega_limits=AngularCtrlLimits(
+                max_omega=2.5,
+                max_acc=2.5,
+                max_decel=2.5,
+                max_ang=np.pi / 2,
+                min_omega=min_omega,
+            ),
+        )
+        follower = _close_target_follower(ctrl_limits=limits)
+        assert follower.set_initial_tracking_image(
+            current_state=state,
+            pose_x_img=click_x,
+            pose_y_img=click_y,
+            detected_boxes=[box],
+            depth_image=depth,
+        )
+        assert follower.loop_step(
+            current_state=state, detections_2d=[box], depth_image=depth
+        )
+        return follower.linear_x_control[0], follower.angular_control[0]
+
+    # No deadband: both commands are live
+    v, omega = commands(0.0, 0.0)
+    assert v != 0.0 and omega != 0.0
+
+    # A linear minimum just above the live command zeroes only the linear one
+    v_cut, omega_kept = commands(abs(v) * 1.01, 0.0)
+    assert v_cut == 0.0
+    assert omega_kept != 0.0
+
+    # An angular minimum just above the live command zeroes only the angular
+    # one; the linear command does not depend on it
+    v_kept, omega_cut = commands(0.0, abs(omega) * 1.01)
+    assert omega_cut == 0.0
+    assert v_kept == v
 
 
 def test_rgbd_follower_rejects_ambiguous_or_incomplete_depth_source(tmp_path):

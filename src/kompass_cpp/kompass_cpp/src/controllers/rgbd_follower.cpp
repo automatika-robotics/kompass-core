@@ -313,7 +313,7 @@ Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
 
     v = std::clamp(v, -ctrl_limits_.velXParams.maxVel,
                    ctrl_limits_.velXParams.maxVel);
-    if (std::abs(v) < config_.min_vel()) {
+    if (std::abs(v) < ctrl_limits_.velXParams.minVel) {
       v = 0.0;
     }
     followingVel.setVx(v);
@@ -335,7 +335,7 @@ Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
 
     omega = std::clamp(omega, -ctrl_limits_.omegaParams.maxOmega,
                        ctrl_limits_.omegaParams.maxOmega);
-    if (std::abs(omega) < config_.min_vel()) {
+    if (std::abs(omega) < ctrl_limits_.omegaParams.minOmega) {
       omega = 0.0;
     }
     followingVel.setOmega(omega);

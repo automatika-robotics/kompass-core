@@ -30,7 +30,6 @@ class VisionRGBFollowerConfig(BaseAttrs):
         target_search_radius (float): Radius used for searching the target (m).
         rotation_gain (float): Proportional gain for angular control.
         speed_gain (float): Proportional gain for linear speed control.
-        min_vel (float): Minimum linear velocity allowed during target following (m/s).
         enable_search (bool): Whether to activate search behavior when the target is lost.
     """
 
@@ -64,9 +63,6 @@ class VisionRGBFollowerConfig(BaseAttrs):
     )
     speed_gain: float = field(
         default=0.7, validator=base_validators.in_range(min_value=1e-9, max_value=10.0)
-    )
-    min_vel: float = field(
-        default=0.1, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
     enable_search: bool = field(default=True)
 
