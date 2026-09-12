@@ -320,6 +320,30 @@ BOOST_AUTO_TEST_CASE(path_cost_centered_sample) {
   BOOST_TEST(cost == 0.0f, tt::tolerance(1e-4f));
 }
 
+// The last segment of a path can be a single point (the path end), whose
+// length is zero. The end-point error is then left out instead of being
+// divided by zero: the cost stays finite, a trajectory is found, and the
+// cost is the plain average distance to that point halved. This is what the
+// GPU kernel does; without it the CPU build found no trajectory near a goal.
+BOOST_AUTO_TEST_CASE(path_cost_single_point_tracked_segment) {
+  LOG_INFO(BOLD(FMAG("Running path_cost_single_point_tracked_segment")));
+  Timer t;
+  // Segments of 5 m over 10 m: the third segment is the single point X = 10
+  Path::Path ref = makeInterpolatedStraightPath(10.0f, 1.0f, 5.0f);
+  const size_t last_segment = ref.getNumSegments() - 1;
+  BOOST_TEST_REQUIRE(ref.getSegment(last_segment).getSize() == 1u);
+  const std::vector<Path::Point> near_end{
+      Path::Point(9.55f, 0.0f, 0.0f), Path::Point(9.6f, 0.0f, 0.0f),
+      Path::Point(9.65f, 0.0f, 0.0f), Path::Point(9.7f, 0.0f, 0.0f),
+      Path::Point(9.75f, 0.0f, 0.0f)};
+  auto samples = makeSingleSampleWithPath(near_end);
+  const float cost = evalCost(soloWeight("reference_path_distance_weight"), ref,
+                              last_segment, std::move(samples));
+  BOOST_TEST(std::isfinite(cost));
+  // Distances to the point: 0.45, 0.4, 0.35, 0.3, 0.25 -> mean 0.35
+  BOOST_TEST(cost == 0.35f / 2.0f, tt::tolerance(1e-4f));
+}
+
 // Sample running parallel to the segment at constant lateral offset d.
 // Each trajectory point's closest segment point is directly opposite it, so
 // min_dist = d for every point → avg cross-track = d. The trajectory end

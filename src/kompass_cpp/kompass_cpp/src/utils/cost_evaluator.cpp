@@ -128,12 +128,16 @@ float CostEvaluator::pathCostFunc(const Trajectory2D &trajectory,
     }
     total_cost += min_dist;
   }
-  // end point distance
+  // End point distance, normalized by the tracked segment length. A tracked
+  // segment reduced to a single point (the end of the path) has zero length
+  // and contributes no end error.
+  const float inv_segment_length =
+      tracked_segment_length > 0.0f ? 1.0f / tracked_segment_length : 0.0f;
   float end_dist_error =
       Path::Path::distance(
           trajectory.path.getEnd(),
-          tracked_segment.getIndex(tracked_segment.getSize() - 1)) /
-      tracked_segment_length;
+          tracked_segment.getIndex(tracked_segment.getSize() - 1)) *
+      inv_segment_length;
 
   // Divide by number of points to get average distance
   // and normalize the total cost
