@@ -204,14 +204,6 @@ private:
                                          double min_abs) const;
 
   /**
-   * @brief Adds the stop sample (zero velocity): a rollout that stays at the
-   * current pose, kept when zero is inside the reachable window and the pose
-   * is collision free. Rankable by the costs, unlike a pure rotation.
-   */
-  void addStopSample(const Path::State &current_pose,
-                     TrajectorySamples2D *admissible_velocity_trajectories);
-
-  /**
    * @brief Updates the range of valid velocity actions that can be reached from
    * a current velocity based on the acceleration limits
    *

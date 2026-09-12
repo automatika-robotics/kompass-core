@@ -529,7 +529,7 @@ def test_dwa_creeps_onto_a_close_goal():
     """A goal closer than the smallest grid speed covers within the horizon:
     0.5 s steps, a 5 s rollout and a speed grid whose smallest speed (0.2 m/s)
     travels 0.9 m, twice the distance to the goal. Every straight grid sample
-    overshoots, so only the stop sample and the creep speed can end near the
+    overshoots, so only the creep speed can end near the
     goal. The controller must reach it with forward motion only: no reverse,
     no turning, no overshoot.
     """

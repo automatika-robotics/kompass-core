@@ -152,19 +152,6 @@ TrajectorySampler::axisSamples(std::vector<double> &samples, double low,
   return samples;
 }
 
-void TrajectorySampler::addStopSample(
-    const Path::State &current_pose,
-    TrajectorySamples2D *admissible_velocity_trajectories) {
-  // Only executable when zero lies inside the reachable window of every axis
-  // (vy is a zero window for non-holonomic robots)
-  if (min_vx_ > 0.0 || max_vx_ < 0.0 || min_vy_ > 0.0 || max_vy_ < 0.0 ||
-      min_omega_ > 0.0 || max_omega_ < 0.0) {
-    return;
-  }
-  getAdmissibleTrajsFromVel(Velocity2D(0.0, 0.0, 0.0), current_pose,
-                            admissible_velocity_trajectories);
-}
-
 void TrajectorySampler::getAdmissibleTrajsFromVel(
     const Velocity2D &vel, const Path::State &start_pose,
     TrajectorySamples2D *admissible_velocity_trajectories) {
@@ -233,8 +220,7 @@ TrajectorySampler::generateTrajectoriesNonHolonomic(
       std::make_unique<TrajectorySamples2D>(numTrajectories,
                                             numPointsPerTrajectory);
   // Sample the (vx × omega) grid for arc-like motion. The vx = 0 row gets no
-  // angular fan so no pure-rotation samples are produced. Zero velocity itself
-  // is the stop sample added after the loops.
+  // angular fan so no pure-rotation samples are produced.
   const std::vector<double> &vx_samples =
       axisSamples(vx_samples_, min_vx_, max_vx_, lin_sample_x_resolution_,
                   ctrlimits.velXParams.minVel);
@@ -272,7 +258,6 @@ TrajectorySampler::generateTrajectoriesNonHolonomic(
       }
     }
   }
-  addStopSample(current_pose, admissible_velocity_trajectories.get());
   return admissible_velocity_trajectories;
 }
 
@@ -328,7 +313,7 @@ TrajectorySampler::generateTrajectoriesHolonomic(
       // vx, vy
       for (const double vy : vy_samples) {
         if (vx == 0.0 && vy == 0.0) {
-          // The stop sample is added once after the loops
+          // Zero velocity is never sampled
           continue;
         }
         getAdmissibleTrajsFromVel(Velocity2D(vx, vy, 0.0), current_pose,
@@ -343,7 +328,6 @@ TrajectorySampler::generateTrajectoriesHolonomic(
       }
     }
   }
-  addStopSample(current_pose, admissible_velocity_trajectories.get());
   return admissible_velocity_trajectories;
 }
 

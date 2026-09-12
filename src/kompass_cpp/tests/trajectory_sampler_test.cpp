@@ -172,7 +172,7 @@ size_t countVx(const Control::TrajectorySamples2D &samples, double vx) {
   return count;
 }
 
-// Number of samples that command no motion at all (the stop sample)
+// Number of samples that command no motion at all (never expected)
 size_t countStops(const Control::TrajectorySamples2D &samples) {
   size_t count = 0;
   for (size_t i = 0; i < samples.size(); ++i) {
@@ -211,9 +211,9 @@ double smallestSpeed(const Control::TrajectorySamples2D &samples) {
 
 // At rest the reachable window is [-1, 1]: the grid of 5 speeds already
 // holds 0 and +/-1, the creep speeds +/-0.05 are added with the full angular
-// fan of a grid speed, and exactly one stop sample exists. Holds for every
+// fan of a grid speed, and zero velocity is never sampled. Holds for every
 // robot type, pooled and serial.
-BOOST_AUTO_TEST_CASE(grid_holds_stop_and_creep_speeds_for_every_robot_type) {
+BOOST_AUTO_TEST_CASE(grid_holds_creep_speeds_for_every_robot_type) {
   const std::vector<Control::ControlType> types{
       Control::ControlType::ACKERMANN, Control::ControlType::DIFFERENTIAL_DRIVE,
       Control::ControlType::OMNI};
@@ -227,7 +227,7 @@ BOOST_AUTO_TEST_CASE(grid_holds_stop_and_creep_speeds_for_every_robot_type) {
       BOOST_TEST_CONTEXT("type " << Control::controlTypeToString(type)
                                  << ", threads " << threads) {
         BOOST_TEST(samples->size() <= sampler->numTrajectories);
-        BOOST_TEST(countStops(*samples) == 1);
+        BOOST_TEST(countStops(*samples) == 0);
         BOOST_TEST(countPureSpins(*samples) == 0);
         BOOST_TEST(countVx(*samples, 0.05) >= 1);
         BOOST_TEST(countVx(*samples, -0.05) == countVx(*samples, 0.05));
@@ -251,16 +251,17 @@ BOOST_AUTO_TEST_CASE(creep_speeds_are_added_only_inside_the_window) {
       Control::Velocity2D(0.12, 0.0, 0.0), Path::State(0.0, 0.0, 0.0, 0.0),
       clearScan());
 
-  BOOST_TEST(countStops(*samples) == 1);
+  BOOST_TEST(countStops(*samples) == 0);
   BOOST_TEST(countVx(*samples, 0.05) >= 1);
   BOOST_TEST(countVx(*samples, -0.05) == 0);
   BOOST_TEST(countVx(*samples, 0.07) == countVx(*samples, 0.05));
-  BOOST_TEST(smallestSpeed(*samples) == 0.0);
+  // The creep speed is the slowest moving sample
+  BOOST_TEST(std::abs(smallestSpeed(*samples) - 0.05) < 1e-6);
 }
 
-// A robot that cannot brake to zero within one step gets neither the stop
-// sample nor the creep speeds: every sample stays inside the window
-BOOST_AUTO_TEST_CASE(no_stop_or_creep_when_zero_is_not_reachable) {
+// A robot that cannot brake to zero within one step gets no creep speeds:
+// every sample stays inside the window
+BOOST_AUTO_TEST_CASE(no_creep_when_zero_is_not_reachable) {
   const Control::LinearVelocityControlParams x_params(1.0, 5.0, 0.2, 0.05);
   auto sampler = makeSampler(Control::ControlType::DIFFERENTIAL_DRIVE, x_params,
                              4, 4, 1);
@@ -285,8 +286,8 @@ size_t countOmega(const Control::TrajectorySamples2D &samples, double omega) {
 }
 
 // Grid values inside the robot's dead band are not sampled: with a minimum
-// speed of 0.3 m/s the grid speeds +/-0.25 are gone, +/-0.3 take their
-// place and the stop sample stays
+// speed of 0.3 m/s the grid speeds +/-0.25 are gone and +/-0.3 take their
+// place
 BOOST_AUTO_TEST_CASE(grid_speeds_inside_the_dead_band_are_not_sampled) {
   const Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0, 0.3);
   // 9 speeds over [-1, 1]: 0, +/-0.25, +/-0.5, +/-0.75, +/-1
@@ -299,7 +300,7 @@ BOOST_AUTO_TEST_CASE(grid_speeds_inside_the_dead_band_are_not_sampled) {
   BOOST_TEST(countVx(*samples, -0.25) == 0);
   BOOST_TEST(countVx(*samples, 0.3) == countVx(*samples, 0.5));
   BOOST_TEST(countVx(*samples, -0.3) == countVx(*samples, 0.5));
-  BOOST_TEST(countStops(*samples) == 1);
+  BOOST_TEST(countStops(*samples) == 0);
   for (size_t i = 0; i < samples->size(); ++i) {
     const double vx = samples->velocities.vx(i, 0);
     BOOST_TEST((vx == 0.0 || std::abs(vx) >= 0.3 - 1e-6));
@@ -350,7 +351,7 @@ BOOST_AUTO_TEST_CASE(creep_speed_on_the_grid_is_not_duplicated) {
   BOOST_TEST(countVx(*samples, 0.05) == 0);
 }
 
-// A zero minimum speed means no creep samples; the stop sample stays
+// A zero minimum speed means no creep samples
 BOOST_AUTO_TEST_CASE(zero_minimum_speed_disables_the_creep_samples) {
   const Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0, 0.0);
   auto sampler = makeSampler(Control::ControlType::DIFFERENTIAL_DRIVE, x_params,
@@ -358,7 +359,7 @@ BOOST_AUTO_TEST_CASE(zero_minimum_speed_disables_the_creep_samples) {
   auto samples = sampler->generateTrajectories(
       Control::Velocity2D(), Path::State(0.0, 0.0, 0.0, 0.0), clearScan());
 
-  BOOST_TEST(countStops(*samples) == 1);
+  BOOST_TEST(countStops(*samples) == 0);
   BOOST_TEST(countPureSpins(*samples) == 0);
   // Every moving sample is a grid speed (multiples of 0.5 m/s)
   for (size_t i = 0; i < samples->size(); ++i) {
@@ -370,37 +371,34 @@ BOOST_AUTO_TEST_CASE(zero_minimum_speed_disables_the_creep_samples) {
   }
 }
 
-// The stop sample keeps the robot where it is, so it is dropped when the
-// current pose already collides, in both sample dropping modes
-BOOST_AUTO_TEST_CASE(stop_sample_is_dropped_when_the_pose_collides) {
+// Zero velocity is never a sample, at rest or in motion, in either sample
+// dropping mode: a standing rollout would win in the middle of a route
+BOOST_AUTO_TEST_CASE(zero_velocity_is_never_sampled) {
   const Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0, 0.05);
-  // One return 5 cm ahead, inside the 20 cm body radius
-  Control::LaserScan touching(Eigen::VectorXf::Constant(1, 0.05f),
-                              Eigen::VectorXf::Constant(1, 0.0f));
   for (const bool drop : {true, false}) {
-    auto sampler = makeSampler(Control::ControlType::DIFFERENTIAL_DRIVE,
-                               x_params, 4, 4, 1);
+    auto sampler = makeSampler(Control::ControlType::OMNI, x_params, 4, 4, 1);
     sampler->setSampleDroppingMode(drop);
-    auto blocked = sampler->generateTrajectories(
-        Control::Velocity2D(), Path::State(0.0, 0.0, 0.0, 0.0), touching);
-    auto free = sampler->generateTrajectories(
+    auto at_rest = sampler->generateTrajectories(
         Control::Velocity2D(), Path::State(0.0, 0.0, 0.0, 0.0), clearScan());
+    auto moving = sampler->generateTrajectories(
+        Control::Velocity2D(0.5, 0.0, 0.0), Path::State(0.0, 0.0, 0.0, 0.0),
+        clearScan());
     BOOST_TEST_CONTEXT("drop_samples " << drop) {
-      BOOST_TEST(countStops(*blocked) == 0);
-      BOOST_TEST(countStops(*free) == 1);
+      BOOST_TEST(countStops(*at_rest) == 0);
+      BOOST_TEST(countStops(*moving) == 0);
     }
   }
 }
 
 // The sample buffers are sized for the grid plus the three extra speeds and
-// the stop sample, for every robot type
+// the two extra rates, for every robot type
 BOOST_AUTO_TEST_CASE(capacity_counts_the_extra_samples) {
-  // Differential drive, 4 and 4: (5 + 3) speeds x (5 + 2) rates + 1
+  // Differential drive, 4 and 4: (5 + 3) speeds x (5 + 2) rates
   BOOST_TEST(Control::getNumTrajectories(
-                 Control::ControlType::DIFFERENTIAL_DRIVE, 4, 4) == 57u);
-  // Omni, 20 and 20: (15 + 3) x (21 + 2) + (15 + 3) x (5 + 3) + 1
+                 Control::ControlType::DIFFERENTIAL_DRIVE, 4, 4) == 56u);
+  // Omni, 20 and 20: (15 + 3) x (21 + 2) + (15 + 3) x (5 + 3)
   BOOST_TEST(Control::getNumTrajectories(Control::ControlType::OMNI, 20, 20) ==
-             559u);
+             558u);
 
   const Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0, 0.05);
   const std::vector<Control::ControlType> types{
@@ -412,7 +410,7 @@ BOOST_AUTO_TEST_CASE(capacity_counts_the_extra_samples) {
         Control::Velocity2D(), Path::State(0.0, 0.0, 0.0, 0.0), clearScan());
     BOOST_TEST_CONTEXT("type " << Control::controlTypeToString(type)) {
       BOOST_TEST(samples->size() <= sampler->numTrajectories);
-      BOOST_TEST(countStops(*samples) == 1);
+      BOOST_TEST(countStops(*samples) == 0);
       BOOST_TEST(countVx(*samples, 0.05) >= 1);
       BOOST_TEST(countVx(*samples, -0.05) >= 1);
     }
