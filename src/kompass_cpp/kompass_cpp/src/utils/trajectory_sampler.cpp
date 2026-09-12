@@ -233,7 +233,7 @@ TrajectorySampler::generateTrajectoriesNonHolonomic(
     futures.clear();
     futures.reserve(numTrajectories);
     for (const double vx : vx_samples) {
-      if (vx != 0.0) {
+      if (std::abs(vx) >= ctrlimits.velXParams.minVel && vx != 0.0) {
         for (const double omega : omega_samples) {
           Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
           // Get admissible trajectories in separate threads
@@ -249,7 +249,7 @@ TrajectorySampler::generateTrajectoriesNonHolonomic(
     }
   } else {
     for (const double vx : vx_samples) {
-      if (vx != 0.0) {
+      if (std::abs(vx) >= ctrlimits.velXParams.minVel && vx != 0.0) {
         for (const double omega : omega_samples) {
           Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
           getAdmissibleTrajsFromVel(vel, current_pose,
@@ -283,7 +283,7 @@ TrajectorySampler::generateTrajectoriesHolonomic(
     futures.clear();
     futures.reserve(numTrajectories);
     for (const double vx : vx_samples) {
-      if (vx != 0.0) {
+      if (std::abs(vx) >= ctrlimits.velXParams.minVel && vx != 0.0) {
         // vx, omega
         for (const double omega : omega_samples) {
           Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
@@ -292,15 +292,20 @@ TrajectorySampler::generateTrajectoriesHolonomic(
               &TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
               current_pose, admissible_velocity_trajectories.get()));
         }
-
-        // vx, vy
-        for (const double vy : vy_samples) {
-          Velocity2D vel = Velocity2D(vx, vy, 0.0); // Limit Y movement
-          // Get admissible trajectories in separate threads
-          futures.emplace_back(m_pool->enqueue(
-              &TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
-              current_pose, admissible_velocity_trajectories.get()));
+      }
+      // vx, vy
+      for (const double vy : vy_samples) {
+        if ((std::abs(vx) < ctrlimits.velXParams.minVel &&
+             std::abs(vy) < ctrlimits.velYParams.minVel) ||
+            (vx == 0.0 && vy == 0.0)) {
+          // Zero velocity is never sampled
+          continue;
         }
+        Velocity2D vel = Velocity2D(vx, vy, 0.0); // Limit Y movement
+        // Get admissible trajectories in separate threads
+        futures.emplace_back(m_pool->enqueue(
+            &TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
+            current_pose, admissible_velocity_trajectories.get()));
       }
     }
     // wait on the futures before returning
@@ -312,14 +317,16 @@ TrajectorySampler::generateTrajectoriesHolonomic(
     for (const double vx : vx_samples) {
       // vx, vy
       for (const double vy : vy_samples) {
-        if (vx == 0.0 && vy == 0.0) {
+        if ((std::abs(vx) < ctrlimits.velXParams.minVel &&
+             std::abs(vy) < ctrlimits.velYParams.minVel) ||
+            (vx == 0.0 && vy == 0.0)) {
           // Zero velocity is never sampled
           continue;
         }
         getAdmissibleTrajsFromVel(Velocity2D(vx, vy, 0.0), current_pose,
                                   admissible_velocity_trajectories.get());
       }
-      if (vx != 0.0) {
+      if (std::abs(vx) >= ctrlimits.velXParams.minVel && vx != 0.0) {
         // vx, omega
         for (const double omega : omega_samples) {
           getAdmissibleTrajsFromVel(Velocity2D(vx, 0.0, omega), current_pose,
