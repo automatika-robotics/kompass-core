@@ -37,9 +37,9 @@ inline size_t getNumTrajectories(ControlType ctrType, int maxLinearSamples,
   int vx_n, vy_n;
   computeLinearSampleSplit(ctrType, maxLinearSamples, vx_n, vy_n);
   // Every axis gets up to 3 extra samples (0 and +/- its minimum velocity):
-  // 3 more linear rows, each with the full angular fan of angSlots + 2.
+  // 3 more linear rows, each with an angular fan of up to angSlots + 3
   const size_t vx_rows = static_cast<size_t>(vx_n) + 3;
-  const size_t omega_cols = static_cast<size_t>(angSlots) + 2;
+  const size_t omega_cols = static_cast<size_t>(angSlots) + 3;
   if (ctrType == ControlType::OMNI) {
     const size_t vy_cols = static_cast<size_t>(vy_n) + 3;
     return vx_rows * omega_cols + vx_rows * vy_cols;
