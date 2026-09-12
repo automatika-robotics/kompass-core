@@ -366,7 +366,7 @@ class DWA(FollowerTemplate):
             logging.error(f"Could not find velocity command: {e}")
             return False
 
-        return True
+        return False if not self._result else self._result.is_found
 
     def has_result(self) -> None:
         """
