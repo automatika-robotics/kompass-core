@@ -26,7 +26,8 @@ TrajectorySampler::TrajectorySampler(
     const std::vector<float> robotDimensions,
     const Eigen::Vector3f &sensor_position_body,
     const Eigen::Quaternionf &sensor_rotation_body, const double octreeRes,
-    const int maxNumThreads) {
+    const bool allowReverse, const int maxNumThreads) {
+  allow_reverse_ = allowReverse;
   // Setup the collision checker
   collChecker = std::make_unique<CollisionChecker>(
       robotShapeType, robotDimensions, sensor_position_body,
@@ -49,7 +50,7 @@ TrajectorySampler::TrajectorySampler(
 
   if (ctrType != ControlType::OMNI) {
     // Discard Vy limits to eliminate movement on Y axis
-    ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
+    ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0, 0.0);
   }
 
   numTrajectories =
@@ -82,7 +83,7 @@ TrajectorySampler::TrajectorySampler(
 
   if (ctrType != ControlType::OMNI) {
     // Discard Vy limits to eliminate movement on Y axis
-    ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0);
+    ctrlimits.velYParams = LinearVelocityControlParams(0.0, 0.0, 0.0, 0.0);
   }
 
   numTrajectories =
@@ -118,16 +119,45 @@ void TrajectorySampler::updateParams(TrajectorySamplerParameters config) {
                            lin_samples_y_);
   int maxAngularSamples = config.getParameter<int>("max_angular_samples");
   ang_samples_max_ = maxAngularSamples + 1 - (maxAngularSamples % 2);
+  allow_reverse_ = config.getParameter<bool>("allow_reverse");
+}
+
+const std::vector<double> &
+TrajectorySampler::axisSamples(std::vector<double> &samples, double low,
+                               double high, double resolution,
+                               double min_abs) const {
+  samples.clear();
+  for (double v = low; v <= high; v += resolution) {
+    // Drop values between 0 and minVel, the exact zero is added below
+    if (std::abs(v) < min_abs) {
+      continue;
+    }
+    samples.push_back(v);
+  }
+  // Zero and the slowest executable motion, when reachable and not already
+  // on the grid
+  for (const double extra : {0.0, min_abs, -min_abs}) {
+    if (extra < low || extra > high) {
+      continue;
+    }
+    bool present = false;
+    for (const double v : samples) {
+      if (std::abs(v - extra) < 1e-3) {
+        present = true;
+        break;
+      }
+    }
+    if (!present) {
+      samples.push_back(extra);
+    }
+  }
+  return samples;
 }
 
 void TrajectorySampler::getAdmissibleTrajsFromVel(
     const Velocity2D &vel, const Path::State &start_pose,
     TrajectorySamples2D *admissible_velocity_trajectories) {
 
-  if (std::abs(vel.vx()) < MIN_VEL and std::abs(vel.vy()) < MIN_VEL and
-      std::abs(vel.omega()) < MIN_VEL) {
-    return;
-  }
   Path::State simulated_pose = start_pose;
   TrajectoryVelocities2D simulated_velocities(numPointsPerTrajectory);
   TrajectoryPath path(numPointsPerTrajectory);
@@ -191,19 +221,22 @@ TrajectorySampler::generateTrajectoriesNonHolonomic(
   std::unique_ptr<TrajectorySamples2D> admissible_velocity_trajectories =
       std::make_unique<TrajectorySamples2D>(numTrajectories,
                                             numPointsPerTrajectory);
-  // Sample the (vx × omega) grid for arc-like motion. Skip vx ≈ 0 so no
-  // pure-rotation samples are produced — unexecutable for Ackermann, and
-  // intentionally excluded for diff-drive (goal-cost cannot rank spins).
+  // Sample the (vx × omega) grid for arc-like motion. The vx = 0 row gets no
+  // angular fan so no pure-rotation samples are produced.
+  const std::vector<double> &vx_samples =
+      axisSamples(vx_samples_, min_vx_, max_vx_, lin_sample_x_resolution_,
+                  ctrlimits.velXParams.minVel);
+  const std::vector<double> &omega_samples =
+      axisSamples(omega_samples_, min_omega_, max_omega_,
+                  ang_sample_resolution_, ctrlimits.omegaParams.minOmega);
   if (m_pool) {
     // run in threadpool
     static thread_local std::vector<std::future<void>> futures;
     futures.clear();
     futures.reserve(numTrajectories);
-    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
-      if (std::abs(vx) >= MIN_VEL) {
-        for (double omega = min_omega_; omega <= max_omega_;
-             omega += ang_sample_resolution_) {
-
+    for (const double vx : vx_samples) {
+      if (std::abs(vx) >= ctrlimits.velXParams.minVel && vx != 0.0) {
+        for (const double omega : omega_samples) {
           Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
           // Get admissible trajectories in separate threads
           futures.emplace_back(m_pool->enqueue(
@@ -217,11 +250,9 @@ TrajectorySampler::generateTrajectoriesNonHolonomic(
       f.wait();
     }
   } else {
-    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
-      if (std::abs(vx) >= MIN_VEL) {
-        for (double omega = min_omega_; omega <= max_omega_;
-             omega += ang_sample_resolution_) {
-
+    for (const double vx : vx_samples) {
+      if (std::abs(vx) >= ctrlimits.velXParams.minVel && vx != 0.0) {
+        for (const double omega : omega_samples) {
           Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
           getAdmissibleTrajsFromVel(vel, current_pose,
                                     admissible_velocity_trajectories.get());
@@ -239,34 +270,44 @@ TrajectorySampler::generateTrajectoriesHolonomic(
       std::make_unique<TrajectorySamples2D>(numTrajectories,
                                             numPointsPerTrajectory);
 
+  const std::vector<double> &vx_samples =
+      axisSamples(vx_samples_, min_vx_, max_vx_, lin_sample_x_resolution_,
+                  ctrlimits.velXParams.minVel);
+  const std::vector<double> &vy_samples =
+      axisSamples(vy_samples_, min_vy_, max_vy_, lin_sample_y_resolution_,
+                  ctrlimits.velYParams.minVel);
+  const std::vector<double> &omega_samples =
+      axisSamples(omega_samples_, min_omega_, max_omega_,
+                  ang_sample_resolution_, ctrlimits.omegaParams.minOmega);
   if (m_pool) {
     // spawn in threadpool
     static thread_local std::vector<std::future<void>> futures;
     futures.clear();
     futures.reserve(numTrajectories);
-    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
-      if (std::abs(vx) >= MIN_VEL) {
+    for (const double vx : vx_samples) {
+      if (std::abs(vx) >= ctrlimits.velXParams.minVel && vx != 0.0) {
         // vx, omega
-        for (double omega = min_omega_; omega <= max_omega_;
-             omega += ang_sample_resolution_) {
-
+        for (const double omega : omega_samples) {
           Velocity2D vel = Velocity2D(vx, 0.0, omega); // Limit Y movement
           // Get admissible trajectories in separate threads
           futures.emplace_back(m_pool->enqueue(
               &TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
               current_pose, admissible_velocity_trajectories.get()));
         }
-
-        // vx, vy
-        for (double vy = min_vy_; vy <= max_vy_;
-             vy += lin_sample_y_resolution_) {
-
-          Velocity2D vel = Velocity2D(vx, vy, 0.0); // Limit Y movement
-          // Get admissible trajectories in separate threads
-          futures.emplace_back(m_pool->enqueue(
-              &TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
-              current_pose, admissible_velocity_trajectories.get()));
+      }
+      // vx, vy
+      for (const double vy : vy_samples) {
+        if ((std::abs(vx) < ctrlimits.velXParams.minVel &&
+             std::abs(vy) < ctrlimits.velYParams.minVel) ||
+            (vx == 0.0 && vy == 0.0)) {
+          // Zero velocity is never sampled
+          continue;
         }
+        Velocity2D vel = Velocity2D(vx, vy, 0.0); // Limit Y movement
+        // Get admissible trajectories in separate threads
+        futures.emplace_back(m_pool->enqueue(
+            &TrajectorySampler::getAdmissibleTrajsFromVel, this, vel,
+            current_pose, admissible_velocity_trajectories.get()));
       }
     }
     // wait on the futures before returning
@@ -275,18 +316,21 @@ TrajectorySampler::generateTrajectoriesHolonomic(
     }
   } else {
 
-    for (double vx = min_vx_; vx <= max_vx_; vx += lin_sample_x_resolution_) {
+    for (const double vx : vx_samples) {
       // vx, vy
-      for (double vy = min_vy_; vy <= max_vy_; vy += lin_sample_y_resolution_) {
-
+      for (const double vy : vy_samples) {
+        if ((std::abs(vx) < ctrlimits.velXParams.minVel &&
+             std::abs(vy) < ctrlimits.velYParams.minVel) ||
+            (vx == 0.0 && vy == 0.0)) {
+          // Zero velocity is never sampled
+          continue;
+        }
         getAdmissibleTrajsFromVel(Velocity2D(vx, vy, 0.0), current_pose,
                                   admissible_velocity_trajectories.get());
       }
-      if (std::abs(vx) >= MIN_VEL) {
+      if (std::abs(vx) >= ctrlimits.velXParams.minVel && vx != 0.0) {
         // vx, omega
-        for (double omega = min_omega_; omega <= max_omega_;
-             omega += ang_sample_resolution_) {
-
+        for (const double omega : omega_samples) {
           getAdmissibleTrajsFromVel(Velocity2D(vx, 0.0, omega), current_pose,
                                     admissible_velocity_trajectories.get());
         }
@@ -356,7 +400,9 @@ void TrajectorySampler::UpdateReachableVelocityRange(
   max_vx_ = std::min(ctrlimits.velXParams.maxVel,
                      currentVel.vx() +
                          ctrlimits.velXParams.maxAcceleration * time_step_);
-  min_vx_ = std::max(-ctrlimits.velXParams.maxVel,
+  // With reversing disallowed the forward window is clipped at zero
+  const double x_floor = allow_reverse_ ? -ctrlimits.velXParams.maxVel : 0.0;
+  min_vx_ = std::max(x_floor,
                      currentVel.vx() -
                          ctrlimits.velXParams.maxDeceleration * time_step_);
 
@@ -397,42 +443,6 @@ void TrajectorySampler::updateState(const Path::State &current_state) {
   collChecker->updateState(current_state);
 }
 
-template <>
-bool TrajectorySampler::checkStatesFeasibility<LaserScan>(
-    const std::vector<Path::State> &states, const LaserScan &scan) {
-  if (states.empty()) {
-    return false;
-  }
-  // states[0] is where the robot was when the scan was taken; the rest are
-  // future poses tested against those same obstacles.
-  collChecker->updateSensorData(scan, states[0]);
-  for (auto state : states) {
-    collChecker->updateState(state);
-    if (collChecker->checkCollisions()) {
-      return true;
-    }
-  }
-  return false;
-}
-
-template <>
-bool TrajectorySampler::checkStatesFeasibility<std::vector<Path::Point>>(
-    const std::vector<Path::State> &states,
-    const std::vector<Path::Point> &cloud) {
-  if (states.empty()) {
-    return false;
-  }
-  // states[0] is the capture pose (see the LaserScan specialization)
-  collChecker->updateSensorData(cloud, states[0]);
-  for (auto state : states) {
-    collChecker->updateState(state);
-    if (collChecker->checkCollisions()) {
-      return true;
-    }
-  }
-  return false;
-}
-
 Trajectory2D
 TrajectorySampler::generateSingleSampleFromVel(const Velocity2D &vel,
                                                const Path::State &pose) {
@@ -441,7 +451,9 @@ TrajectorySampler::generateSingleSampleFromVel(const Velocity2D &vel,
   trajectory.path.add(0, simulated_pose.x, simulated_pose.y);
   if (ctrType == ControlType::DIFFERENTIAL_DRIVE) {
     for (size_t i = 0; i < (numPointsPerTrajectory - 1); ++i) {
-      if (std::abs(vel.vx()) > MIN_VEL && std::abs(vel.omega()) > MIN_VEL) {
+      // Rotate then move only when both parts are motions the robot executes
+      if (std::abs(vel.vx()) >= ctrlimits.velXParams.minVel &&
+          std::abs(vel.omega()) >= ctrlimits.omegaParams.minOmega) {
         // Rotate then move
         Velocity2D tempVel = vel;
         tempVel.setVx(0.0);

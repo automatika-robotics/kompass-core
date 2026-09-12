@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 from kompass_core.vision import CameraFrameConvention, DepthDetector
 from kompass_core.datatypes import Bbox2D, PointsOfInterest
+from kompass_cpp.types import SensorConfig
 
 # -----------------------------------------------------------------------------
 # Fixtures
@@ -222,8 +223,9 @@ def test_poi_multipoint_robot_frame(detector, camera_params):
     The MAD-based bounding box should encompass the spread and the 3D
     center should correspond to the median of the cluster.
     """
-    cx, cy = int(camera_params["principal_point"][0]), int(
-        camera_params["principal_point"][1]
+    cx, cy = (
+        int(camera_params["principal_point"][0]),
+        int(camera_params["principal_point"][1]),
     )
     img_h, img_w = camera_params["img_shape"]
 
@@ -294,9 +296,7 @@ def test_compute_3d_float32_nan_pixels_are_rejected(
     h, w = camera_params["img_shape"]
     img = np.full((h, w), np.nan, dtype=np.float32)
 
-    results = detector.compute_3d_detections(
-        img, [center_bbox_2d], 0.0, 0.0, 0.0, 0.0
-    )
+    results = detector.compute_3d_detections(img, [center_bbox_2d], 0.0, 0.0, 0.0, 0.0)
     assert len(results) == 0
 
 
@@ -397,3 +397,353 @@ def test_the_two_conventions_differ_by_the_rep103_turn(
     # Body-aligned: applied twice -> depth lands on -y, a clean 90 deg off
     doubled = centre(CameraFrameConvention.BODY_ALIGNED)
     assert doubled[1] == pytest.approx(-3.0, abs=0.05)
+
+
+# -----------------------------------------------------------------------------
+# Point cloud input
+# -----------------------------------------------------------------------------
+
+
+def _cloud_dict(points_xyz: np.ndarray) -> dict:
+    """Packs Nx3 float32 points as the PointCloud2 layout dict the mapper
+    takes: 16-byte records (x, y, z at offsets 0/4/8 plus 4 bytes of padding),
+    the way LiDAR drivers publish."""
+    n = len(points_xyz)
+    records = np.zeros((n, 4), dtype=np.float32)
+    records[:, :3] = points_xyz
+    return {
+        "data": records.reshape(-1).view(np.uint8),
+        "point_step": 16,
+        "row_step": 16 * n,
+        "height": 1,
+        "width": n,
+        "x_offset": 0,
+        "y_offset": 4,
+        "z_offset": 8,
+    }
+
+
+def _optical_points_from_depth(depth_mm: np.ndarray, camera_params: dict) -> np.ndarray:
+    """Every valid pixel back-projected at its centre into the camera's
+    optical frame (x right, y down, z forward), Nx3 float32."""
+    fx, fy = camera_params["focal_length"]
+    cx, cy = camera_params["principal_point"]
+    rows, cols = np.nonzero(depth_mm)
+    d = depth_mm[rows, cols].astype(np.float32) * 1e-3
+    return np.stack(
+        [(cols + 0.5 - cx) * d / fx, (rows + 0.5 - cy) * d / fy, d], axis=1
+    ).astype(np.float32)
+
+
+def _optical_to_body(points_opt: np.ndarray) -> np.ndarray:
+    """REP 103: optical (x right, y down, z forward) -> body (x forward,
+    y left, z up) for a camera at the body origin."""
+    return np.stack([points_opt[:, 2], -points_opt[:, 0], -points_opt[:, 1]], axis=1)
+
+
+@pytest.fixture
+def camera_as_cloud_sensor(forward_facing_camera):
+    """A cloud expressed in the camera's optical frame has the camera itself
+    as its sensor."""
+    return SensorConfig(
+        position=forward_facing_camera["translation"],
+        rotation=forward_facing_camera["rotation"],
+    )
+
+
+def _assert_same_boxes(from_depth, from_cloud, tol=1e-3):
+    assert len(from_depth) == len(from_cloud) == 1
+    assert np.allclose(from_depth[0].center, from_cloud[0].center, atol=tol)
+    assert np.allclose(from_depth[0].size, from_cloud[0].size, atol=tol)
+
+
+@pytest.mark.parametrize(
+    "robot_state", [(0.0, 0.0, 0.0, 0.0), (10.0, 5.0, 0.7, 0.0)], ids=["body", "world"]
+)
+def test_point_cloud_matches_depth_image(
+    detector,
+    camera_params,
+    synthetic_depth_image,
+    center_bbox_2d,
+    camera_as_cloud_sensor,
+    robot_state,
+):
+    """The same scene as a point cloud in the camera's optical frame lifts to
+    the same 3D box as the depth image."""
+    from_depth = detector.compute_3d_detections(
+        synthetic_depth_image, [center_bbox_2d], *robot_state
+    )
+    detector.set_point_cloud_sensor(camera_as_cloud_sensor)
+    cloud = _cloud_dict(
+        _optical_points_from_depth(synthetic_depth_image, camera_params)
+    )
+    from_cloud = detector.compute_3d_detections(
+        **cloud,
+        input=[center_bbox_2d],
+        robot_x=robot_state[0],
+        robot_y=robot_state[1],
+        robot_yaw=robot_state[2],
+        robot_speed=robot_state[3],
+    )
+    _assert_same_boxes(from_depth, from_cloud)
+
+
+def test_point_cloud_default_sensor_is_the_body_frame(
+    detector, camera_params, synthetic_depth_image, center_bbox_2d
+):
+    """Without set_point_cloud_sensor the cloud is taken in the robot body
+    frame: the optical cloud turned into body axes lifts to the same box."""
+    from_depth = detector.compute_3d_detections(
+        synthetic_depth_image, [center_bbox_2d], 0.0, 0.0, 0.0, 0.0
+    )
+    body_points = _optical_to_body(
+        _optical_points_from_depth(synthetic_depth_image, camera_params)
+    )
+    from_cloud = detector.compute_3d_detections(
+        **_cloud_dict(body_points),
+        input=[center_bbox_2d],
+        robot_x=0.0,
+        robot_y=0.0,
+        robot_yaw=0.0,
+        robot_speed=0.0,
+    )
+    _assert_same_boxes(from_depth, from_cloud)
+
+
+def test_point_cloud_ignores_invalid_points(
+    detector,
+    camera_params,
+    synthetic_depth_image,
+    center_bbox_2d,
+    camera_as_cloud_sensor,
+):
+    """Non-finite points, points behind the camera and points beyond the
+    depth range (a wall behind the target that projects into the same box)
+    do not change the result."""
+    detector.set_point_cloud_sensor(camera_as_cloud_sensor)
+    clean = _optical_points_from_depth(synthetic_depth_image, camera_params)
+    args = {
+        "input": [center_bbox_2d],
+        "robot_x": 0.0,
+        "robot_y": 0.0,
+        "robot_yaw": 0.0,
+        "robot_speed": 0.0,
+    }
+    from_clean = detector.compute_3d_detections(**_cloud_dict(clean), **args)
+
+    # A wall at 20 m (beyond the 10 m range) covering the whole box, more
+    # points than the target itself, plus a point behind the camera and NaNs
+    wall = clean.copy()
+    wall[:, 2] = 20.0
+    wall[:, :2] *= 20.0 / 3.0
+    behind = np.array([[0.0, 0.0, -3.0]], dtype=np.float32)
+    nans = np.full((10, 3), np.nan, dtype=np.float32)
+    polluted = np.concatenate([wall, behind, nans, clean, wall])
+    from_polluted = detector.compute_3d_detections(**_cloud_dict(polluted), **args)
+    _assert_same_boxes(from_clean, from_polluted)
+
+
+def test_point_cloud_pois_match_depth_image(
+    detector,
+    camera_params,
+    synthetic_depth_image_poi,
+    center_poi,
+    camera_as_cloud_sensor,
+):
+    from_depth = detector.compute_3d_detections(
+        synthetic_depth_image_poi, center_poi, 0.0, 0.0, 0.0, 0.0
+    )
+    detector.set_point_cloud_sensor(camera_as_cloud_sensor)
+    cloud = _cloud_dict(
+        _optical_points_from_depth(synthetic_depth_image_poi, camera_params)
+    )
+    from_cloud = detector.compute_3d_detections(
+        **cloud,
+        input=center_poi,
+        robot_x=0.0,
+        robot_y=0.0,
+        robot_yaw=0.0,
+        robot_speed=0.0,
+    )
+    _assert_same_boxes(from_depth, from_cloud)
+
+
+def test_point_cloud_lifts_through_lidar_mount_pose(detector, camera_params):
+    """A LiDAR mounted away from the camera, yawed, in its own body-aligned
+    frame: a cluster placed at a known body-frame location comes back there,
+    with a larger out-of-range wall behind it ignored."""
+    yaw = 0.2
+    lidar = SensorConfig(
+        position=np.array([-0.1, 0.0, 0.8], dtype=np.float32),
+        rotation=np.array(
+            [0.0, 0.0, np.sin(yaw / 2), np.cos(yaw / 2)], dtype=np.float32
+        ),
+    )
+    detector.set_point_cloud_sensor(lidar)
+    rot = np.array(
+        [
+            [np.cos(yaw), -np.sin(yaw), 0.0],
+            [np.sin(yaw), np.cos(yaw), 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+        dtype=np.float32,
+    )
+
+    def in_lidar(points_body: np.ndarray) -> np.ndarray:
+        return (points_body - lidar.position) @ rot  # rot^T applied to each row
+
+    cluster_center = np.array([3.0, 0.5, 0.4], dtype=np.float32)
+    offsets = np.array(
+        [
+            [0.05 * k, 0.04 * i, 0.04 * j]
+            for i in range(-5, 6)
+            for j in range(-5, 6)
+            for k in (-1, 0, 1)
+        ],
+        dtype=np.float32,
+    )
+    cluster = cluster_center + offsets
+    wall = np.array(
+        [
+            [15.0, 0.5 + 0.05 * i, 0.4 + 0.05 * j]
+            for i in range(-10, 11)
+            for j in range(-10, 11)
+        ],
+        dtype=np.float32,
+    )
+    assert len(wall) > len(cluster)
+    points = in_lidar(np.concatenate([cluster, wall]))
+
+    # The cluster projects to u in [203, 270] and v in [140, 207] for this
+    # camera (fx = fy = 500 at the body origin)
+    box = Bbox2D(
+        top_left_corner=np.array([200, 137], dtype=np.int32),
+        size=np.array([74, 73], dtype=np.int32),
+    )
+    box.img_size = np.array([640, 480], dtype=np.int32)
+    boxes = detector.compute_3d_detections(
+        **_cloud_dict(points),
+        input=[box],
+        robot_x=0.0,
+        robot_y=0.0,
+        robot_yaw=0.0,
+        robot_speed=0.0,
+    )
+    assert len(boxes) == 1
+    assert np.allclose(boxes[0].center, cluster_center, atol=0.02)
+    assert 0.0 < boxes[0].size[0] < 0.2
+
+
+def test_point_cloud_accepts_bytes_and_readonly_buffers(
+    detector,
+    camera_params,
+    synthetic_depth_image,
+    center_bbox_2d,
+    camera_as_cloud_sensor,
+):
+    """The buffer crosses as delivered: a read-only np.frombuffer view (what a
+    ROS callback hands out) and plain bytes are both accepted; a dict missing
+    a layout field is rejected."""
+    detector.set_point_cloud_sensor(camera_as_cloud_sensor)
+    cloud = _cloud_dict(
+        _optical_points_from_depth(synthetic_depth_image, camera_params)
+    )
+    args = {
+        "input": [center_bbox_2d],
+        "robot_x": 0.0,
+        "robot_y": 0.0,
+        "robot_yaw": 0.0,
+        "robot_speed": 0.0,
+    }
+    reference = detector.compute_3d_detections(**cloud, **args)
+
+    raw = cloud["data"].tobytes()
+    readonly = np.frombuffer(raw, dtype=np.uint8)
+    assert not readonly.flags.writeable
+    _assert_same_boxes(
+        reference,
+        detector.compute_3d_detections(**{**cloud, "data": readonly}, **args),
+    )
+    _assert_same_boxes(
+        reference,
+        detector.compute_3d_detections(**{**cloud, "data": raw}, **args),
+    )
+
+    broken = {k: v for k, v in cloud.items() if k != "z_offset"}
+    with pytest.raises(TypeError):
+        detector.compute_3d_detections(**broken, **args)
+
+
+# -----------------------------------------------------------------------------
+# Provenance of a lifted box: which input it came from, how much depth it rests on
+# -----------------------------------------------------------------------------
+
+
+def _box_over_the_void(center_bbox_2d):
+    """A box on pixels that carry no depth, which the detector drops."""
+    box = Bbox2D()
+    box.top_left_corner = np.array([0, 0], dtype=np.int32)
+    box.size = np.array([50, 50], dtype=np.int32)
+    box.img_size = center_bbox_2d.img_size
+    return box
+
+
+def test_boxes_keep_their_source_index_when_others_are_dropped(
+    detector, synthetic_depth_image, center_bbox_2d
+):
+    """The output is not positional, so a survivor must say which input it
+    was lifted from."""
+    results = detector.compute_3d_detections(
+        synthetic_depth_image,
+        [_box_over_the_void(center_bbox_2d), center_bbox_2d],
+        0.0, 0.0, 0.0, 0.0,
+    )
+    assert [box.source_index for box in results] == [1]
+
+
+def test_sample_count_is_the_usable_depth_inside_the_box(
+    detector, synthetic_depth_image, center_bbox_2d
+):
+    """The synthetic scene carries depth exactly inside the box, so every
+    pixel counts; a box half over the void counts half."""
+    (box,) = detector.compute_3d_detections(
+        synthetic_depth_image, [center_bbox_2d], 0.0, 0.0, 0.0, 0.0
+    )
+    w, h = center_bbox_2d.size
+    assert box.sample_count == w * h
+
+    half = Bbox2D()
+    half.top_left_corner = center_bbox_2d.top_left_corner - np.array(
+        [w // 2, 0], dtype=np.int32
+    )
+    half.size = center_bbox_2d.size
+    half.img_size = center_bbox_2d.img_size
+    (box,) = detector.compute_3d_detections(
+        synthetic_depth_image, [half], 0.0, 0.0, 0.0, 0.0
+    )
+    # the box limits are inclusive, which may add one column
+    assert box.sample_count == pytest.approx(w * h / 2, abs=h)
+
+
+def test_poi_boxes_carry_provenance(detector, synthetic_depth_image_poi, center_poi):
+    (box,) = detector.compute_3d_detections(
+        synthetic_depth_image_poi, center_poi, 0.0, 0.0, 0.0, 0.0
+    )
+    assert box.source_index == 0
+    assert box.sample_count > 1
+
+
+def test_point_cloud_boxes_carry_provenance(
+    detector, camera_params, camera_as_cloud_sensor, synthetic_depth_image, center_bbox_2d
+):
+    """Every back-projected point of the scene lands in the box, so the
+    count is the point count, and the index survives a dropped box."""
+    detector.set_point_cloud_sensor(camera_as_cloud_sensor)
+    points = _optical_points_from_depth(synthetic_depth_image, camera_params)
+    (box,) = detector.compute_3d_detections(
+        **_cloud_dict(points),
+        input=[_box_over_the_void(center_bbox_2d), center_bbox_2d],
+        robot_x=0.0, robot_y=0.0, robot_yaw=0.0, robot_speed=0.0,
+    )
+    assert box.source_index == 1
+    assert box.sample_count == len(points)

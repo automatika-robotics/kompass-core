@@ -118,73 +118,40 @@ public:
    */
   Control::TrajSearchResult
   getTrackingCtrl(const std::vector<Bbox3D> &detected_boxes,
-                  const Velocity2D &current_vel) {
-    std::optional<TrackedPose2D> tracked_pose = std::nullopt;
-    if (!detected_boxes.empty()) {
-      if (tracker_->trackerInitialized()) {
-        // Update the tracker with the detected boxes
-        bool tracking_updated = tracker_->updateTracking(detected_boxes);
-        if (!tracking_updated) {
-          LOG_WARNING(
-              "Tracker failed to update target with the detected boxes");
-        } else {
-          tracked_pose = tracker_->getFilteredTrackedPose2D();
-          refreshTargetGeometry();
-        }
-      } else {
-        throw std::runtime_error(
-            "Tracker is not initialized with an initial tracking target. Call "
-            "'RGBDFollower::setInitialTracking' first");
-      }
-    }
-    return this->getTrackingCtrl(tracked_pose, current_vel);
-  };
+                  const Velocity2D &current_vel);
 
   /**
-   * Depth-image variant. The image crosses as a non-owning zero-copy view
-   * (UINT16 millimetres or FLOAT32 metres, row-major) and is only read for
-   * the duration of the call.
+   * @brief Depth-image variant: lifts the 2D detections to 3D through the
+   * depth detector, then tracks and controls like the 3D-box variant.
+   *
+   * @param aligned_depth_img Non-owning zero-copy view of the depth image
+   * (UINT16 millimetres or FLOAT32 metres, row-major), only read for the
+   * duration of the call
+   * @param detected_boxes_2d 2D detections in that image
+   * @param current_vel Current robot velocity
+   * @return Control::TrajSearchResult
    */
   Control::TrajSearchResult
   getTrackingCtrl(const DepthImageView &aligned_depth_img,
                   const std::vector<Bbox2D> &detected_boxes_2d,
-                  const Velocity2D &current_vel) {
-    if (!detector_) {
-      throw std::runtime_error(
-          "DepthDetector is not initialized with the camera intrinsics. Call "
-          "'RGBDFollower::setCameraIntrinsics' first");
-    }
-    if (!tracker_->trackerInitialized()) {
-      throw std::runtime_error(
-          "Tracker is not initialized with an initial tracking target. Call "
-          "'RGBDFollower::setInitialTracking' first");
-    }
-    std::optional<TrackedPose2D> tracked_pose = std::nullopt;
-    if (!detected_boxes_2d.empty()) {
-      if (track_velocity_) {
-        // Send current state to the detector
-        detector_->updateBoxes(aligned_depth_img, detected_boxes_2d,
-                               currentState);
-      } else {
-        detector_->updateBoxes(aligned_depth_img, detected_boxes_2d);
-      }
-      const auto &boxes_3d = detector_->get3dDetections();
-      if (!boxes_3d.empty()) {
-        // Update the tracker with the detected boxes
-        bool tracking_updated = tracker_->updateTracking(boxes_3d);
-        if (!tracking_updated) {
-          LOG_WARNING(
-              "Tracker failed to update target with the detected boxes");
-        } else {
-          tracked_pose = tracker_->getFilteredTrackedPose2D();
-          refreshTargetGeometry();
-        }
-      } else {
-        LOG_WARNING("Detector failed to find 3D boxes");
-      }
-    }
-    return this->getTrackingCtrl(tracked_pose, current_vel);
-  };
+                  const Velocity2D &current_vel);
+
+  /**
+   * @brief Point-cloud variant: lifts the 2D detections to 3D by projecting
+   * the cloud through the camera, then tracks and controls like the 3D-box
+   * variant.
+   *
+   * @param cloud Non-owning zero-copy view of the PointCloud2 buffer, points
+   * in the sensor's own frame as published, only read for the duration of
+   * the call. Mount pose and field encoding come from setPointCloudSensor().
+   * @param detected_boxes_2d 2D detections in the camera image
+   * @param current_vel Current robot velocity
+   * @return Control::TrajSearchResult
+   */
+  Control::TrajSearchResult
+  getTrackingCtrl(const PointCloudView &cloud,
+                  const std::vector<Bbox2D> &detected_boxes_2d,
+                  const Velocity2D &current_vel);
 
   /**
    * @brief Set the initial image position of the target to be tracked
@@ -200,22 +167,50 @@ public:
                           const float yaw = 0.0);
 
   /**
-   * @brief  Set the initial image position of the target to be tracked using 2D
-   * detections
+   * @brief Set the initial target from a pixel position using 2D detections
+   * and an aligned depth image.
    *
-   * @param pose_x_img
-   * @param pose_y_img
-   * @param detected_boxes_2d
-   * @return true
-   * @return false
+   * @param pose_x_img Pixel x of the target
+   * @param pose_y_img Pixel y of the target
+   * @param aligned_depth_image See getTrackingCtrl()
+   * @param detected_boxes_2d 2D detections in that image
+   * @param yaw Robot yaw used to initialize the tracked target
+   * @return True when a detection contains the pixel and was lifted
    */
   bool setInitialTracking(const int pose_x_img, const int pose_y_img,
                           const DepthImageView &aligned_depth_image,
                           const std::vector<Bbox2D> &detected_boxes_2d,
                           const float yaw = 0.0);
 
+  /**
+   * @brief Set the initial target from one 2D box and an aligned depth image.
+   *
+   * @param aligned_depth_image See getTrackingCtrl()
+   * @param target_box_2d 2D box of the target
+   * @param yaw Robot yaw used to initialize the tracked target
+   * @return True when the box was lifted to 3D
+   */
   bool setInitialTracking(const DepthImageView &aligned_depth_image,
                           const Bbox2D &target_box_2d, const float yaw = 0.0);
+
+  /// Point-cloud variant of the pixel-position initial tracking.
+  bool setInitialTracking(const int pose_x_img, const int pose_y_img,
+                          const PointCloudView &cloud,
+                          const std::vector<Bbox2D> &detected_boxes_2d,
+                          const float yaw = 0.0);
+
+  /// Point-cloud variant of the single-box initial tracking.
+  bool setInitialTracking(const PointCloudView &cloud,
+                          const Bbox2D &target_box_2d, const float yaw = 0.0);
+
+  /**
+   * @brief Describes the point-cloud sensor used by the point-cloud variants:
+   * its mount pose in the robot body frame and the encoding of its x/y/z
+   * fields. Forwarded to the depth detector.
+   *
+   * @param sensor Mount pose and field encoding of the point-cloud sensor
+   */
+  void setPointCloudSensor(const SensorConfig &sensor);
 
   Eigen::Vector2f getErrors() const {
     return Eigen::Vector2f(dist_error_, orientation_error_);
@@ -226,6 +221,7 @@ private:
   std::unique_ptr<FeatureBasedBboxTracker> tracker_;
   std::unique_ptr<DepthDetector> detector_;
   Eigen::Isometry3f vision_sensor_tf_;
+  SensorConfig cloud_sensor_;  // Point-cloud sensor if given
   int track_velocity_;
   double robot_radius_;
 
@@ -235,8 +231,48 @@ private:
   // has nothing to report.
   void refreshTargetGeometry();
 
+  // ---- Lifting 2D detections, shared by the depth-image and point-cloud
+  // variants. DepthSource is DepthImageView or PointCloudView. ----
+
+  // Runs the detector on the 2D boxes, with the robot state when the target
+  // is tracked in the world frame
+  template <typename DepthSource>
+  void liftDetections(const DepthSource &source,
+                      const std::vector<Bbox2D> &boxes);
+
+  // Body of the getTrackingCtrl variants taking 2D detections
+  template <typename DepthSource>
+  Control::TrajSearchResult trackDetections(const DepthSource &source,
+                                            const std::vector<Bbox2D> &boxes,
+                                            const Velocity2D &current_vel);
+
+  // Body of the setInitialTracking variants taking one 2D target box
+  template <typename DepthSource>
+  bool initTracking(const DepthSource &source, const Bbox2D &target_box_2d,
+                    const float yaw);
+
+  // Body of the setInitialTracking variants taking a pixel position. The
+  // detection containing the pixel is the target box
+  template <typename DepthSource>
+  bool initTrackingAtPixel(const int pose_x_img, const int pose_y_img,
+                           const DepthSource &source,
+                           const std::vector<Bbox2D> &detected_boxes_2d,
+                           const float yaw);
+
+  // Feeds the detector's last result to the tracker. Returns the filtered
+  // target pose, or nothing
+  std::optional<TrackedPose2D> trackLiftedBoxes();
+
+  // Initializes the tracker on the detector's last (single) result
+  bool initTrackingFromLiftedBox(const float yaw);
+
+  // The first detection whose box contains the pixel, or nullptr
+  static const Bbox2D *findBoxAtPixel(const int pose_x_img,
+                                      const int pose_y_img,
+                                      const std::vector<Bbox2D> &boxes);
+
   // Build a control-horizon-long stationary trajectory (zero velocities,
-  // path pinned at origin). Pure: no side effects on timers or queues.
+  // path pinned at origin).
   TrajSearchResult makeHoldResult() const;
 
   // Build a result by popping commands off `search_commands_queue_`
@@ -261,8 +297,7 @@ private:
   Trajectory2D getTrackingReferenceSegment(const TrackedPose2D &tracking_pose);
 
   // In local-coordinate mode, advance the target's robot-relative pose by
-  // one step of the robot's own motion (the "target gets pushed back" by
-  // the robot's forward step).
+  // one step of the robot's own motion.
   TrackedPose2D updateLocalTarget(const TrackedPose2D &current_target,
                                   const Velocity2D &robot_cmd, double dt);
 
@@ -274,10 +309,11 @@ private:
   Control::TrajSearchResult
   getTrackingCtrl(const std::optional<TrackedPose2D> &tracked_pose,
                   const Velocity2D &current_vel) {
-    // Pipeline-of-stages dispatch: each stage returns nullopt when it
+    // NOTE: Pipeline-of-stages dispatch. Each stage returns nullopt when it
     // doesn't apply, allowing the next stage to take a turn. The first
     // stage that returns a result wins.
-    LOG_DEBUG("Last velocity command: ", latest_velocity_command_.vx(), ", ", latest_velocity_command_.omega());
+    LOG_DEBUG("Last velocity command: ", latest_velocity_command_.vx(), ", ",
+              latest_velocity_command_.omega());
     if (tracked_pose) {
       // Target is back in view — clear any pending search/wait state.
       recorded_wait_time_ = 0.0;

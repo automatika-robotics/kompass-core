@@ -36,12 +36,16 @@ inline size_t getNumTrajectories(ControlType ctrType, int maxLinearSamples,
   const int angSlots = maxAngularSamples + 1 - (maxAngularSamples % 2);
   int vx_n, vy_n;
   computeLinearSampleSplit(ctrType, maxLinearSamples, vx_n, vy_n);
+  // Every axis gets up to 3 extra samples (0 and +/- its minimum velocity):
+  // 3 more linear rows, each with the full angular fan of angSlots + 2.
+  const size_t vx_rows = static_cast<size_t>(vx_n) + 3;
+  const size_t omega_cols = static_cast<size_t>(angSlots) + 2;
   if (ctrType == ControlType::OMNI) {
-    return static_cast<size_t>(vx_n) * static_cast<size_t>(angSlots) +
-           static_cast<size_t>(vx_n) * static_cast<size_t>(vy_n);
+    const size_t vy_cols = static_cast<size_t>(vy_n) + 3;
+    return vx_rows * omega_cols + vx_rows * vy_cols;
   }
   // Non-holonomic: (vx, omega) grid, with an unused vy axis.
-  return static_cast<size_t>(vx_n) * static_cast<size_t>(angSlots);
+  return vx_rows * omega_cols;
 }
 
 // calculate number of points per trajectory based on time step and horizon
@@ -90,7 +94,7 @@ struct TrajectoryVelocities2D {
   TrajectoryVelocities2D(const Eigen::VectorXf &vx_, const Eigen::VectorXf &vy_,
                          const Eigen::VectorXf &omega_)
       : vx(vx_), vy(vy_), omega(omega_),
-        numPointsPerTrajectory_(vx_.size() + 1){};
+        numPointsPerTrajectory_(vx_.size() + 1) {};
 
   // add velocity to specified index in TrajectoryVelocities2D
   void add(size_t idx, const Velocity2D &velocity) {
@@ -194,7 +198,7 @@ struct TrajectoryPath {
   // initialize from eigen vectors
   TrajectoryPath(const Eigen::VectorXf &x_, const Eigen::VectorXf &y_,
                  const Eigen::VectorXf &z_)
-      : x(x_), y(y_), z(z_), numPointsPerTrajectory_(x.size()){};
+      : x(x_), y(y_), z(z_), numPointsPerTrajectory_(x.size()) {};
 
   // add point to specified index in path
   void add(size_t idx, const Path::Point &point) {

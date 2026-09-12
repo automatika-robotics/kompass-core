@@ -3,6 +3,8 @@
 #include "utils/logger.h"
 #include "utils/transformation.h"
 #include <algorithm>
+#include <climits>
+#include <cmath>
 #include <optional>
 #include <vector>
 
@@ -48,7 +50,8 @@ DepthDetector::DepthDetector(
   // rotation lands twice and every detection is 90 degrees off.
   camera_in_body_tf_ =
       convention == CameraFrameConvention::Optical
-          ? camera_in_body_tf * Eigen::Isometry3f(opticalToBodyAligned().conjugate())
+          ? camera_in_body_tf *
+                Eigen::Isometry3f(opticalToBodyAligned().conjugate())
           : camera_in_body_tf;
 
   // Set camera  intrinsic parameters
@@ -58,6 +61,14 @@ DepthDetector::DepthDetector(
   cy_ = principal_point.y();
 
   body_in_world_tf_ = Eigen::Isometry3f::Identity();
+  // Until a sensor is described, a point cloud is taken as an identity mount
+  // with FLOAT32 fields (SensorConfig defaults)
+  setPointCloudSensor(SensorConfig{});
+}
+
+void DepthDetector::setPointCloudSensor(const SensorConfig &sensor) {
+  cloud_sensor_ = sensor;
+  cloud_in_camera_tf_ = camera_in_body_tf_.inverse() * sensor.tfBody();
 }
 
 void DepthDetector::updateBoxes(const DepthImageView &aligned_depth_img,
@@ -67,9 +78,10 @@ void DepthDetector::updateBoxes(const DepthImageView &aligned_depth_img,
     body_in_world_tf_ = getTransformation(robot_state.value());
   }
   boxes_.clear();
-  for (const auto &box2d : detections) {
-    auto converted_box = convert2Dboxto3Dbox(aligned_depth_img, box2d);
+  for (std::size_t i = 0; i < detections.size(); ++i) {
+    auto converted_box = convert2Dboxto3Dbox(aligned_depth_img, detections[i]);
     if (converted_box) {
+      converted_box->source_index = static_cast<int>(i);
       boxes_.push_back(std::move(converted_box.value()));
     }
   }
@@ -84,14 +96,48 @@ void DepthDetector::updatePOIs(const DepthImageView &aligned_depth_img,
   boxes_.clear();
   auto converted_box = convertPOIto3Dbox(aligned_depth_img, poi);
   if (converted_box) {
+    converted_box->source_index = 0;
     boxes_.push_back(std::move(converted_box.value()));
   }
+}
+
+void DepthDetector::updateBoxes(const PointCloudView &cloud,
+                                const std::vector<Bbox2D> &detections,
+                                const std::optional<Path::State> &robot_state) {
+  if (robot_state.has_value()) {
+    body_in_world_tf_ = getTransformation(robot_state.value());
+  }
+  boxes_.clear();
+  if (detections.empty()) {
+    return;
+  }
+  projectCloud(cloud, detections);
+  for (std::size_t i = 0; i < detections.size(); ++i) {
+    auto converted_box = boxFromDepthSamples(detections[i], cloud_samples_[i]);
+    if (converted_box) {
+      converted_box->source_index = static_cast<int>(i);
+      boxes_.push_back(std::move(converted_box.value()));
+    }
+  }
+}
+
+void DepthDetector::updatePOIs(const PointCloudView &cloud,
+                               const PointsOfInterest &poi,
+                               const std::optional<Path::State> &robot_state) {
+  // A points-of-interest set reduces to one 2D box which then takes the same
+  // path as a detection
+  updateBoxes(cloud, {Bbox2D(poi)}, robot_state);
 }
 
 std::optional<Bbox3D>
 DepthDetector::convert2Dboxto3Dbox(const DepthImageView &depth,
                                    const Bbox2D &box2d) {
-  Bbox3D box3d(box2d);
+  gatherDepthSamples(depth, box2d);
+  return boxFromDepthSamples(box2d, depth_values_);
+}
+
+void DepthDetector::gatherDepthSamples(const DepthImageView &depth,
+                                       const Bbox2D &box2d) {
   Eigen::Vector2i x_limits = box2d.getXLimits();
   Eigen::Vector2i y_limits = box2d.getYLimits();
   // FLOAT32 pixels are metres already; UINT16 scale by the configured factor
@@ -113,17 +159,114 @@ DepthDetector::convert2Dboxto3Dbox(const DepthImageView &depth,
       }
     }
   }
-  if (depth_values_.size() <= 1) {
+}
+
+void DepthDetector::projectCloud(const PointCloudView &cloud,
+                                 const std::vector<Bbox2D> &boxes) {
+  const PointFieldType field_type = cloud_sensor_.cloud_field_type;
+  // TODO: an organized cloud (height > 1, height x width equal to the
+  // detection image) in the camera frame maps pixel (row, col) to point
+  // (row, col) directly. Such a cloud could index the box region the way
+  // gatherDepthSamples does instead of projecting every point.
+  cloud_samples_.resize(boxes.size());
+  box_limits_.resize(boxes.size());
+  // NOTE: Union rectangle of all boxes in inclusive pixel limits. A point that
+  // projects outside it cannot fall inside any box, which keeps the per-box
+  // loop off most of the cloud
+  int u_min = INT_MAX, u_max = INT_MIN, v_min = INT_MAX, v_max = INT_MIN;
+  for (std::size_t i = 0; i < boxes.size(); ++i) {
+    cloud_samples_[i].clear();
+    const Eigen::Vector2i x_limits = boxes[i].getXLimits();
+    const Eigen::Vector2i y_limits = boxes[i].getYLimits();
+    box_limits_[i] =
+        Eigen::Vector4i(x_limits(0), x_limits(1), y_limits(0), y_limits(1));
+    u_min = std::min(u_min, x_limits(0));
+    u_max = std::max(u_max, x_limits(1));
+    v_min = std::min(v_min, y_limits(0));
+    v_max = std::max(v_max, y_limits(1));
+  }
+
+  if (cloud.empty() || !cloud.offsetsValid()) {
+    LOG_WARNING("Point cloud is empty or has no x/y/z fields, no depth "
+                "samples for the 2D boxes");
+    return;
+  }
+  // The layout is checked once up front instead of per point. The last point
+  // of the last row must fit in the buffer with fields included
+  const int elem_size = elementSizeOf(field_type);
+  const std::size_t required_bytes =
+      static_cast<std::size_t>(cloud.height - 1) * cloud.row_step +
+      static_cast<std::size_t>(cloud.width - 1) * cloud.point_step +
+      std::max({cloud.x_offset, cloud.y_offset, cloud.z_offset}) + elem_size;
+  if (required_bytes > cloud.data.size()) {
+    LOG_WARNING("Point cloud layout exceeds its buffer (", required_bytes,
+                " bytes needed, ", cloud.data.size(),
+                " given), no depth "
+                "samples for the 2D boxes");
+    return;
+  }
+
+  const Eigen::Matrix3f rotation = cloud_in_camera_tf_.linear();
+  const Eigen::Vector3f translation = cloud_in_camera_tf_.translation();
+  const uint8_t *bytes = cloud.data.data();
+
+  // Walk the rows by their payload only (width points), so the row padding of
+  // organized clouds is never decoded as points
+  const int row_bytes = cloud.width * cloud.point_step;
+  for (int row = 0; row < cloud.height; ++row) {
+    for (int col = 0; col < row_bytes; col += cloud.point_step) {
+      const std::size_t point_start = row * cloud.row_step + col;
+      const Eigen::Vector3f point{
+          load_and_cast_val(bytes, point_start + cloud.x_offset, field_type),
+          load_and_cast_val(bytes, point_start + cloud.y_offset, field_type),
+          load_and_cast_val(bytes, point_start + cloud.z_offset, field_type)};
+      // Into the body-aligned camera axes: x forward, y left, z up
+      const Eigen::Vector3f in_camera = rotation * point + translation;
+      const float depth = in_camera.x();
+
+      // Filter non finite points
+      if (!(depth >= minDepth_ && depth <= maxDepth_) || depth <= 0.0f) {
+        continue;
+      }
+
+      // NOTE: Pinhole projection: optical x (right) is -y and optical y (down)
+      // is -z of the body-aligned axes. Pixel i spans [i, i + 1) so the pixel a
+      // continuous coordinate lands in is its floor
+      const float inv_depth = 1.0f / depth;
+      const int u = static_cast<int>(
+          std::floor(fx_ * (-in_camera.y()) * inv_depth + cx_));
+      const int v = static_cast<int>(
+          std::floor(fy_ * (-in_camera.z()) * inv_depth + cy_));
+      if (u < u_min || u > u_max || v < v_min || v > v_max) {
+        continue;
+      }
+      for (std::size_t i = 0; i < boxes.size(); ++i) {
+        const Eigen::Vector4i &limits = box_limits_[i];
+        if (u >= limits(0) && u <= limits(1) && v >= limits(2) &&
+            v <= limits(3)) {
+          cloud_samples_[i].push_back(depth);
+        }
+      }
+    }
+  }
+}
+
+std::optional<Bbox3D>
+DepthDetector::boxFromDepthSamples(const Bbox2D &box2d,
+                                   std::vector<float> &samples) {
+  Bbox3D box3d(box2d);
+  box3d.sample_count = static_cast<int>(samples.size());
+  if (samples.size() <= 1) {
     LOG_WARNING("Could not get any depth values for 2D bounding box at ",
                 box2d.top_corner.x(), ", ", box2d.top_corner.y());
     return std::nullopt;
   }
   float medianDepth, madDepth;
-  calculateMAD(depth_values_, medianDepth, madDepth);
+  calculateMAD(samples, medianDepth, madDepth);
 
   // Get min and max depth
   float minimum_d = maxDepth_, maximum_d = minDepth_;
-  for (auto depth_val : depth_values_) {
+  for (auto depth_val : samples) {
     if ((depth_val < minimum_d) &&
         (depth_val >= medianDepth - 1.5 * madDepth)) {
       minimum_d = depth_val;

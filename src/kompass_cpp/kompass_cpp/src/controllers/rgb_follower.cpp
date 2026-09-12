@@ -56,7 +56,7 @@ void RGBFollower::generateSearchCommands(float total_rotation,
   double omega_val = total_rotation / rotation_time;
 
   omega_val = std::max(std::min(omega_val, ctrl_limits_.omegaParams.maxOmega),
-                       config_.min_vel());
+                       ctrl_limits_.omegaParams.minOmega);
   // Generate velocity commands
   for (float t = 0.0f; t <= max_rotation_time;
        t = t + config_.control_time_step()) {
@@ -209,14 +209,14 @@ void RGBFollower::trackTarget(const Bbox2D &target) {
   // - 1.0) in [-1, 1] V in [-K_v * speed_max, K_v * speed_max]
   v = config_.K_v() * dist_speed;
 
-  // Limit by the minimum allowed velocity to avoid sending meaningless low
-  // commands to the robot
-  omega = std::abs(omega) >= config_.min_vel() ? omega : 0.0;
+  // Zero commands below the robot's minimum velocities instead of sending
+  // meaningless low commands to the robot
+  omega = std::abs(omega) >= ctrl_limits_.omegaParams.minOmega ? omega : 0.0;
   float omega_limit = static_cast<float>(ctrl_limits_.omegaParams.maxOmega);
   omega = std::clamp(omega, -omega_limit, omega_limit);
 
   float v_limit = static_cast<float>(ctrl_limits_.velXParams.maxVel);
-  v = std::abs(v) >= config_.min_vel() ? v : 0.0;
+  v = std::abs(v) >= ctrl_limits_.velXParams.minVel ? v : 0.0;
   v = std::clamp(v, -v_limit, v_limit);
 
   LOG_DEBUG("dist_error ", dist_error_, ", error_x: ", error_x);

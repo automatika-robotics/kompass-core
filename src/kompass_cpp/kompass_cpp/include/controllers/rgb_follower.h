@@ -32,7 +32,6 @@ public:
       // Pure tracking control law parameters
       addParameter("rotation_gain", Parameter(1.0, 1e-2, 10.0));
       addParameter("speed_gain", Parameter(1.0, 1e-2, 10.0));
-      addParameter("min_vel", Parameter(0.1, 1e-9, 1e9));
       addParameter("enable_search", Parameter(false));
     }
     bool enable_search() const { return getParameter<bool>("enable_search"); }
@@ -61,7 +60,6 @@ public:
     }
     double K_omega() const { return getParameter<double>("rotation_gain"); }
     double K_v() const { return getParameter<double>("speed_gain"); }
-    double min_vel() const { return getParameter<double>("min_vel"); }
   };
 
   RGBFollower(const ControlType robotCtrlType,
