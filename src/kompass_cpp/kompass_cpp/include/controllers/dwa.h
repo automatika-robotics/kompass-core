@@ -192,8 +192,10 @@ protected:
     // find closest segment to use in cost computation
     determineTarget();
 
-    if (rotate_in_place and std::abs(currentTrackedTarget_->heading_error) >
-                                goal_orientation_tolerance * 10.0) {
+    if (rotate_in_place and
+        (std::abs(currentTrackedTarget_->heading_error) >
+         goal_orientation_tolerance * 10.0) and
+        (abs(goal_distance_) <= goal_dist_tolerance)) {
       // If the robot is rotating in place and the heading error is large, we
       // do not need to sample trajectories
       LOG_DEBUG("Rotating In Place ...");
