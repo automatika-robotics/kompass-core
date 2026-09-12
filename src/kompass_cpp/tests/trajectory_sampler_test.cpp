@@ -423,12 +423,12 @@ BOOST_AUTO_TEST_CASE(zero_velocity_is_never_sampled) {
 // The sample buffers are sized for the grid plus the three extra speeds and
 // the two extra rates, for every robot type
 BOOST_AUTO_TEST_CASE(capacity_counts_the_extra_samples) {
-  // Differential drive, 4 and 4: (5 + 3) speeds x (5 + 2) rates
+  // Differential drive, 4 and 4: (5 + 3) speeds x (5 + 3) rates
   BOOST_TEST(Control::getNumTrajectories(
-                 Control::ControlType::DIFFERENTIAL_DRIVE, 4, 4) == 56u);
-  // Omni, 20 and 20: (15 + 3) x (21 + 2) + (15 + 3) x (5 + 3)
+                 Control::ControlType::DIFFERENTIAL_DRIVE, 4, 4) == 64u);
+  // Omni, 20 and 20: (15 + 3) x (21 + 3) + (15 + 3) x (5 + 3)
   BOOST_TEST(Control::getNumTrajectories(Control::ControlType::OMNI, 20, 20) ==
-             558u);
+             576u);
 
   const Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0, 0.05);
   const std::vector<Control::ControlType> types{
