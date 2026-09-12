@@ -443,42 +443,6 @@ void TrajectorySampler::updateState(const Path::State &current_state) {
   collChecker->updateState(current_state);
 }
 
-template <>
-bool TrajectorySampler::checkStatesFeasibility<LaserScan>(
-    const std::vector<Path::State> &states, const LaserScan &scan) {
-  if (states.empty()) {
-    return false;
-  }
-  // states[0] is where the robot was when the scan was taken; the rest are
-  // future poses tested against those same obstacles.
-  collChecker->updateSensorData(scan, states[0]);
-  for (auto state : states) {
-    collChecker->updateState(state);
-    if (collChecker->checkCollisions()) {
-      return true;
-    }
-  }
-  return false;
-}
-
-template <>
-bool TrajectorySampler::checkStatesFeasibility<std::vector<Path::Point>>(
-    const std::vector<Path::State> &states,
-    const std::vector<Path::Point> &cloud) {
-  if (states.empty()) {
-    return false;
-  }
-  // states[0] is the capture pose (see the LaserScan specialization)
-  collChecker->updateSensorData(cloud, states[0]);
-  for (auto state : states) {
-    collChecker->updateState(state);
-    if (collChecker->checkCollisions()) {
-      return true;
-    }
-  }
-  return false;
-}
-
 Trajectory2D
 TrajectorySampler::generateSingleSampleFromVel(const Velocity2D &vel,
                                                const Path::State &pose) {

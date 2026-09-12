@@ -134,9 +134,27 @@ public:
   generateSingleSampleFromVel(const Velocity2D &vel,
                               const Path::State &pose = Path::State());
 
+  // Returns true if ANY of `states` collides with `sensor_points`.
+  // Defined here rather than in the .cpp: `updateSensorData` is itself a
+  // generic template, so every sensor type the samplers accept works without
+  // a matching explicit instantiation.
   template <typename T>
   bool checkStatesFeasibility(const std::vector<Path::State> &states,
-                              const T &sensor_points);
+                              const T &sensor_points) {
+    if (states.empty()) {
+      return false;
+    }
+    // states[0] is where the robot was when the data was captured; the rest
+    // are future poses tested against those same obstacles.
+    collChecker->updateSensorData(sensor_points, states[0]);
+    for (const auto &state : states) {
+      collChecker->updateState(state);
+      if (collChecker->checkCollisions()) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   // Temporarily shrink the rollout horizon (e.g., when the reference path
   // has high curvature ahead and straight-tangent samples would diverge too
