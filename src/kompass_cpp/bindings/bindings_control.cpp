@@ -303,14 +303,16 @@ void bindings_control(py::module_ &m) {
                     double, double, int, int, CollisionChecker::ShapeType,
                     std::vector<float>, const Eigen::Vector3f &,
                     const Eigen::Vector4f &, double,
-                    Control::CostEvaluator::TrajectoryCostsWeights, int>(),
+                    Control::CostEvaluator::TrajectoryCostsWeights, bool,
+                    int>(),
            py::arg("control_limits"), py::arg("control_type"),
            py::arg("time_step"), py::arg("prediction_horizon"),
            py::arg("control_horizon"), py::arg("max_linear_samples"),
            py::arg("max_angular_samples"), py::arg("robot_shape_type"),
            py::arg("robot_dimensions"), py::arg("sensor_position_robot"),
            py::arg("sensor_rotation_robot"), py::arg("octree_resolution"),
-           py::arg("cost_weights"), py::arg("max_num_threads") = 1)
+           py::arg("cost_weights"), py::arg("allow_reverse") = true,
+           py::arg("max_num_threads") = 1)
 
       .def(py::init<Control::TrajectorySampler::TrajectorySamplerParameters,
                     Control::ControlLimitsParams, Control::ControlType,

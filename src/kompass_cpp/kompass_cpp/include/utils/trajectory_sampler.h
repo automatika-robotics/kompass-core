@@ -42,6 +42,9 @@ public:
           Parameter(
               10, 1, 1000,
               "Maximum number of samples for the angular velocity controls"));
+      addParameter("allow_reverse",
+                   Parameter(true, "Whether reversing (negative forward "
+                                   "velocity) samples are generated"));
       addParameter("octree_map_resolution",
                    Parameter(0.1, 0.0, 1000.0,
                              "Resolution of the built-in Octree map used for "
@@ -77,7 +80,8 @@ public:
                     const std::vector<float> robotDimensions,
                     const Eigen::Vector3f &sensor_position_body,
                     const Eigen::Quaternionf &sensor_rotation_body,
-                    const double octreeRes, const int maxNumThreads = 1);
+                    const double octreeRes, const bool allowReverse = true,
+                    const int maxNumThreads = 1);
 
   TrajectorySampler(TrajectorySamplerParameters config,
                     ControlLimitsParams controlLimits, ControlType controlType,
@@ -184,6 +188,7 @@ private:
   double min_omega_;
   size_t numCtrlPoints_;
   bool drop_samples_{true};
+  bool allow_reverse_{true};  // Whether reversing samples are generated
 
   /**
    * @brief Helper method to update the class private parameters from config

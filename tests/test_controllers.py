@@ -510,6 +510,54 @@ def test_linear_ctrl_limits_min_vel():
     assert limits.min_vel == 0.2
 
 
+def test_dwa_allow_reverse():
+    """Reversing samples are generated unless the DWA config turns them off,
+    in which case no command is ever negative."""
+    assert DWAConfig().allow_reverse is True
+
+    # The goal lies behind the robot: with reversing allowed the planner
+    # backs up, forward-only it must turn around instead
+    def first_command(allow_reverse: bool):
+        robot = Robot(
+            robot_type=RobotType.DIFFERENTIAL_DRIVE,
+            geometry_type=RobotGeometry.Type.CYLINDER,
+            geometry_params=np.array([0.2, 0.4]),
+        )
+        limits = RobotCtrlLimits(
+            vx_limits=LinearCtrlLimits(max_vel=0.8, max_acc=5.0, max_decel=10.0),
+            omega_limits=AngularCtrlLimits(
+                max_omega=1.5, max_acc=3.0, max_decel=3.0, max_ang=np.pi
+            ),
+        )
+        dwa = DWA(
+            robot=robot,
+            ctrl_limits=limits,
+            config=DWAConfig(
+                control_time_step=0.1,
+                prediction_horizon=10,
+                control_horizon=2,
+                max_linear_samples=9,
+                max_angular_samples=10,
+                max_num_threads=1,
+                allow_reverse=allow_reverse,
+            ),
+        )
+        poses = []
+        for x in (0.0, -1.5, -3.0):
+            pose = PoseStamped()
+            pose.pose.position.x = x
+            poses.append(pose)
+        dwa.set_path(Path(poses=poses))
+        robot.state.x, robot.state.y, robot.state.yaw = 0.0, 0.0, 0.0
+        angles = np.arange(0.0, 2 * np.pi, 0.1 * np.pi)
+        ranges = np.full(angles.size, 20.0)
+        assert dwa.loop_step(current_state=robot.state, ranges=ranges, angles=angles)
+        return dwa.linear_x_control[0]
+
+    assert first_command(True) < 0.0
+    assert first_command(False) >= 0.0
+
+
 def test_angular_ctrl_limits_min_omega():
     """The angular deadband of the controllers is the minimum angular velocity
     of the angular control limits, 0.05 rad/s when not given."""

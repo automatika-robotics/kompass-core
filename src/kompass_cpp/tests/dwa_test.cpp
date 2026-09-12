@@ -73,7 +73,7 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   Control::DWA planner(controlLimits, controlType, timeStep, predictionHorizon,
                        controlHorizon, maxLinearSamples, maxAngularSamples,
                        robotShapeType, robotDimensions, sensor_position_body,
-                       sensor_rotation_body, octreeRes, costWeights,
+                       sensor_rotation_body, octreeRes, costWeights, true,
                        maxNumThreads);
 
   LOG_INFO("Simulating one step of DWA planner");
@@ -196,7 +196,7 @@ BOOST_AUTO_TEST_CASE(test_DWA_creeps_onto_a_close_goal) {
                        maxLinearSamples, maxAngularSamples,
                        Kompass::CollisionChecker::ShapeType::CYLINDER,
                        robotDimensions, sensor_position_body,
-                       sensor_rotation_body, 0.1, costWeights, 1);
+                       sensor_rotation_body, 0.1, costWeights, true, 1);
   planner.setCurrentPath(path);
 
   // Nothing within 20 m in any direction
@@ -308,7 +308,7 @@ BOOST_AUTO_TEST_CASE(test_DWA_All_Scenarios) {
                              maxLinearSamples, maxAngularSamples, robotShapeType,
                              robotDimensions, sensor_position_body,
                              sensor_rotation_body, octreeRes, costWeights,
-                             maxNumThreads);
+                             true, maxNumThreads);
 
         // Match PurePursuit's goal tolerance — DWA's default 0.1 m is tight
         // given sampling resolution and sidestep-then-continue behavior.

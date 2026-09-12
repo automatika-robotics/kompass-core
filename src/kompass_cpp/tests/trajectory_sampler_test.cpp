@@ -94,7 +94,7 @@ BOOST_AUTO_TEST_CASE(plots_samples_for_each_robot_type) {
         controlLimits, robot_types[j], timeStep, predictionHorizon,
         controlHorizon, maxLinearSamples, maxAngularSamples, robotShapeType,
         robotDimensions, sensor_position_body, sensor_rotation_body, octreeRes,
-        numThreads);
+        true, numThreads);
 
     // Robot initial velocity control
     Control::Velocity2D robotControl;
@@ -151,14 +151,15 @@ makeSampler(Control::ControlType type,
             const Control::LinearVelocityControlParams &x_params,
             int maxLinearSamples, int maxAngularSamples, int maxNumThreads,
             const Control::AngularVelocityControlParams &angular_params =
-                Control::AngularVelocityControlParams(M_PI, 3.14, 2.0, 3.0)) {
+                Control::AngularVelocityControlParams(M_PI, 3.14, 2.0, 3.0),
+            bool allowReverse = true) {
   Control::LinearVelocityControlParams y_params(1.0, 5.0, 10.0, 0.0);
   Control::ControlLimitsParams limits(x_params, y_params, angular_params);
   return std::make_unique<Control::TrajectorySampler>(
       limits, type, 0.5, 5.0, 2.5, maxLinearSamples, maxAngularSamples,
       CollisionChecker::ShapeType::CYLINDER, std::vector<float>{0.2f, 0.4f},
       Eigen::Vector3f{0.0f, 0.0f, 0.0f}, Eigen::Quaternionf{1.0f, 0.0f, 0.0f, 0.0f},
-      0.1, maxNumThreads);
+      0.1, allowReverse, maxNumThreads);
 }
 
 // Number of samples whose first commanded vx equals the given value
@@ -331,6 +332,35 @@ BOOST_AUTO_TEST_CASE(angular_rates_inside_the_dead_band_are_not_sampled) {
     const double omega = samples->velocities.omega(i, 0);
     BOOST_TEST((omega == 0.0 || std::abs(omega) >= 0.4 - 1e-6));
   }
+}
+
+// With reversing disallowed the window is clipped at zero: no negative speed
+// is sampled, at rest or while being pushed backwards, while the forward
+// creep speed stays. The window still opens fully when reversing is allowed.
+BOOST_AUTO_TEST_CASE(no_reverse_samples_when_reversing_is_disallowed) {
+  const Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0, 0.05);
+  auto sampler = makeSampler(
+      Control::ControlType::DIFFERENTIAL_DRIVE, x_params, 4, 4, 1,
+      Control::AngularVelocityControlParams(M_PI, 3.14, 2.0, 3.0), false);
+  for (const double current_vx : {0.0, -0.3}) {
+    auto samples = sampler->generateTrajectories(
+        Control::Velocity2D(current_vx, 0.0, 0.0),
+        Path::State(0.0, 0.0, 0.0, 0.0), clearScan());
+    BOOST_TEST_CONTEXT("current vx " << current_vx) {
+      BOOST_TEST(samples->size() > 0);
+      for (size_t i = 0; i < samples->size(); ++i) {
+        BOOST_TEST(samples->velocities.vx(i, 0) >= 0.0);
+      }
+      BOOST_TEST(countVx(*samples, 0.05) >= 1);
+      BOOST_TEST(countVx(*samples, -0.05) == 0);
+    }
+  }
+  auto free = makeSampler(Control::ControlType::DIFFERENTIAL_DRIVE, x_params,
+                          4, 4, 1);
+  auto samples = free->generateTrajectories(
+      Control::Velocity2D(), Path::State(0.0, 0.0, 0.0, 0.0), clearScan());
+  BOOST_TEST(countVx(*samples, -0.05) >= 1);
+  BOOST_TEST(countVx(*samples, -1.0) >= 1);
 }
 
 // A creep speed that happens to be on the grid is not sampled twice

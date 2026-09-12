@@ -29,7 +29,7 @@ public:
       const Eigen::Vector3f &sensor_position_body,
       const Eigen::Vector4f &sensor_rotation_body, const double octreeRes,
       CostEvaluator::TrajectoryCostsWeights costWeights,
-      const int maxNumThreads = 1);
+      const bool allowReverse = true, const int maxNumThreads = 1);
 
   DWA(TrajectorySampler::TrajectorySamplerParameters config,
       ControlLimitsParams controlLimits, ControlType controlType,
@@ -61,7 +61,7 @@ public:
                  const Eigen::Vector4f &sensor_rotation_body,
                  const double octreeRes,
                  CostEvaluator::TrajectoryCostsWeights costWeights,
-                 const int maxNumThreads = 1);
+                 const bool allowReverse = true, const int maxNumThreads = 1);
 
   void configure(TrajectorySampler::TrajectorySamplerParameters config,
                  ControlLimitsParams controlLimits, ControlType controlType,

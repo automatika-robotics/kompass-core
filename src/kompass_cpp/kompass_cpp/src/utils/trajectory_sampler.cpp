@@ -26,7 +26,8 @@ TrajectorySampler::TrajectorySampler(
     const std::vector<float> robotDimensions,
     const Eigen::Vector3f &sensor_position_body,
     const Eigen::Quaternionf &sensor_rotation_body, const double octreeRes,
-    const int maxNumThreads) {
+    const bool allowReverse, const int maxNumThreads) {
+  allow_reverse_ = allowReverse;
   // Setup the collision checker
   collChecker = std::make_unique<CollisionChecker>(
       robotShapeType, robotDimensions, sensor_position_body,
@@ -118,6 +119,7 @@ void TrajectorySampler::updateParams(TrajectorySamplerParameters config) {
                            lin_samples_y_);
   int maxAngularSamples = config.getParameter<int>("max_angular_samples");
   ang_samples_max_ = maxAngularSamples + 1 - (maxAngularSamples % 2);
+  allow_reverse_ = config.getParameter<bool>("allow_reverse");
 }
 
 const std::vector<double> &
@@ -398,7 +400,9 @@ void TrajectorySampler::UpdateReachableVelocityRange(
   max_vx_ = std::min(ctrlimits.velXParams.maxVel,
                      currentVel.vx() +
                          ctrlimits.velXParams.maxAcceleration * time_step_);
-  min_vx_ = std::max(-ctrlimits.velXParams.maxVel,
+  // With reversing disallowed the forward window is clipped at zero
+  const double x_floor = allow_reverse_ ? -ctrlimits.velXParams.maxVel : 0.0;
+  min_vx_ = std::max(x_floor,
                      currentVel.vx() -
                          ctrlimits.velXParams.maxDeceleration * time_step_);
 

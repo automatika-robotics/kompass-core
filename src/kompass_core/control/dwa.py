@@ -87,6 +87,11 @@ class DWAConfig(FollowerConfig):
       - `True`
       - To drop the entire sample once a collision is detected (True), or maintain the first collision-free segment of the sample (if False)
 
+    * - allow_reverse
+      - `bool`
+      - `True`
+      - Whether reversing (negative forward velocity) samples are generated. Set to `False` for robots that should only be driven forward.
+
     ```
     """
 
@@ -131,6 +136,8 @@ class DWAConfig(FollowerConfig):
     )
 
     drop_samples: bool = field(default=True)
+
+    allow_reverse: bool = field(default=True)
 
     def __attrs_post_init__(self):
         """Attrs post init"""
@@ -240,6 +247,7 @@ class DWA(FollowerTemplate):
             sensor_rotation_robot=self._config.proximity_sensor_rotation_to_robot,
             octree_resolution=self._config.octree_resolution,
             cost_weights=self._config.costs_weights.to_kompass_cpp(),
+            allow_reverse=self._config.allow_reverse,
             max_num_threads=self._config.max_num_threads,
         )
 
