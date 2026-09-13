@@ -4,6 +4,7 @@
 #include "utils/transformation.h"
 #include <Eigen/Dense>
 #include <cmath>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 
@@ -40,6 +41,59 @@ inline int elementSizeOf(const PointFieldType type) {
   }
 }
 
+// Converts the IEEE-754 binary64 bit pattern `b` to the nearest float using
+// integer arithmetic only. Used by load_and_cast_val for FLOAT64 point
+// fields so that GPU kernels never need native fp64. Round-to-nearest-even for
+// normal values; out-of-range values become +-inf, values below the float
+// subnormal range become signed zero, NaN stays NaN.
+inline float float64_bits_to_float(uint64_t b) {
+  const uint32_t sign = static_cast<uint32_t>(b >> 63) << 31;
+  const int32_t exp64 = static_cast<int32_t>((b >> 52) & 0x7FF);
+  const uint64_t mant64 = b & 0xFFFFFFFFFFFFFULL;
+  uint32_t out;
+  if (exp64 == 0x7FF) {
+    out = sign | 0x7F800000u | (mant64 ? 0x400000u : 0u); // inf / nan
+  } else if (exp64 == 0) {
+    out = sign; // double zero / subnormal: below float range
+  } else {
+    int32_t e = exp64 - 1023 + 127;
+    if (e >= 0xFF) {
+      out = sign | 0x7F800000u; // overflow
+    } else if (e <= 0) {
+      // float subnormal: shift the 53-bit significand down, round to nearest
+      // even (a carry out of the top bit yields the smallest normal float)
+      const int32_t shift = 29 + (1 - e);
+      if (shift > 53) {
+        out = sign;
+      } else {
+        const uint64_t sig = mant64 | (1ULL << 52);
+        const uint64_t half = 1ULL << (shift - 1);
+        const uint64_t rem = sig & ((1ULL << shift) - 1);
+        uint64_t rounded = sig >> shift;
+        if (rem > half || (rem == half && (rounded & 1u))) {
+          ++rounded;
+        }
+        out = sign | static_cast<uint32_t>(rounded);
+      }
+    } else {
+      uint32_t m = static_cast<uint32_t>(mant64 >> 29);
+      const uint64_t rem = mant64 & 0x1FFFFFFFULL;
+      const uint64_t half = 0x10000000ULL;
+      if (rem > half || (rem == half && (m & 1u))) {
+        if (++m == 0x800000u) {
+          m = 0;
+          ++e;
+        }
+      }
+      out = (e >= 0xFF) ? (sign | 0x7F800000u)
+                        : (sign | (static_cast<uint32_t>(e) << 23) | m);
+    }
+  }
+  float f;
+  std::memcpy(&f, &out, sizeof(f));
+  return f;
+}
+
 // Helper: Loads bytes safely handling potential misalignment
 inline float load_and_cast_val(const uint8_t *ptr, size_t offset,
                                PointFieldType type) {
@@ -74,8 +128,20 @@ inline float load_and_cast_val(const uint8_t *ptr, size_t offset,
     return load_safe(uint32_t{});
   case PointFieldType::FLOAT32:
     return load_safe(float{});
-  case PointFieldType::FLOAT64:
-    return load_safe(double{});
+  case PointFieldType::FLOAT64: {
+    // TODO: Remove this converter once AdaptiveCpp reports aspect::fp64
+    // honestly (AdaptiveCpp/AdaptiveCpp#2228, item 4): FLOAT64 clouds are then
+    // rejected on devices without fp64 and decoded with
+    // static_cast<float>(double) elsewhere, using a kernel variant without the
+    // FLOAT64 case for fp64-less devices.
+
+    // Assemble the little-endian bit pattern and convert without fp64
+    uint64_t bits = 0;
+    for (size_t i = 0; i < 8; ++i) {
+      bits |= static_cast<uint64_t>(addr[i]) << (8 * i);
+    }
+    return float64_bits_to_float(bits);
+  }
 
   default:
     return 0.0f;
