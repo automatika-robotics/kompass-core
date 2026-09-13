@@ -157,8 +157,10 @@ check_llvm_clang_versions_in_range() {
 
 KOMPASS_CORE_REPO="automatika-robotics/kompass-core"
 KOMPASS_CORE_URL="https://github.com/$KOMPASS_CORE_REPO"
-ADAPTIVE_CPP_URL="https://github.com/AdaptiveCpp/AdaptiveCpp"
-ADAPTIVE_CPP_SOURCE_VERSION="v25.10.0"
+# TODO: Switch back to a versioned upstream AdaptiveCpp release once the changes
+# needed for Arm Mali (AdaptiveCpp/AdaptiveCpp#2228) are merged upstream.
+ADAPTIVE_CPP_URL="https://github.com/aleph-ra/AdaptiveCpp"
+ADAPTIVE_CPP_SOURCE_VERSION="v25.10.0-mali"
 DEFAULT_INSTALL_PREFIX="/usr/local"
 DEFAULT_KEEP_SOURCE_FILES=false
 MINIMUM_LLVM_VERSION=14
