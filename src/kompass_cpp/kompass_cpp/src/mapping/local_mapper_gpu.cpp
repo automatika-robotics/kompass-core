@@ -295,10 +295,10 @@ inline void submitScanToGridKernel(
             sycl::vec<float, 2> toPointLocal;
             toPointLocal[0] =
                 v_startPointLocal[0] +
-                (range * sycl::cos(orient + static_cast<float>(angle)));
+                (range * sycl::cos(orient + angle));
             toPointLocal[1] =
                 v_startPointLocal[1] +
-                (range * sycl::sin(orient + static_cast<float>(angle)));
+                (range * sycl::sin(orient + angle));
 
             toPoint[0] = v_centralPoint[0] + sycl::ceil(toPointLocal[0] / res);
             toPoint[1] = v_centralPoint[1] + sycl::ceil(toPointLocal[1] / res);
