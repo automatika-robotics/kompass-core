@@ -169,18 +169,21 @@ private:
    * Builds a per-cell distance table from the given planar origin, in the
    * column-major layout the ray-cast kernel reads (`cell(i, j)` at flat
    * index `i + j * gridHeight`). Distances are PLANAR (xy only): the ray
-   * ranges they gate against are planar too, so including a sensor's mount
+   * ranges they check against are planar too, so including a sensor's mount
    * height would inflate every cell distance and suppress EMPTY fills near
    * ray endpoints.
    */
   float *makeDistanceTable_(const Eigen::Vector2f &originXY) {
-    float *table = sycl::malloc_shared<float>(m_gridHeight * m_gridWidth, m_q);
+    std::vector<float> hostTable(m_gridHeight * m_gridWidth);
     for (int i = 0; i < m_gridHeight; ++i) {
       for (int j = 0; j < m_gridWidth; ++j) {
         const Eigen::Vector3f cell = gridToLocal({i, j});
-        table[i + j * m_gridHeight] = (cell.head<2>() - originXY).norm();
+        hostTable[i + j * m_gridHeight] = (cell.head<2>() - originXY).norm();
       }
     }
+    // move to device explicitly
+    float *table = sycl::malloc_device<float>(m_gridHeight * m_gridWidth, m_q);
+    m_q.memcpy(table, hostTable.data(), sizeof(float) * hostTable.size()).wait();
     return table;
   }
 
