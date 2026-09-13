@@ -4,6 +4,7 @@
 #include "utils/logger.h"
 #include <Eigen/Dense>
 #include <array>
+#include <mutex>
 #include <sycl/sycl.hpp>
 #include <vector>
 
@@ -234,6 +235,9 @@ private:
   // Device-reported max work-group size. Used as the pointcloud conversion
   // kernel's block dim.
   size_t m_max_wg_size = 0;
+  // Mutex to make sure that mem alocs for angles in scan or growing clouds dont
+  // corrupt
+  std::mutex m_mutex;
 
   sycl::queue m_q;
 };

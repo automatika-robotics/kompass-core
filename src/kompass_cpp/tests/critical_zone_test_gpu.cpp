@@ -18,7 +18,9 @@
 #include "utils/collision_check.h"
 #include "utils/critical_zone_check_gpu.h"
 #include <boost/test/included/unit_test.hpp>
+#include <atomic>
 #include <cmath>
+#include <thread>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -525,4 +527,65 @@ BOOST_AUTO_TEST_CASE(test_multi_sensor_optical_axis_not_filtered) {
              "Sensor-origin self-return should be filtered -> expected 1.0, "
              "got "
                  << clear);
+}
+
+// ---------------------------------------------------------------------------
+// Concurrency: the drive manager calls check() from several executor threads
+// at once with the GIL released, and spinning LiDARs return a different point
+// count every revolution. Each check that sees a larger frame than before
+// reallocates the sensor's device buffer; without serialization two threads free
+// the same buffer or copy into one the other just freed.
+// ---------------------------------------------------------------------------
+
+BOOST_AUTO_TEST_CASE(test_pointcloud_concurrent_checks_with_varying_frames) {
+  Timer time;
+  // Frames of different sizes so the grow-and-reallocate path keeps firing;
+  // every point is far away, so every check must still report 1.0.
+  std::vector<std::vector<uint8_t>> frames;
+  for (int n : {40000, 52000, 41000, 55000, 43000, 50000, 47000, 54000}) {
+    std::vector<uint8_t> cloud;
+    cloud.reserve(static_cast<size_t>(n) * PC_POINT_STEP);
+    for (int i = 0; i < n; ++i) {
+      addPointToCloud(cloud, 5.0f + (i % 7) * 0.1f, 4.0f - (i % 5) * 0.1f,
+                      0.5f);
+    }
+    frames.push_back(std::move(cloud));
+  }
+  auto view = [](const std::vector<uint8_t> &cloud) {
+    const int num_points = static_cast<int>(cloud.size() / PC_POINT_STEP);
+    return PointCloudView{ByteSpan(cloud.data(), cloud.size()),
+                          PC_POINT_STEP,
+                          num_points * PC_POINT_STEP,
+                          1,
+                          num_points,
+                          PC_X_OFF,
+                          PC_Y_OFF,
+                          PC_Z_OFF};
+  };
+
+  auto &checker = shared_multi_checker();
+  constexpr int kThreads = 4;
+  constexpr int kIterations = 150;
+  std::atomic<int> unsafe_results{0};
+  std::vector<std::thread> workers;
+  for (int t = 0; t < kThreads; ++t) {
+    workers.emplace_back([&, t] {
+      for (int k = 0; k < kIterations; ++k) {
+        const auto &a = frames[(t + k) % frames.size()];
+        const auto &b = frames[(t * 3 + k * 5) % frames.size()];
+        const float factor =
+            checker.check(std::vector<PointCloudView>{view(a), view(b)},
+                          /*forward*/ true);
+        if (factor != 1.0f) {
+          ++unsafe_results;
+        }
+      }
+    });
+  }
+  for (auto &w : workers) {
+    w.join();
+  }
+  BOOST_TEST(unsafe_results == 0,
+             "far-away clouds must always be safe; got " << unsafe_results
+                                                         << " other results");
 }

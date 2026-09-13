@@ -18,9 +18,11 @@
 #define BOOST_TEST_MODULE KOMPASS MAPPER TESTS
 #include <Eigen/Dense>
 #include <boost/test/included/unit_test.hpp>
+#include <atomic>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <thread>
 #include <vector>
 
 using namespace Kompass;
@@ -692,4 +694,96 @@ BOOST_AUTO_TEST_CASE(test_multi_sensor_error_paths_gpu) {
   auto &scan_cfg = get_config();
   BOOST_CHECK_THROW(scan_cfg.gpu_local_mapper.scanToGrid({makeCloudView(ring)}),
                     std::logic_error);
+}
+
+// ---------------------------------------------------------------------------
+// Concurrency Tests. The mapper mutates per-sensor device buffers, the device grid
+// and the host grid it returns by reference, all through one in-order queue.
+// A reentrant callback group can run the scan callback concurrently, and a scan
+// of a different length reallocates the cached angle vector; a second caller in
+// pointcloud mode would hit the grow-and-reallocate path of the device buffers.
+// ---------------------------------------------------------------------------
+
+BOOST_AUTO_TEST_CASE(test_mapper_pointcloud_concurrent_varying_frames_gpu) {
+  const std::vector<SensorConfig> sensors = {
+      SensorConfig::fromYaw({0.3f, 0.0f, 0.2f}, 0.0f),
+      SensorConfig::fromYaw({-0.3f, 0.0f, 0.2f}, static_cast<float>(M_PI))};
+  Mapping::LocalMapperGPU mapper(20, 20, 0.1f, sensors, /*isPointCloud*/ true,
+                                 /*scanSize*/ 360, /*maxHeight*/ 0.5f,
+                                 /*minHeight*/ 0.0f, /*rangeMax*/ 5.0f, kMppl);
+  // Frames of different sizes so the device buffers keep growing; all points
+  // sit in the height band around the sensors, at varying ranges
+  std::vector<std::vector<uint8_t>> frames;
+  for (int n : {20000, 26000, 21000, 30000, 23000, 28000}) {
+    std::vector<uint8_t> cloud;
+    for (int i = 0; i < n; ++i) {
+      const float theta = 2.0f * static_cast<float>(M_PI) * i / n;
+      const float r = 0.4f + 0.02f * (i % 7);
+      addPointToCloud(cloud, r * std::cos(theta), r * std::sin(theta), -0.1f);
+    }
+    frames.push_back(std::move(cloud));
+  }
+  constexpr int kThreads = 4;
+  constexpr int kIterations = 60;
+  std::atomic<int> failures{0};
+  std::vector<std::thread> workers;
+  for (int t = 0; t < kThreads; ++t) {
+    workers.emplace_back([&, t] {
+      for (int k = 0; k < kIterations; ++k) {
+        const auto &a = frames[(t + k) % frames.size()];
+        const auto &b = frames[(t * 5 + k * 3) % frames.size()];
+        try {
+          mapper.scanToGrid({makeCloudView(a), makeCloudView(b)});
+        } catch (const std::exception &) {
+          ++failures;
+        }
+      }
+    });
+  }
+  for (auto &w : workers) {
+    w.join();
+  }
+  BOOST_TEST(failures == 0, "scanToGrid threw " << failures << " times");
+  // A quiet call afterwards still maps the ring of points around the robot
+  const auto &grid = mapper.scanToGrid({makeCloudView(frames[0]), makeCloudView(frames[1])});
+  BOOST_TEST(countOccupiedInRows(grid, 0, 19) > 0, "no OCCUPIED cell after the storm");
+}
+
+BOOST_AUTO_TEST_CASE(test_mapper_laserscan_concurrent_varying_lengths_gpu) {
+  constexpr int kScanSize = 63;
+  Mapping::LocalMapperGPU mapper(10, 10, 0.1f, {SensorConfig{}},
+                                 /*isPointCloud*/ false, kScanSize,
+                                 /*maxHeight*/ 0.0f, /*minHeight*/ 0.0f,
+                                 /*rangeMax*/ 20.0f, kMppl);
+  // Scans of different lengths (all at least scan_size, so none is skipped)
+  // make the cached angle vector reallocate on every length change
+  std::vector<std::pair<Eigen::VectorXf, Eigen::VectorXf>> scans;
+  for (int n : {63, 70, 65, 80, 63, 75}) {
+    Eigen::VectorXf angles = Eigen::VectorXf::LinSpaced(
+        n, -static_cast<float>(M_PI), static_cast<float>(M_PI));
+    Eigen::VectorXf ranges = Eigen::VectorXf::Constant(n, 0.3f);
+    scans.emplace_back(angles, ranges);
+  }
+  constexpr int kThreads = 4;
+  constexpr int kIterations = 150;
+  std::atomic<int> failures{0};
+  std::vector<std::thread> workers;
+  for (int t = 0; t < kThreads; ++t) {
+    workers.emplace_back([&, t] {
+      for (int k = 0; k < kIterations; ++k) {
+        const auto &scan = scans[(t + k) % scans.size()];
+        try {
+          mapper.scanToGrid(scan.first, scan.second);
+        } catch (const std::exception &) {
+          ++failures;
+        }
+      }
+    });
+  }
+  for (auto &w : workers) {
+    w.join();
+  }
+  BOOST_TEST(failures == 0, "scanToGrid threw " << failures << " times");
+  const auto &grid = mapper.scanToGrid(scans[0].first, scans[0].second);
+  BOOST_TEST(countOccupiedInRows(grid, 0, 9) > 0, "no OCCUPIED cell after the storm");
 }

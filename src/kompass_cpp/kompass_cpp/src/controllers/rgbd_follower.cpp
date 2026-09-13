@@ -16,6 +16,8 @@
 namespace Kompass {
 namespace Control {
 
+// ---- Construction and sensor setup ----
+
 RGBDFollower::RGBDFollower(const ControlType &robotCtrlType,
                            const ControlLimitsParams &ctrlLimits,
                            const CollisionChecker::ShapeType &robotShapeType,
@@ -55,14 +57,212 @@ void RGBDFollower::setCameraIntrinsics(const float focal_length_x,
                                        const float principal_point_x,
                                        const float principal_point_y) {
   // The mount pose comes from a TF lookup against the frame the depth
-  // Image/CameraInfo names, which ROS always expresses in optical axes.
+  // Image/CameraInfo names
   detector_ = std::make_unique<DepthDetector>(
       config_.depth_range(), vision_sensor_tf_,
       Eigen::Vector2f{focal_length_x, focal_length_y},
       Eigen::Vector2f{principal_point_x, principal_point_y},
       config_.depth_conversion_factor(),
       DepthDetector::CameraFrameConvention::Optical);
+  detector_->setPointCloudSensor(cloud_sensor_);
 }
+
+void RGBDFollower::setPointCloudSensor(const SensorConfig &sensor) {
+  cloud_sensor_ = sensor;
+  if (detector_) {
+    detector_->setPointCloudSensor(sensor);
+  }
+}
+
+// ---- Lifting 2D detections ----
+
+template <typename DepthSource>
+void RGBDFollower::liftDetections(const DepthSource &source,
+                                  const std::vector<Bbox2D> &boxes) {
+  if (track_velocity_) {
+    // Send current state to the detector
+    detector_->updateBoxes(source, boxes, currentState);
+  } else {
+    detector_->updateBoxes(source, boxes);
+  }
+}
+
+template <typename DepthSource>
+Control::TrajSearchResult
+RGBDFollower::trackDetections(const DepthSource &source,
+                              const std::vector<Bbox2D> &boxes,
+                              const Velocity2D &current_vel) {
+  if (!detector_) {
+    throw std::runtime_error(
+        "DepthDetector is not initialized with the camera intrinsics. Call "
+        "'RGBDFollower::setCameraIntrinsics' first");
+  }
+  if (!tracker_->trackerInitialized()) {
+    throw std::runtime_error(
+        "Tracker is not initialized with an initial tracking target. Call "
+        "'RGBDFollower::setInitialTracking' first");
+  }
+  std::optional<TrackedPose2D> tracked_pose = std::nullopt;
+  if (!boxes.empty()) {
+    liftDetections(source, boxes);
+    tracked_pose = trackLiftedBoxes();
+  }
+  return this->getTrackingCtrl(tracked_pose, current_vel);
+}
+
+template <typename DepthSource>
+bool RGBDFollower::initTracking(const DepthSource &source,
+                                const Bbox2D &target_box_2d, const float yaw) {
+  if (!detector_) {
+    throw std::runtime_error(
+        "DepthDetector is not initialized with the camera intrinsics. Call "
+        "'RGBDFollower::setCameraIntrinsics' first");
+  }
+  liftDetections(source, {target_box_2d});
+  return initTrackingFromLiftedBox(yaw);
+}
+
+template <typename DepthSource>
+bool RGBDFollower::initTrackingAtPixel(
+    const int pose_x_img, const int pose_y_img, const DepthSource &source,
+    const std::vector<Bbox2D> &detected_boxes_2d, const float yaw) {
+  const Bbox2D *target_box =
+      findBoxAtPixel(pose_x_img, pose_y_img, detected_boxes_2d);
+  if (!target_box) {
+    LOG_DEBUG("Target point not found in any detected box");
+    return false;
+  }
+  return initTracking(source, *target_box, yaw);
+}
+
+Control::TrajSearchResult
+RGBDFollower::getTrackingCtrl(const std::vector<Bbox3D> &detected_boxes,
+                              const Velocity2D &current_vel) {
+  std::optional<TrackedPose2D> tracked_pose = std::nullopt;
+  if (!detected_boxes.empty()) {
+    if (tracker_->trackerInitialized()) {
+      // Update the tracker with the detected boxes
+      bool tracking_updated = tracker_->updateTracking(detected_boxes);
+      if (!tracking_updated) {
+        LOG_WARNING("Tracker failed to update target with the detected boxes");
+      } else {
+        tracked_pose = tracker_->getFilteredTrackedPose2D();
+        refreshTargetGeometry();
+      }
+    } else {
+      throw std::runtime_error(
+          "Tracker is not initialized with an initial tracking target. Call "
+          "'RGBDFollower::setInitialTracking' first");
+    }
+  }
+  return this->getTrackingCtrl(tracked_pose, current_vel);
+}
+
+Control::TrajSearchResult
+RGBDFollower::getTrackingCtrl(const DepthImageView &aligned_depth_img,
+                              const std::vector<Bbox2D> &detected_boxes_2d,
+                              const Velocity2D &current_vel) {
+  return trackDetections(aligned_depth_img, detected_boxes_2d, current_vel);
+}
+
+Control::TrajSearchResult
+RGBDFollower::getTrackingCtrl(const PointCloudView &cloud,
+                              const std::vector<Bbox2D> &detected_boxes_2d,
+                              const Velocity2D &current_vel) {
+  return trackDetections(cloud, detected_boxes_2d, current_vel);
+}
+
+bool RGBDFollower::setInitialTracking(
+    const int pose_x_img, const int pose_y_img,
+    const DepthImageView &aligned_depth_image,
+    const std::vector<Bbox2D> &detected_boxes_2d, const float yaw) {
+  return initTrackingAtPixel(pose_x_img, pose_y_img, aligned_depth_image,
+                             detected_boxes_2d, yaw);
+}
+
+bool RGBDFollower::setInitialTracking(const DepthImageView &aligned_depth_image,
+                                      const Bbox2D &target_box_2d,
+                                      const float yaw) {
+  return initTracking(aligned_depth_image, target_box_2d, yaw);
+}
+
+bool RGBDFollower::setInitialTracking(
+    const int pose_x_img, const int pose_y_img, const PointCloudView &cloud,
+    const std::vector<Bbox2D> &detected_boxes_2d, const float yaw) {
+  return initTrackingAtPixel(pose_x_img, pose_y_img, cloud, detected_boxes_2d,
+                             yaw);
+}
+
+bool RGBDFollower::setInitialTracking(const PointCloudView &cloud,
+                                      const Bbox2D &target_box_2d,
+                                      const float yaw) {
+  return initTracking(cloud, target_box_2d, yaw);
+}
+
+bool RGBDFollower::setInitialTracking(const int pose_x_img,
+                                      const int pose_y_img,
+                                      const std::vector<Bbox3D> &detected_boxes,
+                                      const float yaw) {
+  const bool ok =
+      tracker_->setInitialTracking(pose_x_img, pose_y_img, detected_boxes, yaw);
+  if (ok) {
+    refreshTargetGeometry();
+  }
+  return ok;
+}
+
+const Bbox2D *RGBDFollower::findBoxAtPixel(const int pose_x_img,
+                                           const int pose_y_img,
+                                           const std::vector<Bbox2D> &boxes) {
+  for (const auto &box : boxes) {
+    const auto limits_x = box.getXLimits();
+    const auto limits_y = box.getYLimits();
+    if (pose_x_img >= limits_x(0) && pose_x_img <= limits_x(1) &&
+        pose_y_img >= limits_y(0) && pose_y_img <= limits_y(1)) {
+      return &box;
+    }
+  }
+  return nullptr;
+}
+
+std::optional<TrackedPose2D> RGBDFollower::trackLiftedBoxes() {
+  const auto &boxes_3d = detector_->get3dDetections();
+  if (boxes_3d.empty()) {
+    LOG_WARNING("Detector failed to find 3D boxes");
+    return std::nullopt;
+  }
+  // Update the tracker with the detected boxes
+  if (!tracker_->updateTracking(boxes_3d)) {
+    LOG_WARNING("Tracker failed to update target with the detected boxes");
+    return std::nullopt;
+  }
+  refreshTargetGeometry();
+  return tracker_->getFilteredTrackedPose2D();
+}
+
+bool RGBDFollower::initTrackingFromLiftedBox(const float yaw) {
+  const auto &boxes_3d = detector_->get3dDetections();
+  if (boxes_3d.empty()) {
+    LOG_DEBUG("Failed to get 3D box from 2D target box");
+    return false;
+  }
+  const bool ok = tracker_->setInitialTracking(boxes_3d[0], yaw);
+  if (ok) {
+    refreshTargetGeometry();
+  }
+  return ok;
+}
+
+void RGBDFollower::refreshTargetGeometry() {
+  if (const auto *raw = tracker_->getRawTracking()) {
+    const auto &sz = raw->box.size;
+    currentTargetRadius_ = 0.5f * std::max(sz.x(), sz.y());
+  }
+  // else: leave previous value untouched so a transient miss doesn't
+  // erase a previously-known radius.
+}
+
+// ---- Tracking control law ----
 
 Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
                                              const bool update_global_error) {
@@ -82,18 +282,15 @@ Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
     psi = Angle::normalizeToMinusPiPlusPi(
         std::atan2(tracking_pose.y(), tracking_pose.x()));
   }
-  // Gap between the two bodies' surfaces: what the standoff is controlled
-  // against. Floored at zero because a target inside the combined radii is
-  // as close as "touching" gets, not a negative separation.
+  // Gap between the two bodies' surfaces that the standoff is controlled
+  // against. Floored at zero.
   constexpr float kMinDistance = 0.001f;
-  float distance = std::max(
-      static_cast<float>(range - robot_radius_ - currentTargetRadius_),
-      kMinDistance);
+  float distance =
+      std::max(static_cast<float>(range - robot_radius_ - currentTargetRadius_),
+               kMinDistance);
 
   float distance_error = config_.target_distance() - distance;
-  // target_orientation is the bearing-to-target to maintain in the robot
-  // frame; gamma (target heading relative to robot) belongs in the motion
-  // feedforward only, not in the angular error.
+  // target_orientation is the bearing-to-target to maintain in the robot frame
   float angle_error =
       Angle::normalizeToMinusPiPlusPi(config_.target_orientation() - psi);
 
@@ -116,7 +313,7 @@ Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
 
     v = std::clamp(v, -ctrl_limits_.velXParams.maxVel,
                    ctrl_limits_.velXParams.maxVel);
-    if (std::abs(v) < config_.min_vel()) {
+    if (std::abs(v) < ctrl_limits_.velXParams.minVel) {
       v = 0.0;
     }
     followingVel.setVx(v);
@@ -127,9 +324,8 @@ Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
         (track_velocity_ * tracking_pose.v() * sin_diff + v * std::sin(psi)) /
         ff_range;
 
-    // Backstop for whatever the floor above cannot cover: the feedforward
-    // alone must never be able to saturate the command, since the feedback
-    // term is what actually steers toward the target.
+    // Backstop for whatever the floor above cannot cover. The feedforward
+    // alone must never be able to saturate the command.
     omega_ff = std::clamp(omega_ff, -0.5 * ctrl_limits_.omegaParams.maxOmega,
                           0.5 * ctrl_limits_.omegaParams.maxOmega);
 
@@ -139,7 +335,7 @@ Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
 
     omega = std::clamp(omega, -ctrl_limits_.omegaParams.maxOmega,
                        ctrl_limits_.omegaParams.maxOmega);
-    if (std::abs(omega) < config_.min_vel()) {
+    if (std::abs(omega) < ctrl_limits_.omegaParams.minOmega) {
       omega = 0.0;
     }
     followingVel.setOmega(omega);
@@ -147,76 +343,7 @@ Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
   return followingVel;
 }
 
-bool RGBDFollower::setInitialTracking(const int pose_x_img,
-                                      const int pose_y_img,
-                                      const std::vector<Bbox3D> &detected_boxes,
-                                      const float yaw) {
-  const bool ok =
-      tracker_->setInitialTracking(pose_x_img, pose_y_img, detected_boxes, yaw);
-  if (ok) {
-    refreshTargetGeometry();
-  }
-  return ok;
-}
-
-bool RGBDFollower::setInitialTracking(
-    const int pose_x_img, const int pose_y_img,
-    const DepthImageView &aligned_depth_image,
-    const std::vector<Bbox2D> &detected_boxes, const float yaw) {
-
-  std::unique_ptr<Bbox2D> target_box;
-  for (auto box : detected_boxes) {
-    auto limits_x = box.getXLimits();
-    if (pose_x_img >= limits_x(0) and pose_x_img <= limits_x(1)) {
-      auto limits_y = box.getYLimits();
-      if (pose_y_img >= limits_y(0) and pose_y_img <= limits_y(1)) {
-        target_box = std::make_unique<Bbox2D>(box);
-        break;
-      }
-    }
-  }
-  if (!target_box) {
-    LOG_DEBUG("Target point not found in any detected box");
-    return false;
-  }
-
-  return setInitialTracking(aligned_depth_image, *target_box, yaw);
-}
-
-bool RGBDFollower::setInitialTracking(const DepthImageView &aligned_depth_image,
-                                      const Bbox2D &target_box_2d,
-                                      const float yaw) {
-  if (!detector_) {
-    throw std::runtime_error(
-        "DepthDetector is not initialized with the camera intrinsics. Call "
-        "'RGBDFollower::setCameraIntrinsics' first");
-  }
-  if (track_velocity_) {
-    // Send current state to the detector
-    detector_->updateBoxes(aligned_depth_image, {target_box_2d}, currentState);
-  } else {
-    detector_->updateBoxes(aligned_depth_image, {target_box_2d});
-  }
-  const auto &boxes_3d = detector_->get3dDetections();
-  if (boxes_3d.empty()) {
-    LOG_DEBUG("Failed to get 3D box from 2D target box");
-    return false;
-  }
-  const bool ok = tracker_->setInitialTracking(boxes_3d[0], yaw);
-  if (ok) {
-    refreshTargetGeometry();
-  }
-  return ok;
-}
-
-void RGBDFollower::refreshTargetGeometry() {
-  if (const auto *raw = tracker_->getRawTracking()) {
-    const auto &sz = raw->box.size;
-    currentTargetRadius_ = 0.5f * std::max(sz.x(), sz.y());
-  }
-  // else: leave previous value untouched so a transient miss doesn't
-  // erase a previously-known radius.
-}
+// ---- Search and wait when the target is lost ----
 
 std::optional<TrajSearchResult> RGBDFollower::trySearch() {
   if (!config_.enable_search()) {
@@ -318,6 +445,8 @@ TrajSearchResult RGBDFollower::popSearchStepResult() {
   result.trajectory = Trajectory2D(velocities, path);
   return result;
 }
+
+// ---- Pipeline stages used by the inner getTrackingCtrl ----
 
 TrackedPose2D
 RGBDFollower::updateLocalTarget(const TrackedPose2D &current_target,

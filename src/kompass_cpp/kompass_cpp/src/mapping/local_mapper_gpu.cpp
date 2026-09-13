@@ -385,6 +385,7 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(Span<PointCloudView> clouds) {
     throw std::logic_error(
         "scanToGrid(clouds): mapper was not constructed for pointcloud input");
   }
+  std::lock_guard<std::mutex> lock(m_mutex);
   validateClouds(clouds, m_sensorDev.size());
 
   try {
@@ -470,6 +471,7 @@ LocalMapperGPU::scanToGrid(Eigen::Ref<const Eigen::VectorXf> angles,
         "input; the laserscan overload would overwrite the pre-uploaded "
         "conversion bin angles");
   }
+  std::lock_guard<std::mutex> lock(m_mutex);
 
   try {
     m_q.fill(m_devicePtrGrid, static_cast<int>(OccupancyType::UNEXPLORED),

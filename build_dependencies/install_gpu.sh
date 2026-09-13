@@ -442,6 +442,7 @@ python3 -m pip uninstall -y kompass-core
 
 # Build and Install
 # SKBUILD_CMAKE_ARGS is already set if we are in legacy mode
+export CMAKE_BUILD_PARALLEL_LEVEL="$(nproc)"
 CXX=$CLANG_EXECUTABLE_PATH python3 -m pip install --no-build-isolation .
 
 # Clean up source files if not required

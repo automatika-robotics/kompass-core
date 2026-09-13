@@ -48,8 +48,9 @@ inline Kompass::ByteSpan toSpan(const ByteArray &a) {
 
 // Zero-copy input types for aligned depth images: a 2-D C-contiguous
 // (rows, cols) numpy array, uint16 (depth in millimetres, ROS 16UC1) or
-// float32 (depth in metres, ROS 32FC1. Wrong-dtype or non-contiguous input
-// converts with a single C-level copy.
+// float32 (depth in metres, ROS 32FC1). Bound with noconvert so a wrong dtype
+// or a non-contiguous layout raises instead of being copied into the other
+// dtype's overload.
 using DepthArrayU16 =
     py::ndarray<const uint16_t, py::ndim<2>, py::c_contig, py::device::cpu>;
 using DepthArrayF32 =

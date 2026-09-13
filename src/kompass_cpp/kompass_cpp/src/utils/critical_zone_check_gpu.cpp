@@ -194,6 +194,7 @@ float CriticalZoneCheckerGPU::check(Span<PointCloudView> clouds,
     throw std::logic_error(
         "check(clouds): checker was not constructed for pointcloud input");
   }
+  std::lock_guard<std::mutex> lock(m_mutex);
   validateClouds(clouds, m_sensorDev.size());
 
   try {
@@ -260,6 +261,7 @@ float CriticalZoneCheckerGPU::check(Eigen::Ref<const Eigen::VectorXf> ranges,
     throw std::logic_error(
         "check(ranges): checker was constructed for pointcloud input");
   }
+  std::lock_guard<std::mutex> lock(m_mutex);
   try {
     // Input is float32. Straight H→D copy
     m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(float) * m_scanSize);

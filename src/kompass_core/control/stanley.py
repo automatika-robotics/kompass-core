@@ -50,10 +50,6 @@ class StanleyConfig(FollowerConfig):
       - `float`
       - `0.1`
       - Maximum allowable distance error. Must be between `1e-9` and `1e9`.
-    * - min_angular_vel
-      - `float`
-      - `0.01`
-      - Minimum allowable angular velocity. Must be between `0.0` and `1e9`.
 
     ```
     """
@@ -85,10 +81,6 @@ class StanleyConfig(FollowerConfig):
 
     max_distance_error: float = field(
         default=0.1, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
-    )
-
-    min_angular_vel: float = field(
-        default=0.01, validator=base_validators.in_range(min_value=0.0, max_value=1e9)
     )
 
     def to_kompass_cpp(self) -> kompass_cpp.control.StanleyParameters:
@@ -152,6 +144,8 @@ class Stanley(FollowerTemplate):
         self._planner.set_angular_ctr_limits(ctrl_limits.omega_limits)
 
         self.__max_angular = ctrl_limits.omega_limits.max_omega
+        # Angular commands below the robot's minimum are treated as no rotation
+        self.__min_angular = ctrl_limits.omega_limits.min_omega
 
         # Init the following result
         self._result = kompass_cpp.control.FollowingResult()
@@ -205,7 +199,7 @@ class Stanley(FollowerTemplate):
 
         elif (
             self._robot.robot_type != RobotType.ACKERMANN
-            and abs(self._planner.get_omega_cmd()) > self._config.min_angular_vel
+            and abs(self._planner.get_omega_cmd()) > self.__min_angular
         ):
             if (
                 abs(self.orientation_error) > self._config.max_angle_error
@@ -230,7 +224,7 @@ class Stanley(FollowerTemplate):
 
         elif (
             self._robot.robot_type != RobotType.ACKERMANN
-            and abs(self._planner.get_omega_cmd()) > self._config.min_angular_vel
+            and abs(self._planner.get_omega_cmd()) > self.__min_angular
         ):
             if (
                 abs(self.orientation_error) > self._config.max_angle_error
@@ -255,7 +249,7 @@ class Stanley(FollowerTemplate):
 
         if (
             self._robot.robot_type != RobotType.ACKERMANN
-            and abs(self._planner.get_omega_cmd()) > self._config.min_angular_vel
+            and abs(self._planner.get_omega_cmd()) > self.__min_angular
         ):
             if (
                 abs(self.orientation_error) > self._config.max_angle_error

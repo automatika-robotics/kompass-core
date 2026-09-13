@@ -11,10 +11,6 @@
 #include <memory>
 #include <vector>
 
-#ifndef MIN_VEL
-#define MIN_VEL 0.01
-#endif
-
 namespace Kompass {
 
 namespace Control {
@@ -46,6 +42,9 @@ public:
           Parameter(
               10, 1, 1000,
               "Maximum number of samples for the angular velocity controls"));
+      addParameter("allow_reverse",
+                   Parameter(true, "Whether reversing (negative forward "
+                                   "velocity) samples are generated"));
       addParameter("octree_map_resolution",
                    Parameter(0.1, 0.0, 1000.0,
                              "Resolution of the built-in Octree map used for "
@@ -81,7 +80,8 @@ public:
                     const std::vector<float> robotDimensions,
                     const Eigen::Vector3f &sensor_position_body,
                     const Eigen::Quaternionf &sensor_rotation_body,
-                    const double octreeRes, const int maxNumThreads = 1);
+                    const double octreeRes, const bool allowReverse = true,
+                    const int maxNumThreads = 1);
 
   TrajectorySampler(TrajectorySamplerParameters config,
                     ControlLimitsParams controlLimits, ControlType controlType,
@@ -134,9 +134,27 @@ public:
   generateSingleSampleFromVel(const Velocity2D &vel,
                               const Path::State &pose = Path::State());
 
+  // Returns true if ANY of `states` collides with `sensor_points`.
+  // Defined here rather than in the .cpp: `updateSensorData` is itself a
+  // generic template, so every sensor type the samplers accept works without
+  // a matching explicit instantiation.
   template <typename T>
   bool checkStatesFeasibility(const std::vector<Path::State> &states,
-                              const T &sensor_points);
+                              const T &sensor_points) {
+    if (states.empty()) {
+      return false;
+    }
+    // states[0] is where the robot was when the data was captured; the rest
+    // are future poses tested against those same obstacles.
+    collChecker->updateSensorData(sensor_points, states[0]);
+    for (const auto &state : states) {
+      collChecker->updateState(state);
+      if (collChecker->checkCollisions()) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   // Temporarily shrink the rollout horizon (e.g., when the reference path
   // has high curvature ahead and straight-tangent samples would diverge too
@@ -173,6 +191,10 @@ private:
   int lin_samples_y_; // split of lin_samples_max_ used for the vy axis (1 for
                       // non-holonomic robots)
   int ang_samples_max_;
+  // Samples of each velocity axis for the current tick
+  std::vector<double> vx_samples_;
+  std::vector<double> vy_samples_;
+  std::vector<double> omega_samples_;
   double lin_sample_x_resolution_;
   double lin_sample_y_resolution_;
   double ang_sample_resolution_;
@@ -184,6 +206,7 @@ private:
   double min_omega_;
   size_t numCtrlPoints_;
   bool drop_samples_{true};
+  bool allow_reverse_{true};  // Whether reversing samples are generated
 
   /**
    * @brief Helper method to update the class private parameters from config
@@ -191,6 +214,17 @@ private:
    * @param config
    */
   void updateParams(TrajectorySamplerParameters config);
+
+  /**
+   * @brief Samples of one velocity axis for the current tick, written into
+   * the given scratch vector: the regular grid over [low, high] with every
+   * value inside 0 < |v| < min_abs dropped, plus 0 and +/- min_abs whenever
+   * they lie inside the window.
+   */
+  const std::vector<double> &axisSamples(std::vector<double> &samples,
+                                         double low, double high,
+                                         double resolution,
+                                         double min_abs) const;
 
   /**
    * @brief Updates the range of valid velocity actions that can be reached from

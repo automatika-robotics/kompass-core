@@ -1,13 +1,14 @@
 // Parametrized fixture-based test for RGBDFollower.
 //
-// Loads each fixture under tests/resources/vision_follower/<case>/ which contains:
+// Loads each fixture under tests/resources/vision_follower/<case>/ which
+// contains:
 //   - depth.png: 16-bit single-channel depth image (millimeters)
 //   - case.json: camera intrinsics, robot state, 2D detections, click pixel,
 //                and loose expected bounds for the resulting control command.
 //
 // Mirrors tests/test_vision_follower.py so both layers exercise the same
-// data. To add cases, edit tests/resources/vision_follower/generate_fixtures.py and
-// re-run it (or drop a new fixture directory in by hand).
+// data. To add cases, edit tests/resources/vision_follower/generate_fixtures.py
+// and re-run it (or drop a new fixture directory in by hand).
 
 #include "controllers/rgbd_follower.h"
 #include "datatypes/control.h"
@@ -21,8 +22,11 @@
 #include <nlohmann/json.hpp>
 #include <opencv2/opencv.hpp>
 
+#include <cstring>
 #include <fstream>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace Kompass;
@@ -54,8 +58,11 @@ fs::path locate_fixture_root() {
     }
   }
   // Fall back to the source-tree path (cmake current source dir).
-  fs::path src_default = fs::path(__FILE__).parent_path().parent_path()
-                             .parent_path().parent_path() /
+  fs::path src_default = fs::path(__FILE__)
+                             .parent_path()
+                             .parent_path()
+                             .parent_path()
+                             .parent_path() /
                          "tests" / "resources" / "vision_follower";
   return src_default;
 }
@@ -68,9 +75,12 @@ std::vector<FixtureCase> discover_fixtures() {
     return out;
   }
   for (auto const &entry : fs::directory_iterator(root)) {
-    if (!fs::is_directory(entry.path())) continue;
-    if (!fs::exists(entry.path() / "case.json")) continue;
-    if (!fs::exists(entry.path() / "depth.png")) continue;
+    if (!fs::is_directory(entry.path()))
+      continue;
+    if (!fs::exists(entry.path() / "case.json"))
+      continue;
+    if (!fs::exists(entry.path() / "depth.png"))
+      continue;
     out.push_back({entry.path().filename().string(), entry.path()});
   }
   std::sort(out.begin(), out.end(),
@@ -84,9 +94,9 @@ cv::Mat load_depth_png(const fs::path &png_path) {
   cv::Mat raw = cv::imread(png_path.string(), cv::IMREAD_UNCHANGED);
   BOOST_REQUIRE_MESSAGE(!raw.empty(),
                         "Could not load depth.png at " << png_path.string());
-  BOOST_REQUIRE_MESSAGE(raw.type() == CV_16UC1,
-                        "depth.png must be 16-bit single-channel: "
-                            << png_path.string());
+  BOOST_REQUIRE_MESSAGE(
+      raw.type() == CV_16UC1,
+      "depth.png must be 16-bit single-channel: " << png_path.string());
   BOOST_REQUIRE(raw.isContinuous());
   return raw;
 }
@@ -115,6 +125,59 @@ std::vector<Bbox2D> parse_detections(const json &case_json) {
   return dets;
 }
 
+// Synthetic fixtures are rendered as if the camera sits at the robot body
+// origin looking straight ahead. The follower reads the pose in the optical
+// convention, so that pose is the REP 103 optical -> body quarter turn as [x,
+// y, z, w]. An identity here would be read as an optical frame pointing along
+// body +z and put every target 90 degrees off.
+const Eigen::Vector3f kCameraPosition{0.0f, 0.0f, 0.0f};
+const Eigen::Vector4f kCameraRotation{-0.5f, 0.5f, -0.5f, 0.5f};
+
+// The depth PNG as a point cloud in the camera's optical frame: every
+// in-range pixel back-projected at its centre, packed as float32 xyz records
+// with 4 bytes of padding (point_step 16, offsets 0/4/8) like a LiDAR driver
+// publishes. The point-cloud path must then reproduce the depth-image path.
+struct PackedCloud {
+  std::vector<uint8_t> data;
+  int count = 0;
+
+  PointCloudView view() const {
+    return PointCloudView{
+        ByteSpan(data.data(), data.size()), 16, 16 * count, 1, count, 0, 4, 8};
+  }
+};
+
+PackedCloud cloud_from_depth(const cv::Mat &depth_mm, const json &cam) {
+  const float fx = cam["fx"].get<float>(), fy = cam["fy"].get<float>();
+  const float cx = cam["cx"].get<float>(), cy = cam["cy"].get<float>();
+  const float to_metres = cam["depth_conversion_factor"].get<float>();
+  PackedCloud cloud;
+  cloud.data.reserve(static_cast<std::size_t>(depth_mm.total()) * 16);
+  for (int row = 0; row < depth_mm.rows; ++row) {
+    for (int col = 0; col < depth_mm.cols; ++col) {
+      const float d = depth_mm.at<uint16_t>(row, col) * to_metres;
+      if (d <= 0.0f) {
+        continue;
+      }
+      const float xyz[3] = {(col + 0.5f - cx) * d / fx,
+                            (row + 0.5f - cy) * d / fy, d};
+      uint8_t record[16] = {};
+      std::memcpy(record, xyz, sizeof(xyz));
+      cloud.data.insert(cloud.data.end(), record, record + 16);
+      ++cloud.count;
+    }
+  }
+  return cloud;
+}
+
+// The cloud is in the optical frame, so its sensor is the camera itself
+SensorConfig camera_as_cloud_sensor() {
+  SensorConfig sensor;
+  sensor.position = kCameraPosition;
+  sensor.rotation = kCameraRotation;
+  return sensor;
+}
+
 std::unique_ptr<Control::RGBDFollower> build_controller(const json &case_json) {
   using namespace Control;
   LinearVelocityControlParams x_params(2.0f, 5.0f, 10.0f);
@@ -139,56 +202,49 @@ std::unique_ptr<Control::RGBDFollower> build_controller(const json &case_json) {
                       case_json["camera"]["max_depth"].get<double>());
 
   std::vector<float> robot_dimensions{0.1f, 0.4f};
-  // Synthetic fixtures are rendered as if the camera coincides with the
-  // robot body frame, so use an identity body->camera transform here.
-  Eigen::Vector3f cam_pos{0.0f, 0.0f, 0.0f};
-  Eigen::Vector4f cam_rot{0.0f, 0.0f, 0.0f, 1.0f};
-
   auto controller = std::make_unique<RGBDFollower>(
       ControlType::DIFFERENTIAL_DRIVE, ctrl_limits,
-      CollisionChecker::ShapeType::CYLINDER, robot_dimensions, cam_pos, cam_rot,
-      config);
+      CollisionChecker::ShapeType::CYLINDER, robot_dimensions, kCameraPosition,
+      kCameraRotation, config);
 
   const auto &cam = case_json["camera"];
-  controller->setCameraIntrinsics(cam["fx"].get<float>(),
-                                  cam["fy"].get<float>(),
-                                  cam["cx"].get<float>(),
-                                  cam["cy"].get<float>());
+  controller->setCameraIntrinsics(
+      cam["fx"].get<float>(), cam["fy"].get<float>(), cam["cx"].get<float>(),
+      cam["cy"].get<float>());
   return controller;
 }
 
-void run_one_fixture(const FixtureCase &fx) {
-  BOOST_TEST_MESSAGE("Running fixture: " << fx.name);
-  std::ifstream in((fx.dir / "case.json").string());
-  json case_json;
-  in >> case_json;
-
-  const cv::Mat depth_mat = load_depth_png(fx.dir / "depth.png");
-  const auto depth = depth_view(depth_mat);
-  auto detections = parse_detections(case_json);
-  auto controller = build_controller(case_json);
-
+// First command of one fixture through one depth source, checked against
+// the fixture's expected bounds. Returns (vx, omega) when a command was found.
+template <typename DepthSource>
+std::optional<std::pair<float, float>>
+run_one_source(const FixtureCase &fx, const std::string &source_name,
+               const json &case_json, const DepthSource &source,
+               Control::RGBDFollower &controller) {
+  const auto detections = parse_detections(case_json);
   Path::State state(case_json["robot"]["x"].get<float>(),
                     case_json["robot"]["y"].get<float>(),
                     case_json["robot"]["yaw"].get<float>(),
                     case_json["robot"]["speed"].get<float>());
-  controller->setCurrentState(state);
+  controller.setCurrentState(state);
+  const std::string tag = fx.name + " (" + source_name + ")";
 
   const int click_x = case_json["click"]["x"].get<int>();
   const int click_y = case_json["click"]["y"].get<int>();
-  const bool init_ok = controller->setInitialTracking(click_x, click_y, depth,
-                                                      detections, state.yaw);
+  const bool init_ok = controller.setInitialTracking(click_x, click_y, source,
+                                                     detections, state.yaw);
   const bool expected_init = case_json["expected"]["init_success"].get<bool>();
-  BOOST_TEST(init_ok == expected_init,
-             fx.name << ": setInitialTracking returned " << init_ok
-                     << ", expected " << expected_init);
-  if (!init_ok) return;
+  BOOST_TEST(init_ok == expected_init, tag << ": setInitialTracking returned "
+                                           << init_ok << ", expected "
+                                           << expected_init);
+  if (!init_ok)
+    return std::nullopt;
 
   Control::Velocity2D current_vel;
-  auto result = controller->getTrackingCtrl(depth, detections, current_vel);
-  BOOST_TEST(result.isTrajFound,
-             fx.name << ": planner failed to find a control");
-  if (!result.isTrajFound) return;
+  auto result = controller.getTrackingCtrl(source, detections, current_vel);
+  BOOST_TEST(result.isTrajFound, tag << ": planner failed to find a control");
+  if (!result.isTrajFound)
+    return std::nullopt;
 
   const float vx = result.trajectory.velocities.vx[0];
   const float omega = result.trajectory.velocities.omega[0];
@@ -199,17 +255,44 @@ void run_one_fixture(const FixtureCase &fx) {
   const float w_min = exp["omega_min"].get<float>();
   const float w_max = exp["omega_max"].get<float>();
 
-  BOOST_TEST(vx >= vx_min,
-             fx.name << ": vx=" << vx << " < vx_min=" << vx_min);
-  BOOST_TEST(vx <= vx_max,
-             fx.name << ": vx=" << vx << " > vx_max=" << vx_max);
+  BOOST_TEST(vx >= vx_min, tag << ": vx=" << vx << " < vx_min=" << vx_min);
+  BOOST_TEST(vx <= vx_max, tag << ": vx=" << vx << " > vx_max=" << vx_max);
   BOOST_TEST(omega >= w_min,
-             fx.name << ": omega=" << omega << " < omega_min=" << w_min);
+             tag << ": omega=" << omega << " < omega_min=" << w_min);
   BOOST_TEST(omega <= w_max,
-             fx.name << ": omega=" << omega << " > omega_max=" << w_max);
+             tag << ": omega=" << omega << " > omega_max=" << w_max);
+  return std::make_pair(vx, omega);
 }
 
-}  // namespace
+void run_one_fixture(const FixtureCase &fx) {
+  BOOST_TEST_MESSAGE("Running fixture: " << fx.name);
+  std::ifstream in((fx.dir / "case.json").string());
+  json case_json;
+  in >> case_json;
+
+  const cv::Mat depth_mat = load_depth_png(fx.dir / "depth.png");
+
+  auto depth_controller = build_controller(case_json);
+  const auto from_depth = run_one_source(
+      fx, "depth image", case_json, depth_view(depth_mat), *depth_controller);
+
+  const PackedCloud cloud = cloud_from_depth(depth_mat, case_json["camera"]);
+  auto cloud_controller = build_controller(case_json);
+  cloud_controller->setPointCloudSensor(camera_as_cloud_sensor());
+  const auto from_cloud = run_one_source(fx, "point cloud", case_json,
+                                         cloud.view(), *cloud_controller);
+
+  // Same scene through both sources must give the same command
+  BOOST_TEST(from_depth.has_value() == from_cloud.has_value(),
+             fx.name << ": depth-image and point-cloud paths disagree on "
+                        "finding a command");
+  if (from_depth && from_cloud) {
+    BOOST_CHECK_SMALL(from_depth->first - from_cloud->first, 1e-3f);
+    BOOST_CHECK_SMALL(from_depth->second - from_cloud->second, 1e-3f);
+  }
+}
+
+} // namespace
 
 BOOST_AUTO_TEST_CASE(RGBDFollower_fixture_cases) {
   auto fixtures = discover_fixtures();

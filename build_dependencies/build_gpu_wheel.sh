@@ -196,6 +196,7 @@ $PYTHON -m pip install patchelf "scikit-build-core>=0.8" "nanobind>=1.8,<2.9.2" 
 # Use acpp as compiler; point CMake at Conan-generated find modules for OMPL/FCL
 # Use CMAKE_PREFIX_PATH instead of CMAKE_TOOLCHAIN_FILE to avoid Conan
 # overriding the build generator (Ninja vs Make conflict with scikit-build)
+export CMAKE_BUILD_PARALLEL_LEVEL="$(nproc)"
 CXX=acpp SKBUILD_CMAKE_ARGS="-DCMAKE_PREFIX_PATH=$CONAN_BUILD_DIR" \
     $PYTHON -m pip wheel --no-build-isolation -w dist/ .
 

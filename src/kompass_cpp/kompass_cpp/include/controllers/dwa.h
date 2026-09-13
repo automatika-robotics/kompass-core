@@ -29,7 +29,7 @@ public:
       const Eigen::Vector3f &sensor_position_body,
       const Eigen::Vector4f &sensor_rotation_body, const double octreeRes,
       CostEvaluator::TrajectoryCostsWeights costWeights,
-      const int maxNumThreads = 1);
+      const bool allowReverse = true, const int maxNumThreads = 1);
 
   DWA(TrajectorySampler::TrajectorySamplerParameters config,
       ControlLimitsParams controlLimits, ControlType controlType,
@@ -61,7 +61,7 @@ public:
                  const Eigen::Vector4f &sensor_rotation_body,
                  const double octreeRes,
                  CostEvaluator::TrajectoryCostsWeights costWeights,
-                 const int maxNumThreads = 1);
+                 const bool allowReverse = true, const int maxNumThreads = 1);
 
   void configure(TrajectorySampler::TrajectorySamplerParameters config,
                  ControlLimitsParams controlLimits, ControlType controlType,
@@ -192,8 +192,10 @@ protected:
     // find closest segment to use in cost computation
     determineTarget();
 
-    if (rotate_in_place and std::abs(currentTrackedTarget_->heading_error) >
-                                goal_orientation_tolerance * 10.0) {
+    if (rotate_in_place and
+        (std::abs(currentTrackedTarget_->heading_error) >
+         goal_orientation_tolerance * 10.0) and
+        (abs(goal_distance_) <= goal_dist_tolerance)) {
       // If the robot is rotating in place and the heading error is large, we
       // do not need to sample trajectories
       LOG_DEBUG("Rotating In Place ...");
@@ -204,12 +206,6 @@ protected:
       return TrajSearchResult{trajectory, true, 0.0};
     }
 
-    // Adapt the prediction horizon to local path curvature. At straight
-    // sections use the full constructor-provided horizon; as the reference
-    // curvature rises, shrink the horizon so straight-tangent samples don't
-    // diverge from the arc by more than `kSagittaTolerance` meters. A
-    // constant-curvature arc deviates from its tangent by ~(v·T)²·κ/8, so
-    // the cap is T ≤ sqrt(8·ε/κ) / v_max.
     adaptPredictionHorizonToCurvature();
 
     // Generate set of valid trajectories in the DW
@@ -247,9 +243,13 @@ private:
 
   Path::Path::View findTrackedPathSegment();
 
-  // Shrink the sampler's rollout horizon based on the max curvature ahead
-  // on the reference path. Keeps straight-tangent samples from drifting too
-  // far off the arc and flat-lining the cost gradient at tight curves.
+  // Adapt the sampler's rollout horizon to local path curvature. At straight
+  // sections use the full constructor-provided horizon; as the reference
+  // curvature rises, shrink it so straight-tangent samples don't diverge
+  // from the arc by more than `kSagittaTolerance` meters (a constant-
+  // curvature arc deviates from its tangent by ~(v·T)²·κ/8, so the cap is
+  // T ≤ sqrt(8·ε/κ) / v_max). Keeps straight-tangent samples from drifting
+  // too far off the arc and flat-lining the cost gradient at tight curves.
   void adaptPredictionHorizonToCurvature();
 
   // One-shot warmup that dispatches every cost-evaluator kernel once with a

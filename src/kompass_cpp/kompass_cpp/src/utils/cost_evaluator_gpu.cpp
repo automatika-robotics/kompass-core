@@ -198,6 +198,7 @@ CostEvaluator::~CostEvaluator() {
 TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     const std::unique_ptr<TrajectorySamples2D> &trajs,
     const Path::Path *reference_path, const Path::Path::View &tracked_segment) {
+  std::lock_guard<std::mutex> lock(m_mutex);
 
   try {
     double weight;

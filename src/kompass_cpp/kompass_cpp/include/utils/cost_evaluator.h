@@ -11,6 +11,7 @@
 #include <memory>
 #include <vector>
 #ifdef GPU
+#include <mutex>
 #include <sycl/sycl.hpp>
 #endif //! GPU
 
@@ -272,6 +273,8 @@ private:
   float *m_devicePtrTempCosts = nullptr;
   LowestCost *m_minCost;
   sycl::queue m_q;
+  // Mutex to serialize the obstacle device buffers allocation
+  std::mutex m_mutex;
   void initializeGPUMemory();
   /**
    * @brief Trajectory cost based on average cross-track error to the tracked

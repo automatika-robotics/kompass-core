@@ -94,6 +94,8 @@ class DVZ(FollowerTemplate):
 
         self._dvz_linear: float = 0.0
         self._dvz_angular: float = 0.0
+        # Angular commands below the robot's minimum are treated as no rotation
+        self.__min_angular = ctrl_limits.omega_limits.min_omega
 
         generator_config = StanleyConfig(
             heading_gain=config.heading_gain, cross_track_gain=config.cross_track_gain
@@ -232,8 +234,7 @@ class DVZ(FollowerTemplate):
         """
         if (
             self._robot.robot_type != RobotType.ACKERMANN
-            and abs(self._dvz_angular)
-            > self.__reference_cmd_generator._config.min_angular_vel
+            and abs(self._dvz_angular) > self.__min_angular
         ):
             if (
                 abs(self.orientation_error)
@@ -258,8 +259,7 @@ class DVZ(FollowerTemplate):
         """
         if (
             self._robot.robot_type != RobotType.ACKERMANN
-            and abs(self._dvz_angular)
-            > self.__reference_cmd_generator._config.min_angular_vel
+            and abs(self._dvz_angular) > self.__min_angular
         ):
             if (
                 abs(self.orientation_error)
@@ -283,8 +283,7 @@ class DVZ(FollowerTemplate):
         """
         if (
             self._robot.robot_type != RobotType.ACKERMANN
-            and abs(self._dvz_angular)
-            > self.__reference_cmd_generator._config.min_angular_vel
+            and abs(self._dvz_angular) > self.__min_angular
         ):
             if (
                 abs(self.orientation_error)
