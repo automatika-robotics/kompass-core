@@ -847,7 +847,7 @@ sycl::event CostEvaluator::jerkCostFunc(const size_t trajs_size,
           // add it to global cost
           if (local_id == 0) {
             float final_val =
-                costWeight * (traj_total_cost / (3.0 * velocitiesCount));
+                costWeight * (traj_total_cost / (3.0f * velocitiesCount));
 
             // Atomically add the computed trajectory cost to the global
             // cost for this trajectory
