@@ -61,8 +61,8 @@ public:
     LOG_INFO("Mode:", (input_type_ == InputType::LASERSCAN ? "LASERSCAN"
                                                            : "POINTCLOUD"));
 
-    // Shared Result Allocation (Used by both modes)
-    m_result = sycl::malloc_shared<float>(1, m_q);
+    // Result Allocation (Used by both modes)
+    m_result = sycl::malloc_device<float>(1, m_q);
 
     // Mode-Specific Allocation
     if (input_type_ == InputType::LASERSCAN) {

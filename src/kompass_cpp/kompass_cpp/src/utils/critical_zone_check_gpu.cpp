@@ -240,7 +240,9 @@ float CriticalZoneCheckerGPU::check(Span<PointCloudView> clouds,
     throw;
   }
 
-  return *m_result;
+  float result = 1.0f;
+  m_q.memcpy(&result, m_result, sizeof(float)).wait();
+  return result;
 }
 
 // Single pointcloud overload
@@ -266,6 +268,9 @@ float CriticalZoneCheckerGPU::check(Eigen::Ref<const Eigen::VectorXf> ranges,
     // Input is float32. Straight H→D copy
     m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(float) * m_scanSize);
 
+    // Reset Result
+    m_q.fill(m_result, 1.0f, 1);
+
     // command scope
     m_q.submit([&](sycl::handler &h) {
       const double robot_radius = robotRadius_;
@@ -289,9 +294,6 @@ float CriticalZoneCheckerGPU::check(Eigen::Ref<const Eigen::VectorXf> ranges,
         critical_indices = m_devicePtrBackward;
         num_work_items = indicies_backward_.size();
       }
-
-      // Reset Result
-      *m_result = 1.0f;
 
       // Capture pointers by value for the kernel
       const auto devRanges = m_devicePtrRanges;
@@ -343,7 +345,9 @@ float CriticalZoneCheckerGPU::check(Eigen::Ref<const Eigen::VectorXf> ranges,
     throw;
   }
 
-  return *m_result;
+  float result = 1.0f;
+  m_q.memcpy(&result, m_result, sizeof(float)).wait();
+  return result;
 }
 
 } // namespace Kompass
