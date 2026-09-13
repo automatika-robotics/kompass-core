@@ -148,7 +148,7 @@ inline void submitCloudCheckKernel(
                 in_zone = true;
             } else {
               // Backward check: is angle within [PI - crit, -PI + crit]
-              if (abs_angle >= M_PI - crit_angle)
+              if (abs_angle >= static_cast<float>(M_PI) - crit_angle)
                 in_zone = true;
             }
 
@@ -273,7 +273,7 @@ float CriticalZoneCheckerGPU::check(Eigen::Ref<const Eigen::VectorXf> ranges,
 
     // command scope
     m_q.submit([&](sycl::handler &h) {
-      const double robot_radius = robotRadius_;
+      const float robot_radius = static_cast<float>(robotRadius_);
 
       // Prepare Transformation Constants
       auto tf = sensors_[0].tf_body.matrix();
