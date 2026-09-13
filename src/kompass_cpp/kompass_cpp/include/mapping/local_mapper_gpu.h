@@ -154,14 +154,11 @@ private:
     // kernel
     m_max_wg_size = dev.get_info<sycl::info::device::max_work_group_size>();
 
-    // NOTE: Angles stay double on device. The ray-cast kernel feeds them to
-    // sin/cos, and on CPU only backend float trig measurably loses to
-    // double trig (glibc). The kernel already narrows the angle to float
-    // before trig, so double costs only the wider H->D copy and per-thread
-    // load and the fp64 throughput penalty is negligible
+    // NOTE: Angles are kept float on device so the ray-cast kernel stays free
+    // of fp64 (embedded GPUs usually have none). On the CPU backend this costs
+    // a little, since glibc float trig is slower than double trig.
     m_devicePtrAngles =
-        sycl::malloc_device<double>(m_scanSize > 0 ? m_scanSize : 1, m_q);
-    m_anglesWide.resize(m_scanSize);
+        sycl::malloc_device<float>(m_scanSize > 0 ? m_scanSize : 1, m_q);
     m_devicePtrGrid = sycl::malloc_device<int>(m_gridHeight * m_gridWidth, m_q);
   }
 
@@ -213,9 +210,8 @@ private:
     // Angles are pre-populated with the `2π / scan_size` bin width the
     // conversion kernel assumes; upload them once here. All sensors share the
     // bin space (bearings are body-oriented around each sensor's own origin)
-    m_anglesWide = initializedAngles.cast<double>();
-    m_q.memcpy(m_devicePtrAngles, m_anglesWide.data(),
-               sizeof(double) * m_scanSize);
+    m_q.memcpy(m_devicePtrAngles, initializedAngles.data(),
+               sizeof(float) * m_scanSize);
     m_q.wait();
   }
 
@@ -224,16 +220,12 @@ private:
   float *m_devicePtrRanges = nullptr;
 
   // Shared buffers (both modes)
-  double
-      *m_devicePtrAngles; // uploaded per-call (laserscan) or once (pointcloud)
+  float *m_devicePtrAngles; // uploaded per-call (laserscan) or once (pointcloud)
   int *m_devicePtrGrid;   // output grid
 
   // Pointcloud mode. One device state per configured sensor; empty in
   // laserscan mode
   std::vector<SensorDeviceState> m_sensorDev;
-
-  // Host-side widening staging buffer for the double device-angles
-  Eigen::VectorXd m_anglesWide;
 
   // Device-reported max work-group size. Used as the pointcloud conversion
   // kernel's block dim.

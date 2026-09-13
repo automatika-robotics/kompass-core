@@ -233,7 +233,7 @@ inline void submitPointCloudToLaserScanKernel(
  *                             column-major. Used to gate the super-cover
  *                             line fill so cells beyond the measured range
  *                             aren't wrongly marked EMPTY.
- * @param devicePtrAngles      Per-ray angle in radians, `scanSize` doubles.
+ * @param devicePtrAngles      Per-ray angle in radians, `scanSize` floats.
  * @param devicePtrRanges      Per-ray range in metres, `scanSize` floats.
  * @param gridHeight           Grid row count (= `rows`).
  * @param gridWidth            Grid column count (= `cols`).
@@ -253,7 +253,7 @@ inline void submitPointCloudToLaserScanKernel(
  */
 inline void submitScanToGridKernel(
     sycl::queue &q, int *devicePtrGrid, const float *devicePtrDistances,
-    const double *devicePtrAngles, const float *devicePtrRanges,
+    const float *devicePtrAngles, const float *devicePtrRanges,
     const int gridHeight, const int gridWidth, const float resolution,
     const float laserscanOrientation, const Eigen::Vector2i &centralPoint,
     const Eigen::Vector3f &laserscanPosition, const Eigen::Vector2i &startPoint,
@@ -289,7 +289,7 @@ inline void submitScanToGridKernel(
           const size_t local_id = item.get_local_id();
 
           float range = devRanges[group_id];
-          double angle = devAngles[group_id];
+          const float angle = devAngles[group_id];
 
           if (local_id == 0) {
             sycl::vec<float, 2> toPointLocal;
@@ -300,8 +300,8 @@ inline void submitScanToGridKernel(
                 v_startPointLocal[1] +
                 (range * sycl::sin(orient + static_cast<float>(angle)));
 
-            toPoint[0] = v_centralPoint[0] + ceil(toPointLocal[0] / res);
-            toPoint[1] = v_centralPoint[1] + ceil(toPointLocal[1] / res);
+            toPoint[0] = v_centralPoint[0] + sycl::ceil(toPointLocal[0] / res);
+            toPoint[1] = v_centralPoint[1] + sycl::ceil(toPointLocal[1] / res);
             deltas[0] = toPoint[0] - v_startPoint[0];
             deltas[1] = toPoint[1] - v_startPoint[1];
             steps[0] = (deltas[0] >= 0) ? 1 : -1;
@@ -323,19 +323,19 @@ inline void submitScanToGridKernel(
           if (sycl::abs(deltas[0]) >= sycl::abs(deltas[1])) {
             float g = delta_y_f / delta_x_f;
             x_float = v_startPoint[0] +
-                      ((delta_x_f >= 0.0) ? 1 : ((delta_x_f < 0.0) ? -1 : 0)) *
+                      ((delta_x_f >= 0.0f) ? 1 : ((delta_x_f < 0.0f) ? -1 : 0)) *
                           local_id;
             y_float = v_startPoint[1] + (g * (x_float - v_startPoint[0]));
           } else {
             float g = delta_x_f / delta_y_f;
             y_float = v_startPoint[1] +
-                      ((delta_y_f > 0.0) ? 1 : ((delta_y_f < 0.0) ? -1 : 0)) *
+                      ((delta_y_f > 0.0f) ? 1 : ((delta_y_f < 0.0f) ? -1 : 0)) *
                           local_id;
             x_float = v_startPoint[0] + (g * (y_float - v_startPoint[1]));
           }
 
-          int x = round(x_float);
-          int y = round(y_float);
+          int x = sycl::round(x_float);
+          int y = sycl::round(y_float);
 
           if (x >= 0 && x < rows && y >= 0 && y < cols) {
             // Super-cover neighbor cells, bounds-checked INDIVIDUALLY at
@@ -491,12 +491,8 @@ LocalMapperGPU::scanToGrid(Eigen::Ref<const Eigen::VectorXf> angles,
       return gridData;
     }
 
-    // Ranges go straight H→D (float32 in, float32 device buffer). Angles
-    // widen through the staging member buffer. The device buffer is double (see
-    // the ctor note on host-backend trig performance)
-    m_anglesWide = angles.cast<double>();
-    m_q.memcpy(m_devicePtrAngles, m_anglesWide.data(),
-               sizeof(double) * m_scanSize);
+    // Ranges and angles go straight H→D (float32 in, float32 device buffers)
+    m_q.memcpy(m_devicePtrAngles, angles.data(), sizeof(float) * m_scanSize);
     m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(float) * m_scanSize);
 
     submitScanToGridKernel(
