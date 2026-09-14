@@ -96,21 +96,15 @@ class OMPLGeometric:
         self._set_planner()
 
         # Setup Path Optimization Objective
-        optimization_objective = getattr(base, self._config.optimization_objective)(
-            self._ompl_setup.getSpaceInformation()
-        )
+        self._set_optimization_objective()
 
-        self._ompl_setup.setOptimizationObjective(optimization_objective)
+        # Last map given to the planner
+        self._map_3d: Optional[np.ndarray] = None
 
         if config_file:
             self.configure(config_file)
-
-        self._cpp_planner: Optional[OMPL2DGeometricPlanner] = OMPL2DGeometricPlanner(
-            robot_shape=self._robot.geometry_type,
-            robot_dimensions=self._robot.geometry_params,
-            ompl_setup=self._ompl_setup,
-            map_resolution=self._config.map_resolution,
-        )
+        else:
+            self._init_cpp_planner()
 
     def configure(
         self,
@@ -150,8 +144,47 @@ class OMPLGeometric:
         planner_params.from_file(config_file, nested_root_name + "." + planner_name)
 
         self._set_planner(planner_params, planner_id)
+        self._set_optimization_objective()
+
+        # The C++ planner holds a copy of the OMPL setup, so it has to be rebuilt
+        # for the new planner, objective and map resolution to take effect
+        self._init_cpp_planner()
 
         self.start = False
+
+    def _init_cpp_planner(self):
+        """
+        Create the C++ planner from the current OMPL setup and config
+        """
+        self._cpp_planner: Optional[OMPL2DGeometricPlanner] = OMPL2DGeometricPlanner(
+            robot_shape=self._robot.geometry_type,
+            robot_dimensions=self._robot.geometry_params,
+            ompl_setup=self._ompl_setup,
+            map_resolution=self._config.map_resolution,
+        )
+        # The new planner has an empty collision map, give it the last map back
+        if self._map_3d is not None:
+            self._cpp_planner.set_map(map_3d=self._map_3d)
+
+    def set_map(self, map_3d: np.ndarray):
+        """
+        Set the map used for collision checking in the following planning problems. This rebuilds the collision map, so call it only when the map changes
+
+        :param map_3d: 3D array for map PointCloud data
+        :type map_3d: np.ndarray
+        """
+        self._cpp_planner.set_map(map_3d=map_3d)
+        # Kept (not copied) to restore the map when the planner is reconfigured
+        self._map_3d = map_3d
+
+    def _set_optimization_objective(self):
+        """
+        Set the path optimization objective from config
+        """
+        optimization_objective = getattr(base, self._config.optimization_objective)(
+            self._ompl_setup.getSpaceInformation()
+        )
+        self._ompl_setup.setOptimizationObjective(optimization_objective)
 
     @property
     def path_cost(self) -> float:
@@ -191,10 +224,18 @@ class OMPLGeometric:
         :type goal_y: float
         :param goal_yaw: Yaw-coordinates (rotation around z) for goal point on the map (rad)
         :type goal_yaw: float
-        :param map_3d: 3D array for map PointCloud data, defaults to None
+        :param map_3d: 3D array for map PointCloud data, rebuilds the collision map when given (see set_map). Defaults to None (plan on the map set last)
         :type map_3d: np.ndarray | None, optional
+
+        :raises ValueError: If no map is given and none was set before
         """
         self._set_space_bounds(map_meta_data)
+        if map_3d is not None:
+            self.set_map(map_3d)
+        elif self._map_3d is None:
+            raise ValueError(
+                "No map to plan on. Pass 'map_3d' or set the map first with 'set_map'"
+            )
         self._cpp_planner.setup_problem(
             start_x=start_x,
             start_y=start_y,
@@ -202,7 +243,6 @@ class OMPLGeometric:
             goal_x=goal_x,
             goal_y=goal_y,
             goal_yaw=goal_yaw,
-            map_3d=map_3d,
         )
 
     @property

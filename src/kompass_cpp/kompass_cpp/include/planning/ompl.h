@@ -25,7 +25,28 @@ public:
   ~OMPL2DGeometricPlanner();
 
   /**
-   * @brief Setup OMPL planning problem
+   * @brief Set the map used for collision checking. Rebuilds the collision
+   * octree, so call it only when the map changes.
+   *
+   * @param map_3d Map PointCloud in the world frame.
+   */
+  void setMap(Span<Path::Point> map_3d);
+
+  /**
+   * @brief Setup OMPL planning problem on the last map set with setMap
+   *
+   * @param start_x
+   * @param start_y
+   * @param start_yaw
+   * @param goal_x
+   * @param goal_y
+   * @param goal_yaw
+   */
+  void setupProblem(double start_x, double start_y, double start_yaw,
+                    double goal_x, double goal_y, double goal_yaw);
+
+  /**
+   * @brief Setup OMPL planning problem with a new map
    *
    * @param start_x
    * @param start_y

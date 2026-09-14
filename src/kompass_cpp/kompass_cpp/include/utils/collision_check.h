@@ -174,8 +174,15 @@ public:
       }
     }
 
-    // Update Octree
-    octTree_->insertPointCloud(octomapCloud_, octomap::point3d(0, 0, 0));
+    // Update Octree: mark the points' voxels occupied directly. The tree is
+    // cleared on every update, so the free space that insertPointCloud would
+    // ray cast from the origin to each point is never used by the collision
+    // checks, while its cost grows with the distance of each point from the
+    // origin (seconds for a large global map).
+    for (const auto &point : octomapCloud_) {
+      octTree_->updateNode(point, true, /*lazy_eval=*/true);
+    }
+    octTree_->updateInnerOccupancy();
     updateOctreePtr();
   }
 

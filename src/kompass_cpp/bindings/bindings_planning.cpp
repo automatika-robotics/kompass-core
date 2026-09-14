@@ -30,6 +30,22 @@ void bindings_planning(py::module_ &m) {
           py::arg("start_x"), py::arg("start_y"), py::arg("start_yaw"),
           py::arg("goal_x"), py::arg("goal_y"), py::arg("goal_yaw"),
           py::arg("map_3d"))
+      .def(
+          "setup_problem",
+          py::overload_cast<double, double, double, double, double, double>(
+              &Planning::OMPL2DGeometricPlanner::setupProblem),
+          py::arg("start_x"), py::arg("start_y"), py::arg("start_yaw"),
+          py::arg("goal_x"), py::arg("goal_y"), py::arg("goal_yaw"))
+      .def(
+          "set_map",
+          [](Planning::OMPL2DGeometricPlanner &self,
+             Eigen::Ref<const RowMatrixX3f> map_3d) {
+            // Zero-copy reinterpret
+            const auto points = toPointSpan(map_3d);
+            py::gil_scoped_release release;
+            self.setMap(points);
+          },
+          py::arg("map_3d"))
       .def("solve", &Planning::OMPL2DGeometricPlanner::solve,
            py::arg("planning_timeout") = 1.0,
            py::call_guard<py::gil_scoped_release>())
