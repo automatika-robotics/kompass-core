@@ -293,6 +293,11 @@ else
     log INFO "Building with defaults."
 fi
 CXX=$CLANG_EXECUTABLE_PATH cmake $CMAKE_FLAGS ..
+# Keep GPUs that AdaptiveCpp can run through CUDA or ROCm from also being reachable through OpenCL
+if grep -qiE '^WITH_(CUDA|ROCM)_BACKEND:BOOL=(ON|TRUE|YES|Y|1)$' CMakeCache.txt; then
+    log INFO "CUDA or ROCm backend found. Disabling the OpenCL backend..."
+    CXX=$CLANG_EXECUTABLE_PATH cmake -DWITH_OPENCL_BACKEND=OFF ..
+fi
 log INFO "Building and installing AdaptiveCpp to $INSTALL_PREFIX..."
 $SUDO make install -j$(nproc)
 
