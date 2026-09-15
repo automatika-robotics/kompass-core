@@ -18,8 +18,11 @@
 #include "utils/collision_check.h"
 #include "utils/critical_zone_check_gpu.h"
 #include <boost/test/included/unit_test.hpp>
+#include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -588,4 +591,102 @@ BOOST_AUTO_TEST_CASE(test_pointcloud_concurrent_checks_with_varying_frames) {
   BOOST_TEST(unsafe_results == 0,
              "far-away clouds must always be safe; got " << unsafe_results
                                                          << " other results");
+}
+
+// ===========================================================================
+// Per-call inputs in pinned host memory (utils/stream_input_buffer_gpu.h)
+// ===========================================================================
+
+namespace {
+
+// Sets KOMPASS_STREAM_INPUT_MEMORY (unsets it for nullptr) for the lifetime of
+// the guard and restores the previous value afterwards
+struct ScopedStreamInputMemory {
+  explicit ScopedStreamInputMemory(const char *mode) {
+    if (const char *previous = std::getenv(kName)) {
+      previous_ = previous;
+      hadPrevious_ = true;
+    }
+    if (mode) {
+      setenv(kName, mode, 1);
+    } else {
+      unsetenv(kName);
+    }
+  }
+  ~ScopedStreamInputMemory() {
+    if (hadPrevious_) {
+      setenv(kName, previous_.c_str(), 1);
+    } else {
+      unsetenv(kName);
+    }
+  }
+  static constexpr const char *kName = "KOMPASS_STREAM_INPUT_MEMORY";
+  std::string previous_;
+  bool hadPrevious_ = false;
+};
+
+} // namespace
+
+// The safety factors do not depend on where the per-call inputs live:
+// two-sensor clouds that grow and shrink between calls, in both motion
+// directions, and laser scans give identical factors in device memory and in
+// host memory, covering stop, slowdown and clear results
+BOOST_AUTO_TEST_CASE(test_checker_stream_input_memory_parity) {
+  std::vector<std::vector<uint8_t>> clouds;
+  for (const float distance : {0.55f, 0.8f, 5.0f, 0.7f}) {
+    std::vector<uint8_t> cloud;
+    for (int i = 0; i < 400 * static_cast<int>(clouds.size() + 1); ++i) {
+      const float spread = 0.001f * static_cast<float>(i % 50);
+      addPointToCloud(cloud, distance + spread, spread - 0.025f, 0.3f);
+    }
+    clouds.push_back(std::move(cloud));
+  }
+  std::vector<std::vector<double>> scans;
+  for (const double range : {0.2, 0.45, 5.0}) {
+    auto scan = fresh_laserscan();
+    setLaserscanAtAngle(M_PI, range, scan.ranges, scan.angles);
+    setLaserscanAtAngle(0.0, range, scan.ranges, scan.angles);
+    scans.push_back(scan.ranges);
+  }
+
+  auto runAll = [&](const char *mode) {
+    ScopedStreamInputMemory setting(mode);
+    std::vector<float> factors;
+    CriticalZoneCheckerGPU cloudChecker(
+        CriticalZoneChecker::InputType::POINTCLOUD, ROBOT_SHAPE, ROBOT_DIMS,
+        {SensorConfig::fromYaw({0.2f, 0.0f, 0.2f}, 0.0f),
+         SensorConfig::fromYaw({-0.2f, 0.0f, 0.2f}, static_cast<float>(M_PI))},
+        CRIT_ANGLE, CRIT_DIST, SLOW_DIST, POINTCLOUD_MIN_H, POINTCLOUD_MAX_H,
+        MAX_RANGE);
+    for (std::size_t k = 0; k < clouds.size(); ++k) {
+      const auto &front = clouds[k];
+      const auto &back = clouds[(k + 2) % clouds.size()];
+      for (const bool forward : {true, false}) {
+        factors.push_back(
+            cloudChecker.check({make_view(front), make_view(back)}, forward));
+      }
+    }
+    CriticalZoneCheckerGPU scanChecker(
+        CriticalZoneChecker::InputType::LASERSCAN, ROBOT_SHAPE, ROBOT_DIMS,
+        {SensorConfig{Eigen::Vector3f{0.22f, 0.0f, 0.4f},
+                      Eigen::Vector4f{0.0f, 0.0f, 0.99f, 0.0f}}},
+        CRIT_ANGLE, CRIT_DIST, SLOW_DIST, LASERSCAN_MIN_H, LASERSCAN_MAX_H,
+        MAX_RANGE, make_reference_angles());
+    for (const auto &ranges : scans) {
+      for (const bool forward : {true, false}) {
+        factors.push_back(scanChecker.check(toVecF(ranges), forward));
+      }
+    }
+    return factors;
+  };
+
+  const auto onDevice = runAll("device");
+  const auto inHost = runAll(nullptr);
+  BOOST_TEST(onDevice == inHost, boost::test_tools::per_element());
+  // The inputs cover every kind of result, so the comparison is not vacuous
+  BOOST_TEST(std::count(inHost.begin(), inHost.end(), 0.0f) > 0);
+  BOOST_TEST(std::count(inHost.begin(), inHost.end(), 1.0f) > 0);
+  BOOST_TEST(std::count_if(inHost.begin(), inHost.end(), [](float f) {
+               return f > 0.0f && f < 1.0f;
+             }) > 0);
 }
