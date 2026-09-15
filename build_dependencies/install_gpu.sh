@@ -251,7 +251,8 @@ fi
 # Install required packages for acpp (ensure dev headers are present)
 $SUDO apt install -y \
     "libclang-${LLVM_VERSION}-dev" "clang-tools-${LLVM_VERSION}" \
-    "libomp-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-dev" "lld-${LLVM_VERSION}"
+    "libomp-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-dev" "lld-${LLVM_VERSION}" \
+    ocl-icd-opencl-dev opencl-c-headers
 
 # Get LLVM/Clang paths
 LLVM_DIR=$(llvm-config-${LLVM_VERSION} --cmakedir)
