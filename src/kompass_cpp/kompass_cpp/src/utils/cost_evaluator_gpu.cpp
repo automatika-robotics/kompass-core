@@ -111,12 +111,15 @@ void CostEvaluator::initializeGPUMemory() {
   }
   // custom costs are only allocated when custom costs are assigned
   if (customTrajCostsPtrs_.size() > 0) {
-    m_devicePtrTempCosts = sycl::malloc_shared<float>(numTrajectories_, m_q);
+    m_devicePtrTempCosts = sycl::malloc_device<float>(numTrajectories_, m_q);
   }
 
   // Result struct memory allocation and init
-  m_minCost = sycl::malloc_shared<LowestCost>(1, m_q);
-  *m_minCost = LowestCost();
+  m_minCost = sycl::malloc_device<LowestCost>(1, m_q);
+  {
+    LowestCost init;
+    m_q.memcpy(m_minCost, &init, sizeof(LowestCost)).wait();
+  }
 }
 
 void CostEvaluator::updateCostWeights(TrajectoryCostsWeights &newCostsWeights) {
@@ -143,8 +146,8 @@ void CostEvaluator::updateCostWeights(TrajectoryCostsWeights &newCostsWeights) {
     m_devicePtrObstaclesY = sycl::malloc_device<float>(maxWGSize_, m_q);
   }
   if (customTrajCostsPtrs_.size() > 0 && !m_devicePtrTempCosts) {
-    // Allocate shared memory for temporary costs
-    m_devicePtrTempCosts = sycl::malloc_shared<float>(numTrajectories_, m_q);
+    // Allocate device memory for temporary costs
+    m_devicePtrTempCosts = sycl::malloc_device<float>(numTrajectories_, m_q);
   }
 };
 
@@ -229,8 +232,10 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
     m_q.memcpy(m_devicePtrVelocitiesOmega, trajs->velocities.omega.data(),
                sizeof(float) * trajs_size * (numPointsPerTrajectory_ - 1));
 
-    m_minCost->cost = DEFAULT_MIN_DIST;
-    m_minCost->sampleIndex = 0;
+    {
+      LowestCost init(DEFAULT_MIN_DIST, 0);
+      m_q.memcpy(m_minCost, &init, sizeof(LowestCost)).wait();
+    }
 
     // wait for all data to be transferred
     m_q.wait();
@@ -346,20 +351,23 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
       // Custom costs can be registered after construction (add_custom_cost
       // from Python), -> allocate on first use
       if (!m_devicePtrTempCosts) {
-        m_devicePtrTempCosts = sycl::malloc_shared<float>(numTrajectories_, m_q);
+        m_devicePtrTempCosts = sycl::malloc_device<float>(numTrajectories_, m_q);
       }
+      std::vector<float> tempCostsHost(numTrajectories_, 0.0f);
       size_t idx = 0;
       for (const auto traj : *trajs) {
-        m_devicePtrTempCosts[idx] = 0.0;
+        tempCostsHost[idx] = 0.0;
         for (const auto &custom_cost : customTrajCostsPtrs_) {
           // custom cost functions takes in the trajectory and the reference
           // path
-          m_devicePtrTempCosts[idx] +=
+          tempCostsHost[idx] +=
               custom_cost->weight *
               custom_cost->evaluator_(traj, *reference_path);
         }
         idx += 1;
       }
+      m_q.memcpy(m_devicePtrTempCosts, tempCostsHost.data(), sizeof(float) * idx)
+          .wait();
 
       // Add temp costs to global costs
       // Command scope
@@ -390,7 +398,9 @@ TrajSearchResult CostEvaluator::getMinTrajectoryCost(
        })
         .wait();
 
-    return {trajs->getIndex(m_minCost->sampleIndex), true, m_minCost->cost};
+    LowestCost result;
+    m_q.memcpy(&result, m_minCost, sizeof(LowestCost)).wait();
+    return {trajs->getIndex(result.sampleIndex), true, result.cost};
   } catch (const sycl::exception &e) {
     LOG_ERROR("Exception caught: ", e.what());
     throw;
@@ -837,7 +847,7 @@ sycl::event CostEvaluator::jerkCostFunc(const size_t trajs_size,
           // add it to global cost
           if (local_id == 0) {
             float final_val =
-                costWeight * (traj_total_cost / (3.0 * velocitiesCount));
+                costWeight * (traj_total_cost / (3.0f * velocitiesCount));
 
             // Atomically add the computed trajectory cost to the global
             // cost for this trajectory

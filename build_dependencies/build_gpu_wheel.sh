@@ -12,8 +12,10 @@ set -xe
 #   python_executable: path to python (default: python3)
 # =============================================================================
 
-ADAPTIVE_CPP_URL="https://github.com/AdaptiveCpp/AdaptiveCpp"
-ADAPTIVE_CPP_VERSION="v25.10.0"
+# TODO: Switch back to a versioned upstream AdaptiveCpp release once the changes
+# needed for Arm Mali (AdaptiveCpp/AdaptiveCpp#2228) are merged upstream.
+ADAPTIVE_CPP_URL="https://github.com/aleph-ra/AdaptiveCpp"
+ADAPTIVE_CPP_VERSION="v25.10.0-mali"
 LLVM_VERSION=17
 ACPP_DEPLOY_DIR="/tmp/acpp_deploy"
 CONAN_BUILD_DIR="/tmp/conan_build"

@@ -2,4 +2,4 @@
 ompl_tester:
   ompl:
     log_level: 'DEBUG'
-    planning_timeout: 5.0
+    planning_timeout: 1.0

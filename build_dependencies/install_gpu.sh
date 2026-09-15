@@ -157,8 +157,10 @@ check_llvm_clang_versions_in_range() {
 
 KOMPASS_CORE_REPO="automatika-robotics/kompass-core"
 KOMPASS_CORE_URL="https://github.com/$KOMPASS_CORE_REPO"
-ADAPTIVE_CPP_URL="https://github.com/AdaptiveCpp/AdaptiveCpp"
-ADAPTIVE_CPP_SOURCE_VERSION="v25.10.0"
+# TODO: Switch back to a versioned upstream AdaptiveCpp release once the changes
+# needed for Arm Mali (AdaptiveCpp/AdaptiveCpp#2228) are merged upstream.
+ADAPTIVE_CPP_URL="https://github.com/aleph-ra/AdaptiveCpp"
+ADAPTIVE_CPP_SOURCE_VERSION="v25.10.0-mali"
 DEFAULT_INSTALL_PREFIX="/usr/local"
 DEFAULT_KEEP_SOURCE_FILES=false
 MINIMUM_LLVM_VERSION=14
@@ -249,7 +251,8 @@ fi
 # Install required packages for acpp (ensure dev headers are present)
 $SUDO apt install -y \
     "libclang-${LLVM_VERSION}-dev" "clang-tools-${LLVM_VERSION}" \
-    "libomp-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-dev" "lld-${LLVM_VERSION}"
+    "libomp-${LLVM_VERSION}-dev" "llvm-${LLVM_VERSION}-dev" "lld-${LLVM_VERSION}" \
+    ocl-icd-opencl-dev opencl-c-headers
 
 # Get LLVM/Clang paths
 LLVM_DIR=$(llvm-config-${LLVM_VERSION} --cmakedir)
@@ -290,6 +293,11 @@ else
     log INFO "Building with defaults."
 fi
 CXX=$CLANG_EXECUTABLE_PATH cmake $CMAKE_FLAGS ..
+# Keep GPUs that AdaptiveCpp can run through CUDA or ROCm from also being reachable through OpenCL
+if grep -qiE '^WITH_(CUDA|ROCM)_BACKEND:BOOL=(ON|TRUE|YES|Y|1)$' CMakeCache.txt; then
+    log INFO "CUDA or ROCm backend found. Disabling the OpenCL backend..."
+    CXX=$CLANG_EXECUTABLE_PATH cmake -DWITH_OPENCL_BACKEND=OFF ..
+fi
 log INFO "Building and installing AdaptiveCpp to $INSTALL_PREFIX..."
 $SUDO make install -j$(nproc)
 
