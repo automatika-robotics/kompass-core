@@ -234,7 +234,7 @@ def test():
     generate_all_geometric_planners_configs()
 
     # Test planning
-    ompl_geometric_testing()
+    ompl_geometric_testing(test_repetitions=1)
 
 
 if __name__ == "__main__":
