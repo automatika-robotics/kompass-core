@@ -81,12 +81,14 @@ if(AdaptiveCpp_FOUND)
   # Mapper GPU test
   add_executable(mapper_test_gpu mapper_test_gpu.cpp)
   target_link_libraries(mapper_test_gpu PRIVATE ${MODULE_NAME} Boost::headers)
+  target_compile_definitions(mapper_test_gpu PRIVATE GPU=1)
   add_sycl_to_target(TARGET mapper_test_gpu SOURCES mapper_test_gpu.cpp)
   add_test(mapper_gpu_tests mapper_test_gpu)
 
   # Critical Zone Checker GPU tests
   add_executable(critical_zone_test_gpu critical_zone_test_gpu.cpp)
   target_link_libraries(critical_zone_test_gpu PRIVATE ${MODULE_NAME} Boost::headers)
+  target_compile_definitions(critical_zone_test_gpu PRIVATE GPU=1)
   add_sycl_to_target(TARGET critical_zone_test_gpu SOURCES critical_zone_test_gpu.cpp)
   add_test(critical_zone_gpu_tests critical_zone_test_gpu)
 

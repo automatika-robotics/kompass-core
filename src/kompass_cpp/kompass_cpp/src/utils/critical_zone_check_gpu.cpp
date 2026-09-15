@@ -209,22 +209,12 @@ float CriticalZoneCheckerGPU::check(Span<PointCloudView> clouds,
       auto &devState = m_sensorDev[s];
       const size_t total_bytes = cloud.data.size();
 
-      // Grow this sensor's raw-bytes device buffer to fit the cloud
-      if (devState.rawCapacity < total_bytes) {
-        if (devState.rawBytes) {
-          // A kernel from a previous throwing call could still be reading
-          // this buffer (sycl::free is host-side and NOT queue-ordered), so
-          // drain before freeing
-          m_q.wait();
-          sycl::free(devState.rawBytes, m_q);
-        }
-        devState.rawBytes = sycl::malloc_device<uint8_t>(total_bytes, m_q);
-        devState.rawCapacity = total_bytes;
-      }
-      m_q.memcpy(devState.rawBytes, cloud.data.data(), total_bytes);
+      // Grow this sensor's raw-bytes buffer to fit the cloud
+      devState.rawBytes.reserve(total_bytes, m_q);
+      devState.rawBytes.upload(cloud.data.data(), total_bytes, m_q);
 
       submitCloudCheckKernel(
-          m_q, devState.rawBytes, total_bytes, m_result, cloud.point_step,
+          m_q, devState.rawBytes.data, total_bytes, m_result, cloud.point_step,
           cloud.row_step, cloud.width, cloud.height, cloud.x_offset,
           cloud.y_offset, cloud.z_offset, sensors_[s].tf, min_height_,
           max_height_, critical_angle_, static_cast<float>(robotRadius_),
@@ -237,6 +227,8 @@ float CriticalZoneCheckerGPU::check(Span<PointCloudView> clouds,
 
   } catch (const sycl::exception &e) {
     LOG_ERROR("Exception caught: ", e.what());
+    // Kernels submitted before the throw may still read the input buffers
+    m_q.wait();
     throw;
   }
 
@@ -265,8 +257,8 @@ float CriticalZoneCheckerGPU::check(Eigen::Ref<const Eigen::VectorXf> ranges,
   }
   std::lock_guard<std::mutex> lock(m_mutex);
   try {
-    // Input is float32. Straight H→D copy
-    m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(float) * m_scanSize);
+    // Input is float32
+    m_ranges.upload(ranges.data(), m_scanSize, m_q);
 
     // Reset Result
     m_q.fill(m_result, 1.0f, 1);
@@ -296,7 +288,7 @@ float CriticalZoneCheckerGPU::check(Eigen::Ref<const Eigen::VectorXf> ranges,
       }
 
       // Capture pointers by value for the kernel
-      const auto devRanges = m_devicePtrRanges;
+      const auto devRanges = m_ranges.data;
       const auto devCos = m_cos;
       const auto devSin = m_sin;
 
@@ -342,6 +334,8 @@ float CriticalZoneCheckerGPU::check(Eigen::Ref<const Eigen::VectorXf> ranges,
 
   } catch (const sycl::exception &e) {
     LOG_ERROR("Exception caught: ", e.what());
+    // Kernels submitted before the throw may still read the input buffers
+    m_q.wait();
     throw;
   }
 
