@@ -79,6 +79,9 @@ template <typename T> struct StreamInputBuffer {
     // true failure
     if (!data) {
       LOG_ERROR("Could not allocate ", elements, " kernel input elements");
+      // Kernels of this call may already be reading other buffers. Leave
+      // the queue drained
+      queue.wait();
       throw std::bad_alloc();
     }
     capacity = elements;

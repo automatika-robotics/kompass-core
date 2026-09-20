@@ -230,6 +230,10 @@ float CriticalZoneCheckerGPU::check(Span<PointCloudView> clouds,
     // Kernels submitted before the throw may still read the input buffers
     m_q.wait();
     throw;
+  } catch (const std::exception &e) {
+    LOG_ERROR("Exception caught: ", e.what());
+    m_q.wait();
+    throw;
   }
 
   float result = 1.0f;
@@ -335,6 +339,10 @@ float CriticalZoneCheckerGPU::check(Eigen::Ref<const Eigen::VectorXf> ranges,
   } catch (const sycl::exception &e) {
     LOG_ERROR("Exception caught: ", e.what());
     // Kernels submitted before the throw may still read the input buffers
+    m_q.wait();
+    throw;
+  } catch (const std::exception &e) {
+    LOG_ERROR("Exception caught: ", e.what());
     m_q.wait();
     throw;
   }
