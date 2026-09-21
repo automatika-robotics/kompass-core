@@ -2,6 +2,7 @@
 
 #include "local_mapper.h"
 #include "utils/logger.h"
+#include "utils/stream_input_buffer_gpu.h"
 #include <Eigen/Dense>
 #include <array>
 #include <mutex>
@@ -48,12 +49,8 @@ public:
     if (m_devicePtrGrid) {
       sycl::free(m_devicePtrGrid, m_q);
     }
-    if (m_devicePtrRanges) {
-      sycl::free(m_devicePtrRanges, m_q);
-    }
-    if (m_devicePtrAngles) {
-      sycl::free(m_devicePtrAngles, m_q);
-    }
+    m_ranges.release(m_q); // stream buffer
+    m_angles.release(m_q); // stream buffer
     if (m_devicePtrDistances) {
       sycl::free(m_devicePtrDistances, m_q);
     }
@@ -64,9 +61,7 @@ public:
       if (dev.distances) {
         sycl::free(dev.distances, m_q);
       }
-      if (dev.rawBytes) {
-        sycl::free(dev.rawBytes, m_q);
-      }
+      dev.rawBytes.release(m_q); // stream buffer
     }
   }
 
@@ -127,10 +122,9 @@ private:
   // Device-side per-sensor state; one entry per configured sensor in
   // pointcloud mode, empty in laserscan mode
   struct SensorDeviceState {
-    // Raw PointCloud2 bytes. Grown lazily per call because the per-scan
-    // point count isn't known at ctor time; grow-only
-    uint8_t *rawBytes = nullptr;
-    size_t rawCapacity = 0;
+    // Raw PointCloud2 bytes in a stream buffer. Grown lazily per call because
+    // the per-scan point count isn't known at ctor time
+    StreamInputBuffer<uint8_t> rawBytes;
     // Conversion output: per-bin minimum planar range (scanSize floats)
     float *ranges = nullptr;
     // Per-cell planar distance from this sensor's origin; gates super-cover
@@ -150,16 +144,54 @@ private:
     auto dev = m_q.get_device();
     LOG_INFO("Running on :", dev.get_info<sycl::info::device::name>());
 
-    // Query the device's max work-group size for the pointcloud conversion
-    // kernel
+    // the device's max work-group size for the pointcloud conversion kernel
     m_max_wg_size = dev.get_info<sycl::info::device::max_work_group_size>();
 
-    // NOTE: Angles are kept float on device so the ray-cast kernel stays free
-    // of fp64 (embedded GPUs usually have none). On the CPU backend this costs
-    // a little, since glibc float trig is slower than double trig.
-    m_devicePtrAngles =
-        sycl::malloc_device<float>(m_scanSize > 0 ? m_scanSize : 1, m_q);
+    // decide where the stream input buffers get assigned
+    m_streamInputsInHost = streamInputsInHostMemory(dev);
+    LOG_INFO("Per-call inputs in",
+             m_streamInputsInHost ? "pinned host memory" : "device memory");
+
+    // allocate output grid
     m_devicePtrGrid = sycl::malloc_device<int>(m_gridHeight * m_gridWidth, m_q);
+  }
+
+  void initLaserscanMode_() {
+    // Ranges and angles arrive with every scan
+    m_ranges.preferHost = m_streamInputsInHost;
+    m_angles.preferHost = m_streamInputsInHost;
+    m_ranges.reserve(m_scanSize, m_q);
+    m_angles.reserve(m_scanSize, m_q);
+    m_devicePtrDistances = makeDistanceTable_(m_sensors[0].origin_xy);
+  }
+
+  // Builds the per-sensor device state from m_sensors (already populated by the
+  // base ctor) plus each sensor's field encoding
+  void initPointCloudMode_(const std::vector<SensorConfig> &sensors) {
+    m_sensorDev.reserve(m_sensors.size());
+    for (size_t s = 0; s < m_sensors.size(); ++s) {
+      SensorDeviceState dev;
+      const Eigen::Matrix4f tf = m_sensors[s].tf_body.matrix();
+      dev.tf = {tf(0, 0), tf(0, 1), tf(0, 2), tf(0, 3), tf(1, 0), tf(1, 1),
+                tf(1, 2), tf(1, 3), tf(2, 0), tf(2, 1), tf(2, 2), tf(2, 3)};
+      dev.originXY = m_sensors[s].origin_xy;
+      dev.startPoint = m_sensors[s].start_point;
+      dev.fieldType = sensors[s].cloud_field_type;
+      dev.elementSize = elementSizeOf(dev.fieldType);
+      dev.rawBytes.preferHost = m_streamInputsInHost;
+      dev.ranges = sycl::malloc_device<float>(m_scanSize, m_q);
+      dev.distances = makeDistanceTable_(m_sensors[s].origin_xy);
+      m_sensorDev.push_back(dev);
+    }
+
+    // Angles are pre-populated with the `2π / scan_size` bin width the
+    // conversion kernel assumes; upload them once here. All sensors share the
+    // bin space (bearings are body-oriented around each sensor's own origin).
+    // They are constant and re-read by every ray-cast, so they stay in device
+    // memory
+    m_angles.reserve(m_scanSize, m_q);
+    m_angles.upload(initializedAngles.data(), m_scanSize, m_q);
+    m_q.wait();
   }
 
   /**
@@ -180,61 +212,35 @@ private:
     }
     // move to device explicitly
     float *table = sycl::malloc_device<float>(m_gridHeight * m_gridWidth, m_q);
-    m_q.memcpy(table, hostTable.data(), sizeof(float) * hostTable.size()).wait();
+    m_q.memcpy(table, hostTable.data(), sizeof(float) * hostTable.size())
+        .wait();
     return table;
   }
 
-  void initLaserscanMode_() {
-    m_devicePtrRanges = sycl::malloc_device<float>(m_scanSize, m_q);
-    m_devicePtrDistances = makeDistanceTable_(m_sensors[0].origin_xy);
-  }
-
-  // Builds the per-sensor device state from m_sensors (already populated by the
-  // base ctor) plus each sensor's field encoding
-  void initPointCloudMode_(const std::vector<SensorConfig> &sensors) {
-    m_sensorDev.reserve(m_sensors.size());
-    for (size_t s = 0; s < m_sensors.size(); ++s) {
-      SensorDeviceState dev;
-      const Eigen::Matrix4f tf = m_sensors[s].tf_body.matrix();
-      dev.tf = {tf(0, 0), tf(0, 1), tf(0, 2), tf(0, 3), tf(1, 0), tf(1, 1),
-                tf(1, 2), tf(1, 3), tf(2, 0), tf(2, 1), tf(2, 2), tf(2, 3)};
-      dev.originXY = m_sensors[s].origin_xy;
-      dev.startPoint = m_sensors[s].start_point;
-      dev.fieldType = sensors[s].cloud_field_type;
-      dev.elementSize = elementSizeOf(dev.fieldType);
-      dev.ranges = sycl::malloc_device<float>(m_scanSize, m_q);
-      dev.distances = makeDistanceTable_(m_sensors[s].origin_xy);
-      m_sensorDev.push_back(dev);
-    }
-
-    // Angles are pre-populated with the `2π / scan_size` bin width the
-    // conversion kernel assumes; upload them once here. All sensors share the
-    // bin space (bearings are body-oriented around each sensor's own origin)
-    m_q.memcpy(m_devicePtrAngles, initializedAngles.data(),
-               sizeof(float) * m_scanSize);
-    m_q.wait();
-  }
-
-  // Laserscan-mode buffers (null in pointcloud mode)
-  float *m_devicePtrDistances = nullptr;
-  float *m_devicePtrRanges = nullptr;
-
-  // Shared buffers (both modes)
-  float *m_devicePtrAngles; // uploaded per-call (laserscan) or once (pointcloud)
-  int *m_devicePtrGrid;   // output grid
-
-  // Pointcloud mode. One device state per configured sensor; empty in
-  // laserscan mode
-  std::vector<SensorDeviceState> m_sensorDev;
-
+  sycl::queue m_q;
   // Device-reported max work-group size. Used as the pointcloud conversion
   // kernel's block dim.
   size_t m_max_wg_size = 0;
   // Mutex to make sure that mem alocs for angles in scan or growing clouds dont
   // corrupt
   std::mutex m_mutex;
+  // Whether per-call inputs are allocated in pinned host memory
+  bool m_streamInputsInHost = false;
 
-  sycl::queue m_q;
+  // Shared buffers (both modes)
+  int *m_devicePtrGrid; // output grid
+  // NOTE: Angles are kept float on device so the ray-cast kernel stays free
+  // of fp64 (embedded GPUs usually have none). On the CPU backend this costs
+  // a little, since glibc float trig is slower than double trig.
+  StreamInputBuffer<float> m_angles; // per call (laserscan) or once (pointcloud)
+
+  // Laserscan-mode buffers (null in pointcloud mode)
+  StreamInputBuffer<float> m_ranges;
+  float *m_devicePtrDistances = nullptr;
+
+  // Pointcloud mode. One device state per configured sensor; empty in
+  // laserscan mode
+  std::vector<SensorDeviceState> m_sensorDev;
 };
 } // namespace Mapping
 } // namespace Kompass

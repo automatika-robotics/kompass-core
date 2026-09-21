@@ -401,24 +401,14 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(Span<PointCloudView> clouds) {
       auto &dev = m_sensorDev[i];
       const size_t total_bytes = cloud.data.size();
 
-      // Grow this sensor's raw-bytes device buffer to fit the cloud
-      if (dev.rawCapacity < total_bytes) {
-        if (dev.rawBytes) {
-          // A kernel from a previous throwing call could still be reading
-          // this buffer (sycl::free is host-side and NOT queue-ordered), so
-          // drain before freeing
-          m_q.wait();
-          sycl::free(dev.rawBytes, m_q);
-        }
-        dev.rawBytes = sycl::malloc_device<uint8_t>(total_bytes, m_q);
-        dev.rawCapacity = total_bytes;
-      }
-      m_q.memcpy(dev.rawBytes, cloud.data.data(), total_bytes);
+      // Grow this sensor's raw-bytes buffer to fit the cloud
+      dev.rawBytes.reserve(total_bytes, m_q);
+      dev.rawBytes.upload(cloud.data.data(), total_bytes, m_q);
 
       // Pointcloud → per-bin pseudo-scan around this sensor's origin in
       // body orientation
       submitPointCloudToLaserScanKernel(
-          m_q, dev.rawBytes, total_bytes, dev.ranges, m_scanSize,
+          m_q, dev.rawBytes.data, total_bytes, dev.ranges, m_scanSize,
           static_cast<float>(m_rangeMax), cloud.point_step, cloud.row_step,
           cloud.width, cloud.height, cloud.x_offset, cloud.y_offset,
           cloud.z_offset, dev.tf, static_cast<float>(m_minHeight),
@@ -428,7 +418,7 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(Span<PointCloudView> clouds) {
       // Ray-cast from this sensor's origin with orientation 0 (the mount
       // rotation is already folded into the bearings)
       submitScanToGridKernel(
-          m_q, m_devicePtrGrid, dev.distances, m_devicePtrAngles, dev.ranges,
+          m_q, m_devicePtrGrid, dev.distances, m_angles.data, dev.ranges,
           m_gridHeight, m_gridWidth, m_resolution, /*orientation*/ 0.0f,
           m_centralPoint,
           Eigen::Vector3f{dev.originXY.x(), dev.originXY.y(), 0.0f},
@@ -442,9 +432,12 @@ Eigen::MatrixXi &LocalMapperGPU::scanToGrid(Span<PointCloudView> clouds) {
 
   } catch (sycl::exception const &e) {
     LOG_ERROR("SYCL exception caught: ", e.what());
+    // Kernels submitted before the throw may still read the input buffers
+    m_q.wait();
     throw; // Re-throw to Python
   } catch (std::exception const &e) {
     LOG_ERROR("Standard exception caught: ", e.what());
+    m_q.wait();
     throw; // Re-throw to Python
   }
   return gridData;
@@ -492,12 +485,12 @@ LocalMapperGPU::scanToGrid(Eigen::Ref<const Eigen::VectorXf> angles,
     }
 
     // Ranges and angles go straight H→D (float32 in, float32 device buffers)
-    m_q.memcpy(m_devicePtrAngles, angles.data(), sizeof(float) * m_scanSize);
-    m_q.memcpy(m_devicePtrRanges, ranges.data(), sizeof(float) * m_scanSize);
+    m_angles.upload(angles.data(), m_scanSize, m_q);
+    m_ranges.upload(ranges.data(), m_scanSize, m_q);
 
     submitScanToGridKernel(
-        m_q, m_devicePtrGrid, m_devicePtrDistances, m_devicePtrAngles,
-        m_devicePtrRanges, m_gridHeight, m_gridWidth, m_resolution,
+        m_q, m_devicePtrGrid, m_devicePtrDistances, m_angles.data,
+        m_ranges.data, m_gridHeight, m_gridWidth, m_resolution,
         m_sensors[0].yaw, m_centralPoint,
         Eigen::Vector3f{m_sensors[0].origin_xy.x(), m_sensors[0].origin_xy.y(),
                         0.0f},
@@ -510,9 +503,12 @@ LocalMapperGPU::scanToGrid(Eigen::Ref<const Eigen::VectorXf> angles,
 
   } catch (sycl::exception const &e) {
     LOG_ERROR("SYCL exception caught: ", e.what());
+    // Kernels submitted before the throw may still read the input buffers
+    m_q.wait();
     throw; // Re-throw to Python
   } catch (std::exception const &e) {
     LOG_ERROR("Standard exception caught: ", e.what());
+    m_q.wait();
     throw; // Re-throw to Python
   }
   return gridData;

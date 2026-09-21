@@ -22,6 +22,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -786,4 +787,155 @@ BOOST_AUTO_TEST_CASE(test_mapper_laserscan_concurrent_varying_lengths_gpu) {
   BOOST_TEST(failures == 0, "scanToGrid threw " << failures << " times");
   const auto &grid = mapper.scanToGrid(scans[0].first, scans[0].second);
   BOOST_TEST(countOccupiedInRows(grid, 0, 9) > 0, "no OCCUPIED cell after the storm");
+}
+
+// ---------------------------------------------------------------------------
+// Per-call inputs in pinned host memory (utils/stream_input_buffer_gpu.h)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Sets KOMPASS_STREAM_INPUT_MEMORY (unsets it for nullptr) for the lifetime of
+// the guard and restores the previous value afterwards
+struct ScopedStreamInputMemory {
+  explicit ScopedStreamInputMemory(const char *mode) {
+    if (const char *previous = std::getenv(kName)) {
+      previous_ = previous;
+      hadPrevious_ = true;
+    }
+    if (mode) {
+      setenv(kName, mode, 1);
+    } else {
+      unsetenv(kName);
+    }
+  }
+  ~ScopedStreamInputMemory() {
+    if (hadPrevious_) {
+      setenv(kName, previous_.c_str(), 1);
+    } else {
+      unsetenv(kName);
+    }
+  }
+  static constexpr const char *kName = "KOMPASS_STREAM_INPUT_MEMORY";
+  std::string previous_;
+  bool hadPrevious_ = false;
+};
+
+// Copies the buffer's first count bytes through a kernel into device memory
+// and back to the host, so the result is what a kernel read from the buffer.
+// Uses USM only, like the classes, so it runs on every Kompass device
+std::vector<uint8_t> readThroughKernel(sycl::queue &q, const uint8_t *data,
+                                       std::size_t count) {
+  uint8_t *copy = sycl::malloc_device<uint8_t>(count, q);
+  q.parallel_for(sycl::range<1>{count},
+                 [=](sycl::id<1> i) { copy[i] = data[i]; });
+  std::vector<uint8_t> result(count);
+  q.memcpy(result.data(), copy, count).wait();
+  sycl::free(copy, q);
+  return result;
+}
+
+} // namespace
+
+// Inputs follow the device's host USM support; only "device" changes that
+BOOST_AUTO_TEST_CASE(test_stream_input_memory_setting) {
+  sycl::queue q{sycl::default_selector_v, sycl::property::queue::in_order{}};
+  const auto dev = q.get_device();
+  const bool hostUsm = dev.has(sycl::aspect::usm_host_allocations);
+  {
+    ScopedStreamInputMemory setting("device");
+    BOOST_TEST(!streamInputsInHostMemory(dev));
+  }
+  for (const char *mode : {static_cast<const char *>(nullptr), "host"}) {
+    ScopedStreamInputMemory setting(mode);
+    BOOST_TEST(streamInputsInHostMemory(dev) == hostUsm);
+  }
+}
+
+// The buffer records where it was allocated, a kernel reads what the host
+// uploaded from either placement, and growing keeps the placement. Asking for
+// host memory on a device without host USM gives device memory without
+// touching the host allocator, whose failure would end the program
+BOOST_AUTO_TEST_CASE(test_stream_input_buffer_round_trip) {
+  sycl::queue q{sycl::default_selector_v, sycl::property::queue::in_order{}};
+  const bool hostUsm = q.get_device().has(sycl::aspect::usm_host_allocations);
+  for (const bool preferHost : {false, true}) {
+    StreamInputBuffer<uint8_t> buffer;
+    buffer.preferHost = preferHost;
+    std::vector<uint8_t> small(1000);
+    for (std::size_t i = 0; i < small.size(); ++i) {
+      small[i] = static_cast<uint8_t>(i % 251);
+    }
+    buffer.reserve(small.size(), q);
+    const bool placement = buffer.inHostMemory;
+    buffer.upload(small.data(), small.size(), q);
+
+    std::vector<uint8_t> large(5000);
+    for (std::size_t i = 0; i < large.size(); ++i) {
+      large[i] = static_cast<uint8_t>((i * 7) % 253);
+    }
+    buffer.reserve(small.size() / 2, q); // no reallocation
+    BOOST_TEST(buffer.capacity == small.size());
+    BOOST_TEST_CONTEXT("preferHost " << preferHost) {
+      BOOST_TEST(placement == (preferHost && hostUsm));
+      BOOST_TEST(readThroughKernel(q, buffer.data, small.size()) == small);
+
+      buffer.reserve(large.size(), q);
+      buffer.upload(large.data(), large.size(), q);
+      BOOST_TEST(buffer.capacity == large.size());
+      BOOST_TEST(buffer.inHostMemory == placement);
+      BOOST_TEST(readThroughKernel(q, buffer.data, large.size()) == large);
+    }
+    q.wait();
+    buffer.release(q);
+    BOOST_TEST(buffer.data == nullptr);
+  }
+}
+
+// The grids do not depend on where the per-call inputs live: two-sensor
+// clouds that grow and shrink between calls, and laser scans, produce
+// identical grids in device memory and in host memory
+BOOST_AUTO_TEST_CASE(test_mapper_stream_input_memory_parity) {
+  const std::vector<SensorConfig> sensors = {
+      SensorConfig::fromYaw({0.3f, 0.0f, 0.2f}, 0.0f),
+      SensorConfig::fromYaw({-0.3f, 0.0f, 0.2f}, static_cast<float>(M_PI))};
+  const std::vector<std::vector<uint8_t>> clouds = {
+      makeRing(0.6f, 0.0f, 50), makeRing(1.2f, -0.1f, 2000),
+      makeRing(0.4f, 0.1f, 300), makeRing(0.9f, 0.0f, 4000)};
+  constexpr int kScanSize = 180;
+  Eigen::VectorXf angles = Eigen::VectorXf::LinSpaced(
+      kScanSize, -static_cast<float>(M_PI), static_cast<float>(M_PI));
+
+  auto runAll = [&](const char *mode) {
+    ScopedStreamInputMemory setting(mode);
+    std::vector<Eigen::MatrixXi> grids;
+    Mapping::LocalMapperGPU cloudMapper(40, 40, 0.1f, sensors,
+                                        /*isPointCloud*/ true, 360,
+                                        /*maxHeight*/ 0.5f, /*minHeight*/ 0.0f,
+                                        /*rangeMax*/ 5.0f, kMppl);
+    for (std::size_t k = 0; k < clouds.size(); ++k) {
+      const auto &front = clouds[k];
+      const auto &back = clouds[(k + 1) % clouds.size()];
+      grids.push_back(
+          cloudMapper.scanToGrid({makeCloudView(front), makeCloudView(back)}));
+    }
+    Mapping::LocalMapperGPU scanMapper(40, 40, 0.1f, {SensorConfig{}},
+                                       /*isPointCloud*/ false, kScanSize,
+                                       0.0f, 0.0f, /*rangeMax*/ 5.0f, kMppl);
+    for (const float range : {0.5f, 1.3f, 0.8f}) {
+      Eigen::VectorXf ranges = Eigen::VectorXf::Constant(kScanSize, range);
+      grids.push_back(scanMapper.scanToGrid(angles, ranges));
+    }
+    return grids;
+  };
+
+  const auto onDevice = runAll("device");
+  const auto inHost = runAll(nullptr);
+  BOOST_TEST_REQUIRE(onDevice.size() == inHost.size());
+  for (std::size_t i = 0; i < onDevice.size(); ++i) {
+    BOOST_TEST_CONTEXT("call " << i) {
+      BOOST_TEST((onDevice[i].array() == inHost[i].array()).all());
+      BOOST_TEST(countOccupiedInRows(inHost[i], 0, 39) > 0);
+    }
+  }
 }

@@ -3,6 +3,7 @@
 #include "utils/collision_check.h"
 #include "utils/critical_zone_check.h"
 #include "utils/logger.h"
+#include "utils/stream_input_buffer_gpu.h"
 #include <Eigen/Dense>
 #include <mutex>
 #include <sycl/sycl.hpp>
@@ -60,6 +61,9 @@ public:
              dev.get_info<sycl::info::device::name>());
     LOG_INFO("Mode:", (input_type_ == InputType::LASERSCAN ? "LASERSCAN"
                                                            : "POINTCLOUD"));
+    const bool inputsInHost = streamInputsInHostMemory(dev);
+    LOG_INFO("Per-call inputs in",
+             inputsInHost ? "pinned host memory" : "device memory");
 
     // Result Allocation (Used by both modes)
     m_result = sycl::malloc_device<float>(1, m_q);
@@ -67,7 +71,8 @@ public:
     // Mode-Specific Allocation
     if (input_type_ == InputType::LASERSCAN) {
       // --- LaserScan Setup ---
-      m_devicePtrRanges = sycl::malloc_device<float>(m_scanSize, m_q);
+      m_ranges.preferHost = inputsInHost;
+      m_ranges.reserve(m_scanSize, m_q);
 
       // Load pre-computed Sin/Cos for fast transform
       m_cos = sycl::malloc_device<float>(cos_angles_.size(), m_q);
@@ -91,8 +96,11 @@ public:
     } else {
       // --- PointCloud Setup ---
       max_wg_size_ = dev.get_info<sycl::info::device::max_work_group_size>();
-      // One device-buffer slot per sensor; grown lazily on first use.
+      // One buffer slot per sensor; grown lazily on first use.
       m_sensorDev.resize(sensors_.size());
+      for (auto &devState : m_sensorDev) {
+        devState.rawBytes.preferHost = inputsInHost;
+      }
     }
   }
 
@@ -106,8 +114,7 @@ public:
 
     // Free LaserScan Resources
     if (input_type_ == InputType::LASERSCAN) {
-      if (m_devicePtrRanges)
-        sycl::free(m_devicePtrRanges, m_q);
+      m_ranges.release(m_q);
       if (m_devicePtrForward)
         sycl::free(m_devicePtrForward, m_q);
       if (m_devicePtrBackward)
@@ -120,9 +127,7 @@ public:
 
     // Free PointCloud Resources
     for (auto &devState : m_sensorDev) {
-      if (devState.rawBytes) {
-        sycl::free(devState.rawBytes, m_q);
-      }
+      devState.rawBytes.release(m_q);
     }
   }
 
@@ -170,19 +175,18 @@ private:
   sycl::queue m_q;
 
   // -- LaserScan Specific --
-  float *m_devicePtrRanges = nullptr;
+  StreamInputBuffer<float> m_ranges;
   size_t *m_devicePtrForward = nullptr;
   size_t *m_devicePtrBackward = nullptr;
   float *m_cos = nullptr;
   float *m_sin = nullptr;
 
   // -- PointCloud Specific --
-  // Per-sensor DEVICE BUFFERS only; one entry per configured sensor in
+  // Per-sensor kernel buffers only; one entry per configured sensor in
   // pointcloud mode, empty in laserscan mode
   struct SensorDeviceState {
-    // Raw PointCloud2 bytes. Grown lazily per call; grow-only
-    uint8_t *rawBytes = nullptr;
-    size_t rawCapacity = 0;
+    // Raw PointCloud2 bytes. Grown lazily per call
+    StreamInputBuffer<uint8_t> rawBytes;
   };
   std::vector<SensorDeviceState> m_sensorDev;
   size_t max_wg_size_ = 0;
