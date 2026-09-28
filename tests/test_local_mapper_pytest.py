@@ -423,3 +423,79 @@ def test_update_from_pointcloud_livox_recording(logs_test_dir: str):
         grid, scale=50, show_image=False,
         save_file=os.path.join(logs_test_dir, "pc_livox.jpg"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Grid allocation and the Bayesian layer
+# ---------------------------------------------------------------------------
+
+
+def _half_circle_scan(radius: float = 0.5, beams: int = 90):
+    """Ranges/angles pair covering the front half plane at a fixed radius."""
+    angles = np.linspace(-np.pi / 2, np.pi / 2, beams, dtype=np.float32)
+    ranges = np.full(angles.shape, radius, dtype=np.float32)
+    return ranges, angles
+
+
+def test_non_square_map_is_rejected():
+    """Non-square maps are unsupported while the cpp grid axes disagree: axis 0
+    is indexed with x but sized by the height, which would clip x silently."""
+    with pytest.raises(ValueError, match="non-square"):
+        MapConfig(width=4.0, height=2.0, padding=0.0, resolution=0.05)
+
+
+def test_grid_axes_x_first():
+    """Axis 0 of the grid is x and axis 1 is y, the convention the cpp mappers
+    index with and the OccupancyGrid publisher flattens for. A silent transpose
+    here would publish a mirrored map."""
+    resolution = 0.05
+    mapper_config = MapConfig(
+        width=3.0, height=3.0, padding=0.0, resolution=resolution
+    )
+    mapper = LocalMapper(
+        config=mapper_config, scan_model_config=ScanModelConfig(angle_step=0.01)
+    )
+    assert mapper.grid_data.occupancy.shape == (mapper.grid_width, mapper.grid_height)
+
+    # cpp centres the grid at (round(height/2) - 1, round(width/2) - 1)
+    centre = (round(mapper.grid_height / 2) - 1, round(mapper.grid_width / 2) - 1)
+    distance = 0.5
+    cells = int(distance / resolution)
+
+    ranges = np.array([distance], dtype=np.float32)
+    for angle, expected in (
+        (0.0, (centre[0] + cells, centre[1])),
+        (np.pi / 2, (centre[0], centre[1] + cells)),
+    ):
+        mapper = LocalMapper(
+            config=mapper_config, scan_model_config=ScanModelConfig(angle_step=0.01)
+        )
+        mapper.update_from_laserscan(
+            _origin_pose(), ranges=ranges, angles=np.array([angle], dtype=np.float32)
+        )
+        occupied = np.argwhere(mapper.occupancy == OCCUPANCY_TYPE.OCCUPIED.value)
+        assert occupied.tolist() == [list(expected)], (
+            f"beam at {angle} rad landed at {occupied.tolist()}, expected {expected}"
+        )
+
+
+def test_bayesian_update_runs_on_every_build():
+    """bayesian_update exists on the cpu mapper only; a GPU build must fall back
+    to it instead of failing on the first update."""
+    from kompass_cpp.mapping import LocalMapper as LocalMapperCpp
+
+    mapper_config = MapConfig(
+        width=3.0, height=3.0, padding=0.0, resolution=0.05, bayesian_update=True
+    )
+    mapper = LocalMapper(
+        config=mapper_config, scan_model_config=ScanModelConfig(angle_step=0.01)
+    )
+
+    ranges, angles = _half_circle_scan()
+    # Two updates from the same pose: the second one runs the accumulating path
+    mapper.update_from_laserscan(_origin_pose(), ranges=ranges, angles=angles)
+    mapper.update_from_laserscan(_origin_pose(), ranges=ranges, angles=angles)
+
+    assert isinstance(mapper.local_mapper, LocalMapperCpp)
+    n_occ, n_empty, _ = _occupancy_counts(mapper.probabilistic_occupancy)
+    assert n_occ > 0 and n_empty > 0

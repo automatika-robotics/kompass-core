@@ -220,6 +220,59 @@ BOOST_AUTO_TEST_CASE(test_mapper_circles) {
   std::cout << *gridDataProb << std::endl;
 }
 
+// The Bayesian update is recursive: the posterior of one call is the prior of
+// the next. Each update multiplies a cell's odds by the same sensor factor, so
+// running the same scan twice from the same pose must square the odds ratio
+// relative to the prior.
+BOOST_AUTO_TEST_CASE(test_mapper_bayesian_accumulates) {
+  const double radius = 0.3;
+  Control::LaserScan scan =
+      generateLaserScan(angle_increment, "circle", radius);
+  filtered_ranges.resize(scan.ranges.size());
+  for (Eigen::Index i = 0; i < scan.ranges.size(); ++i) {
+    filtered_ranges[i] = std::min(static_cast<float>(limit), scan.ranges[i]);
+  }
+
+  // Copies: the mapper hands out references to its own buffers
+  const Eigen::MatrixXf firstProb = std::get<1>(
+      local_mapper.scanToGridBayesian(scan.angles, filtered_ranges));
+  const Eigen::MatrixXf secondProb = std::get<1>(
+      local_mapper.scanToGridBayesian(scan.angles, filtered_ranges));
+
+  const double oddsPrior = pPrior / (1.0 - pPrior);
+  int updatedCells = 0;
+  for (Eigen::Index r = 0; r < firstProb.rows(); ++r) {
+    for (Eigen::Index c = 0; c < firstProb.cols(); ++c) {
+      const double odds1 = firstProb(r, c) / (1.0 - firstProb(r, c));
+      const double odds2 = secondProb(r, c) / (1.0 - secondProb(r, c));
+      // odds1 = oddsPrior * m and odds2 = oddsPrior * m^2
+      BOOST_CHECK_CLOSE_FRACTION(odds2 * oddsPrior, odds1 * odds1, 1e-3);
+      if (std::abs(firstProb(r, c) - pPrior) > 1e-6) {
+        ++updatedCells;
+      }
+    }
+  }
+  // The identity above says nothing if the scan moved no cell off the prior
+  BOOST_CHECK_GT(updatedCells, 0);
+
+  // A cell the next scan does not touch keeps the evidence it carries
+  Eigen::VectorXf singleAngle(1), singleRange(1);
+  singleAngle << 0.0f;
+  singleRange << static_cast<float>(radius);
+  const Eigen::MatrixXf thirdProb =
+      std::get<1>(local_mapper.scanToGridBayesian(singleAngle, singleRange));
+  int retainedCells = 0;
+  for (Eigen::Index r = 0; r < thirdProb.rows(); ++r) {
+    for (Eigen::Index c = 0; c < thirdProb.cols(); ++c) {
+      if (std::abs(secondProb(r, c) - pPrior) > 1e-6 &&
+          thirdProb(r, c) == secondProb(r, c)) {
+        ++retainedCells;
+      }
+    }
+  }
+  BOOST_CHECK_GT(retainedCells, 0);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 // ---------------------------------------------------------------------------

@@ -282,9 +282,12 @@ LocalMapper::scanToGridBayesian(Eigen::Ref<const Eigen::VectorXf> angles,
                            "constructed for pointcloud input");
   }
   gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
-  gridDataProb.fill(m_pPrior);
+  // Start from the evidence accumulated so far
+  gridDataProb = previousGridDataProb;
   rasterizeScanBayesian_(angles, ranges, m_sensors[0].origin_xy,
                          m_sensors[0].yaw, m_sensors[0].start_point);
+  // The posterior is the prior of the next call
+  previousGridDataProb = gridDataProb;
   return std::tie(gridData, gridDataProb);
 }
 
@@ -345,10 +348,12 @@ LocalMapper::scanToGridBayesian(ByteSpan data, int point_step, int row_step,
                                m_rangeMax, m_minHeight, m_maxHeight, m_scanSize,
                                initializedRanges);
   gridData.fill(static_cast<int>(Mapping::OccupancyType::UNEXPLORED));
-  gridDataProb.fill(m_pPrior);
+  // Carries the accumulated evidence
+  gridDataProb = previousGridDataProb;
   rasterizeScanBayesian_(initializedAngles, initializedRanges,
                          m_sensors[0].origin_xy, 0.0f,
                          m_sensors[0].start_point);
+  previousGridDataProb = gridDataProb;
   return std::tie(gridData, gridDataProb);
 }
 } // namespace Mapping
