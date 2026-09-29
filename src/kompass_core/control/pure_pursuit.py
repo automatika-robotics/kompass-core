@@ -72,19 +72,7 @@ class PurePursuitConfig(FollowerConfig):
         default=np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32)
     )
 
-    def to_kompass_cpp(self) -> kompass_cpp.control.PurePursuitConfig:
-        """
-        Convert to kompass_cpp lib config format
-
-        :return: C++ Config Object
-        :rtype: kompass_cpp.control.PurePursuitConfig
-        """
-        pp_config = kompass_cpp.control.PurePursuitConfig()
-
-        # Map attributes to C++ config
-        pp_config.from_dict(self.asdict())
-
-        return pp_config
+    _cpp_params_class = kompass_cpp.control.PurePursuitConfig
 
 
 class PurePursuit(FollowerTemplate):

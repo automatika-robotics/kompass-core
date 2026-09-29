@@ -247,7 +247,9 @@ class DWA(FollowerTemplate):
             sensor_rotation_robot=self._config.proximity_sensor_rotation_to_robot,
             octree_resolution=self._config.octree_resolution,
             cost_weights=self._config.costs_weights.to_kompass_cpp(),
+            follower_params=self._config.to_kompass_cpp(),  # pass follower config
             allow_reverse=self._config.allow_reverse,
+            drop_samples=self._config.drop_samples,
             max_num_threads=self._config.max_num_threads,
         )
 

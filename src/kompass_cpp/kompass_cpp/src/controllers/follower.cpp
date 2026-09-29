@@ -38,12 +38,6 @@ void Follower::setParams(const FollowerParameters &config) {
       this->config.getParameter<double>("speed_regulation_angular");
   min_speed_regulation_factor =
       this->config.getParameter<double>("min_speed_regulation_factor");
-  // Set rotate_in_place based on the robot type
-  if (ctrType == Control::ControlType::ACKERMANN) {
-    rotate_in_place = false;
-  } else {
-    rotate_in_place = true;
-  }
   max_segment_size_ = getMaxSegmentSize();
 }
 

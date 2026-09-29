@@ -282,6 +282,8 @@ class VisionRGBDFollowerConfig(FollowerConfig):
         default=np.array([-0.5, 0.5, -0.5, 0.5], dtype=np.float32)
     )
 
+    _cpp_params_class = RGBDFollowerParameters
+
     def to_kompass_cpp(self) -> RGBDFollowerParameters:
         """
         Convert to kompass_cpp lib config format
@@ -289,7 +291,7 @@ class VisionRGBDFollowerConfig(FollowerConfig):
         :return: C++ parameter object populated from this config
         :rtype: kompass_cpp.control.RGBDFollowerParameters
         """
-        vision_dwa_params = RGBDFollowerParameters()
+        vision_dwa_params = self._cpp_params_class()
 
         # Special handling for None values that are represented by -1 in C++
         params_dict = self.asdict()

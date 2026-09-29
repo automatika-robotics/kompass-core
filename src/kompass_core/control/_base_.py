@@ -41,15 +41,15 @@ class FollowerConfig(BaseAttrs):
     * - goal_dist_tolerance
       - `float`
       - `0.1`
-      - Distance tolerance to consider the goal reached. Must be between `1e-4` and `1e3`.
+      - Distance tolerance to consider the goal reached. Must be between `1e-3` and `1e2`.
     * - goal_orientation_tolerance
       - `float`
       - `0.1`
-      - Orientation tolerance to consider the goal reached. Must be between `1e-4` and `2*PI`.
+      - Orientation tolerance to consider the goal reached. Must be between `1e-3` and `PI`.
     * - path_segment_length
       - `float`
       - `1.0`
-      - Length of path segments used for processing. Must be between `1e-3` and `1e3`.
+      - Length of path segments used for processing. Must be between `1e-3` and `1e2`.
     * - max_point_interpolation_distance
       - `float`
       - `0.01`
@@ -72,7 +72,7 @@ class FollowerConfig(BaseAttrs):
       - Speed regulation rotation factor. Must be between `1e-3` and `1.0`.
     * - min_speed_regulation_factor
       - `float`
-      - `0.1`
+      - `0.5`
       - Minimum speed regulation factor. Must be between `1e-3` and `1.0`.
     * - curvature_horizon_tolerance
       - `float`
@@ -91,19 +91,19 @@ class FollowerConfig(BaseAttrs):
     )
 
     goal_dist_tolerance: float = field(
-        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
+        default=0.1, validator=base_validators.in_range(min_value=1e-3, max_value=1e2)
     )
 
     goal_orientation_tolerance: float = field(
-        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=np.pi)
+        default=0.1, validator=base_validators.in_range(min_value=1e-3, max_value=np.pi)
     )
 
     path_segment_length: float = field(
-        default=1.0, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
+        default=1.0, validator=base_validators.in_range(min_value=1e-3, max_value=1e2)
     )
 
     loosing_goal_distance: float = field(
-        default=0.2, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
+        default=0.5, validator=base_validators.in_range(min_value=1e-3, max_value=1e2)
     )
     speed_regulation_curvature: float = field(
         default=0.5, validator=base_validators.in_range(min_value=1e-3, max_value=1.0)
@@ -112,11 +112,28 @@ class FollowerConfig(BaseAttrs):
         default=0.5, validator=base_validators.in_range(min_value=1e-3, max_value=1.0)
     )
     min_speed_regulation_factor: float = field(
-        default=0.1, validator=base_validators.in_range(min_value=1e-3, max_value=1.0)
+        default=0.5, validator=base_validators.in_range(min_value=1e-3, max_value=1.0)
     )
     curvature_horizon_tolerance: float = field(
         default=1.5, validator=base_validators.in_range(min_value=0.5, max_value=1e2)
     )
+
+    # The cpp parameters class this config maps onto.
+    _cpp_params_class = kompass_cpp.control.FollowerParameters
+
+    def to_kompass_cpp(self) -> kompass_cpp.configure.ConfigParameters:
+        """
+        Convert to kompass_cpp lib config format
+
+        Keys the cpp side does not know are ignored, so a config carrying extra
+        fields (weights, sample counts) can be passed as is.
+
+        :return: cpp parameters of this controller
+        :rtype: kompass_cpp.configure.ConfigParameters
+        """
+        params = self._cpp_params_class()
+        params.from_dict(self.asdict())
+        return params
 
 
 class ControllerTemplate:

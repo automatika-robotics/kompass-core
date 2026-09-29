@@ -19,13 +19,17 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
          const Eigen::Vector3f &sensor_position_body,
          const Eigen::Vector4f &sensor_rotation_body, const double octreeRes,
          CostEvaluator::TrajectoryCostsWeights costWeights,
-         const bool allowReverse, const int maxNumThreads)
+         const FollowerParameters &followerParams, const bool allowReverse,
+         const bool dropSamples, const int maxNumThreads)
     : Follower() {
+  setControlType(controlType);
+  setParams(followerParams);
+
   // Setup the trajectory sampler and cost evaluator
   configure(controlLimits, controlType, timeStep, predictionHorizon,
             controlHorizon, maxLinearSamples, maxAngularSamples, robotShapeType,
             robotDimensions, sensor_position_body, sensor_rotation_body,
-            octreeRes, costWeights, allowReverse, maxNumThreads);
+            octreeRes, costWeights, allowReverse, dropSamples, maxNumThreads);
 
   // Update the max forward distance the robot can make
   if (controlType == ControlType::OMNI) {
@@ -47,8 +51,12 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
          const Eigen::Vector3f &sensor_position_body,
          const Eigen::Vector4f &sensor_rotation_body,
          CostEvaluator::TrajectoryCostsWeights costWeights,
-         const int maxNumThreads)
+         const FollowerParameters &followerParams, const int maxNumThreads)
     : Follower() {
+  // See the other constructor: robot type first, then the parameters
+  setControlType(controlType);
+  setParams(followerParams);
+
   // Setup the trajectory sampler and cost evaluator
   configure(config, controlLimits, controlType, robotShapeType, robotDimensions,
             sensor_position_body, sensor_rotation_body, costWeights,
@@ -100,7 +108,8 @@ void DWA::configure(ControlLimitsParams controlLimits, ControlType controlType,
                     const Eigen::Vector4f &sensor_rotation_body,
                     const double octreeRes,
                     CostEvaluator::TrajectoryCostsWeights costWeights,
-                    const bool allowReverse, const int maxNumThreads) {
+                    const bool allowReverse, const bool dropSamples,
+                    const int maxNumThreads) {
   // The controller base keeps its own copy of the limits for the command
   // clamps, the rotate-in-place scaling and the horizon adaptation
   ctrlimitsParams = controlLimits;
@@ -108,7 +117,7 @@ void DWA::configure(ControlLimitsParams controlLimits, ControlType controlType,
       controlLimits, controlType, timeStep, predictionHorizon, controlHorizon,
       maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
       sensor_position_body, Eigen::Quaternionf(sensor_rotation_body), octreeRes,
-      allowReverse, maxNumThreads);
+      allowReverse, dropSamples, maxNumThreads);
 
   trajCostEvaluator = std::make_unique<CostEvaluator>(
       costWeights, sensor_position_body,
