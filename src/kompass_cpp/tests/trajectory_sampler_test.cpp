@@ -94,7 +94,7 @@ BOOST_AUTO_TEST_CASE(plots_samples_for_each_robot_type) {
         controlLimits, robot_types[j], timeStep, predictionHorizon,
         controlHorizon, maxLinearSamples, maxAngularSamples, robotShapeType,
         robotDimensions, sensor_position_body, sensor_rotation_body, octreeRes,
-        true, numThreads);
+        true, /*dropSamples*/ true, numThreads);
 
     // Robot initial velocity control
     Control::Velocity2D robotControl;
@@ -152,14 +152,14 @@ makeSampler(Control::ControlType type,
             int maxLinearSamples, int maxAngularSamples, int maxNumThreads,
             const Control::AngularVelocityControlParams &angular_params =
                 Control::AngularVelocityControlParams(M_PI, 3.14, 2.0, 3.0),
-            bool allowReverse = true) {
+            bool allowReverse = true, bool dropSamples = true) {
   Control::LinearVelocityControlParams y_params(1.0, 5.0, 10.0, 0.0);
   Control::ControlLimitsParams limits(x_params, y_params, angular_params);
   return std::make_unique<Control::TrajectorySampler>(
       limits, type, 0.5, 5.0, 2.5, maxLinearSamples, maxAngularSamples,
       CollisionChecker::ShapeType::CYLINDER, std::vector<float>{0.2f, 0.4f},
       Eigen::Vector3f{0.0f, 0.0f, 0.0f}, Eigen::Quaternionf{1.0f, 0.0f, 0.0f, 0.0f},
-      0.1, allowReverse, maxNumThreads);
+      0.1, allowReverse, dropSamples, maxNumThreads);
 }
 
 // Number of samples whose first commanded vx equals the given value
@@ -445,4 +445,47 @@ BOOST_AUTO_TEST_CASE(capacity_counts_the_extra_samples) {
       BOOST_TEST(countVx(*samples, -0.05) >= 1);
     }
   }
+}
+
+// drop_samples reaches the sampler through the constructor. The constructor DWA
+// uses ignored it (and left numCtrlPoints_, which the keeping branch reads,
+// uninitialised): a sample colliding past the control horizon is truncated and
+// kept instead of thrown away, so keeping yields more samples than dropping.
+BOOST_AUTO_TEST_CASE(drop_samples_is_taken_from_the_constructor) {
+  // A wall 1.5 m ahead. The slower samples reach it late in the rollout, past
+  // the 5 control points a kept sample has to survive, so they are the ones
+  // the keeping sampler truncates instead of discarding
+  const int n = 36;
+  Eigen::VectorXf ranges = Eigen::VectorXf::Constant(n, 20.0f);
+  Eigen::VectorXf angles(n);
+  for (int i = 0; i < n; ++i) {
+    angles(i) = static_cast<float>(i) * 2.0f * M_PI / n;
+    // the forward cone, with the scan running from 0 to 2 pi
+    if (angles(i) < 0.5f || angles(i) > 2.0f * M_PI - 0.5f) {
+      ranges(i) = 1.5f;
+    }
+  }
+  const Control::LaserScan wallScan(ranges, angles);
+  const Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0, 0.05);
+
+  auto dropping = makeSampler(Control::ControlType::DIFFERENTIAL_DRIVE,
+                              x_params, 6, 4, 1,
+                              Control::AngularVelocityControlParams(
+                                  M_PI, 3.14, 2.0, 3.0),
+                              /*allowReverse*/ true, /*dropSamples*/ true);
+  auto keeping = makeSampler(Control::ControlType::DIFFERENTIAL_DRIVE, x_params,
+                             6, 4, 1,
+                             Control::AngularVelocityControlParams(M_PI, 3.14,
+                                                                   2.0, 3.0),
+                             /*allowReverse*/ true, /*dropSamples*/ false);
+
+  const Control::Velocity2D atRest;
+  const Path::State origin(0.0, 0.0, 0.0, 0.0);
+  const size_t dropped =
+      dropping->generateTrajectories(atRest, origin, wallScan)->size();
+  const size_t kept =
+      keeping->generateTrajectories(atRest, origin, wallScan)->size();
+
+  BOOST_TEST_MESSAGE("dropped=" << dropped << " kept=" << kept);
+  BOOST_TEST(dropped < kept);
 }

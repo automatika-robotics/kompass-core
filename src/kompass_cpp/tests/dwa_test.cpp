@@ -73,8 +73,9 @@ BOOST_AUTO_TEST_CASE(test_DWA) {
   Control::DWA planner(controlLimits, controlType, timeStep, predictionHorizon,
                        controlHorizon, maxLinearSamples, maxAngularSamples,
                        robotShapeType, robotDimensions, sensor_position_body,
-                       sensor_rotation_body, octreeRes, costWeights, true,
-                       maxNumThreads);
+                       sensor_rotation_body, octreeRes, costWeights,
+                       Control::Follower::FollowerParameters(), true,
+                       /*dropSamples*/ true, maxNumThreads);
 
   LOG_INFO("Simulating one step of DWA planner");
 
@@ -196,7 +197,9 @@ BOOST_AUTO_TEST_CASE(test_DWA_creeps_onto_a_close_goal) {
                        maxLinearSamples, maxAngularSamples,
                        Kompass::CollisionChecker::ShapeType::CYLINDER,
                        robotDimensions, sensor_position_body,
-                       sensor_rotation_body, 0.1, costWeights, true, 1);
+                       sensor_rotation_body, 0.1, costWeights,
+                       Control::Follower::FollowerParameters(), true,
+                       /*dropSamples*/ true, 1);
   planner.setCurrentPath(path);
 
   // Nothing within 20 m in any direction
@@ -303,18 +306,17 @@ BOOST_AUTO_TEST_CASE(test_DWA_All_Scenarios) {
         LOG_INFO("Testing DWA: Robot=", robotName, ", Path=", pathName,
                  ", Obstacle Avoidance=", (useAvoidance ? "ON" : "OFF"));
 
-        Control::DWA planner(controlLimits, robotType, timeStep,
-                             predictionHorizon, controlHorizon,
-                             maxLinearSamples, maxAngularSamples, robotShapeType,
-                             robotDimensions, sensor_position_body,
-                             sensor_rotation_body, octreeRes, costWeights,
-                             true, maxNumThreads);
-
         // Match PurePursuit's goal tolerance — DWA's default 0.1 m is tight
         // given sampling resolution and sidestep-then-continue behavior.
         Control::Follower::FollowerParameters fp;
         fp.setParameter("goal_dist_tolerance", 0.3);
-        planner.setParams(fp);
+
+        Control::DWA planner(controlLimits, robotType, timeStep,
+                             predictionHorizon, controlHorizon,
+                             maxLinearSamples, maxAngularSamples, robotShapeType,
+                             robotDimensions, sensor_position_body,
+                             sensor_rotation_body, octreeRes, costWeights, fp,
+                             true, /*dropSamples*/ true, maxNumThreads);
 
         Path::Path path = pathGen();
         planner.setCurrentPath(path);
@@ -442,4 +444,103 @@ BOOST_AUTO_TEST_CASE(test_DWA_All_Scenarios) {
       }
     }
   }
+}
+
+// The follower parameters reach the cpp planner only through the constructor.
+// They used to stay at their defaults, so a configured goal tolerance (and with
+// it the path segmentation and the interpolation step) did nothing.
+BOOST_AUTO_TEST_CASE(test_DWA_applies_follower_parameters) {
+  std::vector<Path::Point> points{Path::Point(0.0, 0.0, 0.0),
+                                  Path::Point(1.5, 0.0, 0.0),
+                                  Path::Point(3.0, 0.0, 0.0)};
+
+  Control::CostEvaluator::TrajectoryCostsWeights costWeights;
+  Control::LinearVelocityControlParams x_params(0.8, 5.0, 10.0, 0.05);
+  Control::LinearVelocityControlParams y_params(0.0, 0.0, 0.0, 0.0);
+  Control::AngularVelocityControlParams angular_params(M_PI, 1.5, 3.0, 3.0);
+  Control::ControlLimitsParams controlLimits(x_params, y_params,
+                                             angular_params);
+  std::vector<float> robotDimensions{0.2, 0.4};
+  const Eigen::Vector3f sensor_position_body{0.0, 0.0, 0.0};
+  const Eigen::Vector4f sensor_rotation_body{0, 0, 0, 1};
+
+  // 0.25 m short of the goal: inside a 0.35 m tolerance, outside the 0.1 m
+  // default
+  const Path::State robotState(2.75, 0.0, 0.0, 0.0);
+
+  Control::Follower::FollowerParameters loose;
+  loose.setParameter("goal_dist_tolerance", 0.35);
+
+  for (const auto &entry :
+       std::vector<std::pair<Control::Follower::FollowerParameters, bool>>{
+           {Control::Follower::FollowerParameters(), false}, {loose, true}}) {
+    Path::Path path(points);
+    Control::DWA planner(
+        controlLimits, Control::ControlType::DIFFERENTIAL_DRIVE, 0.5, 5.0, 2.5,
+        9, 10, Kompass::CollisionChecker::ShapeType::CYLINDER, robotDimensions,
+        sensor_position_body, sensor_rotation_body, 0.1, costWeights,
+        entry.first, true, /*dropSamples*/ true, 1);
+    planner.setCurrentPath(path);
+    planner.setCurrentState(robotState);
+
+    BOOST_TEST_CONTEXT("goal_dist_tolerance "
+                       << entry.first.getParameter<double>(
+                              "goal_dist_tolerance")) {
+      BOOST_TEST(planner.isGoalReached() == entry.second);
+    }
+  }
+}
+
+// The robot type has to reach the controller base for the end-of-path rotation
+// to be possible at all: it never did, so rotateInPlace() was false for every
+// DWA and a differential-drive robot could not turn towards the goal heading.
+BOOST_AUTO_TEST_CASE(test_DWA_rotates_in_place_at_the_goal) {
+  std::vector<Path::Point> points{Path::Point(0.0, 0.0, 0.0),
+                                  Path::Point(1.5, 0.0, 0.0),
+                                  Path::Point(3.0, 0.0, 0.0)};
+  Path::Path path(points);
+
+  Control::CostEvaluator::TrajectoryCostsWeights costWeights;
+  Control::LinearVelocityControlParams x_params(0.8, 5.0, 10.0, 0.05);
+  Control::LinearVelocityControlParams y_params(0.0, 0.0, 0.0, 0.0);
+  Control::AngularVelocityControlParams angular_params(M_PI, 1.5, 3.0, 3.0);
+  Control::ControlLimitsParams controlLimits(x_params, y_params,
+                                             angular_params);
+  std::vector<float> robotDimensions{0.2, 0.4};
+  const Eigen::Vector3f sensor_position_body{0.0, 0.0, 0.0};
+  const Eigen::Vector4f sensor_rotation_body{0, 0, 0, 1};
+
+  Control::DWA planner(controlLimits, Control::ControlType::DIFFERENTIAL_DRIVE,
+                       0.5, 5.0, 2.5, 9, 10,
+                       Kompass::CollisionChecker::ShapeType::CYLINDER,
+                       robotDimensions, sensor_position_body,
+                       sensor_rotation_body, 0.1, costWeights,
+                       Control::Follower::FollowerParameters(), true,
+                       /*dropSamples*/ true, 1);
+
+  BOOST_TEST(static_cast<int>(planner.getControlType()) ==
+             static_cast<int>(Control::ControlType::DIFFERENTIAL_DRIVE));
+
+  planner.setCurrentPath(path);
+  // Inside the goal tolerance, 90 degrees off the path heading
+  planner.setCurrentState(Path::State(2.95, 0.0, M_PI / 2, 0.0));
+
+  Eigen::VectorXf ranges = Eigen::VectorXf::Constant(36, 20.0f);
+  Eigen::VectorXf angles(36);
+  for (int i = 0; i < 36; ++i) {
+    angles(i) = static_cast<float>(i) * 2.0f * M_PI / 36;
+  }
+  Control::LaserScan robotScan(ranges, angles);
+
+  // Two cycles, as a control loop runs them: the first tracks the target onto
+  // the last path segment, the goal check then brings goal_distance_ down from
+  // its initial infinity, and the second cycle is the one that must rotate
+  planner.computeVelocityCommandsSet(Control::Velocity2D(), robotScan);
+  planner.isGoalReached();
+  Control::TrajSearchResult result =
+      planner.computeVelocityCommandsSet(Control::Velocity2D(), robotScan);
+  BOOST_REQUIRE(result.isTrajFound);
+  // A pure rotation: no forward motion, non-zero angular velocity
+  BOOST_TEST(planner.getLinearVelocityCmdX() == 0.0);
+  BOOST_TEST(std::abs(planner.getAngularVelocityCmd()) > 0.1);
 }

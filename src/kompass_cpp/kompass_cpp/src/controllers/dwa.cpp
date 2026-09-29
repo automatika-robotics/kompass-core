@@ -82,14 +82,17 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
 // planner tick (where it would blow the control-cycle deadline).
 void DWA::initJitCompile() {
   const int dummyNumSamples = 1;
-  const int dummyNumPoints = 2;
-  TrajectoryVelocitySamples2D velocities(dummyNumSamples, dummyNumPoints);
-  TrajectoryPathSamples paths(dummyNumSamples, dummyNumPoints);
-  velocities.push_back({Velocity2D(1.0, 0.0, 0.0)});
-  auto dummyPath = Path::Path(
-      {Path::Point(0.0f, 0.0f, 0.0f), Path::Point(1.0f, 1.0f, 0.0f)});
+  auto dummyPath = Path::Path(std::vector<Path::Point>{
+      Path::Point(0.0f, 0.0f, 0.0f), Path::Point(1.0f, 1.0f, 0.0f),
+      Path::Point(2.0f, 2.0f, 0.0f)});
   dummyPath.interpolate(0.5, Path::InterpolationType::LINEAR);
   dummyPath.segment(1.0, 100);
+
+  const size_t dummyNumPoints = dummyPath.getSize();
+  TrajectoryVelocitySamples2D velocities(dummyNumSamples, dummyNumPoints);
+  TrajectoryPathSamples paths(dummyNumSamples, dummyNumPoints);
+  velocities.push_back(
+      std::vector<Velocity2D>(dummyNumPoints - 1, Velocity2D(1.0, 0.0, 0.0)));
   auto dummyPathView = dummyPath.getSegment(0);
   paths.push_back(dummyPath);
   std::unique_ptr<TrajectorySamples2D> dummySamples =

@@ -1086,3 +1086,102 @@ def test_dwa_custom_cost():
     assert delta > 0, (
         "no other Python thread ran during the solve -> the GIL was held"
     )
+
+
+def _straight_path(*x_values: float) -> Path:
+    """Path along the x axis through the given x coordinates"""
+    poses = []
+    for x in x_values:
+        pose = PoseStamped()
+        pose.pose.position.x = x
+        poses.append(pose)
+    return Path(poses=poses)
+
+
+def _diff_drive_robot() -> Robot:
+    return Robot(
+        robot_type=RobotType.DIFFERENTIAL_DRIVE,
+        geometry_type=RobotGeometry.Type.CYLINDER,
+        geometry_params=np.array([0.2, 0.4]),
+    )
+
+
+def _limits(
+    max_vel: float = 0.8, max_omega: float = 1.5, omega_acc: float = 3.0
+) -> RobotCtrlLimits:
+    return RobotCtrlLimits(
+        vx_limits=LinearCtrlLimits(max_vel=max_vel, max_acc=5.0, max_decel=10.0),
+        omega_limits=AngularCtrlLimits(
+            max_omega=max_omega, max_acc=omega_acc, max_decel=omega_acc,
+            max_ang=np.pi,
+        ),
+    )
+
+
+def test_dwa_follower_params_reach_the_planner():
+    """DWAConfig's follower settings stopped at the wrapper: the cpp planner was
+    built with Follower() defaults, so a configured goal tolerance did nothing."""
+
+    def goal_reached(goal_dist_tolerance: float) -> bool:
+        robot = _diff_drive_robot()
+        dwa = DWA(
+            robot=robot,
+            ctrl_limits=_limits(),
+            config=DWAConfig(
+                control_time_step=0.1,
+                prediction_horizon=10,
+                control_horizon=2,
+                max_linear_samples=9,
+                max_angular_samples=10,
+                max_num_threads=1,
+                goal_dist_tolerance=goal_dist_tolerance,
+            ),
+        )
+        dwa.set_path(_straight_path(0.0, 1.5, 3.0))
+        # 0.25 m short of the goal: inside a 0.35 m tolerance, outside 0.1 m
+        robot.state.x, robot.state.y, robot.state.yaw = 2.75, 0.0, 0.0
+        angles = np.arange(0.0, 2 * np.pi, 0.1 * np.pi)
+        ranges = np.full(angles.size, 20.0)
+        dwa.loop_step(current_state=robot.state, ranges=ranges, angles=angles)
+        return dwa.reached_end()
+
+    assert goal_reached(0.1) is False
+    assert goal_reached(0.35) is True
+
+
+def test_stanley_uses_configured_gains_and_wheelbase():
+    """Stanley read its gains from the defaults before the configuration was
+    applied, and its steering law ran on a 1.0 m wheel base regardless of the
+    configured one."""
+
+    def first_omega(**config_kwargs) -> float:
+        robot = Robot(
+            robot_type=RobotType.ACKERMANN,
+            geometry_type=RobotGeometry.Type.CYLINDER,
+            geometry_params=np.array([0.2, 0.4]),
+        )
+        stanley = Stanley(
+            robot=robot,
+            # A high angular acceleration keeps the one-step rate limit from
+            # clamping both commands to the same value
+            ctrl_limits=_limits(max_omega=5.0, omega_acc=50.0),
+            config=StanleyConfig(**config_kwargs),
+            control_time_step=0.1,
+        )
+        stanley.set_path(_straight_path(0.0, 1.5, 3.0))
+        # Off the path and yawed away from it, so both terms of the control law
+        # contribute
+        robot.state.x, robot.state.y, robot.state.yaw = 0.0, 0.3, 0.3
+        assert stanley.loop_step(current_state=robot.state)
+        return abs(stanley.angular_control[0])
+
+    # omega = tan(steering) * |v| / wheel_base, so a longer wheel base turns
+    # the same steering angle into a slower rotation
+    short_base = first_omega(wheel_base=0.3, cross_track_gain=1.5, heading_gain=2.0)
+    long_base = first_omega(wheel_base=3.0, cross_track_gain=1.5, heading_gain=2.0)
+    assert short_base > long_base
+
+    # The gains steer the command too
+    weak = first_omega(wheel_base=0.3, cross_track_gain=0.01, heading_gain=0.01)
+    strong = first_omega(wheel_base=0.3, cross_track_gain=1.5, heading_gain=2.0)
+    assert strong > weak
