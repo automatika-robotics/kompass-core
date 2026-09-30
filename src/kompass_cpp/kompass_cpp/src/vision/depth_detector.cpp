@@ -138,8 +138,13 @@ DepthDetector::convert2Dboxto3Dbox(const DepthImageView &depth,
 
 void DepthDetector::gatherDepthSamples(const DepthImageView &depth,
                                        const Bbox2D &box2d) {
-  Eigen::Vector2i x_limits = box2d.getXLimits();
-  Eigen::Vector2i y_limits = box2d.getYLimits();
+  // NOTE: The limits are clamped to the image, the far edge stays inclusive.
+  const Eigen::Vector2i x_limits = box2d.getXLimits();
+  const Eigen::Vector2i y_limits = box2d.getYLimits();
+  const int col_min = std::max(x_limits(0), 0);
+  const int col_max = std::min(x_limits(1), depth.cols - 1);
+  const int row_min = std::max(y_limits(0), 0);
+  const int row_max = std::min(y_limits(1), depth.rows - 1);
   // FLOAT32 pixels are metres already; UINT16 scale by the configured factor
   const float to_meters = depth.field_type == PointFieldType::FLOAT32
                               ? 1.0f
@@ -148,11 +153,14 @@ void DepthDetector::gatherDepthSamples(const DepthImageView &depth,
   // All depth values in the 2D box within the range of interest.
   // NaN padding in float images -> rejected.
   depth_values_.clear();
-  depth_values_.reserve(
-      static_cast<std::size_t>(y_limits(1) - y_limits(0) + 1) *
-      (x_limits(1) - x_limits(0) + 1));
-  for (int row_idx = y_limits(0); row_idx <= y_limits(1); ++row_idx) {
-    for (int col_idx = x_limits(0); col_idx <= x_limits(1); ++col_idx) {
+  // A box entirely outside the image has no samples to lift
+  if (col_min > col_max || row_min > row_max) {
+    return;
+  }
+  depth_values_.reserve(static_cast<std::size_t>(row_max - row_min + 1) *
+                        (col_max - col_min + 1));
+  for (int row_idx = row_min; row_idx <= row_max; ++row_idx) {
+    for (int col_idx = col_min; col_idx <= col_max; ++col_idx) {
       depth_meters = depth.at(row_idx, col_idx) * to_meters;
       if (depth_meters <= maxDepth_ && depth_meters >= minDepth_) {
         depth_values_.push_back(depth_meters);
