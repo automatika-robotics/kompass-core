@@ -22,22 +22,14 @@ class FollowerConfig(BaseAttrs):
       - Type
       - Default
       - Description
-    * - wheel_base
+    * - max_point_interpolation_distance
       - `float`
-      - `0.34`
-      - Distance between the front and rear axles of the robot. Must be between `0.0` and `100.0`.
-    * - lookahead_gain_forward
+      - `0.01`
+      - Maximum distance between interpolated points. Must be between `1e-4` and `1e2`.
+    * - lookahead_distance
       - `float`
-      - `0.8`
-      - Gain for lookahead distance calculation (k * v). Must be between `0.1` and `5.0`.
-    * - lookahead_min
-      - `float`
-      - `0.5`
-      - Minimum lookahead distance. Must be between `0.0` and `10.0`.
-    * - control_time_step
-      - `float`
-      - `0.1`
-      - Time interval between control actions. Must be between `1e-6` and `1e3`.
+      - `1.0`
+      - Lookahead distance. Must be between `1e-4` and `1e2`.
     * - goal_dist_tolerance
       - `float`
       - `0.1`
@@ -50,18 +42,10 @@ class FollowerConfig(BaseAttrs):
       - `float`
       - `1.0`
       - Length of path segments used for processing. Must be between `1e-3` and `1e2`.
-    * - max_point_interpolation_distance
+    * - loosing_goal_distance
       - `float`
-      - `0.01`
-      - Maximum distance between interpolated points. Must be between `1e-4` and `1e3`.
-    * - enable_reverse_driving
-      - `bool`
-      - `False`
-      - Whether to allow reverse driving.
-    * - lookahead_distance
-      - `float`
-      - `1.0`
-      - Lookahead distance. Must be between `0.0` and `100.0`.
+      - `0.5`
+      - Distance driven past the goal after which the goal is considered lost and the robot stops. Must be between `1e-3` and `1e2`.
     * - speed_regulation_curvature
       - `float`
       - `0.5`
@@ -77,7 +61,7 @@ class FollowerConfig(BaseAttrs):
     * - curvature_horizon_tolerance
       - `float`
       - `1.5`
-      - Curvature horizon tolerance for adaptive prediction horizon. Must be between `0.5` and `100.0`.
+      - Curvature horizon tolerance for adaptive prediction horizon. Must be between `0.5` and `1e2`.
 
     ```
     """
