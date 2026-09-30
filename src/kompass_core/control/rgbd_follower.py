@@ -1,4 +1,4 @@
-from attrs import define, field
+from attrs import define, field, validators
 from ..utils.common import base_validators
 from kompass_cpp.control import (
     RGBDFollower as RGBDFollowerCpp,
@@ -207,7 +207,12 @@ class VisionRGBDFollowerConfig(FollowerConfig):
     buffer_size: int = field(
         default=1, validator=base_validators.in_range(min_value=1, max_value=10)
     )
-    target_distance: Optional[float] = field(default=None)
+    target_distance: Optional[float] = field(
+        default=None,
+        validator=validators.optional(
+            base_validators.in_range(min_value=0.0, max_value=1e9)
+        ),
+    )
     target_wait_timeout: float = field(
         default=30.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
     )  # wait for target to appear again timeout (seconds), used if search is disabled
