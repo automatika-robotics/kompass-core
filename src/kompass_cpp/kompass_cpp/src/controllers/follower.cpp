@@ -18,8 +18,6 @@ void Follower::setParams(const FollowerParameters &config) {
   this->config = config;
   // Get parameters from config
   lookahead_distance = this->config.getParameter<double>("lookahead_distance");
-  enable_reverse_driving =
-      this->config.getParameter<bool>("enable_reverse_driving");
   goal_dist_tolerance =
       this->config.getParameter<double>("goal_dist_tolerance");
   goal_orientation_tolerance =

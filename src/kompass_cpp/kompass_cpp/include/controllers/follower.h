@@ -190,7 +190,6 @@ protected:
   // DWA::adaptPredictionHorizonToCurvature() for the derivation.
   double curvature_horizon_tolerance_{1.0};
   double lookahead_distance{0.0};
-  bool enable_reverse_driving{false};
   double path_segment_length_{0.0};
   double min_speed_regulation_factor{0.0};
   double max_point_interpolation_distance_{0.0};
