@@ -92,7 +92,7 @@ class VisionRGBDFollowerConfig(FollowerConfig):
     * - target_distance
       - `Optional[float]`
       - `None`
-      - Edge-to-edge distance to maintain from the target (m). `None` lets the controller decide.
+      - Edge-to-edge distance to maintain from the target (m). `None` holds the gap the target is at when tracking starts.
 
     * - target_wait_timeout
       - `float`

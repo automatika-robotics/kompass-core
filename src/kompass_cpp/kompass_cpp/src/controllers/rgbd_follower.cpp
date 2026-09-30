@@ -42,6 +42,8 @@ RGBDFollower::RGBDFollower(const ControlType &robotCtrlType,
                                         vision_sensor_position_body);
 
   robot_radius_ = getRobotRadius(robotShapeType, robotDimensions);
+  // -1 when none is configured, until a target is acquired
+  targetDistance_ = static_cast<float>(config_.target_distance());
 }
 
 double
@@ -207,6 +209,7 @@ bool RGBDFollower::setInitialTracking(const int pose_x_img,
       tracker_->setInitialTracking(pose_x_img, pose_y_img, detected_boxes, yaw);
   if (ok) {
     refreshTargetGeometry();
+    latchTargetDistance();
   }
   return ok;
 }
@@ -249,6 +252,7 @@ bool RGBDFollower::initTrackingFromLiftedBox(const float yaw) {
   const bool ok = tracker_->setInitialTracking(boxes_3d[0], yaw);
   if (ok) {
     refreshTargetGeometry();
+    latchTargetDistance();
   }
   return ok;
 }
@@ -262,15 +266,46 @@ void RGBDFollower::refreshTargetGeometry() {
   // erase a previously-known radius.
 }
 
+double RGBDFollower::rangeTo(const TrackedPose2D &tracking_pose) const {
+  // World frame: measured from the robot's body, not from the world origin
+  if (track_velocity_) {
+    return tracking_pose.distance(currentState.x, currentState.y, 0.0);
+  }
+  return tracking_pose.distance(0.0, 0.0, 0.0);
+}
+
+float RGBDFollower::surfaceGap(const double range) const {
+  // Gap between the two bodies' surfaces that the standoff is controlled
+  // against. Floored at zero.
+  constexpr float kMinDistance = 0.001f;
+  return std::max(
+      static_cast<float>(range - robot_radius_ - currentTargetRadius_),
+      kMinDistance);
+}
+
+void RGBDFollower::latchTargetDistance() {
+  const double configured = config_.target_distance();
+  if (configured >= 0.0) {
+    targetDistance_ = static_cast<float>(configured);
+    return;
+  }
+  // None means we hold the same start target distance.
+  if (const auto pose = tracker_->getFilteredTrackedPose2D()) {
+    targetDistance_ = surfaceGap(rangeTo(*pose));
+    LOG_DEBUG("No target distance configured, holding the acquired gap of ",
+              targetDistance_, " m");
+  }
+}
+
 // ---- Tracking control law ----
 
 Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
                                              const bool update_global_error) {
-  float range, psi, gamma = 0.0f;
+  const float range = static_cast<float>(rangeTo(tracking_pose));
+  float psi, gamma = 0.0f;
   if (track_velocity_) {
     // World frame: target bearing must be measured from the robot's body,
     // not from the world origin.
-    range = tracking_pose.distance(currentState.x, currentState.y, 0.0);
     psi = Angle::normalizeToMinusPiPlusPi(
         std::atan2(tracking_pose.y() - currentState.y,
                    tracking_pose.x() - currentState.x) -
@@ -278,18 +313,12 @@ Velocity2D RGBDFollower::getPureTrackingCtrl(const TrackedPose2D &tracking_pose,
     gamma =
         Angle::normalizeToMinusPiPlusPi(tracking_pose.yaw() - currentState.yaw);
   } else {
-    range = tracking_pose.distance(0.0, 0.0, 0.0);
     psi = Angle::normalizeToMinusPiPlusPi(
         std::atan2(tracking_pose.y(), tracking_pose.x()));
   }
-  // Gap between the two bodies' surfaces that the standoff is controlled
-  // against. Floored at zero.
-  constexpr float kMinDistance = 0.001f;
-  float distance =
-      std::max(static_cast<float>(range - robot_radius_ - currentTargetRadius_),
-               kMinDistance);
+  const float distance = surfaceGap(range);
 
-  float distance_error = config_.target_distance() - distance;
+  float distance_error = targetDistance_ - distance;
   // target_orientation is the bearing-to-target to maintain in the robot frame
   float angle_error =
       Angle::normalizeToMinusPiPlusPi(config_.target_orientation() - psi);

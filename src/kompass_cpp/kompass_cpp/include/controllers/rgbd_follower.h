@@ -227,9 +227,23 @@ private:
 
   float currentTargetRadius_ = 0.0f;
 
+  // Edge-to-edge gap the control law holds. The configured target_distance,
+  // or gap measured when tracking was acquired if set to none.
+  float targetDistance_ = -1.0f;
+
   // Pull the latest target geometry off the tracker. No-op if the tracker
   // has nothing to report.
   void refreshTargetGeometry();
+
+  // Distance from the robot to a tracked pose, in the frame the target is
+  // tracked in
+  double rangeTo(const TrackedPose2D &tracking_pose) const;
+
+  // Gap between the robot's and the target's surfaces at a given range
+  float surfaceGap(const double range) const;
+
+  // Fix the gap the control law holds for a newly acquired target.
+  void latchTargetDistance();
 
   // ---- Lifting 2D detections, shared by the depth-image and point-cloud
   // variants. DepthSource is DepthImageView or PointCloudView. ----

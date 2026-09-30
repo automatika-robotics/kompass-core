@@ -451,3 +451,64 @@ BOOST_AUTO_TEST_CASE(Test_RGBDFollower_global_frame) {
   BOOST_TEST(test_passed,
              "RGBDFollower Failed To Find Control in global frame mode");
 }
+
+// Without a configured target distance the follower holds the gap the target
+// was acquired at, and measures it again on every new acquisition. The unset
+// distance used to reach the control law as -1, so every cycle asked for a
+// negative gap and the robot drove on until contact.
+BOOST_AUTO_TEST_CASE(Test_RGBDFollower_holds_the_acquired_gap) {
+  Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0);
+  Control::LinearVelocityControlParams y_params(1, 3, 5);
+  Control::AngularVelocityControlParams angular_params(3.14, 1.0, 3.0, 3.0);
+  Control::ControlLimitsParams controlLimits(x_params, y_params,
+                                             angular_params);
+
+  // First linear command against a stationary target straight ahead
+  auto firstCommandAt = [&](const double target_distance,
+                            const std::vector<float> &target_x) {
+    auto config = Control::RGBDFollower::RGBDFollowerConfig();
+    config.setParameter("target_distance", target_distance);
+    config.setParameter("use_local_coordinates", true);
+    Control::RGBDFollower controller(
+        Control::ControlType::DIFFERENTIAL_DRIVE, controlLimits,
+        Kompass::CollisionChecker::ShapeType::CYLINDER, {0.2f, 0.4f},
+        Eigen::Vector3f{0.0f, 0.0f, 0.0f}, Eigen::Vector4f{1.0f, 0.0f, 0.0f, 0.0f},
+        config);
+    controller.setCurrentState(Path::State(0.0, 0.0, 0.0, 0.0));
+
+    std::vector<double> commands;
+    // One acquisition per entry, then a few cycles against that target
+    for (const float x : target_x) {
+      Bbox3D box;
+      box.size = {0.5f, 0.5f, 1.0f};
+      box.center = {x, 0.0f, 0.0f};
+      box.center_img_frame = {320, 240};
+      box.size_img_frame = {25, 25};
+      box.timestamp = 0.0f;
+      const std::vector<Bbox3D> boxes{box};
+      BOOST_REQUIRE(controller.setInitialTracking(320, 240, boxes));
+
+      Control::Velocity2D cmd;
+      for (int cycle = 0; cycle < 5; ++cycle) {
+        auto result = controller.getTrackingCtrl(boxes, cmd);
+        BOOST_REQUIRE(result.isTrajFound);
+        for (auto vel : result.trajectory.velocities) {
+          cmd = vel;
+          break;
+        }
+      }
+      commands.push_back(cmd.vx());
+    }
+    return commands;
+  };
+
+  // Unset: holds the gap at 1.5 m, and after re-acquiring at 2.5 m holds that
+  // one instead of chasing the first
+  const auto unset = firstCommandAt(-1.0, {1.5f, 2.5f});
+  BOOST_TEST(unset[0] == 0.0);
+  BOOST_TEST(unset[1] == 0.0);
+
+  // Configured: a 0.2 m gap still makes the robot approach a target 1.5 m away
+  const auto configured = firstCommandAt(0.2, {1.5f});
+  BOOST_TEST(configured[0] > 0.1);
+}
