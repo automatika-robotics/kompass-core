@@ -393,3 +393,14 @@ def test_rgbd_follower_rejects_ambiguous_or_incomplete_depth_source(tmp_path):
     incomplete = {k: v for k, v in cloud.items() if k != "row_step"}
     with pytest.raises(ValueError, match="row_step"):
         follower.loop_step(current_state=state, detections_2d=[], **incomplete)
+
+
+def test_target_distance_is_none_or_a_gap():
+    """target_distance is None or a non-negative gap: a negative value used to
+    pass and silently act like None, below -1 it threw inside the cpp config"""
+    assert VisionRGBDFollowerConfig().target_distance is None
+    assert VisionRGBDFollowerConfig(target_distance=0.0).target_distance == 0.0
+    assert VisionRGBDFollowerConfig(target_distance=1.5).target_distance == 1.5
+    for value in (-0.5, -1.0, -2.0):
+        with pytest.raises(ValueError):
+            VisionRGBDFollowerConfig(target_distance=value)
