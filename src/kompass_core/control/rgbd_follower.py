@@ -147,7 +147,7 @@ class VisionRGBDFollowerConfig(FollowerConfig):
     * - use_local_coordinates
       - `bool`
       - `True`
-      - Track the target in the robot's local frame (no world pose required). Set to `False` to track in the world frame, in which case `current_state` becomes mandatory in `loop_step`. Underscore-prefixed because it is plumbed through to the C++ planner rather than being a typical user knob.
+      - Track the target in the robot's local frame (no world pose required). Set to `False` to track in the world frame, in which case `current_state` becomes mandatory in `loop_step`.
 
     * - error_pose
       - `float`
