@@ -1185,3 +1185,37 @@ def test_stanley_uses_configured_gains_and_wheelbase():
     weak = first_omega(wheel_base=0.3, cross_track_gain=0.01, heading_gain=0.01)
     strong = first_omega(wheel_base=0.3, cross_track_gain=1.5, heading_gain=2.0)
     assert strong > weak
+
+
+def test_dvz_reads_its_config_section(tmp_path):
+    """DVZ and its reference Stanley must read DVZ's section of the config file,
+    named by the same `config_root_name` every controller takes. DVZ took it under
+    another keyword, so kompass's root name was dropped: the reference Stanley read
+    nothing and ran on default settings, a 0.266 m wheel base included."""
+    robot = Robot(
+        robot_type=RobotType.ACKERMANN,
+        geometry_type=RobotGeometry.Type.CYLINDER,
+        geometry_params=np.array([0.2, 0.4]),
+    )
+
+    # Without a file the reference generator takes the robot's wheel base, as
+    # Stanley does on its own
+    dvz = DVZ(robot=robot, ctrl_limits=_limits(), control_time_step=0.1)
+    assert dvz._DVZ__reference_cmd_generator._config.wheel_base == pytest.approx(
+        robot.wheelbase
+    )
+
+    # With a file both read its DVZ section
+    config_file = tmp_path / "params.toml"
+    config_file.write_text(
+        "[controller.DVZ]\nwheel_base = 0.42\nmin_front_margin = 0.7\n"
+    )
+    dvz = DVZ(
+        robot=robot,
+        ctrl_limits=_limits(),
+        control_time_step=0.1,
+        config_file=str(config_file),
+        config_root_name="controller.DVZ",
+    )
+    assert dvz._DVZ__reference_cmd_generator._config.wheel_base == pytest.approx(0.42)
+    assert dvz._path_controller.config.min_front_margin == pytest.approx(0.7)

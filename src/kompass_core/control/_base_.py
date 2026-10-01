@@ -129,7 +129,7 @@ class ControllerTemplate:
     def __init__(
         self,
         config_file: Optional[str] = None,
-        config_yaml_root_name: Optional[str] = None,
+        config_root_name: Optional[str] = None,
         **_,
     ) -> None:
         """
@@ -218,7 +218,7 @@ class FollowerTemplate:
         self,
         config: Optional[FollowerConfig] = None,
         config_file: Optional[str] = None,
-        config_yaml_root_name: Optional[str] = None,
+        config_root_name: Optional[str] = None,
         **kwargs,
     ) -> None:
         """
