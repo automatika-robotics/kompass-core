@@ -178,7 +178,8 @@ class MotionModel2D:
         :param path_to_file: Path to file (yaml, json, toml)
         :type path_to_file: str
         """
-        self.params.from_file(path_to_file)
+        # Under 'robot', as RobotSim's other loaders read the same file
+        self.params.from_file(path_to_file, nested_root_name="robot")
 
     def set_linear_x_params(self, params: List[float]) -> None:
         """

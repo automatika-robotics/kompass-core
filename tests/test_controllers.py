@@ -1240,3 +1240,31 @@ def test_differential_drive_wheel_speeds():
     )
     assert robot.control.v_left == pytest.approx(0.0)
     assert robot.control.v_right == pytest.approx(0.0)
+
+
+def test_robot_sim_loads_its_params_file(tmp_path):
+    """RobotSim builds from a params file whose 'robot' section holds the robot,
+    its initial state and its motion model. It called a motion model loader that
+    does not exist, and the real one read the file's top level, where only the
+    section names are, so the motion model kept its defaults."""
+    from kompass_core.simulation import RobotSim
+
+    params_file = tmp_path / "robot.yaml"
+    params_file.write_text(
+        "robot:\n"
+        "  robot_model_type: DIFFERENTIAL_DRIVE\n"
+        "  robot_geometry_type: CYLINDER\n"
+        "  robot_geometry_params: [0.2, 0.4]\n"
+        "  robot_max_speed: 1.0\n"
+        "  robot_max_steering_angle: 0.5\n"
+        "  robot_initial_x: 1.0\n"
+        "  robot_initial_y: 2.0\n"
+        "  robot_initial_heading: 0.3\n"
+        "  robot_initial_speed: 0.0\n"
+        "  x_dot_prop_vx: 0.9\n"
+    )
+    sim = RobotSim(str(params_file))
+
+    state = sim.robot.state
+    assert (state.x, state.y, state.yaw) == pytest.approx((1.0, 2.0, 0.3))
+    assert state.model.params.x_dot_prop_vx == pytest.approx(0.9)
