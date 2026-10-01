@@ -151,3 +151,48 @@ BOOST_AUTO_TEST_CASE(test_Vision_Tracker) {
     throw std::system_error(res, std::generic_category(),
                             "Python script failed with error code");
 }
+
+// The tracker asks the filter to propagate over the control steps elapsed
+// since the previous detection. The overload without inputs used to drop that
+// count and always predict a single step, so with detections slower than the
+// control loop the prediction lagged the measurement it was corrected with.
+BOOST_AUTO_TEST_CASE(test_Kalman_filter_predicts_every_elapsed_step) {
+  // 1D constant velocity: state (x, v), both measured
+  const float dt = 0.1f;
+  Eigen::MatrixXf A(2, 2), B = Eigen::MatrixXf::Zero(2, 1);
+  A << 1.0f, dt, 0.0f, 1.0f;
+  const Eigen::MatrixXf H = Eigen::MatrixXf::Identity(2, 2);
+  const Eigen::MatrixXf Q = 1e-4f * Eigen::MatrixXf::Identity(2, 2);
+  // As uncertain as the initial state, so the prediction carries real weight
+  // against the measurement and a short prediction cannot hide behind it
+  const Eigen::MatrixXf R = Eigen::MatrixXf::Identity(2, 2);
+  Eigen::VectorXf initial_state(2);
+  initial_state << 0.0f, 1.0f; // at the origin, moving at 1 m/s
+
+  auto makeFilter = [&]() {
+    auto filter = std::make_unique<LinearSSKalmanFilter>(2, 1);
+    filter->setup(A, B, Q, H, R);
+    filter->setInitialState(initial_state);
+    return filter;
+  };
+
+  // Measured exactly where the target is after five steps
+  const int steps = 5;
+  Eigen::MatrixXf measurement(2, 1);
+  measurement << steps * dt * 1.0f, 1.0f;
+
+  auto without_inputs = makeFilter();
+  without_inputs->estimate(measurement, steps);
+  auto with_zero_inputs = makeFilter();
+  with_zero_inputs->estimate(measurement, Eigen::MatrixXf::Zero(1, 1), steps);
+
+  const Eigen::MatrixXf a = without_inputs->getState().value();
+  const Eigen::MatrixXf b = with_zero_inputs->getState().value();
+  // Both overloads propagate the same number of steps
+  BOOST_TEST((a - b).cwiseAbs().maxCoeff() < 1e-6f);
+  // The prediction lands on the measurement, so the update leaves it there.
+  // Predicting a single step put it at 0.1 m and the update only part of the
+  // way to the measurement
+  BOOST_TEST(std::abs(a(0, 0) - 0.5f) < 1e-4f);
+  BOOST_TEST(std::abs(a(1, 0) - 1.0f) < 1e-4f);
+}
