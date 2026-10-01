@@ -512,3 +512,37 @@ BOOST_AUTO_TEST_CASE(Test_RGBDFollower_holds_the_acquired_gap) {
   const auto configured = firstCommandAt(0.2, {1.5f});
   BOOST_TEST(configured[0] > 0.1);
 }
+
+// The image-only follower starts its search towards the side of the image the
+// target was last seen on: a negative omega for the right half, as in its
+// tracking law.
+BOOST_AUTO_TEST_CASE(Test_RGBFollower_searches_towards_the_last_seen_side) {
+  Control::LinearVelocityControlParams x_params(1.0, 5.0, 10.0);
+  Control::LinearVelocityControlParams y_params(1, 3, 5);
+  Control::AngularVelocityControlParams angular_params(3.14, 1.0, 3.0, 3.0);
+  Control::ControlLimitsParams controlLimits(x_params, y_params,
+                                             angular_params);
+  Control::RGBFollower::RGBFollowerConfig config;
+  config.setParameter("enable_search", true);
+
+  // Omega of the first search command after losing a target last seen at
+  // column center_x of a 640 x 480 image
+  auto firstSearchOmega = [&](const int center_x) {
+    Control::RGBFollower follower(Control::ControlType::DIFFERENTIAL_DRIVE,
+                                  controlLimits, config);
+    const Bbox2D box({center_x - 20, 220}, {40, 40}, 0.0f, "", {640, 480});
+    follower.resetTarget(box);
+    BOOST_REQUIRE(follower.run(box));
+    BOOST_REQUIRE(follower.run(std::nullopt));
+    return follower.getCtrl().omega(0);
+  };
+  const double right = firstSearchOmega(560);
+  const double left = firstSearchOmega(80);
+  BOOST_TEST_MESSAGE("first search omega: target on the right " << right
+                     << ", on the left " << left);
+  BOOST_TEST(right < 0.0);
+  BOOST_TEST(left > 0.0);
+  // Both sides search at the same speed. Right turns used to be clamped to the
+  // minimum angular velocity
+  BOOST_TEST(std::abs(right) == left, boost::test_tools::tolerance(1e-6));
+}
