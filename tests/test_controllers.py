@@ -1219,3 +1219,24 @@ def test_dvz_reads_its_config_section(tmp_path):
     )
     assert dvz._DVZ__reference_cmd_generator._config.wheel_base == pytest.approx(0.42)
     assert dvz._path_controller.config.min_front_margin == pytest.approx(0.7)
+
+
+def test_differential_drive_wheel_speeds():
+    """Wheel speeds of a differential drive command: v +/- omega * L / 2. Both
+    getters raised AttributeError: they read the parent's private wheel base
+    under the subclass's mangled name."""
+    from kompass_core.models import DifferentialDriveControl
+
+    control = DifferentialDriveControl(velocity_x=1.0, omega=0.5, wheel_base=0.4)
+    assert control.wheel_base == pytest.approx(0.4)
+    assert control.v_right == pytest.approx(1.1)
+    assert control.v_left == pytest.approx(0.9)
+
+    # Every differential drive robot carries one
+    robot = Robot(
+        robot_type=RobotType.DIFFERENTIAL_DRIVE,
+        geometry_type=RobotGeometry.Type.CYLINDER,
+        geometry_params=np.array([0.2, 0.4]),
+    )
+    assert robot.control.v_left == pytest.approx(0.0)
+    assert robot.control.v_right == pytest.approx(0.0)

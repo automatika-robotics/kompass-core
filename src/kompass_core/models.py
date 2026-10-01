@@ -919,6 +919,16 @@ class MotionControl:
         self.__omega = __value
 
     @property
+    def wheel_base(self) -> float:
+        """
+        Getter of the robot wheel base, the distance between its two wheels
+
+        :return: Wheel base (m)
+        :rtype: float
+        """
+        return self.__robot_wheel_base
+
+    @property
     def steering_angle(self) -> float:
         """
         Getter of the angular velocity control
@@ -979,28 +989,22 @@ class DifferentialDriveControl(MotionControl):
     @property
     def v_right(self) -> float:
         """
-        Getter for the linear velocity control for forward motion (x-axis)
+        Getter of the right wheel's linear velocity
 
-        :return: Linear velocity V_x (m/s)
+        :return: Right wheel velocity (m/s)
         :rtype: float
         """
-        return (
-            self.linear_velocity_x
-            + (self.__robot_wheel_base) * self.angular_velocity / 2
-        )
+        return self.linear_velocity_x + self.wheel_base * self.angular_velocity / 2
 
     @property
     def v_left(self) -> float:
         """
-        Getter of the angular velocity control
+        Getter of the left wheel's linear velocity
 
-        :return: _description_
-        :rtype: _type_
+        :return: Left wheel velocity (m/s)
+        :rtype: float
         """
-        return (
-            self.linear_velocity_x
-            - (self.__robot_wheel_base) * self.angular_velocity / 2
-        )
+        return self.linear_velocity_x - self.wheel_base * self.angular_velocity / 2
 
 
 class AckermannControl(MotionControl):
