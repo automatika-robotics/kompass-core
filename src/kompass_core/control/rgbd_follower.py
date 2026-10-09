@@ -16,7 +16,7 @@ from typing import Any, Dict, Optional, List, Union
 import numpy as np
 import logging
 from ._base_ import ControllerTemplate, FollowerConfig
-from ..models import Robot, RobotState, RobotCtrlLimits, RobotGeometry, RobotType
+from ..models import Robot, RobotState, RobotCtrlLimits
 
 
 def _depth_source(

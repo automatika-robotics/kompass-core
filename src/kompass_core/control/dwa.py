@@ -8,9 +8,7 @@ import kompass_cpp
 from ..models import (
     Robot,
     RobotCtrlLimits,
-    RobotGeometry,
     RobotState,
-    RobotType,
 )
 
 from ._base_ import FollowerTemplate, FollowerConfig

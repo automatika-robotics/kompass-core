@@ -5,7 +5,7 @@ from attrs import define, field
 from ..utils.common import base_validators
 
 import kompass_cpp
-from ..models import Robot, RobotCtrlLimits, RobotState, RobotType, RobotGeometry
+from ..models import Robot, RobotCtrlLimits, RobotState
 from ._base_ import FollowerTemplate, FollowerConfig
 
 

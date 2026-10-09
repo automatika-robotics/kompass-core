@@ -1,11 +1,10 @@
-from enum import Enum
 from typing import List, Optional, Union
 
 from .utils.common import BaseAttrs, base_validators, set_params_from_yaml
 from .utils import geometry as GeometryUtils
 
 import numpy as np
-from attrs import Factory, define, field, validators
+from attrs import Factory, define, field
 from .datatypes.path import Point2D
 
 import kompass_cpp
