@@ -33,6 +33,7 @@ namespace {
 // and segmented path.
 Path::Path makeInterpolatedStraightPath(float length, float interp, float seg) {
   std::vector<Path::Point> pts{Path::Point(0.0f, 0.0f, 0.0f),
+                               Path::Point(0.5f * length, 0.0f, 0.0f),
                                Path::Point(length, 0.0f, 0.0f)};
   Path::Path p(pts);
   p.interpolate(interp, Path::InterpolationType::LINEAR);

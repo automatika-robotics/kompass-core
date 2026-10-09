@@ -94,7 +94,7 @@ void LinearSSKalmanFilter::estimate(const Eigen::MatrixXf &measurements,
   Eigen::MatrixXf inputs;
   inputs.resize(size, 1);
   inputs = Eigen::MatrixXf::Zero(size, 1);
-  this->estimate(measurements, inputs);
+  this->estimate(measurements, inputs, numberSteps);
 }
 
 double LinearSSKalmanFilter::getState(const size_t state_index) {

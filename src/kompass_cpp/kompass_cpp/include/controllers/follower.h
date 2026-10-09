@@ -169,6 +169,13 @@ public:
    */
   double calculateExponentialSpeedFactor(double current_angular_vel) const;
 
+  /**
+   * @brief Whether the robot can turn on the spot.
+   */
+  bool rotateInPlace() const {
+    return ctrType != Control::ControlType::ACKERMANN;
+  }
+
 protected:
   // Speed Control Parameters
   double speed_reg_curvature{0.0}; // Curvature factor
@@ -182,9 +189,7 @@ protected:
   // Used by DWA to cap the rollout horizon on curved paths. See
   // DWA::adaptPredictionHorizonToCurvature() for the derivation.
   double curvature_horizon_tolerance_{1.0};
-  bool rotate_in_place{false};
   double lookahead_distance{0.0};
-  bool enable_reverse_driving{false};
   double path_segment_length_{0.0};
   double min_speed_regulation_factor{0.0};
   double max_point_interpolation_distance_{0.0};

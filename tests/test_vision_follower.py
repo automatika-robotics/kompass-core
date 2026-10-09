@@ -76,7 +76,7 @@ def _make_follower(case: dict) -> VisionRGBDFollower:
         prediction_horizon=6,
         target_distance=0.5,
         distance_tolerance=0.1,
-        _use_local_coordinates=True,
+        use_local_coordinates=True,
         depth_conversion_factor=float(cam["depth_conversion_factor"]),
         min_depth=float(cam["min_depth"]),
         max_depth=float(cam["max_depth"]),
@@ -260,10 +260,10 @@ def _close_target_follower(
             max_omega=2.5, max_acc=2.5, max_decel=2.5, max_ang=np.pi / 2
         ),
     )
+    config_overrides.setdefault("use_local_coordinates", True)
     config = VisionRGBDFollowerConfig(
         control_time_step=0.1,
         target_distance=0.5,
-        _use_local_coordinates=True,
         camera_position_to_robot=np.array([0.0, 0.0, 0.3], dtype=np.float32),
         camera_rotation_to_robot=np.array(_TILTED_MOUNT, dtype=np.float32),
         **config_overrides,
@@ -393,3 +393,44 @@ def test_rgbd_follower_rejects_ambiguous_or_incomplete_depth_source(tmp_path):
     incomplete = {k: v for k, v in cloud.items() if k != "row_step"}
     with pytest.raises(ValueError, match="row_step"):
         follower.loop_step(current_state=state, detections_2d=[], **incomplete)
+
+
+def test_target_distance_is_none_or_a_gap():
+    """target_distance is None or a non-negative gap: a negative value used to
+    pass and silently act like None, below -1 it threw inside the cpp config"""
+    assert VisionRGBDFollowerConfig().target_distance is None
+    assert VisionRGBDFollowerConfig(target_distance=0.0).target_distance == 0.0
+    assert VisionRGBDFollowerConfig(target_distance=1.5).target_distance == 1.5
+    for value in (-0.5, -1.0, -2.0):
+        with pytest.raises(ValueError):
+            VisionRGBDFollowerConfig(target_distance=value)
+
+
+def test_world_frame_setting_reaches_the_controller() -> None:
+    """`use_local_coordinates=False` must make the controller track in the world
+    frame. The key used to be dropped on its way to cpp, so the controller always
+    tracked robot-relative whatever the config said.
+
+    Observed through the planned path: in the world frame it starts at the
+    robot's position, in the local frame at the origin.
+    """
+    depth, box, (click_x, click_y) = _close_target_frame()
+    state = RobotState(x=5.0, y=3.0, yaw=0.0, speed=0.0)
+
+    for use_local, expected_start in ((True, (0.0, 0.0)), (False, (5.0, 3.0))):
+        follower = _close_target_follower(use_local_coordinates=use_local)
+        assert follower.set_initial_tracking_image(
+            current_state=state,
+            pose_x_img=click_x,
+            pose_y_img=click_y,
+            detected_boxes=[box],
+            depth_image=depth,
+        )
+        assert follower.loop_step(
+            current_state=state, detections_2d=[box], depth_image=depth
+        )
+        path = follower.optimal_path()
+        assert (path.x[0], path.y[0]) == pytest.approx(expected_start), (
+            f"use_local_coordinates={use_local}: path starts at "
+            f"({path.x[0]}, {path.y[0]})"
+        )

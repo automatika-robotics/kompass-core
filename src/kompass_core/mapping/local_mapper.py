@@ -1,18 +1,18 @@
-from typing import List, Optional, Sequence, Union
-from attrs import define, field, validators
+import logging
 import math
-import numpy as np
-from ..datatypes.pose import PoseData
+from typing import List, Optional, Sequence, Union
 
+import numpy as np
+from attrs import define, field, validators
 from kompass_cpp.mapping import (
     OCCUPANCY_TYPE,
 )
 from kompass_cpp.types import SensorConfig
 
-from ..utils.geometry import transform_point_from_local_to_global, get_relative_pose
-
+from ..datatypes.pose import PoseData
 from ..datatypes.scan_model import ScanModelConfig
 from ..utils.common import BaseAttrs, base_validators
+from ..utils.geometry import get_relative_pose, transform_point_from_local_to_global
 
 
 @define
@@ -49,6 +49,8 @@ class GridData(BaseAttrs):
         :return:    2D array filled with unexplored occupancy
         :rtype:     np.ndarray
         """
+        # NOTE: Axis 0 is x (width) and axis 1 is y (height). Column-major storage
+        # keeps both the copy from Eigen and ones that flatten a straight memcpy.
         data = np.full(
             (self.width, self.height),
             OCCUPANCY_TYPE.UNEXPLORED.value,
@@ -101,6 +103,15 @@ class MapConfig(BaseAttrs):
         # estimate max number of points drawn per scan line
         # at average 1.5 points per setup
         return round((self.filter_limit / self.resolution) * 1.5)
+
+    def __attrs_post_init__(self):
+        """Attrs post init"""
+        # TODO: Rejected here until that axis convention is fixed on cpp backends
+        if self.width != self.height:
+            raise ValueError(
+                f"A non-square map is not supported (width={self.width}, "
+                f"height={self.height}); use width == height"
+            )
 
 
 class LocalMapper:
@@ -239,6 +250,14 @@ class LocalMapper:
 
     def _initialize_mapper(self, scan_size: int) -> None:
         """Initialize cpp local mapper"""
+        if self.config.bayesian_update:
+            # scan_to_grid_bayesian exists on only on the cpu mapper
+            logging.warning(
+                "bayesian_update is implemented only on the CPU mapper, "
+                "using it instead of the GPU mapper"
+            )
+            self._initialize_cpu_mapper(scan_size)
+            return
         try:
             from kompass_cpp.mapping import LocalMapperGPU
 
@@ -255,23 +274,27 @@ class LocalMapper:
                 max_points_per_line=self.config.max_points_per_line,
             )
         except ImportError:
-            from kompass_cpp.mapping import LocalMapper as LocalMapperCpp
+            self._initialize_cpu_mapper(scan_size)
 
-            # angle_step only used to derive scan_size for pointclouds, not used
-            # in cpp ctor
-            scan_model_params = self.scan_model.asdict()
-            scan_model_params.pop("angle_step", None)
-            self.local_mapper = LocalMapperCpp(
-                grid_height=self.grid_height,
-                grid_width=self.grid_width,
-                resolution=self.config.resolution,
-                sensor_configs=self._sensor_configs(),
-                is_pointcloud=self.is_pointcloud,
-                scan_size=scan_size,
-                **scan_model_params,
-                max_points_per_line=self.config.max_points_per_line,
-                max_num_threads=self.config.max_num_threads,
-            )
+    def _initialize_cpu_mapper(self, scan_size: int) -> None:
+        """Initialize the cpu cpp local mapper"""
+        from kompass_cpp.mapping import LocalMapper as LocalMapperCpp
+
+        # angle_step only used to derive scan_size for pointclouds, not used
+        # in cpp ctor
+        scan_model_params = self.scan_model.asdict()
+        scan_model_params.pop("angle_step", None)
+        self.local_mapper = LocalMapperCpp(
+            grid_height=self.grid_height,
+            grid_width=self.grid_width,
+            resolution=self.config.resolution,
+            sensor_configs=self._sensor_configs(),
+            is_pointcloud=self.is_pointcloud,
+            scan_size=scan_size,
+            **scan_model_params,
+            max_points_per_line=self.config.max_points_per_line,
+            max_num_threads=self.config.max_num_threads,
+        )
 
     def _calculate_grid_shift(self, current_robot_pose: PoseData):
         """Calculates 3D global pose shift of the last step probability grid based on the current robot position

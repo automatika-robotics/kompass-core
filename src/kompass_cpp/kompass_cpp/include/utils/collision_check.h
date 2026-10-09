@@ -29,7 +29,8 @@ public:
     ShapeType shapeType = ShapeType::BOX;
     std::vector<float>
         dimensions; // Ordered as the matching FCL primitive takes them:
-                    // BOX/ELLIPSOID: [x, y, z] extents / semi-axes.
+                    // BOX: [x, y, z] full extents.
+                    // ELLIPSOID: [a, b, c] semi-axes along x, y, z.
                     // CYLINDER/CAPSULE/CONE: [radius, length along z].
                     // SPHERE: [radius].
     Eigen::Isometry3f tf = Eigen::Isometry3f::Identity();

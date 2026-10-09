@@ -18,8 +18,6 @@ void Follower::setParams(const FollowerParameters &config) {
   this->config = config;
   // Get parameters from config
   lookahead_distance = this->config.getParameter<double>("lookahead_distance");
-  enable_reverse_driving =
-      this->config.getParameter<bool>("enable_reverse_driving");
   goal_dist_tolerance =
       this->config.getParameter<double>("goal_dist_tolerance");
   goal_orientation_tolerance =
@@ -38,12 +36,6 @@ void Follower::setParams(const FollowerParameters &config) {
       this->config.getParameter<double>("speed_regulation_angular");
   min_speed_regulation_factor =
       this->config.getParameter<double>("min_speed_regulation_factor");
-  // Set rotate_in_place based on the robot type
-  if (ctrType == Control::ControlType::ACKERMANN) {
-    rotate_in_place = false;
-  } else {
-    rotate_in_place = true;
-  }
   max_segment_size_ = getMaxSegmentSize();
 }
 

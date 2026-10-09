@@ -81,6 +81,7 @@ public:
                     const Eigen::Vector3f &sensor_position_body,
                     const Eigen::Quaternionf &sensor_rotation_body,
                     const double octreeRes, const bool allowReverse = true,
+                    const bool dropSamples = true,
                     const int maxNumThreads = 1);
 
   TrajectorySampler(TrajectorySamplerParameters config,

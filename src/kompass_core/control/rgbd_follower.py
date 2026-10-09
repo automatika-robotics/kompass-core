@@ -1,4 +1,4 @@
-from attrs import define, field
+from attrs import define, field, validators
 from ..utils.common import base_validators
 from kompass_cpp.control import (
     RGBDFollower as RGBDFollowerCpp,
@@ -16,7 +16,7 @@ from typing import Any, Dict, Optional, List, Union
 import numpy as np
 import logging
 from ._base_ import ControllerTemplate, FollowerConfig
-from ..models import Robot, RobotState, RobotCtrlLimits, RobotGeometry, RobotType
+from ..models import Robot, RobotState, RobotCtrlLimits
 
 
 def _depth_source(
@@ -92,7 +92,7 @@ class VisionRGBDFollowerConfig(FollowerConfig):
     * - target_distance
       - `Optional[float]`
       - `None`
-      - Edge-to-edge distance to maintain from the target (m). `None` lets the controller decide.
+      - Edge-to-edge distance to maintain from the target (m). `None` holds the gap the target is at when tracking starts.
 
     * - target_wait_timeout
       - `float`
@@ -144,10 +144,10 @@ class VisionRGBDFollowerConfig(FollowerConfig):
       - `1.0`
       - Gain applied in the speed control law. Must be between `1e-2` and `10.0`.
 
-    * - _use_local_coordinates
+    * - use_local_coordinates
       - `bool`
       - `True`
-      - Track the target in the robot's local frame (no world pose required). Set to `False` to track in the world frame, in which case `current_state` becomes mandatory in `loop_step`. Underscore-prefixed because it is plumbed through to the C++ planner rather than being a typical user knob.
+      - Track the target in the robot's local frame (no world pose required). Set to `False` to track in the world frame, in which case `current_state` becomes mandatory in `loop_step`.
 
     * - error_pose
       - `float`
@@ -207,7 +207,12 @@ class VisionRGBDFollowerConfig(FollowerConfig):
     buffer_size: int = field(
         default=1, validator=base_validators.in_range(min_value=1, max_value=10)
     )
-    target_distance: Optional[float] = field(default=None)
+    target_distance: Optional[float] = field(
+        default=None,
+        validator=validators.optional(
+            base_validators.in_range(min_value=0.0, max_value=1e9)
+        ),
+    )
     target_wait_timeout: float = field(
         default=30.0, validator=base_validators.in_range(min_value=0.0, max_value=1e3)
     )  # wait for target to appear again timeout (seconds), used if search is disabled
@@ -242,8 +247,8 @@ class VisionRGBDFollowerConfig(FollowerConfig):
         default=1.0, validator=base_validators.in_range(min_value=1e-2, max_value=10.0)
     )  # Gain for the speed control law
 
-    _use_local_coordinates: bool = field(
-        default=True, alias="_use_local_coordinates"
+    use_local_coordinates: bool = field(
+        default=True
     )  # Track in local frame (default) or world frame (when False)
 
     error_pose: float = field(
@@ -282,6 +287,8 @@ class VisionRGBDFollowerConfig(FollowerConfig):
         default=np.array([-0.5, 0.5, -0.5, 0.5], dtype=np.float32)
     )
 
+    _cpp_params_class = RGBDFollowerParameters
+
     def to_kompass_cpp(self) -> RGBDFollowerParameters:
         """
         Convert to kompass_cpp lib config format
@@ -289,7 +296,7 @@ class VisionRGBDFollowerConfig(FollowerConfig):
         :return: C++ parameter object populated from this config
         :rtype: kompass_cpp.control.RGBDFollowerParameters
         """
-        vision_dwa_params = RGBDFollowerParameters()
+        vision_dwa_params = self._cpp_params_class()
 
         # Special handling for None values that are represented by -1 in C++
         params_dict = self.asdict()
@@ -313,7 +320,7 @@ class VisionRGBDFollower(ControllerTemplate):
     giving up.
 
     Tracking can run in either the robot's local frame (default) or the world
-    frame; toggle via `_use_local_coordinates` on the config. World-frame
+    frame; toggle via `use_local_coordinates` on the config. World-frame
     tracking requires `current_state` on every `loop_step` call.
 
     ```python
@@ -425,6 +432,15 @@ class VisionRGBDFollower(ControllerTemplate):
 
         if control_time_step:
             self._config.control_time_step = control_time_step
+
+        if not self._config.use_local_coordinates:
+            logging.warning(
+                "VisionRGBDFollower is tracking in the world frame "
+                "(use_local_coordinates=False): the target's estimated velocity is "
+                "fed forward into the commands, which needs accurate velocity "
+                "tracking (good localization and a steady detection rate). Use the "
+                "default local frame otherwise."
+            )
 
         self._planner = RGBDFollowerCpp(
             control_type=robot.robot_type,
@@ -546,7 +562,7 @@ class VisionRGBDFollower(ControllerTemplate):
             )
             return False
         try:
-            if not self._config._use_local_coordinates:
+            if not self._config.use_local_coordinates:
                 # Global mode: detector needs the robot pose for world-frame projection
                 self._planner.set_current_state(
                     current_state.x,
@@ -647,7 +663,7 @@ class VisionRGBDFollower(ControllerTemplate):
             )
             return False
         try:
-            if not self._config._use_local_coordinates:
+            if not self._config.use_local_coordinates:
                 # Global mode: detector needs the robot pose for world-frame projection
                 self._planner.set_current_state(
                     current_state.x,
@@ -700,7 +716,7 @@ class VisionRGBDFollower(ControllerTemplate):
         The 2D detections are lifted to 3D through exactly one depth source:
         an aligned depth image or a point cloud given as its PointCloud2
 
-        In global mode (``_use_local_coordinates=False``) ``current_state`` is
+        In global mode (``use_local_coordinates=False``) ``current_state`` is
         **mandatory** — it is used by the depth detector (world-frame
         projection) and the control law (distance and bearing computation). In
         local mode ``current_state`` is optional; if provided, only its
@@ -742,7 +758,7 @@ class VisionRGBDFollower(ControllerTemplate):
             return False
 
         robot_cmd = None
-        if not self._config._use_local_coordinates:
+        if not self._config.use_local_coordinates:
             # Global mode: state is mandatory — detector and control law need it
             if current_state is None:
                 logging.error(

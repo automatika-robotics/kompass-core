@@ -31,9 +31,6 @@ public:
   class ControllerParameters : public Parameters {
   public:
     ControllerParameters() : Parameters() {
-      addParameter("enable_reverse_driving",
-                   Parameter(true)); // Enable reverse driving if angle to goal
-                                     // is larger than pi
       addParameter(
           "enable_check_blocked",
           Parameter(false)); // Enable check for blocked robot (no movement)

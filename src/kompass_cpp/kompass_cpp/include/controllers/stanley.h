@@ -67,13 +67,20 @@ public:
    */
   void setWheelBase(double length);
 
+  /**
+   * @brief Apply a Stanley configuration: the follower parameters plus this
+   * controller's own gains and wheel base
+   *
+   * @param config
+   */
+  void setParams(const StanleyParameters &config);
+
 protected:
   StanleyParameters config;
   double robotWheelBase{1.0};
   double cross_track_gain{0.0};
   double heading_gain{0.0};
   double min_velocity{0.0};
-  double wheel_base{0.0};
   double determined_control_gain{0.0};
 
   /**

@@ -354,3 +354,41 @@ BOOST_AUTO_TEST_CASE(lifted_boxes_carry_their_provenance) {
   BOOST_CHECK_EQUAL(from_depth.get3dDetections()[0].source_index, 0);
   BOOST_CHECK_GT(from_depth.get3dDetections()[0].sample_count, 1);
 }
+
+// Boxes arrive as (x1, y1, x2, y2) corners with x2, y2 the far boundary, so a
+// box clipped at the right or bottom edge ends one past the last pixel, and
+// grounded boxes can overshoot the image. Every depth sample must come from
+// inside the image: DepthImageView::at does no bounds check.
+BOOST_AUTO_TEST_CASE(depth_samples_stay_inside_the_image) {
+  // The image is the first kRows rows of a larger buffer whose extra rows hold
+  // valid depth too, so a read past the image lands in memory the test owns
+  // and shows up as extra samples instead of undefined behaviour
+  constexpr int kExtraRows = 48;
+  const std::vector<uint16_t> buffer(
+      static_cast<std::size_t>(kRows + kExtraRows) * kCols, 2000);
+  const DepthImageView depth(
+      ByteSpan(reinterpret_cast<const uint8_t *>(buffer.data()),
+               static_cast<std::size_t>(kRows) * kCols * sizeof(uint16_t)),
+      kRows, kCols, PointFieldType::UINT16);
+
+  DepthDetector detector =
+      makeDetector(opticalCameraPose(Eigen::Vector3f::Zero(), 0.0f));
+  // Number of depth pixels the box was lifted from, 0 when it was not lifted
+  auto samplesFor = [&](const Eigen::Vector2i &corner,
+                        const Eigen::Vector2i &size) {
+    detector.updateBoxes(depth, {Bbox2D(corner, size)});
+    const auto &boxes = detector.get3dDetections();
+    return boxes.empty() ? 0 : boxes.front().sample_count;
+  };
+
+  // Inside the image the far edge is inclusive: size + 1 pixels per axis
+  BOOST_TEST(samplesFor({100, 100}, {10, 5}) == 11 * 6);
+  // Clipped at the right edge, x2 = kCols: columns 630 to 639
+  BOOST_TEST(samplesFor({630, 100}, {10, 5}) == 10 * 6);
+  // Clipped at the bottom edge, y2 = kRows: rows 470 to 479
+  BOOST_TEST(samplesFor({100, 470}, {10, 10}) == 11 * 10);
+  // Overshooting both edges: only the part inside the image
+  BOOST_TEST(samplesFor({635, 475}, {40, 40}) == 5 * 5);
+  // Entirely outside the image: nothing to lift
+  BOOST_TEST(samplesFor({700, 500}, {10, 10}) == 0);
+}

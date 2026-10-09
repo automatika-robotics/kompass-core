@@ -65,7 +65,7 @@ class RobotSim:
         self.robot.state.set_from_yaml(params_file)
 
         # Set robot motion model from config
-        self.robot.state.model.set_params_from_yaml(params_file)
+        self.robot.state.model.set_params_from_file(params_file)
 
     @classmethod
     def simulate_motion(
