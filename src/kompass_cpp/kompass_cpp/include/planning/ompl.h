@@ -99,6 +99,15 @@ private:
   bool gotSolution_ = false;
   ompl::geometric::SimpleSetupPtr setup_;
   std::shared_ptr<CollisionChecker> collision_checker_;
+  /**
+   * @brief How close a state has to be to the goal to count as having reached
+   * it. One map cell: a plan is no more precise than the map it is planned on,
+   * and OMPL's own default is the machine epsilon, which a sampling planner
+   * never hits - every solve then returns an approximate solution, a path to
+   * the nearest state it could reach rather than to the goal. Taken from the
+   * map in setSpaceBoundsFromMap, and from the constructor until then
+   */
+  double goal_threshold_;
 
   /**
    * @brief State validity checking function (uses collision checker)

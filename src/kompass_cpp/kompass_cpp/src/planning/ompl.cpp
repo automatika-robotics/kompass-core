@@ -1,8 +1,33 @@
 #include "planning/ompl.h"
 #include "utils/logger.h"
+#include <cmath>
+#include <ompl/base/goals/GoalState.h>
 
 namespace Kompass {
 namespace Planning {
+namespace {
+/**
+ * @brief A goal reached by standing on it, whatever way the robot faces.
+ *
+ * The threshold OMPL checks a state against is a distance in the whole state
+ * space, and SE(2) weights yaw at 0.5: with a threshold of one map cell the
+ * heading would have to match within a tenth of a radian, which a sampling
+ * planner rarely hits, so every solve would come back approximate. A 2D
+ * navigation goal is a place, not a pose: arrival is judged on position, and
+ * the heading at the end belongs to whoever drives the path.
+ */
+class PositionGoal : public ompl::base::GoalState {
+public:
+  using ompl::base::GoalState::GoalState;
+
+  double distanceGoal(const ompl::base::State *state) const override {
+    const auto *reached = state->as<ompl::base::SE2StateSpace::StateType>();
+    const auto *wanted = getState()->as<ompl::base::SE2StateSpace::StateType>();
+    return std::hypot(reached->getX() - wanted->getX(),
+                      reached->getY() - wanted->getY());
+  }
+};
+} // namespace
 OMPL2DGeometricPlanner::OMPL2DGeometricPlanner(
     const CollisionChecker::ShapeType &robot_shape_type,
     const std::vector<float> &robot_dimensions,
@@ -15,6 +40,7 @@ OMPL2DGeometricPlanner::OMPL2DGeometricPlanner(
   collision_checker_ = std::make_shared<CollisionChecker>(
       robot_shape_type, robot_dimensions, Eigen::Vector3f(0.0, 0.0, 0.0),
       Eigen::Quaternionf(1.0, 0.0, 0.0, 0.0), map_resolution);
+  goal_threshold_ = map_resolution;
 }
 
 OMPL2DGeometricPlanner::~OMPL2DGeometricPlanner() {}
@@ -52,7 +78,12 @@ void OMPL2DGeometricPlanner::setupProblem(double start_x, double start_y,
   goal->setY(goal_y);
   goal->setYaw(goal_yaw);
 
-  setup_->setStartAndGoalStates(start, goal);
+  setup_->setStartState(start);
+  auto goal_region =
+      std::make_shared<PositionGoal>(setup_->getSpaceInformation());
+  goal_region->setState(goal);
+  goal_region->setThreshold(goal_threshold_);
+  setup_->setGoal(goal_region);
 }
 
 void OMPL2DGeometricPlanner::setSpaceBoundsFromMap(const float origin_x,
@@ -66,6 +97,8 @@ void OMPL2DGeometricPlanner::setSpaceBoundsFromMap(const float origin_x,
   bounds.setHigh(0, origin_x + float(resolution * width));
   bounds.setHigh(1, origin_y + float(resolution * height));
   setup_->getStateSpace()->as<ompl::base::SE2StateSpace>()->setBounds(bounds);
+  // A plan is no more precise than one cell of the map it is planned on
+  goal_threshold_ = resolution;
 }
 
 bool OMPL2DGeometricPlanner::solve(double planning_timeout) {
