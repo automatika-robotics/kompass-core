@@ -29,7 +29,9 @@ public:
       const Eigen::Vector3f &sensor_position_body,
       const Eigen::Vector4f &sensor_rotation_body, const double octreeRes,
       CostEvaluator::TrajectoryCostsWeights costWeights,
-      const bool allowReverse = true, const int maxNumThreads = 1);
+      const FollowerParameters &followerParams = FollowerParameters(),
+      const bool allowReverse = true, const bool dropSamples = true,
+      const int maxNumThreads = 1);
 
   DWA(TrajectorySampler::TrajectorySamplerParameters config,
       ControlLimitsParams controlLimits, ControlType controlType,
@@ -38,6 +40,7 @@ public:
       const Eigen::Vector3f &sensor_position_body,
       const Eigen::Vector4f &sensor_rotation_body,
       CostEvaluator::TrajectoryCostsWeights costWeights,
+      const FollowerParameters &followerParams = FollowerParameters(),
       const int maxNumThreads = 1);
 
   // DWA(DWAConfig &cfg);
@@ -61,7 +64,8 @@ public:
                  const Eigen::Vector4f &sensor_rotation_body,
                  const double octreeRes,
                  CostEvaluator::TrajectoryCostsWeights costWeights,
-                 const bool allowReverse = true, const int maxNumThreads = 1);
+                 const bool allowReverse = true, const bool dropSamples = true,
+                 const int maxNumThreads = 1);
 
   void configure(TrajectorySampler::TrajectorySamplerParameters config,
                  ControlLimitsParams controlLimits, ControlType controlType,
@@ -192,7 +196,7 @@ protected:
     // find closest segment to use in cost computation
     determineTarget();
 
-    if (rotate_in_place and
+    if (rotateInPlace() and
         (std::abs(currentTrackedTarget_->heading_error) >
          goal_orientation_tolerance * 10.0) and
         (abs(goal_distance_) <= goal_dist_tolerance)) {

@@ -22,46 +22,30 @@ class FollowerConfig(BaseAttrs):
       - Type
       - Default
       - Description
-    * - wheel_base
-      - `float`
-      - `0.34`
-      - Distance between the front and rear axles of the robot. Must be between `0.0` and `100.0`.
-    * - lookahead_gain_forward
-      - `float`
-      - `0.8`
-      - Gain for lookahead distance calculation (k * v). Must be between `0.1` and `5.0`.
-    * - lookahead_min
-      - `float`
-      - `0.5`
-      - Minimum lookahead distance. Must be between `0.0` and `10.0`.
-    * - control_time_step
-      - `float`
-      - `0.1`
-      - Time interval between control actions. Must be between `1e-6` and `1e3`.
-    * - goal_dist_tolerance
-      - `float`
-      - `0.1`
-      - Distance tolerance to consider the goal reached. Must be between `1e-4` and `1e3`.
-    * - goal_orientation_tolerance
-      - `float`
-      - `0.1`
-      - Orientation tolerance to consider the goal reached. Must be between `1e-4` and `2*PI`.
-    * - path_segment_length
-      - `float`
-      - `1.0`
-      - Length of path segments used for processing. Must be between `1e-3` and `1e3`.
     * - max_point_interpolation_distance
       - `float`
       - `0.01`
-      - Maximum distance between interpolated points. Must be between `1e-4` and `1e3`.
-    * - enable_reverse_driving
-      - `bool`
-      - `False`
-      - Whether to allow reverse driving.
+      - Maximum distance between interpolated points. Must be between `1e-4` and `1e2`.
     * - lookahead_distance
       - `float`
       - `1.0`
-      - Lookahead distance. Must be between `0.0` and `100.0`.
+      - Lookahead distance. Must be between `1e-4` and `1e2`.
+    * - goal_dist_tolerance
+      - `float`
+      - `0.1`
+      - Distance tolerance to consider the goal reached. Must be between `1e-3` and `1e2`.
+    * - goal_orientation_tolerance
+      - `float`
+      - `0.1`
+      - Orientation tolerance to consider the goal reached. Must be between `1e-3` and `PI`.
+    * - path_segment_length
+      - `float`
+      - `1.0`
+      - Length of path segments used for processing. Must be between `1e-3` and `1e2`.
+    * - loosing_goal_distance
+      - `float`
+      - `0.5`
+      - Distance driven past the goal after which the goal is considered lost and the robot stops. Must be between `1e-3` and `1e2`.
     * - speed_regulation_curvature
       - `float`
       - `0.5`
@@ -72,12 +56,12 @@ class FollowerConfig(BaseAttrs):
       - Speed regulation rotation factor. Must be between `1e-3` and `1.0`.
     * - min_speed_regulation_factor
       - `float`
-      - `0.1`
+      - `0.5`
       - Minimum speed regulation factor. Must be between `1e-3` and `1.0`.
     * - curvature_horizon_tolerance
       - `float`
       - `1.5`
-      - Curvature horizon tolerance for adaptive prediction horizon. Must be between `0.5` and `100.0`.
+      - Curvature horizon tolerance for adaptive prediction horizon. Must be between `0.5` and `1e2`.
 
     ```
     """
@@ -91,19 +75,19 @@ class FollowerConfig(BaseAttrs):
     )
 
     goal_dist_tolerance: float = field(
-        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
+        default=0.1, validator=base_validators.in_range(min_value=1e-3, max_value=1e2)
     )
 
     goal_orientation_tolerance: float = field(
-        default=0.1, validator=base_validators.in_range(min_value=1e-4, max_value=np.pi)
+        default=0.1, validator=base_validators.in_range(min_value=1e-3, max_value=np.pi)
     )
 
     path_segment_length: float = field(
-        default=1.0, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
+        default=1.0, validator=base_validators.in_range(min_value=1e-3, max_value=1e2)
     )
 
     loosing_goal_distance: float = field(
-        default=0.2, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
+        default=0.5, validator=base_validators.in_range(min_value=1e-3, max_value=1e2)
     )
     speed_regulation_curvature: float = field(
         default=0.5, validator=base_validators.in_range(min_value=1e-3, max_value=1.0)
@@ -112,11 +96,28 @@ class FollowerConfig(BaseAttrs):
         default=0.5, validator=base_validators.in_range(min_value=1e-3, max_value=1.0)
     )
     min_speed_regulation_factor: float = field(
-        default=0.1, validator=base_validators.in_range(min_value=1e-3, max_value=1.0)
+        default=0.5, validator=base_validators.in_range(min_value=1e-3, max_value=1.0)
     )
     curvature_horizon_tolerance: float = field(
         default=1.5, validator=base_validators.in_range(min_value=0.5, max_value=1e2)
     )
+
+    # The cpp parameters class this config maps onto.
+    _cpp_params_class = kompass_cpp.control.FollowerParameters
+
+    def to_kompass_cpp(self) -> kompass_cpp.configure.ConfigParameters:
+        """
+        Convert to kompass_cpp lib config format
+
+        Keys the cpp side does not know are ignored, so a config carrying extra
+        fields (weights, sample counts) can be passed as is.
+
+        :return: cpp parameters of this controller
+        :rtype: kompass_cpp.configure.ConfigParameters
+        """
+        params = self._cpp_params_class()
+        params.from_dict(self.asdict())
+        return params
 
 
 class ControllerTemplate:
@@ -128,7 +129,7 @@ class ControllerTemplate:
     def __init__(
         self,
         config_file: Optional[str] = None,
-        config_yaml_root_name: Optional[str] = None,
+        config_root_name: Optional[str] = None,
         **_,
     ) -> None:
         """
@@ -217,7 +218,7 @@ class FollowerTemplate:
         self,
         config: Optional[FollowerConfig] = None,
         config_file: Optional[str] = None,
-        config_yaml_root_name: Optional[str] = None,
+        config_root_name: Optional[str] = None,
         **kwargs,
     ) -> None:
         """

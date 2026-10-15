@@ -26,8 +26,9 @@ TrajectorySampler::TrajectorySampler(
     const std::vector<float> robotDimensions,
     const Eigen::Vector3f &sensor_position_body,
     const Eigen::Quaternionf &sensor_rotation_body, const double octreeRes,
-    const bool allowReverse, const int maxNumThreads) {
+    const bool allowReverse, const bool dropSamples, const int maxNumThreads) {
   allow_reverse_ = allowReverse;
+  drop_samples_ = dropSamples;
   // Setup the collision checker
   collChecker = std::make_unique<CollisionChecker>(
       robotShapeType, robotDimensions, sensor_position_body,
@@ -55,6 +56,8 @@ TrajectorySampler::TrajectorySampler(
 
   numTrajectories =
       getNumTrajectories(ctrType, lin_samples_max_, ang_samples_max_);
+  // Read when samples are read on collision because drop_samples_ is false
+  numCtrlPoints_ = control_time_ / time_step_;
 
   this->maxNumThreads = maxNumThreads;
   if (maxNumThreads > 1) {

@@ -30,11 +30,13 @@ float CollisionChecker::radiusOf(const ShapeType shape_type,
     // Radius is the first parameter
     return dimensions.at(0);
   case ShapeType::BOX:
-  case ShapeType::ELLIPSOID:
     // Half the diagonal of the footprint spanned by the x and y extents
     return std::sqrt(std::pow(dimensions.at(0), 2) +
                      std::pow(dimensions.at(1), 2)) /
            2;
+  case ShapeType::ELLIPSOID:
+    // Semi-axes: the larger one in the plane bounds the footprint.
+    return std::max(dimensions.at(0), dimensions.at(1));
   }
   throw std::invalid_argument("Invalid robot geometry type");
 }
@@ -53,9 +55,11 @@ float CollisionChecker::heightOf(const ShapeType shape_type,
     // Diameter
     return 2 * dimensions.at(0);
   case ShapeType::BOX:
-  case ShapeType::ELLIPSOID:
     // z extent is the third parameter
     return dimensions.at(2);
+  case ShapeType::ELLIPSOID:
+    // Twice the z semi-axis
+    return 2 * dimensions.at(2);
   }
   throw std::invalid_argument("Invalid robot geometry type");
 }

@@ -1,4 +1,5 @@
 #include "datatypes/path.h"
+#include "utils/logger.h"
 #include "utils/spline.h"
 #include <cmath>
 #include <cstdlib>
@@ -169,6 +170,15 @@ void Path::interpolate(double max_interpolation_point_dist,
   if (current_size_ < 2) {
     throw std::invalid_argument(
         "At least two points are required to perform interpolation.");
+  }
+
+  // NOTE: A hermite fit needs neighbours to estimate its end slopes, so with two
+  // points it bulges away from the straight segment they describe. Change it to
+  // LINREAR which is exact for that case
+  if (current_size_ == 2 && type == InterpolationType::HERMITE_SPLINE) {
+    LOG_DEBUG("Interpolating a two point path as LINEAR instead of "
+              "HERMITE_SPLINE");
+    type = InterpolationType::LINEAR;
   }
 
   // --- Data Preparation & Parametrization ---

@@ -9,15 +9,19 @@
 namespace Kompass {
 namespace Control {
 
-Stanley::Stanley() : Follower() {
+Stanley::Stanley() : Follower() { setParams(StanleyParameters()); }
+
+Stanley::Stanley(StanleyParameters config) : Follower() { setParams(config); }
+
+// NOTE: Follower::setParams only knows the base parameters, so the gains and
+// the wheel base have to be re-read here.
+void Stanley::setParams(const StanleyParameters &config) {
+  Follower::setParams(config);
+  this->config = config;
   cross_track_gain = config.getParameter<double>("cross_track_gain");
   heading_gain = config.getParameter<double>("heading_gain");
   min_velocity = config.getParameter<double>("cross_track_min_linear_vel");
-  wheel_base = config.getParameter<double>("wheel_base");
-}
-
-Stanley::Stanley(StanleyParameters config) : Stanley() {
-  setParams(config);
+  robotWheelBase = config.getParameter<double>("wheel_base");
 }
 
 Controller::Result Stanley::execute(Path::State currentPosition,

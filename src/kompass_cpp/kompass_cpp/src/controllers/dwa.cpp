@@ -19,13 +19,17 @@ DWA::DWA(ControlLimitsParams controlLimits, ControlType controlType,
          const Eigen::Vector3f &sensor_position_body,
          const Eigen::Vector4f &sensor_rotation_body, const double octreeRes,
          CostEvaluator::TrajectoryCostsWeights costWeights,
-         const bool allowReverse, const int maxNumThreads)
+         const FollowerParameters &followerParams, const bool allowReverse,
+         const bool dropSamples, const int maxNumThreads)
     : Follower() {
+  setControlType(controlType);
+  setParams(followerParams);
+
   // Setup the trajectory sampler and cost evaluator
   configure(controlLimits, controlType, timeStep, predictionHorizon,
             controlHorizon, maxLinearSamples, maxAngularSamples, robotShapeType,
             robotDimensions, sensor_position_body, sensor_rotation_body,
-            octreeRes, costWeights, allowReverse, maxNumThreads);
+            octreeRes, costWeights, allowReverse, dropSamples, maxNumThreads);
 
   // Update the max forward distance the robot can make
   if (controlType == ControlType::OMNI) {
@@ -47,8 +51,12 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
          const Eigen::Vector3f &sensor_position_body,
          const Eigen::Vector4f &sensor_rotation_body,
          CostEvaluator::TrajectoryCostsWeights costWeights,
-         const int maxNumThreads)
+         const FollowerParameters &followerParams, const int maxNumThreads)
     : Follower() {
+  // See the other constructor: robot type first, then the parameters
+  setControlType(controlType);
+  setParams(followerParams);
+
   // Setup the trajectory sampler and cost evaluator
   configure(config, controlLimits, controlType, robotShapeType, robotDimensions,
             sensor_position_body, sensor_rotation_body, costWeights,
@@ -74,14 +82,17 @@ DWA::DWA(TrajectorySampler::TrajectorySamplerParameters config,
 // planner tick (where it would blow the control-cycle deadline).
 void DWA::initJitCompile() {
   const int dummyNumSamples = 1;
-  const int dummyNumPoints = 2;
-  TrajectoryVelocitySamples2D velocities(dummyNumSamples, dummyNumPoints);
-  TrajectoryPathSamples paths(dummyNumSamples, dummyNumPoints);
-  velocities.push_back({Velocity2D(1.0, 0.0, 0.0)});
-  auto dummyPath = Path::Path(
-      {Path::Point(0.0f, 0.0f, 0.0f), Path::Point(1.0f, 1.0f, 0.0f)});
+  auto dummyPath = Path::Path(std::vector<Path::Point>{
+      Path::Point(0.0f, 0.0f, 0.0f), Path::Point(1.0f, 1.0f, 0.0f),
+      Path::Point(2.0f, 2.0f, 0.0f)});
   dummyPath.interpolate(0.5, Path::InterpolationType::LINEAR);
   dummyPath.segment(1.0, 100);
+
+  const size_t dummyNumPoints = dummyPath.getSize();
+  TrajectoryVelocitySamples2D velocities(dummyNumSamples, dummyNumPoints);
+  TrajectoryPathSamples paths(dummyNumSamples, dummyNumPoints);
+  velocities.push_back(
+      std::vector<Velocity2D>(dummyNumPoints - 1, Velocity2D(1.0, 0.0, 0.0)));
   auto dummyPathView = dummyPath.getSegment(0);
   paths.push_back(dummyPath);
   std::unique_ptr<TrajectorySamples2D> dummySamples =
@@ -100,7 +111,8 @@ void DWA::configure(ControlLimitsParams controlLimits, ControlType controlType,
                     const Eigen::Vector4f &sensor_rotation_body,
                     const double octreeRes,
                     CostEvaluator::TrajectoryCostsWeights costWeights,
-                    const bool allowReverse, const int maxNumThreads) {
+                    const bool allowReverse, const bool dropSamples,
+                    const int maxNumThreads) {
   // The controller base keeps its own copy of the limits for the command
   // clamps, the rotate-in-place scaling and the horizon adaptation
   ctrlimitsParams = controlLimits;
@@ -108,7 +120,7 @@ void DWA::configure(ControlLimitsParams controlLimits, ControlType controlType,
       controlLimits, controlType, timeStep, predictionHorizon, controlHorizon,
       maxLinearSamples, maxAngularSamples, robotShapeType, robotDimensions,
       sensor_position_body, Eigen::Quaternionf(sensor_rotation_body), octreeRes,
-      allowReverse, maxNumThreads);
+      allowReverse, dropSamples, maxNumThreads);
 
   trajCostEvaluator = std::make_unique<CostEvaluator>(
       costWeights, sensor_position_body,

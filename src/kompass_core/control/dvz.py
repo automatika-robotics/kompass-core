@@ -58,7 +58,7 @@ class DVZ(FollowerTemplate):
         control_time_step: float,
         config_file: Optional[str] = None,
         config: Optional[DVZConfig] = None,
-        config_yaml_root_name: Optional[str] = None,
+        config_root_name: Optional[str] = None,
         **_,
     ):
         """Setup DVZ Local Planner
@@ -73,8 +73,8 @@ class DVZ(FollowerTemplate):
         :type config_file: Optional[str], optional
         :param config: DVZ configuration, defaults to None
         :type config: Optional[DVZConfig], optional
-        :param config_yaml_root_name: Root name for the config in the config file, defaults to None
-        :type config_yaml_root_name: Optional[str], optional
+        :param config_root_name: Root name for the config in the config file, defaults to None
+        :type config_root_name: Optional[str], optional
         """
         # Init the controller
         self._robot = robot
@@ -90,15 +90,20 @@ class DVZ(FollowerTemplate):
         )
 
         if config_file:
-            self._path_controller.set_from_yaml(config_file)
+            self._path_controller.set_from_yaml(
+                config_file, nested_root_name=config_root_name
+            )
 
         self._dvz_linear: float = 0.0
         self._dvz_angular: float = 0.0
         # Angular commands below the robot's minimum are treated as no rotation
         self.__min_angular = ctrl_limits.omega_limits.min_omega
 
+        # The robot's wheel base, as Stanley takes it
         generator_config = StanleyConfig(
-            heading_gain=config.heading_gain, cross_track_gain=config.cross_track_gain
+            heading_gain=config.heading_gain,
+            cross_track_gain=config.cross_track_gain,
+            wheel_base=robot.wheelbase,
         )
         # Setup a stanley follower to generate the reference commands
         self.__reference_cmd_generator = Stanley(
@@ -106,7 +111,7 @@ class DVZ(FollowerTemplate):
             ctrl_limits=ctrl_limits,
             config=generator_config,
             config_file=config_file,
-            config_yaml_root_name=config_yaml_root_name,
+            config_root_name=config_root_name,
             generate_reference=True,
         )
         logging.info("DVZ PATH CONTROLLER IS READY")

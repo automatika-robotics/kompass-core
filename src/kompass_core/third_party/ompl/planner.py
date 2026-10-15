@@ -5,7 +5,7 @@ from attrs import asdict, define, field
 from ...utils.common import BaseAttrs, base_validators
 
 import omplpy as ompl
-from ...models import Robot, RobotGeometry
+from ...models import Robot
 from omplpy import base, geometric
 from kompass_cpp.planning import OMPL2DGeometricPlanner
 

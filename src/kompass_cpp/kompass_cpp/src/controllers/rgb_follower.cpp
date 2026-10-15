@@ -51,9 +51,9 @@ void RGBFollower::generateSearchCommands(float total_rotation,
     rotation_time =
         max_rotation_time * (1 - num_pause_steps / config_.control_time_step());
   }
-  // Angular velocity to rotate 'total_rotation' in total time steps
-  // 'rotation_steps' with dt = control_time_step
-  double omega_val = total_rotation / rotation_time;
+  // Angular speed to rotate 'total_rotation' in total time steps
+  // 'rotation_steps' with dt = control_time_step.
+  double omega_val = std::abs(total_rotation) / rotation_time;
 
   omega_val = std::max(std::min(omega_val, ctrl_limits_.omegaParams.maxOmega),
                        ctrl_limits_.omegaParams.minOmega);
@@ -121,9 +121,11 @@ bool RGBFollower::run(const std::optional<Bbox2D> &target) {
       if (search_commands_queue_.empty()) {
         int last_direction = 1;
         if (has_last_tracking_) {
+          // Search towards the side of the image the target was last seen on.
+          // A target on the right is turned towards with a negative omega.
           auto last_center = last_tracking_.getCenter();
           last_direction =
-              ((last_center.x() - last_center.y() / 2.0) > 0.0) ? 1 : -1;
+              (last_center.x() > last_tracking_.img_size.x() / 2.0) ? -1 : 1;
           has_last_tracking_ = false;
         }
         getFindTargetCmds(last_direction);

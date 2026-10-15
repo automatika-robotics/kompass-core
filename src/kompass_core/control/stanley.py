@@ -29,19 +29,19 @@ class StanleyConfig(FollowerConfig):
     * - wheel_base
       - `float`
       - `0.266`
-      - Distance between the front and rear axles of the robot. Must be between `1e-3` and `1e3`.
+      - Distance between the front and rear axles of the robot. Must be between `1e-3` and `1e2`.
     * - heading_gain
       - `float`
       - `0.7`
-      - Gain for heading control. Must be between `0.0` and `1e2`.
+      - Gain for heading control. Must be between `0.0` and `10.0`.
     * - cross_track_min_linear_vel
       - `float`
       - `0.05`
-      - Minimum linear velocity for cross-track control. Must be between `1e-4` and `1e2`.
+      - Minimum linear velocity for cross-track control. Must be between `1e-4` and `10.0`.
     * - cross_track_gain
       - `float`
       - `1.5`
-      - Gain for cross-track control. Must be between `0.0` and `1e2`.
+      - Gain for cross-track control. Must be between `0.0` and `50.0`.
     * - max_angle_error
       - `float`
       - `np.pi / 16`
@@ -59,19 +59,19 @@ class StanleyConfig(FollowerConfig):
     )
 
     wheel_base: float = field(
-        default=0.266, validator=base_validators.in_range(min_value=1e-3, max_value=1e3)
+        default=0.266, validator=base_validators.in_range(min_value=1e-3, max_value=1e2)
     )
 
     heading_gain: float = field(
-        default=0.7, validator=base_validators.in_range(min_value=0.0, max_value=1e2)
+        default=0.7, validator=base_validators.in_range(min_value=0.0, max_value=10.0)
     )
 
     cross_track_min_linear_vel: float = field(
-        default=0.05, validator=base_validators.in_range(min_value=1e-4, max_value=1e2)
+        default=0.05, validator=base_validators.in_range(min_value=1e-4, max_value=10.0)
     )
 
     cross_track_gain: float = field(
-        default=1.5, validator=base_validators.in_range(min_value=0.0, max_value=1e2)
+        default=1.5, validator=base_validators.in_range(min_value=0.0, max_value=50.0)
     )
 
     max_angle_error: float = field(
@@ -83,16 +83,7 @@ class StanleyConfig(FollowerConfig):
         default=0.1, validator=base_validators.in_range(min_value=1e-9, max_value=1e9)
     )
 
-    def to_kompass_cpp(self) -> kompass_cpp.control.StanleyParameters:
-        """
-        Convert to kompass_cpp lib config format
-
-        :return: _description_
-        :rtype: kompass_cpp.control.StanleyParameters
-        """
-        stanley_config = kompass_cpp.control.StanleyParameters()
-        stanley_config.from_dict(self.asdict())
-        return stanley_config
+    _cpp_params_class = kompass_cpp.control.StanleyParameters
 
 
 class Stanley(FollowerTemplate):

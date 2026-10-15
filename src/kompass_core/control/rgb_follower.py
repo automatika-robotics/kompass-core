@@ -3,7 +3,7 @@ import logging
 from typing import Optional, List
 from attrs import define, field
 from ..utils.common import BaseAttrs, base_validators
-from ..models import Robot, RobotCtrlLimits, RobotType
+from ..models import Robot, RobotCtrlLimits
 from kompass_cpp.control import RGBFollower, RGBFollowerParameters
 from kompass_cpp.types import Bbox2D
 import numpy as np

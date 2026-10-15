@@ -242,7 +242,7 @@ def test_rgbd_follower_boundary_does_not_scale_with_image_size():
         ctrl_limits=ctrl_limits,
         config=VisionRGBDFollowerConfig(
             control_time_step=0.1,
-            _use_local_coordinates=True,
+            use_local_coordinates=True,
             depth_conversion_factor=1e-3,
             min_depth=0.1,
             max_depth=10.0,
@@ -310,7 +310,7 @@ def test_rgbd_follower_point_cloud_accepts_readonly_buffer():
         ),
         config=VisionRGBDFollowerConfig(
             control_time_step=0.1,
-            _use_local_coordinates=True,
+            use_local_coordinates=True,
             min_depth=0.1,
             max_depth=10.0,
         ),

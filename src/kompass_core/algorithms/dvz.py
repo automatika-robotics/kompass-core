@@ -1,12 +1,12 @@
 import logging
-from typing import Any
+from typing import Any, Optional
 
-from ..utils.common import base_validators, BaseAttrs
-from ..utils.geometry import convert_to_0_2pi, convert_to_plus_minus_pi
 import numpy as np
 from attrs import define, field
 
-from ..models import Robot, RobotState, RobotCtrlLimits
+from ..models import Robot, RobotCtrlLimits, RobotState
+from ..utils.common import BaseAttrs, base_validators
+from ..utils.geometry import convert_to_0_2pi, convert_to_plus_minus_pi
 
 # Lapierre, Lionel & Zapata, Rene & Lépinay, Pascal. (2007). Simultaneous Path Following and Obstacle Avoidance Control of a Unicycle-type Robot. 2617 - 2622. 10.1109/ROBOT.2007.363860.
 
@@ -153,13 +153,18 @@ class DeformableVirtualZone:
         self.zone_ori_shift: float = 0.0  # gamma in the paper
         self.zone_shift_y_diff: float = 0.0
 
-    def set_from_yaml(self, path_to_file: str) -> None:
+    def set_from_yaml(
+        self, path_to_file: str, nested_root_name: Optional[str] = None
+    ) -> None:
         """Setup the DVZ controller params from file.
 
         :param path_to_file:
         :type path_to_file: str
+        :param nested_root_name: Section of the file holding the parameters,
+            defaults to "DVZ"
+        :type nested_root_name: Optional[str], optional
         """
-        self.config.from_file(path_to_file, nested_root_name="DVZ")
+        self.config.from_file(path_to_file, nested_root_name=nested_root_name or "DVZ")
         self._cache_sensor_mount_pose()
         self._set_control_regularization()
 

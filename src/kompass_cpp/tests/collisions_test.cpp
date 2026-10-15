@@ -80,3 +80,30 @@ BOOST_AUTO_TEST_CASE(test_FCL) {
     BOOST_TEST(res, "Collision Result: " << res);
   }
 }
+
+// The robot radius and height every consumer derives from the shape: the
+// critical zone checker subtracts the radius from each range and the RGBD
+// follower measures its standoff from it. Ellipsoid dimensions are semi-axes,
+// as FCL builds the collision shape from them, but they used to go through the
+// box formula, which reads them as full extents.
+BOOST_AUTO_TEST_CASE(test_robot_radius_and_height_per_shape) {
+  using Shape = CollisionChecker::ShapeType;
+  constexpr float kTol = 1e-6f;
+
+  // Ellipsoid: radius is the larger planar semi-axis, height twice the z one
+  BOOST_TEST(CollisionChecker::radiusOf(Shape::ELLIPSOID, {0.3f, 0.3f, 0.4f}) ==
+                 0.3f,
+             boost::test_tools::tolerance(kTol));
+  BOOST_TEST(CollisionChecker::radiusOf(Shape::ELLIPSOID, {0.5f, 0.2f, 0.4f}) ==
+                 0.5f,
+             boost::test_tools::tolerance(kTol));
+  BOOST_TEST(CollisionChecker::heightOf(Shape::ELLIPSOID, {0.5f, 0.2f, 0.4f}) ==
+                 0.8f,
+             boost::test_tools::tolerance(kTol));
+
+  // Box (full extents) is unchanged: half the footprint diagonal, z extent
+  BOOST_TEST(CollisionChecker::radiusOf(Shape::BOX, {0.6f, 0.8f, 0.4f}) == 0.5f,
+             boost::test_tools::tolerance(kTol));
+  BOOST_TEST(CollisionChecker::heightOf(Shape::BOX, {0.6f, 0.8f, 0.4f}) == 0.4f,
+             boost::test_tools::tolerance(kTol));
+}

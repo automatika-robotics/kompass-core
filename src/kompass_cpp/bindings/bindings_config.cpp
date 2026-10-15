@@ -24,7 +24,8 @@ void set_parameters_from_dict(Parameters &params,
                 }
             }
         } catch (const std::exception &e) {
-            PyErr_SetString(PyExc_RuntimeError, e.what());
+            const std::string message = "Parameter '" + name + "': " + e.what();
+            PyErr_SetString(PyExc_RuntimeError, message.c_str());
             throw py::python_error();
         }
     }
