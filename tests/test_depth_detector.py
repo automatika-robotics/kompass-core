@@ -722,7 +722,7 @@ def test_sample_count_is_the_usable_depth_inside_the_box(
         synthetic_depth_image, [half], 0.0, 0.0, 0.0, 0.0
     )
     # the box limits are inclusive, which may add one column
-    assert box.sample_count == pytest.approx(w * h / 2, abs=h)
+    assert box.sample_count == pytest.approx(w * h / 2, abs=int(h))
 
 
 def test_poi_boxes_carry_provenance(detector, synthetic_depth_image_poi, center_poi):
