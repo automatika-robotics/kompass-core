@@ -336,7 +336,11 @@ else
         log INFO "NIGHTLY build enabled, cloning kompass-core from main..."
         git clone --depth 1 --branch main "$KOMPASS_CORE_URL"
     else
-        LATEST_TAG=$(curl -s "https://api.github.com/repos/$KOMPASS_CORE_REPO/tags" | jq -r '.[0].name')
+        LATEST_TAG=$(git ls-remote --tags --refs "$KOMPASS_CORE_URL" | sed 's|.*refs/tags/||' | sort -V | tail -n 1) || true
+        if [[ -z "$LATEST_TAG" ]]; then
+            log ERROR "Could not find the latest kompass-core release on GitHub. Check the network connection and try again."
+            exit 1
+        fi
         log INFO "Cloning kompass-core repository at tag $LATEST_TAG..."
         git clone --depth 1 --branch "$LATEST_TAG" "$KOMPASS_CORE_URL"
     fi
